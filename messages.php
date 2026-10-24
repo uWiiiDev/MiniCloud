@@ -805,9 +805,10 @@ require_once __DIR__ . '/includes/header.php';
 
                         <button
                             type="submit"
-                            class="px-4 py-2.5 rounded-xl <?= $activeChannelType === 'broadcast' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700' ?> text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
+                            title="<?= $activeChannelType === 'broadcast' ? '📢 An alle' : 'Senden' ?>"
+                            aria-label="<?= $activeChannelType === 'broadcast' ? '📢 An alle' : 'Senden' ?>"
+                            class="p-3 rounded-xl <?= $activeChannelType === 'broadcast' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700' ?> text-white shadow-xs transition-colors cursor-pointer shrink-0 flex items-center justify-center"
                         >
-                            <span><?= $activeChannelType === 'broadcast' ? '📢 An alle' : 'Senden' ?></span>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/>
                             </svg>
