@@ -272,7 +272,54 @@ function getAuthorizedFileForDownload(PDO $pdo, int $userId, int $fileId, bool $
         }
     }
 
+    // 4. Datei wurde im Chat an diesen Benutzer oder in einer Rundnachricht gesendet
+    try {
+        $stmtChatFile = $pdo->prepare(
+            'SELECT id FROM messages
+             WHERE attached_file_id = :fid
+               AND (recipient_id = :uid OR is_broadcast = 1)
+             LIMIT 1'
+        );
+        $stmtChatFile->execute([':fid' => $fileId, ':uid' => $userId]);
+        if ($stmtChatFile->fetch()) {
+            return $file;
+        }
+    } catch (Throwable) {
+        // Ignorieren falls Tabelle noch nicht existiert
+    }
+
     return null;
+}
+
+/**
+ * Ermittelt die Anzahl ungelesener Chat-Nachrichten (Direktnachrichten + Admin-Rundnachrichten) für einen Benutzer.
+ */
+function getUnreadMessagesCount(PDO $pdo, int $userId): int
+{
+    if ($userId <= 0) {
+        return 0;
+    }
+
+    try {
+        $stmtDirect = $pdo->prepare(
+            'SELECT COUNT(*) FROM messages WHERE recipient_id = :uid AND is_read = 0'
+        );
+        $stmtDirect->execute([':uid' => $userId]);
+        $unreadDirect = (int)$stmtDirect->fetchColumn();
+
+        $stmtBroadcast = $pdo->prepare(
+            'SELECT COUNT(*) FROM messages
+             WHERE is_broadcast = 1
+               AND sender_id <> :uid1
+               AND id > COALESCE((SELECT last_read_broadcast_id FROM message_broadcast_reads WHERE user_id = :uid2), 0)'
+        );
+        $stmtBroadcast->execute([':uid1' => $userId, ':uid2' => $userId]);
+        $unreadBroadcast = (int)$stmtBroadcast->fetchColumn();
+
+        return $unreadDirect + $unreadBroadcast;
+    } catch (Throwable) {
+        return 0;
+    }
 }
 
 /**
@@ -649,6 +696,7 @@ function getAppSettings(?PDO $pdo = null): array
         'registration_code'             => '',
         'registration_default_quota_mb' => '100',
         'enable_calendar'               => '1',
+        'enable_chat'                   => '1',
     ];
 
     try {

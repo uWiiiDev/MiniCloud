@@ -358,6 +358,36 @@ function ensureSchemaUpdated(PDO $pdo): void
         $pdo->exec("ALTER TABLE `calendar_shares` ADD COLUMN `can_delete` TINYINT(1) NOT NULL DEFAULT 0 AFTER `can_edit`");
     }
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `messages` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `sender_id` INT UNSIGNED NOT NULL,
+            `recipient_id` INT UNSIGNED DEFAULT NULL,
+            `is_broadcast` TINYINT(1) NOT NULL DEFAULT 0,
+            `message_text` TEXT NOT NULL,
+            `attached_file_id` INT UNSIGNED DEFAULT NULL,
+            `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_msg_sender` (`sender_id`),
+            KEY `idx_msg_recipient` (`recipient_id`, `is_read`),
+            KEY `idx_msg_broadcast` (`is_broadcast`, `id`),
+            CONSTRAINT `fk_msg_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_msg_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_msg_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `message_broadcast_reads` (
+            `user_id` INT UNSIGNED NOT NULL,
+            `last_read_broadcast_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`user_id`),
+            CONSTRAINT `fk_mbr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();
     if ($adminCount === 0) {

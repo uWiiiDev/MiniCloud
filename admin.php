@@ -546,10 +546,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $registrationCode  = mb_substr(trim((string)($_POST['registration_code'] ?? '')), 0, 100);
         $regQuotaMb        = max(1, min(102400, (int)($_POST['registration_default_quota_mb'] ?? 100)));
         $enableCalendar    = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
+        $enableChat        = isset($_POST['enable_chat']) && $_POST['enable_chat'] === '1' ? '1' : '0';
         saveAppSetting($pdo, 'allow_registration', $allowRegistration);
         saveAppSetting($pdo, 'registration_code', $registrationCode);
         saveAppSetting($pdo, 'registration_default_quota_mb', (string)$regQuotaMb);
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
+        saveAppSetting($pdo, 'enable_chat', $enableChat);
 
         if ($clearSmtpPass) {
             saveAppSetting($pdo, 'smtp_pass', '');
@@ -1001,9 +1003,43 @@ require_once __DIR__ . '/includes/header.php';
                     >
                     <span>
                         <strong>Integrierten Kalender aktivieren</strong><br>
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Persönliche &amp; Gruppen-Termine, Kalender-Teilen (unter Beachtung der Datenschutz-Freigabe), Cloud-Datei-Anhänge &amp; .ics-Export.</span>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Persönliche Termine, Kalender-Teilen (unter Beachtung der Datenschutz-Freigabe), Cloud-Datei-Anhänge &amp; .ics-Export.</span>
                     </span>
                 </label>
+            </div>
+
+            <!-- Optionales Chat- & Rundnachrichten-Modul -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        💬 Chat- &amp; Rundnachrichten-Modul
+                    </p>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                        <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                    </span>
+                </div>
+
+                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        name="enable_chat"
+                        value="1"
+                        <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'checked' : '' ?>
+                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    >
+                    <span>
+                        <strong>Integrierten Messenger / Chat aktivieren</strong><br>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Direktnachrichten zwischen Benutzern (nur bei aktivierter Teilen-Sichtbarkeit) sowie Admin-Rundnachrichten an alle Benutzer.</span>
+                    </span>
+                </label>
+
+                <?php if (($currentSettings['enable_chat'] ?? '1') === '1'): ?>
+                    <div class="pt-1">
+                        <a href="messages.php?channel=broadcast" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            📢 Rundnachricht an alle Benutzer senden &rarr;
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 

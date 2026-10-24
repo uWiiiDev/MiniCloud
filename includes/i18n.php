@@ -2409,6 +2409,90 @@ function getTranslationDictionary(): array
             'es' => 'Mostrar el calendario integrado en la navegación',
             'nl' => 'Geïntegreerde kalender in de navigatie tonen',
         ],
+        'Chat' => [
+            'en' => 'Chat',
+            'fr' => 'Chat',
+            'es' => 'Chat',
+            'nl' => 'Chat',
+        ],
+        'Chat & Nachrichten' => [
+            'en' => 'Chat & Messages',
+            'fr' => 'Chat & Messages',
+            'es' => 'Chat y Mensajes',
+            'nl' => 'Chat & Berichten',
+        ],
+        'Direktnachrichten mit freigegebenen Cloud-Benutzern und offizielle Admin-Ankündigungen.' => [
+            'en' => 'Direct messages with shared cloud users and official admin announcements.',
+            'fr' => 'Messages directs avec les utilisateurs autorisés et annonces officielles de l’administrateur.',
+            'es' => 'Mensajes directos con usuarios habilitados y anuncios oficiales del administrador.',
+            'nl' => 'Directe berichten met zichtbare cloudgebruikers en officiële beheerdersaankondigingen.',
+        ],
+        'Rundnachricht an alle senden' => [
+            'en' => 'Send broadcast to all',
+            'fr' => 'Envoyer une annonce à tous',
+            'es' => 'Enviar mensaje a todos',
+            'nl' => 'Bericht aan iedereen sturen',
+        ],
+        '➕ Neuen Chat starten' => [
+            'en' => '➕ Start New Chat',
+            'fr' => '➕ Nouveau chat',
+            'es' => '➕ Iniciar nuevo chat',
+            'nl' => '➕ Nieuwe chat starten',
+        ],
+        '👤 Kontakt auswählen...' => [
+            'en' => '👤 Select contact...',
+            'fr' => '👤 Choisir un contact...',
+            'es' => '👤 Seleccionar contacto...',
+            'nl' => '👤 Contact selecteren...',
+        ],
+        'Ankündigungen (Alle)' => [
+            'en' => 'Announcements (All)',
+            'fr' => 'Annonces (Tous)',
+            'es' => 'Anuncios (Todos)',
+            'nl' => 'Aankondigingen (Iedereen)',
+        ],
+        'Ankündigungen an alle Benutzer' => [
+            'en' => 'Announcements to All Users',
+            'fr' => 'Annonces à tous les utilisateurs',
+            'es' => 'Anuncios para todos los usuarios',
+            'nl' => 'Aankondigingen aan alle gebruikers',
+        ],
+        'Offizielle Rundnachrichten der Administration an alle Cloud-Mitglieder' => [
+            'en' => 'Official broadcasts from the administration to all cloud members',
+            'fr' => 'Messages officiels de l’administration à tous les membres du cloud',
+            'es' => 'Comunicados oficiales de la administración para todos los miembros',
+            'nl' => 'Officiële mededelingen van het beheer aan alle cloudleden',
+        ],
+        '📢 Rundnachricht' => [
+            'en' => '📢 Broadcast',
+            'fr' => '📢 Annonce',
+            'es' => '📢 Anuncio',
+            'nl' => '📢 Mededeling',
+        ],
+        'Senden' => [
+            'en' => 'Send',
+            'fr' => 'Envoyer',
+            'es' => 'Enviar',
+            'nl' => 'Verzenden',
+        ],
+        '📢 An alle' => [
+            'en' => '📢 To All',
+            'fr' => '📢 À tous',
+            'es' => '📢 A todos',
+            'nl' => '📢 Aan allen',
+        ],
+        '💬 Chat- & Rundnachrichten-Modul' => [
+            'en' => '💬 Chat & Broadcast Module',
+            'fr' => '💬 Module Chat & Annonces',
+            'es' => '💬 Módulo de Chat y Anuncios',
+            'nl' => '💬 Chat- & aankondigingenmodule',
+        ],
+        'Integrierten Messenger / Chat aktivieren' => [
+            'en' => 'Enable integrated Messenger / Chat',
+            'fr' => 'Activer la messagerie / le chat intégré',
+            'es' => 'Activar mensajería / chat integrado',
+            'nl' => 'Geïntegreerde messenger / chat inschakelen',
+        ],
     ];
 
     return $dict;
