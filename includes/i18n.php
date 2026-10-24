@@ -1539,6 +1539,134 @@ function getTranslationDictionary(): array
             'es' => 'Desbloquear recurso compartido',
             'nl' => 'Gedeeld item ontgrendelen',
         ],
+
+        // --- Einstellungsseite (settings.php) ---
+        'Einstellungen' => [
+            'en' => 'Settings',
+            'fr' => 'Paramètres',
+            'es' => 'Ajustes',
+            'nl' => 'Instellingen',
+        ],
+        'Sprache, Farbdesign und persönliche Kontoeinstellungen anpassen.' => [
+            'en' => 'Customize language, color theme, and personal account settings.',
+            'fr' => 'Personnaliser la langue, le thème visuel et les paramètres du compte.',
+            'es' => 'Personalizar idioma, tema de color y ajustes de la cuenta.',
+            'nl' => 'Taal, kleurthema en persoonlijke accountinstellingen aanpassen.',
+        ],
+        '← Zurück' => [
+            'en' => '← Back',
+            'fr' => '← Retour',
+            'es' => '← Volver',
+            'nl' => '← Terug',
+        ],
+        'Benutzerverwaltung, Gruppenordner, Branding, Impressum und SMTP-Mailserver konfigurieren.' => [
+            'en' => 'Configure user management, group folders, branding, legal notice, and SMTP mail server.',
+            'fr' => 'Configurer les utilisateurs, dossiers de groupe, personnalisation, mentions légales et serveur SMTP.',
+            'es' => 'Configurar gestión de usuarios, carpetas de grupo, marca, aviso legal y servidor SMTP.',
+            'nl' => 'Gebruikersbeheer, groepsmappen, huisstijl, colofon en SMTP-mailserver configureren.',
+        ],
+        'Administration öffnen →' => [
+            'en' => 'Open Administration →',
+            'fr' => 'Ouvrir l’administration →',
+            'es' => 'Abrir administración →',
+            'nl' => 'Beheer openen →',
+        ],
+        'Anwendungssprache' => [
+            'en' => 'Application Language',
+            'fr' => 'Langue de l’application',
+            'es' => 'Idioma de la aplicación',
+            'nl' => 'Toepassingstaal',
+        ],
+        'Wählen Sie Ihre bevorzugte Sprache für die Benutzeroberfläche.' => [
+            'en' => 'Choose your preferred language for the user interface.',
+            'fr' => 'Choisissez votre langue préférée pour l’interface utilisateur.',
+            'es' => 'Elija su idioma preferido para la interfaz de usuario.',
+            'nl' => 'Kies uw voorkeurstaal voor de gebruikersinterface.',
+        ],
+        'Farbdesign & Theme' => [
+            'en' => 'Color Design & Theme',
+            'fr' => 'Design & Thème de couleur',
+            'es' => 'Diseño de color y Tema',
+            'nl' => 'Kleurontwerp & Thema',
+        ],
+        'Alle hellen Themes sind angenehm abgedunkelt, um ein grelles Blenden zu vermeiden.' => [
+            'en' => 'All light themes are softly toned down to prevent harsh glare.',
+            'fr' => 'Tous les thèmes clairs sont agréablement tamisés pour éviter l’éblouissement.',
+            'es' => 'Todos los temas claros están suavemente atenuados para evitar el deslumbramiento.',
+            'nl' => 'Alle lichte thema’s zijn aangenaam gedempt om fel verblinden te voorkomen.',
+        ],
+        'Eigenes Passwort ändern' => [
+            'en' => 'Change Your Password',
+            'fr' => 'Modifier votre mot de passe',
+            'es' => 'Cambiar su contraseña',
+            'nl' => 'Eigen wachtwoord wijzigen',
+        ],
+        'Aktualisieren Sie Ihr persönliches Anmeldepasswort (mindestens 8 Zeichen, BCRYPT-verschlüsselt).' => [
+            'en' => 'Update your personal sign-in password (minimum 8 characters, BCRYPT encrypted).',
+            'fr' => 'Mettez à jour votre mot de passe personnel (au moins 8 caractères, chiffré BCRYPT).',
+            'es' => 'Actualice su contraseña personal de inicio de sesión (mínimo 8 caracteres, cifrado BCRYPT).',
+            'nl' => 'Werk uw persoonlijke inlogwachtwoord bij (minimaal 8 tekens, BCRYPT-versleuteld).',
+        ],
+        'Aktuelles Passwort' => [
+            'en' => 'Current password',
+            'fr' => 'Mot de passe actuel',
+            'es' => 'Contraseña actual',
+            'nl' => 'Huidig wachtwoord',
+        ],
+        'Neues Passwort (mind. 8 Zeichen)' => [
+            'en' => 'New password (min. 8 chars)',
+            'fr' => 'Nouveau mot de passe (min. 8 caract.)',
+            'es' => 'Nueva contraseña (mín. 8 caract.)',
+            'nl' => 'Nieuw wachtwoord (min. 8 tekens)',
+        ],
+        'Mindestens 8 Zeichen' => [
+            'en' => 'Minimum 8 characters',
+            'fr' => 'Au moins 8 caractères',
+            'es' => 'Mínimo 8 caracteres',
+            'nl' => 'Minimaal 8 tekens',
+        ],
+        'Neues Passwort bestätigen' => [
+            'en' => 'Confirm new password',
+            'fr' => 'Confirmer le nouveau mot de passe',
+            'es' => 'Confirmar nueva contraseña',
+            'nl' => 'Nieuw wachtwoord bevestigen',
+        ],
+        'Passwort wiederholen' => [
+            'en' => 'Repeat password',
+            'fr' => 'Répéter le mot de passe',
+            'es' => 'Repetir contraseña',
+            'nl' => 'Wachtwoord herhalen',
+        ],
+        'Passwort speichern' => [
+            'en' => 'Save password',
+            'fr' => 'Enregistrer le mot de passe',
+            'es' => 'Guardar contraseña',
+            'nl' => 'Wachtwoord opslaan',
+        ],
+        'Das aktuelle Passwort ist nicht korrekt.' => [
+            'en' => 'The current password is incorrect.',
+            'fr' => 'Le mot de passe actuel est incorrect.',
+            'es' => 'La contraseña actual no es correcta.',
+            'nl' => 'Het huidige wachtwoord is niet juist.',
+        ],
+        'Das neue Passwort muss mindestens 8 Zeichen lang sein.' => [
+            'en' => 'The new password must be at least 8 characters long.',
+            'fr' => 'Le nouveau mot de passe doit comporter au moins 8 caractères.',
+            'es' => 'La nueva contraseña debe tener al menos 8 caracteres.',
+            'nl' => 'Het nieuwe wachtwoord moet minimaal 8 tekens lang zijn.',
+        ],
+        'Die neuen Passwörter stimmen nicht überein.' => [
+            'en' => 'The new passwords do not match.',
+            'fr' => 'Les nouveaux mots de passe ne correspondent pas.',
+            'es' => 'Las nuevas contraseñas no coinciden.',
+            'nl' => 'De nieuwe wachtwoorden komen niet overeen.',
+        ],
+        'Ihr Passwort wurde erfolgreich geändert.' => [
+            'en' => 'Your password has been changed successfully.',
+            'fr' => 'Votre mot de passe a été modifié avec succès.',
+            'es' => 'Su contraseña ha sido cambiada con éxito.',
+            'nl' => 'Uw wachtwoord is succesvol gewijzigd.',
+        ],
     ];
 
     return $dict;

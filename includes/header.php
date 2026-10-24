@@ -249,54 +249,6 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 
         <!-- Right Navigation & Controls -->
         <nav class="flex items-center gap-1 sm:gap-2.5 shrink-0">
-            <!-- Sprachauswahl (5 Sprachen: DE, EN, FR, ES, NL) -->
-            <form action="lang.php" method="post" id="langForm" class="inline-flex items-center">
-                <label for="langSelect" class="sr-only">Sprache wählen</label>
-                <select
-                    id="langSelect"
-                    name="lang"
-                    aria-label="Sprache wählen"
-                    title="Sprache wählen"
-                    onchange="this.form.submit()"
-                    class="max-w-[68px] sm:max-w-none text-xs sm:text-sm font-medium rounded-xl px-1.5 sm:px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer transition-colors truncate"
-                >
-                    <?php foreach (getAllowedLanguages() as $lCode => $lLabel): ?>
-                        <option value="<?= e($lCode) ?>" <?= $currentLang === $lCode ? 'selected' : '' ?>><?= e($lLabel) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </form>
-
-            <!-- Theme Switcher -->
-            <form action="theme.php" method="post" id="themeForm" class="inline-flex items-center">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <label for="themeSelect" class="sr-only">Design-Theme wählen</label>
-                <select
-                    id="themeSelect"
-                    name="theme"
-                    aria-label="Theme wählen"
-                    class="max-w-[92px] sm:max-w-none text-xs sm:text-sm font-medium rounded-xl px-1.5 sm:px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer transition-colors truncate"
-                >
-                    <optgroup label="Sanft &amp; Gedämpft Hell">
-                        <option value="sand" <?= $currentTheme === 'sand' ? 'selected' : '' ?>>☕ Sand (Warmbeige)</option>
-                        <option value="sage" <?= $currentTheme === 'sage' ? 'selected' : '' ?>>🌿 Salbei (Naturgrün)</option>
-                        <option value="nordic" <?= $currentTheme === 'nordic' ? 'selected' : '' ?>>☁️ Nordisch (Blaugrau)</option>
-                        <option value="lavender" <?= $currentTheme === 'lavender' ? 'selected' : '' ?>>🌸 Lavendel (Flieder)</option>
-                        <option value="light" <?= $currentTheme === 'light' ? 'selected' : '' ?>>☀️ Hell (Klassisch)</option>
-                    </optgroup>
-                    <optgroup label="Halbdunkle Designs">
-                        <option value="dusk" <?= $currentTheme === 'dusk' ? 'selected' : '' ?>>🌆 Dämmerung (Schiefer)</option>
-                        <option value="mocha" <?= $currentTheme === 'mocha' ? 'selected' : '' ?>>🍫 Mokka (Warmbraun)</option>
-                        <option value="petrol" <?= $currentTheme === 'petrol' ? 'selected' : '' ?>>💎 Petrol (Blaugrün)</option>
-                        <option value="plum" <?= $currentTheme === 'plum' ? 'selected' : '' ?>>🍇 Pflaume (Violettgrau)</option>
-                    </optgroup>
-                    <optgroup label="Dunkle Designs">
-                        <option value="dark" <?= $currentTheme === 'dark' ? 'selected' : '' ?>>🌙 Dunkel</option>
-                        <option value="ocean" <?= $currentTheme === 'ocean' ? 'selected' : '' ?>>🌊 Ozean</option>
-                        <option value="forest" <?= $currentTheme === 'forest' ? 'selected' : '' ?>>🌲 Wald</option>
-                    </optgroup>
-                </select>
-            </form>
-
             <?php if (isLoggedIn()): ?>
                 <?php if ($headerStorageStats !== null): ?>
                     <!-- Kompakte Speicherplatz-Anzeige in der Kopfzeile -->
@@ -344,30 +296,31 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     <?php endif; ?>
                 </a>
 
-                <?php if (isAdmin()): ?>
-                    <a
-                        href="admin.php"
-                        class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors"
-                        title="Benutzer- &amp; Gruppenordner-Administration"
-                    >
-                        <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        <span class="hidden sm:inline">Admin</span>
-                    </a>
-                <?php endif; ?>
-
                 <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium">
                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span class="truncate max-w-[120px]" title="<?= e((string)$_SESSION['username']) ?>">
                         <?= e((string)$_SESSION['username']) ?>
                     </span>
                     <?php if (isAdmin()): ?>
-                        <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white">Admin</span>
+                        <a href="admin.php" title="Benutzer- &amp; Gruppenordner-Administration" class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 hover:bg-brand-700 text-white transition-colors">Admin</a>
                     <?php endif; ?>
                 </div>
+            <?php endif; ?>
 
+            <!-- Einstellungen (Zahnrädchen-Symbol) -->
+            <a
+                href="settings.php"
+                class="inline-flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
+                title="Einstellungen"
+                aria-label="Einstellungen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </a>
+
+            <?php if (isLoggedIn()): ?>
                 <form action="logout.php" method="post" class="inline">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                     <button
