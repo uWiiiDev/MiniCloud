@@ -11,7 +11,7 @@ $loggedIn = isLoggedIn();
 $userRow = null;
 
 if ($loggedIn) {
-    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
+    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
     $stmtU->execute([':id' => (int)$_SESSION['user_id']]);
     $userRow = $stmtU->fetch() ?: null;
 }
@@ -131,6 +131,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
                 ? sprintf('Die Anzeigedauer für Statusmeldungen wurde auf %d Sekunde(n) festgelegt.', $newFlashSec)
                 : 'Statusmeldungen bleiben nun dauerhaft sichtbar, bis Sie diese manuell schließen.'
         );
+
+        header('Location: settings.php');
+        exit;
+    }
+
+    if ($action === 'update_chat_notify_mode') {
+        $newMode = isset($_POST['chat_notify_mode']) ? max(0, min(3, (int)$_POST['chat_notify_mode'])) : 1;
+
+        $stmtUpdNotify = $pdo->prepare('UPDATE users SET chat_notify_mode = :m WHERE id = :id');
+        $stmtUpdNotify->execute([
+            ':m'  => $newMode,
+            ':id' => (int)$userRow['id'],
+        ]);
+        $_SESSION['chat_notify_mode'] = $newMode;
+
+        $msgMap = [
+            1 => 'Chat-Benachrichtigungen wurden auf „Nur System-Benachrichtigung (PC & Mobilgerät)“ gesetzt.',
+            2 => 'Chat-Benachrichtigungen wurden auf „System-Benachrichtigung & In-App-Banner“ gesetzt.',
+            3 => 'Chat-Benachrichtigungen wurden auf „Nur In-App-Banner“ gesetzt.',
+            0 => 'Chat-Benachrichtigungen wurden deaktiviert (es wird nur der rote Zähler angezeigt).',
+        ];
+        setFlash('success', $msgMap[$newMode] ?? $msgMap[1]);
 
         header('Location: settings.php');
         exit;
@@ -461,6 +483,110 @@ $themeGroups = [
                     </div>
                 </div>
             </form>
+        </section>
+
+        <!-- 3b-3. CHAT-BENACHRICHTIGUNGEN (PC & MOBILGERÄT) -->
+        <?php
+        $userChatNotifyMode = isset($userRow['chat_notify_mode']) ? max(0, min(3, (int)$userRow['chat_notify_mode'])) : 1;
+        $chatNotifyModes = [
+            1 => '🔔 Nur System-Benachrichtigung (Standard)',
+            2 => '🔔 + 💬 System & In-App-Banner',
+            3 => '💬 Nur In-App-Banner',
+            0 => '🔕 Deaktiviert (Nur roter Zähler)',
+        ];
+        ?>
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">💬 Chat-Benachrichtigungen (PC &amp; Mobilgerät)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userChatNotifyMode > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($chatNotifyModes[$userChatNotifyMode] ?? $chatNotifyModes[1]) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Legen Sie fest, wie Sie am Rechner und auf dem Smartphone über neue Chat-Nachrichten informiert werden möchten. Standardmäßig sind nur echte System-Benachrichtigungen (ohne In-App-Banner) aktiv.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_chat_notify_mode">
+
+                <?php foreach ($chatNotifyModes as $nMode => $nLabel): ?>
+                    <?php $isSelectedNotify = ($userChatNotifyMode === (int)$nMode); ?>
+                    <button
+                        type="submit"
+                        name="chat_notify_mode"
+                        value="<?= (int)$nMode ?>"
+                        class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedNotify ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                    >
+                        <span class="truncate"><?= e($nLabel) ?></span>
+                        <?php if ($isSelectedNotify): ?>
+                            <span class="text-xs font-bold shrink-0">✓</span>
+                        <?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
+            </form>
+
+            <div class="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <p id="browserNotifyStatusText" class="text-xs text-slate-500 dark:text-slate-400">
+                    Für System-Benachrichtigungen auf PC &amp; Mobilgerät muss Ihr Browser einmalig die Berechtigung erhalten.
+                </p>
+                <button
+                    type="button"
+                    id="btnRequestBrowserNotify"
+                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+                >
+                    🔔 System-Benachrichtigung auf diesem Gerät freigeben / testen
+                </button>
+            </div>
+            <script>
+            (() => {
+                const btn = document.getElementById('btnRequestBrowserNotify');
+                const statusEl = document.getElementById('browserNotifyStatusText');
+                if (!btn || !statusEl) return;
+
+                const updatePermStatus = () => {
+                    if (!('Notification' in window)) {
+                        statusEl.textContent = 'Hinweis: Dieser Browser unterstützt keine nativen System-Benachrichtigungen (auf iPhone/iPad bitte zuerst als App zum Home-Bildschirm hinzufügen).';
+                        return;
+                    }
+                    if (Notification.permission === 'granted') {
+                        statusEl.textContent = '✅ System-Benachrichtigungen sind auf diesem Gerät freigegeben.';
+                        btn.textContent = '🔔 Test-Benachrichtigung senden';
+                    } else if (Notification.permission === 'denied') {
+                        statusEl.textContent = '⚠️ System-Benachrichtigungen wurden in den Browser-Einstellungen blockiert.';
+                    }
+                };
+                updatePermStatus();
+
+                btn.addEventListener('click', async () => {
+                    if (!('Notification' in window)) {
+                        alert('Dieser Browser unterstützt keine System-Benachrichtigungen. Auf iOS fügen Sie die Cloud bitte zuerst zum Home-Bildschirm hinzu.');
+                        return;
+                    }
+                    let perm = Notification.permission;
+                    if (perm !== 'granted') {
+                        try {
+                            perm = await Notification.requestPermission();
+                        } catch (_) {}
+                    }
+                    updatePermStatus();
+                    if (perm === 'granted') {
+                        const title = '💬 Chat-Benachrichtigung aktiv';
+                        const opts = {
+                            body: 'Sie erhalten neue Chat-Nachrichten nun direkt auf diesem Gerät.',
+                            icon: 'app-icon.php?size=180',
+                            badge: 'app-icon.php?size=180',
+                            data: { url: 'messages.php' }
+                        };
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts)).catch(() => new Notification(title, opts));
+                        } else {
+                            new Notification(title, opts);
+                        }
+                    }
+                });
+            })();
+            </script>
         </section>
 
         <!-- 3c. SICHTBARKEIT IN DER TEILEN-AUSWAHL (DATENSCHUTZ BEI DIREKTFREIGABEN) -->

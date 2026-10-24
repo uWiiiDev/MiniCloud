@@ -263,6 +263,132 @@ $versionInfo    = getAppVersionInfo();
     }
 })();
 
+<?php if (isLoggedIn() && (($footerSettings['enable_chat'] ?? '1') === '1')): ?>
+(() => {
+    const notifyMode = <?= (int)getCurrentChatNotifyMode() ?>;
+    const flashDurationMs = <?= (int)(getCurrentFlashDuration() * 1000) ?>;
+    const storageKey = 'mc_last_notified_msg_id_<?= (int)$_SESSION['user_id'] ?>';
+    let sinceId = parseInt(sessionStorage.getItem(storageKey) || '0', 10) || 0;
+
+    const showSystemNotification = (msg) => {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        const title = msg.is_broadcast
+            ? `📢 Rundnachricht von ${msg.sender_username}`
+            : `💬 Neue Nachricht von ${msg.sender_username}`;
+        const targetUrl = `messages.php?channel=${encodeURIComponent(msg.channel)}`;
+        const opts = {
+            body: msg.message_text || '',
+            icon: 'app-icon.php?size=180',
+            badge: 'app-icon.php?size=180',
+            tag: 'mc-chat-' + msg.id,
+            data: { url: targetUrl }
+        };
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready
+                .then((reg) => reg.showNotification(title, opts))
+                .catch(() => {
+                    try {
+                        const n = new Notification(title, opts);
+                        n.onclick = () => { window.focus(); window.location.href = targetUrl; };
+                    } catch (_) {}
+                });
+        } else {
+            try {
+                const n = new Notification(title, opts);
+                n.onclick = () => { window.focus(); window.location.href = targetUrl; };
+            } catch (_) {}
+        }
+    };
+
+    const showInAppBanner = (msg) => {
+        // Nur bei Modus 2 (System + In-App) oder Modus 3 (Nur In-App) einblenden
+        if (notifyMode !== 2 && notifyMode !== 3) return;
+
+        // Nicht einblenden, wenn man bereits genau diesen Chat im Vordergrund geöffnet hat
+        if (window.location.pathname.endsWith('messages.php') && !document.hidden) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('channel') === String(msg.channel)) return;
+        }
+
+        const banner = document.createElement('a');
+        banner.href = `messages.php?channel=${encodeURIComponent(msg.channel)}`;
+        banner.className = 'fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-white dark:bg-slate-900 border border-brand-500/60 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3 transition-all duration-300';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center text-base shrink-0';
+        iconSpan.textContent = msg.is_broadcast ? '📢' : '💬';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'min-w-0 flex-1';
+        const titleEl = document.createElement('p');
+        titleEl.className = 'text-xs font-bold text-slate-900 dark:text-white truncate';
+        titleEl.textContent = msg.is_broadcast
+            ? `Rundnachricht von ${msg.sender_username}`
+            : `Nachricht von ${msg.sender_username}`;
+        const bodyEl = document.createElement('p');
+        bodyEl.className = 'text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5';
+        bodyEl.textContent = msg.message_text || '';
+
+        contentDiv.appendChild(titleEl);
+        contentDiv.appendChild(bodyEl);
+        banner.appendChild(iconSpan);
+        banner.appendChild(contentDiv);
+        document.body.appendChild(banner);
+
+        if (flashDurationMs > 0) {
+            setTimeout(() => {
+                banner.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => banner.remove(), 300);
+            }, flashDurationMs);
+        }
+    };
+
+    const checkUnreadMessages = async () => {
+        try {
+            const res = await fetch(`messages.php?ajax=check_unread&since_id=${sinceId}`);
+            const data = await res.json();
+            if (!data || !data.success) return;
+
+            const badge = document.getElementById('headerUnreadChatBadge');
+            if (badge) {
+                if (data.unread_total > 0) {
+                    badge.textContent = String(data.unread_total);
+                    badge.classList.remove('hidden');
+                    badge.classList.add('inline-flex');
+                } else {
+                    badge.classList.add('hidden');
+                    badge.classList.remove('inline-flex');
+                }
+            }
+
+            if (sinceId === 0) {
+                sinceId = Number(data.max_id || 0);
+                sessionStorage.setItem(storageKey, String(sinceId));
+                return;
+            }
+
+            if (data.latest_unread && Number(data.latest_unread.id) > sinceId) {
+                const msg = data.latest_unread;
+                sinceId = Number(msg.id);
+                sessionStorage.setItem(storageKey, String(sinceId));
+
+                if (notifyMode === 1 || notifyMode === 2) {
+                    showSystemNotification(msg);
+                }
+                if (notifyMode === 2 || notifyMode === 3) {
+                    showInAppBanner(msg);
+                }
+            } else if (Number(data.max_id || 0) > sinceId) {
+                sinceId = Number(data.max_id);
+                sessionStorage.setItem(storageKey, String(sinceId));
+            }
+        } catch (_) {}
+    };
+
+    checkUnreadMessages();
+    setInterval(checkUnreadMessages, 6000);
+})();
+<?php endif; ?>
+
 <?php if (isLoggedIn() && getCurrentSessionTimeout() > 0): ?>
 (() => {
     const timeoutMs = <?= (int)getCurrentSessionTimeout() * 60 * 1000 ?>;

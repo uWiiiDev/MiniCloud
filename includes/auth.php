@@ -54,12 +54,13 @@ function isLoggedIn(): bool
         $verifiedThisRequest = true;
         try {
             $pdo = getDB();
-            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout, flash_duration FROM users WHERE id = :id LIMIT 1');
+            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout, flash_duration, chat_notify_mode FROM users WHERE id = :id LIMIT 1');
             $stmt->execute([':id' => $_SESSION['user_id']]);
             $row = $stmt->fetch();
             if ($row) {
-                $timeoutMin = isset($row['session_timeout']) ? (int)$row['session_timeout'] : 30;
-                $flashSec   = isset($row['flash_duration']) ? max(0, min(300, (int)$row['flash_duration'])) : 10;
+                $timeoutMin     = isset($row['session_timeout']) ? (int)$row['session_timeout'] : 30;
+                $flashSec       = isset($row['flash_duration']) ? max(0, min(300, (int)$row['flash_duration'])) : 10;
+                $chatNotifyMode = isset($row['chat_notify_mode']) ? max(0, min(3, (int)$row['chat_notify_mode'])) : 1;
                 if ($timeoutMin > 0 && isset($_SESSION['last_activity']) && is_int($_SESSION['last_activity'])) {
                     if ((time() - $_SESSION['last_activity']) > ($timeoutMin * 60)) {
                         $_SESSION = [];
@@ -67,23 +68,25 @@ function isLoggedIn(): bool
                         return false;
                     }
                 }
-                $_SESSION['username']        = (string)$row['username'];
-                $_SESSION['is_admin']        = ((int)$row['is_admin'] === 1);
-                $_SESSION['theme']           = (string)($row['theme'] ?: 'light');
-                $_SESSION['session_timeout'] = $timeoutMin;
-                $_SESSION['flash_duration']  = $flashSec;
-                $_SESSION['last_activity']   = time();
+                $_SESSION['username']         = (string)$row['username'];
+                $_SESSION['is_admin']         = ((int)$row['is_admin'] === 1);
+                $_SESSION['theme']            = (string)($row['theme'] ?: 'light');
+                $_SESSION['session_timeout']  = $timeoutMin;
+                $_SESSION['flash_duration']   = $flashSec;
+                $_SESSION['chat_notify_mode'] = $chatNotifyMode;
+                $_SESSION['last_activity']    = time();
             } else {
                 // Benutzer wurde gelöscht
                 $_SESSION = [];
                 return false;
             }
         } catch (Throwable) {
-            $_SESSION['is_admin']        = $_SESSION['is_admin'] ?? false;
-            $_SESSION['theme']           = $_SESSION['theme'] ?? 'light';
-            $_SESSION['session_timeout'] = $_SESSION['session_timeout'] ?? 30;
-            $_SESSION['flash_duration']  = $_SESSION['flash_duration'] ?? 10;
-            $_SESSION['last_activity']   = time();
+            $_SESSION['is_admin']         = $_SESSION['is_admin'] ?? false;
+            $_SESSION['theme']            = $_SESSION['theme'] ?? 'light';
+            $_SESSION['session_timeout']  = $_SESSION['session_timeout'] ?? 30;
+            $_SESSION['flash_duration']   = $_SESSION['flash_duration'] ?? 10;
+            $_SESSION['chat_notify_mode'] = $_SESSION['chat_notify_mode'] ?? 1;
+            $_SESSION['last_activity']    = time();
         }
     }
 
@@ -129,6 +132,21 @@ function getCurrentFlashDuration(): int
         return 10;
     }
     return isset($_SESSION['flash_duration']) ? max(0, min(300, (int)$_SESSION['flash_duration'])) : 10;
+}
+
+/**
+ * Liefert den vom Benutzer gewählten Benachrichtigungs-Modus für neue Chat-Nachrichten:
+ * 1 = Nur System-/Browser-Benachrichtigung (Standard)
+ * 2 = System-Benachrichtigung + In-App-Banner
+ * 3 = Nur In-App-Banner
+ * 0 = Deaktiviert (Nur roter Zähler)
+ */
+function getCurrentChatNotifyMode(): int
+{
+    if (!isLoggedIn()) {
+        return 0;
+    }
+    return isset($_SESSION['chat_notify_mode']) ? max(0, min(3, (int)$_SESSION['chat_notify_mode'])) : 1;
 }
 
 /**

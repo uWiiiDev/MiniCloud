@@ -1,4 +1,4 @@
-const CACHE_NAME = 'minicloud-pwa-v1';
+const CACHE_NAME = 'minicloud-pwa-v2';
 
 const OFFLINE_HTML = `<!DOCTYPE html>
 <html lang="de" class="dark">
@@ -118,4 +118,24 @@ self.addEventListener('fetch', (event) => {
                 .catch(() => caches.match(req))
         );
     }
+});
+
+// Klick auf System-/Browser-Benachrichtigungen (PC & Mobilgerät) -> Öffnet oder fokussiert den Chat
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : 'messages.php';
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    client.navigate(targetUrl).catch(() => {});
+                    return client.focus();
+                }
+            }
+            if (self.clients.openWindow) {
+                return self.clients.openWindow(targetUrl);
+            }
+        })
+    );
 });

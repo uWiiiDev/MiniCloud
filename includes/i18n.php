@@ -2577,6 +2577,84 @@ function getTranslationDictionary(): array
             'es' => 'La duración de los avisos de estado se ha establecido en 1 segundo.',
             'nl' => 'De weergaveduur voor statusmeldingen is ingesteld op 1 seconde.',
         ],
+        '💬 Chat-Benachrichtigungen (PC & Mobilgerät)' => [
+            'en' => '💬 Chat Notifications (PC & Mobile)',
+            'fr' => '💬 Notifications de chat (PC & Mobile)',
+            'es' => '💬 Notificaciones de chat (PC y Móvil)',
+            'nl' => '💬 Chatmeldingen (PC & Mobiel)',
+        ],
+        'Legen Sie fest, wie Sie am Rechner und auf dem Smartphone über neue Chat-Nachrichten informiert werden möchten. Standardmäßig sind nur echte System-Benachrichtigungen (ohne In-App-Banner) aktiv.' => [
+            'en' => 'Choose how you want to be notified about new chat messages on your PC and smartphone. By default, only native system notifications (without in-app banners) are active.',
+            'fr' => 'Choisissez comment être informé des nouveaux messages sur PC et smartphone. Par défaut, seules les notifications système natives sont actives.',
+            'es' => 'Elija cómo desea recibir notificaciones de nuevos mensajes en PC y móvil. Por defecto, solo están activas las notificaciones del sistema.',
+            'nl' => 'Kies hoe u op pc en smartphone over nieuwe chatberichten wilt worden geïnformeerd. Standaard zijn alleen systeemmeldingen actief.',
+        ],
+        '🔔 Nur System-Benachrichtigung (Standard)' => [
+            'en' => '🔔 System Notification Only (Default)',
+            'fr' => '🔔 Notification système uniquement (Par défaut)',
+            'es' => '🔔 Solo notificación del sistema (Predeterminado)',
+            'nl' => '🔔 Alleen systeemmelding (Standaard)',
+        ],
+        '🔔 + 💬 System & In-App-Banner' => [
+            'en' => '🔔 + 💬 System & In-App Banner',
+            'fr' => '🔔 + 💬 Système & Bannière intégrée',
+            'es' => '🔔 + 💬 Sistema y Banner en la app',
+            'nl' => '🔔 + 💬 Systeem & In-app-banner',
+        ],
+        '💬 Nur In-App-Banner' => [
+            'en' => '💬 In-App Banner Only',
+            'fr' => '💬 Bannière intégrée uniquement',
+            'es' => '💬 Solo banner en la app',
+            'nl' => '💬 Alleen in-app-banner',
+        ],
+        '🔕 Deaktiviert (Nur roter Zähler)' => [
+            'en' => '🔕 Disabled (Red badge only)',
+            'fr' => '🔕 Désactivé (Compteur rouge uniquement)',
+            'es' => '🔕 Desactivado (Solo contador rojo)',
+            'nl' => '🔕 Uitgeschakeld (Alleen rode teller)',
+        ],
+        'Für System-Benachrichtigungen auf PC & Mobilgerät muss Ihr Browser einmalig die Berechtigung erhalten.' => [
+            'en' => 'Your browser requires a one-time permission to show system notifications on PC & mobile.',
+            'fr' => 'Votre navigateur nécessite une autorisation unique pour afficher les notifications système.',
+            'es' => 'Su navegador necesita permiso una sola vez para mostrar notificaciones del sistema.',
+            'nl' => 'Uw browser heeft eenmalig toestemming nodig voor systeemmeldingen op pc en mobiel.',
+        ],
+        '🔔 System-Benachrichtigung auf diesem Gerät freigeben / testen' => [
+            'en' => '🔔 Enable / Test System Notifications on this Device',
+            'fr' => '🔔 Activer / Tester les notifications sur cet appareil',
+            'es' => '🔔 Activar / Probar notificaciones en este dispositivo',
+            'nl' => '🔔 Systeemmeldingen op dit apparaat inschakelen / testen',
+        ],
+        'Verlauf leeren' => [
+            'en' => 'Clear history',
+            'fr' => 'Vider l’historique',
+            'es' => 'Vaciar historial',
+            'nl' => 'Geschiedenis wissen',
+        ],
+        'Gesamten Chatverlauf leeren' => [
+            'en' => 'Clear entire chat history',
+            'fr' => 'Vider tout l’historique du chat',
+            'es' => 'Vaciar todo el historial del chat',
+            'nl' => 'Volledige chatgeschiedenis wissen',
+        ],
+        'Meldungen aktivieren' => [
+            'en' => 'Enable alerts',
+            'fr' => 'Activer les alertes',
+            'es' => 'Activar avisos',
+            'nl' => 'Meldingen activeren',
+        ],
+        'Zurück zur Kontaktliste' => [
+            'en' => 'Back to contact list',
+            'fr' => 'Retour à la liste des contacts',
+            'es' => 'Volver a la lista de contactos',
+            'nl' => 'Terug naar contactenlijst',
+        ],
+        'Der Chatverlauf wurde vollständig geleert.' => [
+            'en' => 'The chat history has been completely cleared.',
+            'fr' => 'L’historique du chat a été entièrement vidé.',
+            'es' => 'El historial del chat se ha vaciado por completo.',
+            'nl' => 'De chatgeschiedenis is volledig gewist.',
+        ],
     ];
 
     return $dict;

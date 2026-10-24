@@ -87,7 +87,61 @@ function markBroadcastsAsRead(PDO $pdo, int $userId): void
     }
 }
 
-// --- 1. AJAX-Endpunkt für Live-Polling neuer Nachrichten ---
+// --- 1. AJAX-Endpunkte für Live-Polling & globale Benachrichtigungen ---
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'check_unread') {
+    header('Content-Type: application/json; charset=utf-8');
+    $sinceId = max(0, (int)($_GET['since_id'] ?? 0));
+
+    $stmtMax = $pdo->prepare(
+        'SELECT COALESCE(MAX(id), 0) FROM messages
+         WHERE recipient_id = :u1 OR is_broadcast = 1'
+    );
+    $stmtMax->execute([':u1' => $userId]);
+    $maxId = (int)$stmtMax->fetchColumn();
+
+    $latestUnread = null;
+    if ($sinceId > 0 && $maxId > $sinceId) {
+        $stmtLatest = $pdo->prepare(
+            'SELECT m.id, m.sender_id, m.is_broadcast, m.message_text, u.username AS sender_username
+             FROM messages m
+             INNER JOIN users u ON u.id = m.sender_id
+             WHERE m.id > :since_id
+               AND m.sender_id <> :uid1
+               AND (
+                   (m.is_broadcast = 0 AND m.recipient_id = :uid2 AND m.is_read = 0)
+                   OR (m.is_broadcast = 1 AND m.id > COALESCE((SELECT last_read_broadcast_id FROM message_broadcast_reads WHERE user_id = :uid3), 0))
+               )
+             ORDER BY m.id DESC
+             LIMIT 1'
+        );
+        $stmtLatest->execute([
+            ':since_id' => $sinceId,
+            ':uid1'     => $userId,
+            ':uid2'     => $userId,
+            ':uid3'     => $userId,
+        ]);
+        $rowLatest = $stmtLatest->fetch();
+        if ($rowLatest) {
+            $isBroad = ((int)$rowLatest['is_broadcast'] === 1);
+            $latestUnread = [
+                'id'              => (int)$rowLatest['id'],
+                'sender_username' => (string)$rowLatest['sender_username'],
+                'message_text'    => mb_substr((string)$rowLatest['message_text'], 0, 140),
+                'is_broadcast'    => $isBroad,
+                'channel'         => $isBroad ? 'broadcast' : (string)(int)$rowLatest['sender_id'],
+            ];
+        }
+    }
+
+    echo json_encode([
+        'success'       => true,
+        'unread_total'  => getUnreadMessagesCount($pdo, $userId),
+        'max_id'        => $maxId,
+        'latest_unread' => $latestUnread,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
     header('Content-Type: application/json; charset=utf-8');
 
@@ -246,6 +300,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: messages.php' . ($returnChannel !== '' ? '?channel=' . urlencode($returnChannel) : ''));
         exit;
     }
+
+    // C) Gesamten Chatverlauf leeren
+    if ($action === 'clear_history') {
+        $targetChannel = trim((string)($_POST['target_channel'] ?? ''));
+
+        if ($targetChannel === 'broadcast') {
+            if ($isAdmin) {
+                $pdo->exec('DELETE FROM messages WHERE is_broadcast = 1');
+                setFlash('success', 'Der Ankündigungs-Verlauf wurde vollständig geleert.');
+            } else {
+                setFlash('error', 'Nur Administratoren können den Ankündigungs-Verlauf leeren.');
+            }
+            header('Location: messages.php?channel=broadcast');
+            exit;
+        }
+
+        if (ctype_digit($targetChannel) && (int)$targetChannel > 0) {
+            $partnerId = (int)$targetChannel;
+            $stmtClr = $pdo->prepare(
+                'DELETE FROM messages
+                 WHERE is_broadcast = 0
+                   AND ((sender_id = :u1 AND recipient_id = :p1) OR (sender_id = :p2 AND recipient_id = :u2))'
+            );
+            $stmtClr->execute([
+                ':u1' => $userId,
+                ':p1' => $partnerId,
+                ':p2' => $partnerId,
+                ':u2' => $userId,
+            ]);
+            setFlash('success', 'Der Chatverlauf wurde vollständig geleert.');
+            header('Location: messages.php?channel=' . $partnerId);
+            exit;
+        }
+
+        header('Location: messages.php');
+        exit;
+    }
 }
 
 // --- 3. Konversations-Liste & Kontakte laden ---
@@ -343,7 +434,11 @@ if ($isAdmin) {
 $availableContacts = $stmtContacts->fetchAll();
 
 // 3d. Aktiven Kanal bestimmen ('broadcast' oder Benutzer-ID)
+// Auf Mobilgeräten (< lg) zeigen wir zuerst die Kontaktliste, sofern kein Kanal explizit per ?channel=... gewählt wurde
 $rawChannel = trim((string)($_GET['channel'] ?? ''));
+$hasExplicitChannel = ($rawChannel !== '');
+$mobileShowList = !$hasExplicitChannel || (isset($_GET['view']) && $_GET['view'] === 'list');
+
 if ($rawChannel === '') {
     if ($unreadBroadcastCount > 0) {
         $rawChannel = 'broadcast';
@@ -467,11 +562,11 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </div>
 
-<!-- Messenger 2-Spalten-Hauptcontainer -->
-<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[560px] lg:h-[680px]">
+<!-- Messenger Hauptcontainer (Mobil: 1-Spalten-Navigation Kontakte <-> Chat | Desktop: 2-Spalten-Ansicht) -->
+<div id="messengerMainCard" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[540px] lg:h-[680px]">
 
     <!-- LINKE SPALTE: Konversationen & Neuer Chat (4 Spalten) -->
-    <div class="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/60">
+    <div id="chatSidebarPane" class="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 <?= $mobileShowList ? 'flex' : 'hidden lg:flex' ?> flex-col h-[560px] lg:h-full bg-slate-50/50 dark:bg-slate-900/60">
         <!-- "+ Neuer Chat" Auswahl -->
         <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 space-y-2">
             <label for="newChatUserSelect" class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -605,7 +700,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- RECHTE SPALTE: Aktiver Chat-Verlauf & Eingabeleiste (8 Spalten) -->
-    <div class="lg:col-span-8 flex flex-col h-[520px] lg:h-full bg-white dark:bg-slate-900">
+    <div id="chatConversationPane" class="lg:col-span-8 <?= $mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col h-[560px] lg:h-full bg-white dark:bg-slate-900">
         <?php if ($activeChannelType === 'none'): ?>
             <div class="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <div class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl mb-3">
@@ -618,8 +713,20 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         <?php else: ?>
             <!-- Chat-Kopfzeile -->
-            <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40 shrink-0">
-                <div class="flex items-center gap-3 min-w-0">
+            <div class="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/60 dark:bg-slate-800/40 shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <!-- Mobil-Zurück-Button zur Kontaktliste -->
+                    <a
+                        href="messages.php?view=list"
+                        class="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-brand-600 shrink-0 shadow-2xs"
+                        title="Zurück zur Kontaktliste"
+                        aria-label="Zurück zur Kontaktliste"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+
                     <?php if ($activeChannelType === 'broadcast'): ?>
                         <div class="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-base font-bold shrink-0">
                             📢
@@ -655,6 +762,40 @@ require_once __DIR__ . '/includes/header.php';
                                 <?= $pVis ? '👁️ Direktfreigaben &amp; Chat aktiv' : '🔒 In Teilen-Auswahl verborgen' ?>
                             </p>
                         </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Rechte Aktionsbuttons im Chat-Header (System-Benachrichtigungen freigeben & Verlauf leeren) -->
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button
+                        type="button"
+                        id="btnQuickEnablePush"
+                        class="hidden items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 text-xs font-semibold transition-colors cursor-pointer"
+                        title="System-Benachrichtigungen für neue Nachrichten auf diesem Gerät aktivieren"
+                    >
+                        <span>🔔</span>
+                        <span class="hidden sm:inline">Meldungen aktivieren</span>
+                    </button>
+
+                    <?php if (!empty($chatMessages) && ($activeChannelType === 'user' || ($activeChannelType === 'broadcast' && $isAdmin))): ?>
+                        <form
+                            action="messages.php"
+                            method="post"
+                            class="inline"
+                            onsubmit="return confirm('Möchten Sie den gesamten Nachrichtenverlauf in diesem Chat wirklich unwiderruflich leeren?');"
+                        >
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="clear_history">
+                            <input type="hidden" name="target_channel" value="<?= e($rawChannel) ?>">
+                            <button
+                                type="submit"
+                                class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/50 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                title="Gesamten Chatverlauf leeren"
+                            >
+                                <span>🗑️</span>
+                                <span class="hidden sm:inline">Verlauf leeren</span>
+                            </button>
+                        </form>
                     <?php endif; ?>
                 </div>
             </div>
@@ -772,8 +913,18 @@ require_once __DIR__ . '/includes/header.php';
     const container = document.getElementById('chatMessagesContainer');
     const input = document.getElementById('chatMessageInput');
     const form = document.getElementById('chatSendForm');
+    const btnQuickPush = document.getElementById('btnQuickEnablePush');
     const activeChannel = <?= json_encode($rawChannel) ?>;
+    const chatNotifyMode = <?= (int)getCurrentChatNotifyMode() ?>;
     let lastMsgId = <?= (int)$lastMessageId ?>;
+
+    // Automatische Mobilgeräte-Erkennung (Viewport, Touch-Sensorik & User-Agent)
+    const isMobileDevice =
+        window.matchMedia('(max-width: 1023px)').matches ||
+        window.matchMedia('(pointer: coarse)').matches ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+
+    document.documentElement.setAttribute('data-device', isMobileDevice ? 'mobile' : 'desktop');
 
     function scrollToBottom() {
         if (container) {
@@ -782,8 +933,33 @@ require_once __DIR__ . '/includes/header.php';
     }
     scrollToBottom();
 
+    // Schnell-Button zum Aktivieren von System-Benachrichtigungen anzeigen, falls noch nicht freigegeben
+    if (btnQuickPush && (chatNotifyMode === 1 || chatNotifyMode === 2) && ('Notification' in window) && Notification.permission === 'default') {
+        btnQuickPush.classList.remove('hidden');
+        btnQuickPush.classList.add('inline-flex');
+        btnQuickPush.addEventListener('click', async () => {
+            try {
+                const perm = await Notification.requestPermission();
+                if (perm !== 'default') {
+                    btnQuickPush.classList.add('hidden');
+                    btnQuickPush.classList.remove('inline-flex');
+                }
+            } catch (_) {}
+        });
+    }
+
     if (input && form) {
-        input.focus();
+        if (isMobileDevice) {
+            // Auf Mobilgeräten kompakt 1-zeilig starten und beim Tippen automatisch mitwachsen lassen
+            input.setAttribute('rows', '1');
+            input.addEventListener('input', () => {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 110) + 'px';
+            });
+        } else {
+            input.focus();
+        }
+
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
