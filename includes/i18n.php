@@ -2709,6 +2709,12 @@ function getTranslationDictionary(): array
             'es' => 'Abrir en GitHub ↗',
             'nl' => 'Openen op GitHub ↗',
         ],
+        '🌌 Mitternacht (Tiefviolett)' => [
+            'en' => '🌌 Midnight (Deep Violet)',
+            'fr' => '🌌 Minuit (Violet profond)',
+            'es' => '🌌 Medianoche (Violeta oscuro)',
+            'nl' => '🌌 Middernacht (Diepblauw/Paars)',
+        ],
     ];
 
     return $dict;

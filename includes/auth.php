@@ -206,7 +206,7 @@ function getAllowedThemes(): array
     return [
         'light', 'sand', 'sage', 'nordic', 'lavender',
         'dusk', 'mocha', 'petrol', 'plum',
-        'dark', 'ocean', 'forest',
+        'dark', 'ocean', 'forest', 'obsidian',
     ];
 }
 

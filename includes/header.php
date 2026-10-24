@@ -18,7 +18,7 @@ $appLogoUri  = $appSettings['logo_data_uri'];
 $pageTitle = isset($pageTitle) ? $pageTitle . ' – ' . $appTitle : $appTitle . ' – Sicherer Cloud-Speicher';
 $flashes = getFlashes();
 $currentTheme = getCurrentTheme();
-$isDarkLike = in_array($currentTheme, ['dusk', 'mocha', 'petrol', 'plum', 'dark', 'ocean', 'forest'], true);
+$isDarkLike = in_array($currentTheme, ['dusk', 'mocha', 'petrol', 'plum', 'dark', 'ocean', 'forest', 'obsidian'], true);
 
 $headerStorageStats = null;
 $headerBarColor = 'bg-brand-600';
@@ -193,7 +193,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-plum.dark select,
         html.theme-plum.dark textarea { background-color: #2f273b !important; border-color: #65567b !important; color: #faf5ff !important; }
 
-        /* --- Dunkle Themes (Dark, Ocean & Forest) --- */
+        /* --- Dunkle Themes (Dark, Ocean, Forest & Obsidian/Mitternacht) --- */
         html.theme-ocean.dark body { background-color: #07192f !important; color: #e2e8f0; }
         html.theme-ocean.dark header,
         html.theme-ocean.dark footer,
@@ -202,6 +202,13 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-forest.dark header,
         html.theme-forest.dark footer,
         html.theme-forest.dark .mc-card { background-color: #0c2e24 !important; border-color: #164e3d !important; }
+        html.theme-obsidian.dark body { background-color: #0b0719 !important; color: #ede9fe; }
+        html.theme-obsidian.dark header,
+        html.theme-obsidian.dark footer,
+        html.theme-obsidian.dark .mc-card { background-color: #16102c !important; border-color: #2e2252 !important; }
+        html.theme-obsidian.dark input:not([type="checkbox"]),
+        html.theme-obsidian.dark select,
+        html.theme-obsidian.dark textarea { background-color: #110c22 !important; border-color: #36285f !important; color: #f5f3ff !important; }
 
         /* --- Mobile-Optimierungen (Verhindert ungewollten Auto-Zoom unter iOS/Android & verbessert Touch-Bedienung) --- */
         @media (max-width: 640px) {

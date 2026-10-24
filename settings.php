@@ -196,9 +196,10 @@ $themeGroups = [
         'plum'   => ['label' => '🍇 Pflaume (Violettgrau)',  'bg' => '#251b2e', 'card' => '#32253e', 'text' => '#ebdcf5'],
     ],
     'Dunkle Designs' => [
-        'dark'   => ['label' => '🌙 Dunkel',                 'bg' => '#020617', 'card' => '#0f172a', 'text' => '#f8fafc'],
-        'ocean'  => ['label' => '🌊 Ozean',                  'bg' => '#061326', 'card' => '#0c1f3d', 'text' => '#e0f2fe'],
-        'forest' => ['label' => '🌲 Wald',                   'bg' => '#071a12', 'card' => '#0e291e', 'text' => '#dcfce7'],
+        'dark'     => ['label' => '🌙 Dunkel',                    'bg' => '#020617', 'card' => '#0f172a', 'text' => '#f8fafc'],
+        'ocean'    => ['label' => '🌊 Ozean',                     'bg' => '#061326', 'card' => '#0c1f3d', 'text' => '#e0f2fe'],
+        'forest'   => ['label' => '🌲 Wald',                      'bg' => '#071a12', 'card' => '#0e291e', 'text' => '#dcfce7'],
+        'obsidian' => ['label' => '🌌 Mitternacht (Tiefviolett)', 'bg' => '#0b0719', 'card' => '#16102c', 'text' => '#ede9fe'],
     ],
 ];
 ?>
