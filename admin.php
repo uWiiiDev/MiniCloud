@@ -487,14 +487,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- 11. Anwendungsname, Logo & Impressum aktualisieren ---
     if ($action === 'update_branding') {
-        $newTitle    = mb_substr(trim((string)($_POST['app_title'] ?? '')), 0, 80);
-        $newSubtitle = mb_substr(trim((string)($_POST['app_subtitle'] ?? '')), 0, 80);
-        $imprintText = mb_substr(trim((string)($_POST['imprint_text'] ?? '')), 0, 25000);
-        $mailFrom    = mb_substr(trim((string)($_POST['mail_from'] ?? '')), 0, 190);
-        $removeLogo  = isset($_POST['remove_logo']) && $_POST['remove_logo'] === '1';
+        $newTitle       = mb_substr(trim((string)($_POST['app_title'] ?? '')), 0, 80);
+        $newSubtitle    = mb_substr(trim((string)($_POST['app_subtitle'] ?? '')), 0, 80);
+        $imprintText    = mb_substr(trim((string)($_POST['imprint_text'] ?? '')), 0, 25000);
+        $mailFrom       = mb_substr(trim((string)($_POST['mail_from'] ?? '')), 0, 190);
+        $mailTransport  = trim((string)($_POST['mail_transport'] ?? 'mail'));
+        $smtpHost       = mb_substr(trim((string)($_POST['smtp_host'] ?? '')), 0, 190);
+        $smtpPort       = (int)($_POST['smtp_port'] ?? 465);
+        $smtpEncryption = trim((string)($_POST['smtp_encryption'] ?? 'ssl'));
+        $smtpUser       = mb_substr(trim((string)($_POST['smtp_user'] ?? '')), 0, 190);
+        $smtpPassInput  = (string)($_POST['smtp_pass'] ?? '');
+        $clearSmtpPass  = isset($_POST['clear_smtp_pass']) && $_POST['clear_smtp_pass'] === '1';
+        $removeLogo     = isset($_POST['remove_logo']) && $_POST['remove_logo'] === '1';
 
         if ($newTitle === '') {
             $newTitle = APP_NAME;
+        }
+        if (!in_array($mailTransport, ['mail', 'smtp'], true)) {
+            $mailTransport = 'mail';
+        }
+        if (!in_array($smtpEncryption, ['ssl', 'tls', 'none'], true)) {
+            $smtpEncryption = 'ssl';
+        }
+        if ($smtpPort <= 0 || $smtpPort > 65535) {
+            $smtpPort = $smtpEncryption === 'tls' ? 587 : 465;
         }
 
         if ($mailFrom !== '' && filter_var($mailFrom, FILTER_VALIDATE_EMAIL) === false) {
@@ -503,10 +519,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        if ($mailTransport === 'smtp' && $smtpHost === '') {
+            setFlash('error', 'Bitte geben Sie für den SMTP-Versand einen gültigen SMTP-Server (Host) an.');
+            header('Location: admin.php#branding');
+            exit;
+        }
+
         saveAppSetting($pdo, 'app_title', $newTitle);
         saveAppSetting($pdo, 'app_subtitle', $newSubtitle);
         saveAppSetting($pdo, 'imprint_text', $imprintText);
         saveAppSetting($pdo, 'mail_from', $mailFrom);
+        saveAppSetting($pdo, 'mail_transport', $mailTransport);
+        saveAppSetting($pdo, 'smtp_host', $smtpHost);
+        saveAppSetting($pdo, 'smtp_port', (string)$smtpPort);
+        saveAppSetting($pdo, 'smtp_encryption', $smtpEncryption);
+        saveAppSetting($pdo, 'smtp_user', $smtpUser);
+
+        if ($clearSmtpPass) {
+            saveAppSetting($pdo, 'smtp_pass', '');
+        } elseif ($smtpPassInput !== '') {
+            saveAppSetting($pdo, 'smtp_pass', $smtpPassInput);
+        }
 
         if ($removeLogo) {
             saveAppSetting($pdo, 'logo_data_uri', '');
@@ -550,7 +583,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        setFlash('success', 'Anwendungstitel, Logo, 2FA-Absender und Impressum wurden erfolgreich gespeichert.');
+        setFlash('success', 'Anwendungstitel, Logo, E-Mail-/SMTP-Konfiguration und Impressum wurden erfolgreich gespeichert.');
+        header('Location: admin.php#branding');
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // 0b. TEST-E-MAIL SENDEN (PHP mail() / Postfix oder SMTP prüfen)
+    // -------------------------------------------------------------------------
+    if ($action === 'send_test_email') {
+        $testRecipient = trim((string)($_POST['test_email'] ?? ''));
+        if (filter_var($testRecipient, FILTER_VALIDATE_EMAIL) === false) {
+            setFlash('error', 'Bitte geben Sie eine gültige Empfänger-E-Mail-Adresse für die Test-E-Mail ein.');
+            header('Location: admin.php#branding');
+            exit;
+        }
+
+        $settings = getAppSettings($pdo);
+        $cleanTitle = preg_replace('/[\r\n"]/', '', $settings['app_title'] ?: APP_NAME) ?: APP_NAME;
+        $transportLabel = $settings['mail_transport'] === 'smtp'
+            ? sprintf('Externer SMTP-Server (%s:%s)', $settings['smtp_host'], $settings['smtp_port'])
+            : 'Standard PHP mail() / Lokaler Mailserver (Postfix)';
+
+        $subject = sprintf('[%s] Test-E-Mail des E-Mail-Versands', $cleanTitle);
+        $body = implode("\r\n", [
+            'Hallo,',
+            '',
+            sprintf('dies ist eine automatische Test-E-Mail Ihrer %s-Installation.', $cleanTitle),
+            '',
+            'Aktive Versandart: ' . $transportLabel,
+            'Zeitpunkt:         ' . date('d.m.Y H:i:s') . ' Uhr',
+            'Server-URL:        ' . getBaseUrl(),
+            '',
+            'Der E-Mail-Versand für die Zwei-Faktor-Authentifizierung (2FA) funktioniert einwandfrei!',
+        ]);
+
+        $mailErr = null;
+        if (sendSystemEmail($pdo, $testRecipient, $subject, $body, $mailErr)) {
+            setFlash('success', sprintf('Test-E-Mail wurde erfolgreich über „%s“ an %s versendet.', $transportLabel, $testRecipient));
+        } else {
+            setFlash('error', sprintf('Fehler beim Senden der Test-E-Mail: %s', $mailErr ?: 'Unbekannter Versandfehler.'));
+        }
         header('Location: admin.php#branding');
         exit;
     }
@@ -672,18 +745,132 @@ require_once __DIR__ . '/includes/header.php';
                 >
             </div>
 
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Absender-E-Mail für 2FA-Codes (optional)
-                </label>
-                <input
-                    type="email"
-                    name="mail_from"
-                    maxlength="190"
-                    value="<?= e($currentSettings['mail_from']) ?>"
-                    placeholder="Standard: noreply@<?= e(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud')) ?: 'runready.cloud') ?>"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+                <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    ✉️ E-Mail-Versand für 2FA-Codes
+                </p>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Versandart
+                    </label>
+                    <select
+                        name="mail_transport"
+                        id="mailTransportSelect"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                        <option value="mail" <?= $currentSettings['mail_transport'] === 'mail' ? 'selected' : '' ?>>
+                            Standard PHP mail() / Lokaler Server (z.B. Postfix / STRATO-Webspace)
+                        </option>
+                        <option value="smtp" <?= $currentSettings['mail_transport'] === 'smtp' ? 'selected' : '' ?>>
+                            Externer SMTP-Server (z.B. smtp.strato.de, smtp.ionos.de)
+                        </option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Absender-E-Mail-Adresse (From)
+                    </label>
+                    <input
+                        type="email"
+                        name="mail_from"
+                        maxlength="190"
+                        value="<?= e($currentSettings['mail_from']) ?>"
+                        placeholder="Standard: noreply@<?= e(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud')) ?: 'runready.cloud') ?>"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                    <p class="text-[11px] text-slate-400 mt-1">
+                        Hinweis für STRATO/IONOS: Muss als echtes Postfach Ihrer Domain angelegt sein.
+                    </p>
+                </div>
+
+                <!-- Optionale SMTP-Zugangsdaten (wird eingeblendet wenn "smtp" gewählt ist) -->
+                <div
+                    id="smtpSettingsBox"
+                    class="<?= $currentSettings['mail_transport'] === 'smtp' ? '' : 'hidden' ?> pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
                 >
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div class="sm:col-span-2">
+                            <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                SMTP-Server (Host)
+                            </label>
+                            <input
+                                type="text"
+                                name="smtp_host"
+                                maxlength="190"
+                                value="<?= e($currentSettings['smtp_host']) ?>"
+                                placeholder="z.B. smtp.strato.de"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Port
+                            </label>
+                            <input
+                                type="number"
+                                name="smtp_port"
+                                id="smtpPortInput"
+                                min="1"
+                                max="65535"
+                                value="<?= e($currentSettings['smtp_port']) ?>"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Verschlüsselung
+                        </label>
+                        <select
+                            name="smtp_encryption"
+                            id="smtpEncryptionSelect"
+                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        >
+                            <option value="ssl" <?= $currentSettings['smtp_encryption'] === 'ssl' ? 'selected' : '' ?>>SSL / TLS (Standard Port 465)</option>
+                            <option value="tls" <?= $currentSettings['smtp_encryption'] === 'tls' ? 'selected' : '' ?>>STARTTLS (Standard Port 587)</option>
+                            <option value="none" <?= $currentSettings['smtp_encryption'] === 'none' ? 'selected' : '' ?>>Keine Verschlüsselung (Port 25)</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                SMTP-Benutzername
+                            </label>
+                            <input
+                                type="text"
+                                name="smtp_user"
+                                maxlength="190"
+                                autocomplete="off"
+                                value="<?= e($currentSettings['smtp_user']) ?>"
+                                placeholder="z.B. noreply@ihredomain.de"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                SMTP-Passwort <?= $currentSettings['smtp_pass'] !== '' ? '<span class="text-emerald-600 dark:text-emerald-400">(hinterlegt)</span>' : '' ?>
+                            </label>
+                            <input
+                                type="password"
+                                name="smtp_pass"
+                                autocomplete="new-password"
+                                placeholder="<?= $currentSettings['smtp_pass'] !== '' ? '•••••••• (leer lassen zum Behalten)' : 'Passwort des Postfachs' ?>"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                        </div>
+                    </div>
+
+                    <?php if ($currentSettings['smtp_pass'] !== ''): ?>
+                        <label class="inline-flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                            <input type="checkbox" name="clear_smtp_pass" value="1" class="rounded border-slate-300">
+                            <span>Gespeichertes SMTP-Passwort löschen</span>
+                        </label>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
@@ -731,7 +918,7 @@ require_once __DIR__ . '/includes/header.php';
                 </label>
                 <textarea
                     name="imprint_text"
-                    rows="8"
+                    rows="10"
                     placeholder="Angaben gemäß § 5 DDG:&#10;Max Mustermann&#10;Musterstraße 1&#10;12345 Musterstadt&#10;&#10;Kontakt:&#10;E-Mail: info@beispiel.de"
                     class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 ><?= e($currentSettings['imprint_text']) ?></textarea>
@@ -747,6 +934,66 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
     </form>
+
+    <!-- Schneller Funktions-Test für den E-Mail-Versand (PHP mail() / Postfix oder SMTP) -->
+    <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+            <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                E-Mail-Versand testen
+            </p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                Sendet eine Test-E-Mail über die aktuell gespeicherte Versandart (<strong><?= $currentSettings['mail_transport'] === 'smtp' ? 'Externer SMTP-Server' : 'Standard PHP mail() / Postfix' ?></strong>).
+            </p>
+        </div>
+        <form action="admin.php" method="post" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="send_test_email">
+            <input
+                type="email"
+                name="test_email"
+                required
+                placeholder="Empfänger-E-Mail für Test..."
+                class="w-full sm:w-64 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+            <button
+                type="submit"
+                class="px-3.5 py-1.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+            >
+                ✉️ Test-E-Mail senden
+            </button>
+        </form>
+    </div>
+
+    <script>
+    (() => {
+        const transportSel = document.getElementById('mailTransportSelect');
+        const smtpBox = document.getElementById('smtpSettingsBox');
+        const encSel = document.getElementById('smtpEncryptionSelect');
+        const portInput = document.getElementById('smtpPortInput');
+
+        if (transportSel && smtpBox) {
+            transportSel.addEventListener('change', () => {
+                if (transportSel.value === 'smtp') {
+                    smtpBox.classList.remove('hidden');
+                } else {
+                    smtpBox.classList.add('hidden');
+                }
+            });
+        }
+
+        if (encSel && portInput) {
+            encSel.addEventListener('change', () => {
+                if (encSel.value === 'ssl' && (portInput.value === '587' || portInput.value === '25')) {
+                    portInput.value = '465';
+                } else if (encSel.value === 'tls' && (portInput.value === '465' || portInput.value === '25')) {
+                    portInput.value = '587';
+                } else if (encSel.value === 'none' && (portInput.value === '465' || portInput.value === '587')) {
+                    portInput.value = '25';
+                }
+            });
+        }
+    })();
+    </script>
 </section>
 
 <!-- 1. BENUTZERVERWALTUNG -->

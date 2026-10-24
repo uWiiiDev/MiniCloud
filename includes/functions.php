@@ -537,18 +537,24 @@ function getUploadErrorMessage(int $errorCode): string
 }
 
 /**
- * Lädt die Systemeinstellungen (Anwendungstitel, Untertitel, Logo, Impressum, Absender-E-Mail) aus der Datenbank.
+ * Lädt die Systemeinstellungen (Anwendungstitel, Untertitel, Logo, Impressum, Absender-E-Mail & SMTP) aus der Datenbank.
  *
- * @return array{app_title: string, app_subtitle: string, logo_data_uri: string, imprint_text: string, mail_from: string}
+ * @return array{app_title: string, app_subtitle: string, logo_data_uri: string, imprint_text: string, mail_from: string, mail_transport: string, smtp_host: string, smtp_port: string, smtp_encryption: string, smtp_user: string, smtp_pass: string}
  */
 function getAppSettings(?PDO $pdo = null): array
 {
     $defaults = [
-        'app_title'     => APP_NAME,
-        'app_subtitle'  => 'Private Cloud',
-        'logo_data_uri' => '',
-        'imprint_text'  => '',
-        'mail_from'     => '',
+        'app_title'       => APP_NAME,
+        'app_subtitle'    => 'Private Cloud',
+        'logo_data_uri'   => '',
+        'imprint_text'    => '',
+        'mail_from'       => '',
+        'mail_transport'  => 'mail',
+        'smtp_host'       => '',
+        'smtp_port'       => '465',
+        'smtp_encryption' => 'ssl',
+        'smtp_user'       => '',
+        'smtp_pass'       => '',
     ];
 
     try {
@@ -567,6 +573,15 @@ function getAppSettings(?PDO $pdo = null): array
 
     if (trim($defaults['app_title']) === '') {
         $defaults['app_title'] = APP_NAME;
+    }
+    if (!in_array($defaults['mail_transport'], ['mail', 'smtp'], true)) {
+        $defaults['mail_transport'] = 'mail';
+    }
+    if (!in_array($defaults['smtp_encryption'], ['ssl', 'tls', 'none'], true)) {
+        $defaults['smtp_encryption'] = 'ssl';
+    }
+    if (trim($defaults['smtp_port']) === '' || (int)$defaults['smtp_port'] <= 0) {
+        $defaults['smtp_port'] = $defaults['smtp_encryption'] === 'tls' ? '587' : '465';
     }
 
     return $defaults;
@@ -609,12 +624,199 @@ function maskEmailAddress(string $email): string
 }
 
 /**
- * Versendet den 6-stelligen 2FA-Sicherheitscode per E-Mail an den Benutzer.
+ * Liest eine mehrzeilige SMTP-Serverantwort und gibt den 3-stelligen Statuscode sowie den Text zurück.
+ *
+ * @param resource $socket
+ * @return array{code: int, text: string}
  */
-function sendTwoFactorEmail(PDO $pdo, string $toEmail, string $username, string $code): bool
+function readSmtpResponse($socket): array
+{
+    $lines = '';
+    $code = 0;
+    while (!feof($socket)) {
+        $line = fgets($socket, 1024);
+        if ($line === false) {
+            break;
+        }
+        $lines .= $line;
+        if (preg_match('/^(\d{3})([ -])/', $line, $m)) {
+            $code = (int)$m[1];
+            if ($m[2] === ' ') {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return ['code' => $code, 'text' => trim($lines)];
+}
+
+/**
+ * Sendet einen SMTP-Befehl und prüft, ob der Statuscode in $expectedCodes enthalten ist.
+ *
+ * @param resource $socket
+ * @param int[] $expectedCodes
+ */
+function sendSmtpCommand($socket, string $command, array $expectedCodes, ?string &$errorOut = null): bool
+{
+    if (@fwrite($socket, $command . "\r\n") === false) {
+        $errorOut = 'Schreibfehler auf der SMTP-Verbindung.';
+        return false;
+    }
+    $resp = readSmtpResponse($socket);
+    if (!in_array($resp['code'], $expectedCodes, true)) {
+        $errorOut = sprintf('SMTP-Antwort (%d): %s', $resp['code'], $resp['text']);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Versendet eine E-Mail direkt über einen konfigurierten SMTP-Server (SSL/TLS Port 465, STARTTLS Port 587 oder Plain).
+ *
+ * @param array<string, string> $settings
+ */
+function sendSmtpEmail(
+    array $settings,
+    string $fromEmail,
+    string $toEmail,
+    string $encodedSubject,
+    string $body,
+    string $headerStr,
+    ?string &$errorOut = null
+): bool {
+    $host = trim((string)($settings['smtp_host'] ?? ''));
+    $port = (int)($settings['smtp_port'] ?? 465);
+    $enc  = (string)($settings['smtp_encryption'] ?? 'ssl');
+    $user = trim((string)($settings['smtp_user'] ?? ''));
+    $pass = (string)($settings['smtp_pass'] ?? '');
+
+    if ($host === '' || $port <= 0 || $port > 65535) {
+        $errorOut = 'Ungültiger SMTP-Host oder Port.';
+        return false;
+    }
+
+    $remote = ($enc === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port;
+    $ctx = stream_context_create([
+        'ssl' => [
+            'verify_peer'       => true,
+            'verify_peer_name'  => true,
+            'allow_self_signed' => false,
+        ],
+    ]);
+
+    $errno = 0;
+    $errstr = '';
+    $socket = @stream_socket_client($remote, $errno, $errstr, 12.0, STREAM_CLIENT_CONNECT, $ctx);
+    if (!is_resource($socket)) {
+        $errorOut = sprintf('Verbindung zu %s:%d fehlgeschlagen (%s).', $host, $port, $errstr ?: ('Code ' . $errno));
+        return false;
+    }
+
+    stream_set_timeout($socket, 12);
+
+    $greeting = readSmtpResponse($socket);
+    if ($greeting['code'] !== 220) {
+        fclose($socket);
+        $errorOut = 'Ungültige SMTP-Begrüßung: ' . $greeting['text'];
+        return false;
+    }
+
+    $ehloDomain = preg_replace('/[^a-zA-Z0-9.-]/', '', (string)($_SERVER['HTTP_HOST'] ?? 'localhost')) ?: 'localhost';
+    if (!sendSmtpCommand($socket, 'EHLO ' . $ehloDomain, [250], $errorOut)) {
+        fclose($socket);
+        return false;
+    }
+
+    if ($enc === 'tls') {
+        if (!sendSmtpCommand($socket, 'STARTTLS', [220], $errorOut)) {
+            fclose($socket);
+            return false;
+        }
+        $cryptoMethod = STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT;
+        if (defined('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT')) {
+            $cryptoMethod |= STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT;
+        }
+        if (!@stream_socket_enable_crypto($socket, true, $cryptoMethod)) {
+            fclose($socket);
+            $errorOut = 'STARTTLS-Verschlüsselung konnte nicht ausgehandelt werden.';
+            return false;
+        }
+        if (!sendSmtpCommand($socket, 'EHLO ' . $ehloDomain, [250], $errorOut)) {
+            fclose($socket);
+            return false;
+        }
+    }
+
+    if ($user !== '') {
+        if (!sendSmtpCommand($socket, 'AUTH LOGIN', [334], $errorOut)) {
+            fclose($socket);
+            return false;
+        }
+        if (!sendSmtpCommand($socket, base64_encode($user), [334], $errorOut)) {
+            fclose($socket);
+            return false;
+        }
+        if (!sendSmtpCommand($socket, base64_encode($pass), [235], $errorOut)) {
+            fclose($socket);
+            $errorOut = 'SMTP-Authentifizierung fehlgeschlagen (Benutzername oder Passwort falsch).';
+            return false;
+        }
+    }
+
+    if (!sendSmtpCommand($socket, 'MAIL FROM:<' . $fromEmail . '>', [250], $errorOut)) {
+        fclose($socket);
+        return false;
+    }
+    if (!sendSmtpCommand($socket, 'RCPT TO:<' . $toEmail . '>', [250, 251], $errorOut)) {
+        fclose($socket);
+        return false;
+    }
+    if (!sendSmtpCommand($socket, 'DATA', [354], $errorOut)) {
+        fclose($socket);
+        return false;
+    }
+
+    // Dot-Stuffing nach RFC 5321
+    $normalizedBody = str_replace(["\r\n", "\r"], "\n", $body);
+    $stuffedLines = [];
+    foreach (explode("\n", $normalizedBody) as $line) {
+        if (str_starts_with($line, '.')) {
+            $line = '.' . $line;
+        }
+        $stuffedLines[] = $line;
+    }
+
+    $msgId = '<' . bin2hex(random_bytes(12)) . '@' . $ehloDomain . '>';
+    $dataPayload = implode("\r\n", [
+        'Date: ' . date('r'),
+        'To: <' . $toEmail . '>',
+        'Subject: ' . $encodedSubject,
+        'Message-ID: ' . $msgId,
+        $headerStr,
+        '',
+        implode("\r\n", $stuffedLines),
+        '.',
+    ]);
+
+    if (!sendSmtpCommand($socket, $dataPayload, [250], $errorOut)) {
+        fclose($socket);
+        return false;
+    }
+
+    @fwrite($socket, "QUIT\r\n");
+    fclose($socket);
+    return true;
+}
+
+/**
+ * Zentrale Versandfunktion für System-E-Mails (nutzt je nach Einstellung PHP mail()/Postfix oder SMTP).
+ */
+function sendSystemEmail(PDO $pdo, string $toEmail, string $rawSubject, string $body, ?string &$errorOut = null): bool
 {
     $toEmail = trim($toEmail);
     if (filter_var($toEmail, FILTER_VALIDATE_EMAIL) === false) {
+        $errorOut = 'Ungültige Empfänger-E-Mail-Adresse.';
         return false;
     }
 
@@ -633,13 +835,52 @@ function sendTwoFactorEmail(PDO $pdo, string $toEmail, string $username, string 
     }
 
     $configuredFrom = trim($settings['mail_from']);
-    $fromEmail = (filter_var($configuredFrom, FILTER_VALIDATE_EMAIL) !== false)
-        ? $configuredFrom
-        : ('noreply@' . $domain);
+    $smtpUserEmail  = trim($settings['smtp_user']);
+    if (filter_var($configuredFrom, FILTER_VALIDATE_EMAIL) !== false) {
+        $fromEmail = $configuredFrom;
+    } elseif ($settings['mail_transport'] === 'smtp' && filter_var($smtpUserEmail, FILTER_VALIDATE_EMAIL) !== false) {
+        $fromEmail = $smtpUserEmail;
+    } else {
+        $fromEmail = 'noreply@' . $domain;
+    }
 
     $cleanTitle = preg_replace('/[\r\n"]/', '', $appTitle) ?: APP_NAME;
     $encodedFromName = '=?UTF-8?B?' . base64_encode($cleanTitle) . '?=';
-    $subject = '=?UTF-8?B?' . base64_encode(sprintf('[%s] Ihr 2FA-Anmeldecode: %s', $cleanTitle, $code)) . '?=';
+    $encodedSubject  = '=?UTF-8?B?' . base64_encode($rawSubject) . '?=';
+
+    $headers = [
+        'From: ' . $encodedFromName . ' <' . $fromEmail . '>',
+        'Reply-To: ' . $fromEmail,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        'X-Mailer: MiniCloud-2FA',
+    ];
+    $headerStr = implode("\r\n", $headers);
+
+    if ($settings['mail_transport'] === 'smtp') {
+        return sendSmtpEmail($settings, $fromEmail, $toEmail, $encodedSubject, $body, $headerStr, $errorOut);
+    }
+
+    $sent = @mail($toEmail, $encodedSubject, $body, $headerStr, '-f ' . escapeshellarg($fromEmail));
+    if (!$sent) {
+        $sent = @mail($toEmail, $encodedSubject, $body, $headerStr);
+    }
+    if (!$sent) {
+        $errorOut = 'Der lokale PHP mail()-Aufruf ist fehlgeschlagen.';
+    }
+
+    return (bool)$sent;
+}
+
+/**
+ * Versendet den 6-stelligen 2FA-Sicherheitscode per E-Mail an den Benutzer.
+ */
+function sendTwoFactorEmail(PDO $pdo, string $toEmail, string $username, string $code): bool
+{
+    $settings = getAppSettings($pdo);
+    $cleanTitle = preg_replace('/[\r\n"]/', '', $settings['app_title'] ?: APP_NAME) ?: APP_NAME;
+    $rawSubject = sprintf('[%s] Ihr 2FA-Anmeldecode: %s', $cleanTitle, $code);
 
     $body = implode("\r\n", [
         sprintf('Hallo %s,', $username),
@@ -656,22 +897,7 @@ function sendTwoFactorEmail(PDO $pdo, string $toEmail, string $username, string 
         $cleanTitle . ' (' . getBaseUrl() . ')',
     ]);
 
-    $headers = [
-        'From: ' . $encodedFromName . ' <' . $fromEmail . '>',
-        'Reply-To: ' . $fromEmail,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit',
-        'X-Mailer: MiniCloud-2FA',
-    ];
-    $headerStr = implode("\r\n", $headers);
-
-    $sent = @mail($toEmail, $subject, $body, $headerStr, '-f ' . escapeshellarg($fromEmail));
-    if (!$sent) {
-        $sent = @mail($toEmail, $subject, $body, $headerStr);
-    }
-
-    return (bool)$sent;
+    return sendSystemEmail($pdo, $toEmail, $rawSubject, $body);
 }
 
 /**

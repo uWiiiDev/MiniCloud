@@ -155,7 +155,7 @@ Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Spalte | Datentyp | Null | Standardwert | Schlüssel / Index | Beschreibung |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`) |
+| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`, `mail_from`, `mail_transport`, `smtp_host`, `smtp_port`, `smtp_encryption`, `smtp_user`, `smtp_pass`) |
 | `setting_value` | `MEDIUMTEXT` | Ja | `NULL` | – | Zugehöriger Konfigurationswert |
 | `updated_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Letzte Änderung |
 
