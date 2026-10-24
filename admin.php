@@ -556,7 +556,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 setFlash('success', sprintf('Benutzer "%s" (%d MB) wurde erfolgreich angelegt.', $username, $quotaMb));
             }
         }
-        header('Location: admin.php');
+        header('Location: admin.php#tab-users');
         exit;
     }
 
@@ -578,7 +578,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $targetUserId]);
             setFlash('success', 'Benutzerkonto und zugehörige Dateien wurden gelöscht.');
         }
-        header('Location: admin.php');
+        header('Location: admin.php#tab-users');
         exit;
     }
 
@@ -599,19 +599,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($targetUserId > 0) {
             if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
                 setFlash('error', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.');
-                header('Location: admin.php');
+                header('Location: admin.php#tab-users');
                 exit;
             }
             if ($twoFactor === 1 && $email === '') {
                 setFlash('error', 'Um die 2FA per E-Mail zu aktivieren, muss eine gültige E-Mail-Adresse angegeben werden.');
-                header('Location: admin.php');
+                header('Location: admin.php#tab-users');
                 exit;
             }
 
             if ($newPassword !== '') {
                 if (strlen($newPassword) < 8) {
                     setFlash('error', 'Neues Passwort muss mindestens 8 Zeichen lang sein.');
-                    header('Location: admin.php');
+                    header('Location: admin.php#tab-users');
                     exit;
                 }
                 $hash = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 12]);
@@ -655,7 +655,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             setFlash('success', 'Benutzer-Einstellungen wurden aktualisiert.');
         }
-        header('Location: admin.php');
+        header('Location: admin.php#tab-users');
         exit;
     }
 
@@ -797,7 +797,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 11. Anwendungsname, Logo & Impressum aktualisieren ---
+    // --- 11a. Öffentliche Selbstregistrierung aktualisieren ---
+    if ($action === 'update_registration_settings') {
+        $allowRegistration = isset($_POST['allow_registration']) && $_POST['allow_registration'] === '1' ? '1' : '0';
+        $registrationCode  = mb_substr(trim((string)($_POST['registration_code'] ?? '')), 0, 100);
+        $regQuotaMb        = max(1, min(102400, (int)($_POST['registration_default_quota_mb'] ?? 100)));
+
+        saveAppSetting($pdo, 'allow_registration', $allowRegistration);
+        saveAppSetting($pdo, 'registration_code', $registrationCode);
+        saveAppSetting($pdo, 'registration_default_quota_mb', (string)$regQuotaMb);
+
+        setFlash('success', 'Einstellungen für die öffentliche Selbstregistrierung wurden gespeichert.');
+        header('Location: admin.php#tab-users');
+        exit;
+    }
+
+    // --- 11b. Module & Funktionen (Kalender & Chat) aktualisieren ---
+    if ($action === 'update_modules_settings') {
+        $enableCalendar = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
+        $enableChat     = isset($_POST['enable_chat']) && $_POST['enable_chat'] === '1' ? '1' : '0';
+
+        saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
+        saveAppSetting($pdo, 'enable_chat', $enableChat);
+
+        setFlash('success', 'Modul-Einstellungen (Kalender & Chat) wurden erfolgreich gespeichert.');
+        header('Location: admin.php#tab-modules');
+        exit;
+    }
+
+    // --- 11c. Darstellung, Logo & Impressum (Branding) aktualisieren ---
+    if ($action === 'update_branding_only') {
+        $newTitle    = mb_substr(trim((string)($_POST['app_title'] ?? '')), 0, 80);
+        $newSubtitle = mb_substr(trim((string)($_POST['app_subtitle'] ?? '')), 0, 80);
+        $imprintText = mb_substr(trim((string)($_POST['imprint_text'] ?? '')), 0, 25000);
+        $removeLogo  = isset($_POST['remove_logo']) && $_POST['remove_logo'] === '1';
+
+        if ($newTitle === '') {
+            $newTitle = APP_NAME;
+        }
+
+        saveAppSetting($pdo, 'app_title', $newTitle);
+        saveAppSetting($pdo, 'app_subtitle', $newSubtitle);
+        saveAppSetting($pdo, 'imprint_text', $imprintText);
+
+        if ($removeLogo) {
+            saveAppSetting($pdo, 'logo_data_uri', '');
+        }
+
+        // Optionaler Logo-Upload (PNG, JPG, WEBP, GIF, SVG bis max. 2 MB)
+        if (isset($_FILES['logo_file']) && is_array($_FILES['logo_file']) && (int)($_FILES['logo_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $err = (int)$_FILES['logo_file']['error'];
+            $tmp = (string)($_FILES['logo_file']['tmp_name'] ?? '');
+            $sz  = (int)($_FILES['logo_file']['size'] ?? 0);
+
+            if ($err !== UPLOAD_ERR_OK || !is_uploaded_file($tmp)) {
+                setFlash('error', 'Fehler beim Hochladen der Logo-Datei.');
+                header('Location: admin.php#tab-branding');
+                exit;
+            }
+            if ($sz <= 0 || $sz > 2 * 1024 * 1024) {
+                setFlash('error', 'Das Logo darf maximal 2 MB groß sein.');
+                header('Location: admin.php#tab-branding');
+                exit;
+            }
+
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = (string)($finfo->file($tmp) ?: '');
+            $allowedMimes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+            if (!in_array($mime, $allowedMimes, true)) {
+                setFlash('error', 'Ungültiges Bildformat. Erlaubt sind PNG, JPG, WEBP, GIF und SVG.');
+                header('Location: admin.php#tab-branding');
+                exit;
+            }
+
+            $rawBytes = file_get_contents($tmp);
+            if ($rawBytes !== false) {
+                if ($mime === 'image/svg+xml' && preg_match('/<\s*script|onload|onerror|javascript:|<\s*foreignObject/i', $rawBytes)) {
+                    setFlash('error', 'Die SVG-Datei enthält potenziell unsicheren aktiven Code und wurde abgelehnt.');
+                    header('Location: admin.php#tab-branding');
+                    exit;
+                }
+                $dataUri = 'data:' . $mime . ';base64,' . base64_encode($rawBytes);
+                saveAppSetting($pdo, 'logo_data_uri', $dataUri);
+            }
+        }
+
+        setFlash('success', 'Anwendungstitel, Logo und Impressum wurden erfolgreich gespeichert.');
+        header('Location: admin.php#tab-branding');
+        exit;
+    }
+
+    // --- 11d. E-Mail- & SMTP-Konfiguration aktualisieren ---
+    if ($action === 'update_mail_settings') {
+        $mailFrom       = mb_substr(trim((string)($_POST['mail_from'] ?? '')), 0, 190);
+        $mailTransport  = trim((string)($_POST['mail_transport'] ?? 'mail'));
+        $smtpHost       = mb_substr(trim((string)($_POST['smtp_host'] ?? '')), 0, 190);
+        $smtpPort       = (int)($_POST['smtp_port'] ?? 465);
+        $smtpEncryption = trim((string)($_POST['smtp_encryption'] ?? 'ssl'));
+        $smtpUser       = mb_substr(trim((string)($_POST['smtp_user'] ?? '')), 0, 190);
+        $smtpPassInput  = (string)($_POST['smtp_pass'] ?? '');
+        $clearSmtpPass  = isset($_POST['clear_smtp_pass']) && $_POST['clear_smtp_pass'] === '1';
+
+        if (!in_array($mailTransport, ['mail', 'smtp'], true)) {
+            $mailTransport = 'mail';
+        }
+        if (!in_array($smtpEncryption, ['ssl', 'tls', 'none'], true)) {
+            $smtpEncryption = 'ssl';
+        }
+        if ($smtpPort <= 0 || $smtpPort > 65535) {
+            $smtpPort = $smtpEncryption === 'tls' ? 587 : 465;
+        }
+
+        if ($mailFrom !== '' && filter_var($mailFrom, FILTER_VALIDATE_EMAIL) === false) {
+            setFlash('error', 'Die angegebene Absender-E-Mail-Adresse ist ungültig.');
+            header('Location: admin.php#tab-mail');
+            exit;
+        }
+
+        if ($mailTransport === 'smtp' && $smtpHost === '') {
+            setFlash('error', 'Bitte geben Sie für den SMTP-Versand einen gültigen SMTP-Server (Host) an.');
+            header('Location: admin.php#tab-mail');
+            exit;
+        }
+
+        saveAppSetting($pdo, 'mail_from', $mailFrom);
+        saveAppSetting($pdo, 'mail_transport', $mailTransport);
+        saveAppSetting($pdo, 'smtp_host', $smtpHost);
+        saveAppSetting($pdo, 'smtp_port', (string)$smtpPort);
+        saveAppSetting($pdo, 'smtp_encryption', $smtpEncryption);
+        saveAppSetting($pdo, 'smtp_user', $smtpUser);
+
+        if ($clearSmtpPass) {
+            saveAppSetting($pdo, 'smtp_pass', '');
+        } elseif ($smtpPassInput !== '') {
+            saveAppSetting($pdo, 'smtp_pass', $smtpPassInput);
+        }
+
+        setFlash('success', 'E-Mail- und SMTP-Konfiguration wurde erfolgreich gespeichert.');
+        header('Location: admin.php#tab-mail');
+        exit;
+    }
+
+    // --- 11e. Kombinierter Fallback (update_branding) ---
     if ($action === 'update_branding') {
         $newTitle       = mb_substr(trim((string)($_POST['app_title'] ?? '')), 0, 80);
         $newSubtitle    = mb_substr(trim((string)($_POST['app_subtitle'] ?? '')), 0, 80);
@@ -827,13 +968,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($mailFrom !== '' && filter_var($mailFrom, FILTER_VALIDATE_EMAIL) === false) {
             setFlash('error', 'Die angegebene Absender-E-Mail-Adresse für 2FA-Codes ist ungültig.');
-            header('Location: admin.php#branding');
+            header('Location: admin.php#tab-mail');
             exit;
         }
 
         if ($mailTransport === 'smtp' && $smtpHost === '') {
             setFlash('error', 'Bitte geben Sie für den SMTP-Versand einen gültigen SMTP-Server (Host) an.');
-            header('Location: admin.php#branding');
+            header('Location: admin.php#tab-mail');
             exit;
         }
 
@@ -868,46 +1009,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             saveAppSetting($pdo, 'logo_data_uri', '');
         }
 
-        // Optionaler Logo-Upload (PNG, JPG, WEBP, GIF, SVG bis max. 2 MB)
-        if (isset($_FILES['logo_file']) && is_array($_FILES['logo_file']) && (int)($_FILES['logo_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-            $err = (int)$_FILES['logo_file']['error'];
-            $tmp = (string)($_FILES['logo_file']['tmp_name'] ?? '');
-            $sz  = (int)($_FILES['logo_file']['size'] ?? 0);
-
-            if ($err !== UPLOAD_ERR_OK || !is_uploaded_file($tmp)) {
-                setFlash('error', 'Fehler beim Hochladen der Logo-Datei.');
-                header('Location: admin.php#branding');
-                exit;
-            }
-            if ($sz <= 0 || $sz > 2 * 1024 * 1024) {
-                setFlash('error', 'Das Logo darf maximal 2 MB groß sein.');
-                header('Location: admin.php#branding');
-                exit;
-            }
-
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = (string)($finfo->file($tmp) ?: '');
-            $allowedMimes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
-            if (!in_array($mime, $allowedMimes, true)) {
-                setFlash('error', 'Ungültiges Bildformat. Erlaubt sind PNG, JPG, WEBP, GIF und SVG.');
-                header('Location: admin.php#branding');
-                exit;
-            }
-
-            $rawBytes = file_get_contents($tmp);
-            if ($rawBytes !== false) {
-                if ($mime === 'image/svg+xml' && preg_match('/<\s*script|onload|onerror|javascript:|<\s*foreignObject/i', $rawBytes)) {
-                    setFlash('error', 'Die SVG-Datei enthält potenziell unsicheren aktiven Code und wurde abgelehnt.');
-                    header('Location: admin.php#branding');
-                    exit;
-                }
-                $dataUri = 'data:' . $mime . ';base64,' . base64_encode($rawBytes);
-                saveAppSetting($pdo, 'logo_data_uri', $dataUri);
-            }
-        }
-
-        setFlash('success', 'Anwendungstitel, Logo, E-Mail-/SMTP-Konfiguration und Impressum wurden erfolgreich gespeichert.');
-        header('Location: admin.php#branding');
+        setFlash('success', 'Einstellungen wurden erfolgreich gespeichert.');
+        header('Location: admin.php#tab-branding');
         exit;
     }
 
@@ -918,7 +1021,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $testRecipient = trim((string)($_POST['test_email'] ?? ''));
         if (filter_var($testRecipient, FILTER_VALIDATE_EMAIL) === false) {
             setFlash('error', 'Bitte geben Sie eine gültige Empfänger-E-Mail-Adresse für die Test-E-Mail ein.');
-            header('Location: admin.php#branding');
+            header('Location: admin.php#tab-mail');
             exit;
         }
 
@@ -938,7 +1041,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'Zeitpunkt:         ' . date('d.m.Y H:i:s') . ' Uhr',
             'Server-URL:        ' . getBaseUrl(),
             '',
-            'Der E-Mail-Versand für die Zwei-Faktor-Authentifizierung (2FA) funktioniert einwandfrei!',
+            'Der E-Mail-Versand für Passwort-Resets und die Zwei-Faktor-Authentifizierung (2FA) funktioniert einwandfrei!',
         ]);
 
         $mailErr = null;
@@ -947,7 +1050,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             setFlash('error', sprintf('Fehler beim Senden der Test-E-Mail: %s', $mailErr ?: 'Unbekannter Versandfehler.'));
         }
-        header('Location: admin.php#branding');
+        header('Location: admin.php#tab-mail');
         exit;
     }
 
@@ -964,7 +1067,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $result = performGitHubUpdate($pdo, $repoInput);
         setFlash($result['ok'] ? 'success' : 'error', $result['message']);
-        header('Location: admin.php#system-update');
+        header('Location: admin.php#tab-system');
         exit;
     }
 }
@@ -1020,11 +1123,17 @@ $pageTitle = 'Administration';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<?php
+$localCommitInfo = getLocalInstalledCommitInfo($pdo);
+$versionMeta     = getAppVersionInfo();
+$configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelrath/MiniCloud')) ?: 'uwebenzelrath/MiniCloud';
+?>
+
+<div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
         <h1 class="text-2xl font-bold text-slate-900 dark:text-white">System-Administration</h1>
         <p class="text-sm text-slate-500 dark:text-slate-400">
-            Anwendungstitel, Logo &amp; Impressum anpassen, Systemeinstellungen steuern und Benutzerkonten verwalten.
+            Benutzer &amp; Registrierung, Cloud-Module, Branding &amp; Impressum, E-Mail-Versand sowie Updates &amp; Server-Status.
         </p>
     </div>
     <a href="index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300/80 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors self-start sm:self-auto">
@@ -1032,105 +1141,671 @@ require_once __DIR__ . '/includes/header.php';
     </a>
 </div>
 
-<!-- 0. ANWENDUNGSNAME, LOGO & IMPRESSUM (BRANDING) -->
-<section id="branding" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-10">
-    <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
-        <div>
-            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Anwendungstitel, Logo &amp; Impressum</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400">
-                Passen Sie den Namen der Cloud, das Kopfzeilen-Logo, die 2FA-Absenderadresse und das öffentlich abrufbare Impressum an.
-            </p>
-        </div>
-        <a
-            href="impressum.php"
-            target="_blank"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
-        >
-            <span>Impressum-Seite öffnen &nearr;</span>
-        </a>
-    </div>
+<!-- THEMATISCHE BEREICHS-NAVIGATION (TABS) -->
+<nav aria-label="Administrations-Bereiche" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-xs mb-6 flex flex-wrap items-center gap-1.5">
+    <button
+        type="button"
+        data-admin-tab-btn="tab-users"
+        onclick="switchAdminTab('tab-users')"
+        class="admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+    >
+        <span>👥</span>
+        <span>Benutzer &amp; Registrierung</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= count($allUsers) ?></span>
+    </button>
 
-    <form action="admin.php" method="post" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-        <input type="hidden" name="action" value="update_branding">
+    <button
+        type="button"
+        data-admin-tab-btn="tab-modules"
+        onclick="switchAdminTab('tab-modules')"
+        class="admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+    >
+        <span>🧩</span>
+        <span>Module &amp; Funktionen</span>
+    </button>
 
-        <!-- Linke Spalte: Titel, Untertitel, 2FA-Absender & Logo -->
-        <div class="lg:col-span-5 space-y-4">
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Titel / Name der Anwendung
-                </label>
-                <input
-                    type="text"
-                    name="app_title"
-                    required
-                    maxlength="80"
-                    value="<?= e($currentSettings['app_title']) ?>"
-                    placeholder="z.B. MiniCloud oder Familien-Cloud"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
+    <button
+        type="button"
+        data-admin-tab-btn="tab-branding"
+        onclick="switchAdminTab('tab-branding')"
+        class="admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+    >
+        <span>🎨</span>
+        <span>Darstellung &amp; Impressum</span>
+    </button>
 
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Zusatztitel / Badge in der Kopfzeile (optional)
-                </label>
-                <input
-                    type="text"
-                    name="app_subtitle"
-                    maxlength="80"
-                    value="<?= e($currentSettings['app_subtitle']) ?>"
-                    placeholder="z.B. Private Cloud (leer lassen zum Ausblenden)"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
+    <button
+        type="button"
+        data-admin-tab-btn="tab-mail"
+        onclick="switchAdminTab('tab-mail')"
+        class="admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+    >
+        <span>✉️</span>
+        <span>E-Mail &amp; SMTP</span>
+    </button>
 
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
-                <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    ✉️ E-Mail-Versand für 2FA-Codes
-                </p>
+    <button
+        type="button"
+        data-admin-tab-btn="tab-system"
+        onclick="switchAdminTab('tab-system')"
+        class="admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+    >
+        <span>🖥️</span>
+        <span>System, Update &amp; Status</span>
+    </button>
 
+    <button
+        type="button"
+        data-admin-tab-btn="all"
+        onclick="switchAdminTab('all')"
+        class="admin-tab-btn sm:ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+        title="Alle Bereiche untereinander einblenden"
+    >
+        <span>📋</span>
+        <span>Alle Bereiche</span>
+    </button>
+</nav>
+
+<!-- ======================================================================= -->
+<!-- TAB 1: BENUTZER & REGISTRIERUNG                                         -->
+<!-- ======================================================================= -->
+<div id="tab-users" data-admin-tab-panel="tab-users" class="space-y-6 mb-10">
+    <!-- 1a. Öffentliche Selbstregistrierung -->
+    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 text-lg">
+                    👤
+                </span>
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Versandart
-                    </label>
-                    <select
-                        name="mail_transport"
-                        id="mailTransportSelect"
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                        <option value="mail" <?= $currentSettings['mail_transport'] === 'mail' ? 'selected' : '' ?>>
-                            Standard PHP mail() / Lokaler Server (z.B. Postfix / STRATO-Webspace)
-                        </option>
-                        <option value="smtp" <?= $currentSettings['mail_transport'] === 'smtp' ? 'selected' : '' ?>>
-                            Externer SMTP-Server (z.B. smtp.strato.de, smtp.ionos.de)
-                        </option>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Absender-E-Mail-Adresse (From)
-                    </label>
-                    <input
-                        type="email"
-                        name="mail_from"
-                        maxlength="190"
-                        value="<?= e($currentSettings['mail_from']) ?>"
-                        placeholder="Standard: noreply@<?= e(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud')) ?: 'runready.cloud') ?>"
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                    <p class="text-[11px] text-slate-400 mt-1">
-                        Hinweis für STRATO/IONOS: Muss als echtes Postfach Ihrer Domain angelegt sein.
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Öffentliche Selbstregistrierung</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Legen Sie fest, ob Besucher sich selbst auf der Anmeldeseite ein Benutzerkonto erstellen dürfen (optional geschützt per Einladungs-Code).
                     </p>
                 </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+            </span>
+        </div>
 
-                <!-- Optionale SMTP-Zugangsdaten (wird eingeblendet wenn "smtp" gewählt ist) -->
+        <form action="admin.php" method="post" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="update_registration_settings">
+
+            <div class="lg:col-span-5">
+                <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        name="allow_registration"
+                        value="1"
+                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'checked' : '' ?>
+                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    >
+                    <span>
+                        <strong>Selbstregistrierung auf der Anmeldeseite erlauben</strong><br>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Neue Konten sind aus Datenschutzgründen in der Teilen-Auswahl standardmäßig unsichtbar.</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="lg:col-span-3">
+                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Einladungs-Code (optional)
+                </label>
+                <input
+                    type="text"
+                    name="registration_code"
+                    maxlength="100"
+                    value="<?= e($currentSettings['registration_code'] ?? '') ?>"
+                    placeholder="Leer = ohne Code"
+                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+            </div>
+
+            <div class="lg:col-span-2">
+                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Start-Quota (MB)
+                </label>
+                <input
+                    type="number"
+                    name="registration_default_quota_mb"
+                    min="1"
+                    max="102400"
+                    value="<?= e($currentSettings['registration_default_quota_mb'] ?? '100') ?>"
+                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+            </div>
+
+            <div class="lg:col-span-2">
+                <button
+                    type="submit"
+                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
+                >
+                    Speichern
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- 1b. Benutzer anlegen & Benutzerliste -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Formular: Neuen Benutzer anlegen -->
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <h2 class="text-base font-bold text-slate-900 dark:text-white mb-1">Neuen Benutzer anlegen</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Erstellen Sie manuell ein neues Benutzerkonto inkl. E-Mail-Adresse (für Passwort-Reset &amp; 2FA) und Speicher-Quota.
+            </p>
+
+            <form action="admin.php" method="post" class="space-y-3.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="create_user">
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Benutzername</label>
+                    <input
+                        type="text"
+                        name="username"
+                        required
+                        minlength="3"
+                        maxlength="32"
+                        placeholder="z.B. anna_schmidt"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">E-Mail-Adresse (für Passwort-Reset &amp; 2FA)</label>
+                    <input
+                        type="email"
+                        name="email"
+                        maxlength="190"
+                        placeholder="z.B. anna@beispiel.de"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Initial-Passwort (BCRYPT)</label>
+                    <input
+                        type="password"
+                        name="password"
+                        required
+                        minlength="8"
+                        placeholder="Mindestens 8 Zeichen"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Speicherplatz (MB)</label>
+                        <input
+                            type="number"
+                            name="quota_mb"
+                            value="100"
+                            min="1"
+                            max="102400"
+                            required
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Rolle</label>
+                        <select
+                            name="is_admin"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                            <option value="0">Standardbenutzer</option>
+                            <option value="1">Administrator</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input type="checkbox" name="two_factor_enabled" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                    <span>🔒 <strong>2FA per E-Mail aktivieren</strong> (Sendet 6-stelligen Code beim Login)</span>
+                </label>
+
+                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input type="checkbox" name="allow_user_sharing" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                    <span>👁️ <strong>In Teilen-Auswahl sichtbar</strong> (Standardmäßig aus Datenschutzgründen deaktiviert)</span>
+                </label>
+
+                <button
+                    type="submit"
+                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
+                >
+                    Benutzer erstellen
+                </button>
+            </form>
+        </div>
+
+        <!-- Liste aller Benutzer -->
+        <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+            <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <h2 class="text-base font-bold text-slate-900 dark:text-white">Registrierte Cloud-Benutzer (<?= count($allUsers) ?>)</h2>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                            <th class="py-3 px-4">Benutzer &amp; E-Mail</th>
+                            <th class="py-3 px-4">Belegt / Quota</th>
+                            <th class="py-3 px-4">Anpassen (E-Mail, 2FA, Quota, Passwort)</th>
+                            <th class="py-3 px-4 text-right">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                        <?php foreach ($allUsers as $u): ?>
+                            <?php
+                            $uId = (int)$u['id'];
+                            $uQuotaMb = (int)round(((int)$u['storage_quota']) / (1024 * 1024));
+                            $uEmail = trim((string)($u['email'] ?? ''));
+                            $u2fa = (int)($u['two_factor_enabled'] ?? 0) === 1;
+                            $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
+                            ?>
+                            <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                                <td class="py-3 px-4">
+                                    <div class="font-semibold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
+                                        <span><?= e((string)$u['username']) ?></span>
+                                        <?php if ((int)$u['is_admin'] === 1): ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white">Admin</span>
+                                        <?php endif; ?>
+                                        <?php if ($u2fa && $uEmail !== ''): ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per E-Mail aktiviert">🔒 2FA</span>
+                                        <?php endif; ?>
+                                        <?php if ($uShareVis): ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600 text-white" title="Sichtbar in der Teilen-Auswahl anderer Benutzer">👁️ Teilen</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]" title="<?= e($uEmail !== '' ? $uEmail : 'Keine E-Mail-Adresse hinterlegt') ?>">
+                                        <?= $uEmail !== '' ? '✉️ ' . e($uEmail) : '<span class="italic text-slate-400">Keine E-Mail</span>' ?>
+                                    </div>
+                                    <div class="text-[11px] text-slate-400">ID #<?= $uId ?> &bull; Theme: <?= e((string)$u['theme']) ?></div>
+                                </td>
+                                <td class="py-3 px-4 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                    <div><strong><?= e(formatBytes((int)$u['used_bytes'])) ?></strong> / <?= e(formatBytes((int)$u['storage_quota'], 0)) ?></div>
+                                    <div class="text-slate-400"><?= (int)$u['file_count'] ?> Dateien</div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <form action="admin.php" method="post" class="flex flex-wrap items-center gap-2">
+                                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                        <input type="hidden" name="action" value="update_user">
+                                        <input type="hidden" name="user_id" value="<?= $uId ?>">
+                                        <input
+                                            type="email"
+                                            name="email"
+                                            value="<?= e($uEmail) ?>"
+                                            placeholder="E-Mail (Reset & 2FA)"
+                                            title="E-Mail-Adresse des Benutzers"
+                                            class="w-full sm:w-44 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                                        >
+                                        <input
+                                            type="number"
+                                            name="quota_mb"
+                                            value="<?= $uQuotaMb ?>"
+                                            min="1"
+                                            title="Quota in MB"
+                                            class="w-24 sm:w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                                        >
+                                        <input
+                                            type="password"
+                                            name="new_password"
+                                            placeholder="Neues Passwort (optional)"
+                                            class="w-full sm:w-40 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                                        >
+                                        <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Optionale 2FA per E-Mail aktivieren">
+                                            <input type="checkbox" name="two_factor_enabled" value="1" <?= $u2fa ? 'checked' : '' ?>>
+                                            <span>2FA</span>
+                                        </label>
+                                        <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="In Teilen-Auswahl für andere Benutzer sichtbar">
+                                            <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?>>
+                                            <span>Teilen</span>
+                                        </label>
+                                        <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                                            <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>
+                                            <span>Admin</span>
+                                        </label>
+                                        <button type="submit" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-brand-600 hover:text-white text-xs font-medium transition-colors cursor-pointer">
+                                            Speichern
+                                        </button>
+                                    </form>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <?php if ($uId !== $currentAdminId): ?>
+                                        <form action="admin.php" method="post" onsubmit="return confirm('Benutzer &quot;<?= e(addslashes((string)$u['username'])) ?>&quot; samt Dateien wirklich löschen?');">
+                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                            <input type="hidden" name="action" value="delete_user">
+                                            <input type="hidden" name="user_id" value="<?= $uId ?>">
+                                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
+                                                Löschen
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="text-xs text-slate-400">Aktuell</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- ======================================================================= -->
+<!-- TAB 2: MODULE & FUNKTIONEN (Kalender & Chat)                            -->
+<!-- ======================================================================= -->
+<div id="tab-modules" data-admin-tab-panel="tab-modules" class="hidden space-y-6 mb-10">
+    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 text-lg">
+                    🧩
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cloud-Module &amp; Zusatzfunktionen</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Aktivieren oder deaktivieren Sie optionale Funktionsmodule der Cloud global für alle Benutzer.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <form action="admin.php" method="post" class="space-y-5">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="update_modules_settings">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- Modul 1: Kalender -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📅 Kalender-Modul
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_calendar"
+                                value="1"
+                                <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Integrierten Termin-Kalender aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Ermöglicht persönliche Termine, Kalender-Freigaben zwischen Benutzern (unter Beachtung der Datenschutz-Freigabe), Cloud-Datei-Anhänge am Termin sowie `.ics`-Export.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <?php if (($currentSettings['enable_calendar'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="calendar.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📅 Kalender öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 2: Chat & Rundnachrichten -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                💬 Chat- &amp; Rundnachrichten-Modul
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_chat"
+                                value="1"
+                                <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Integrierten Messenger / Chat aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Direktnachrichten zwischen Benutzern (nur bei aktivierter Teilen-Sichtbarkeit), Desktop-/Mobil-Benachrichtigungen sowie offizielle Admin-Rundnachrichten an alle Benutzer.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <?php if (($currentSettings['enable_chat'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="messages.php?channel=broadcast" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📢 Rundnachricht an alle Benutzer senden &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button
+                    type="submit"
+                    class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
+                >
+                    Modul-Einstellungen speichern
+                </button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<!-- ======================================================================= -->
+<!-- TAB 3: DARSTELLUNG, LOGO & IMPRESSUM (BRANDING)                         -->
+<!-- ======================================================================= -->
+<div id="tab-branding" data-admin-tab-panel="tab-branding" class="hidden space-y-6 mb-10">
+    <section id="branding" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 text-lg">
+                    🎨
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Anwendungstitel, Logo &amp; Impressum</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Passen Sie den Namen der Cloud, das Kopfzeilen-Logo und das öffentlich abrufbare Impressum (<code class="font-mono">impressum.php</code>) an.
+                    </p>
+                </div>
+            </div>
+            <a
+                href="impressum.php"
+                target="_blank"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+            >
+                <span>Impressum-Seite öffnen &nearr;</span>
+            </a>
+        </div>
+
+        <form action="admin.php" method="post" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="update_branding_only">
+
+            <!-- Linke Spalte: Titel, Untertitel & Logo -->
+            <div class="lg:col-span-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Titel / Name der Anwendung
+                    </label>
+                    <input
+                        type="text"
+                        name="app_title"
+                        required
+                        maxlength="80"
+                        value="<?= e($currentSettings['app_title']) ?>"
+                        placeholder="z.B. MiniCloud oder Familien-Cloud"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Zusatztitel / Badge in der Kopfzeile (optional)
+                    </label>
+                    <input
+                        type="text"
+                        name="app_subtitle"
+                        maxlength="80"
+                        value="<?= e($currentSettings['app_subtitle']) ?>"
+                        placeholder="z.B. Private Cloud (leer lassen zum Ausblenden)"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+                    <div class="flex items-center gap-3">
+                        <?php if ($currentSettings['logo_data_uri'] !== ''): ?>
+                            <img
+                                src="<?= e($currentSettings['logo_data_uri']) ?>"
+                                alt="Aktuelles Logo"
+                                class="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1 shrink-0"
+                            >
+                        <?php else: ?>
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 flex items-center justify-center text-white shrink-0">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                                </svg>
+                            </div>
+                        <?php endif; ?>
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">Eigenes Logo hochladen</p>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">PNG, JPG, WEBP, GIF oder SVG (max. 2 MB)</p>
+                        </div>
+                    </div>
+
+                    <input
+                        type="file"
+                        name="logo_file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                        class="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 dark:file:bg-brand-950 file:text-brand-700 dark:file:text-brand-300 hover:file:bg-brand-100 cursor-pointer"
+                    >
+
+                    <?php if ($currentSettings['logo_data_uri'] !== ''): ?>
+                        <label class="inline-flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer">
+                            <input type="checkbox" name="remove_logo" value="1" class="rounded border-slate-300">
+                            <span>Eigenes Logo entfernen (Standard-Wolken-Icon verwenden)</span>
+                        </label>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Rechte Spalte: Impressum -->
+            <div class="lg:col-span-7 flex flex-col justify-between space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Impressum-Text (wird öffentlich unter <code class="text-brand-600 dark:text-brand-400">impressum.php</code> angezeigt)
+                    </label>
+                    <textarea
+                        name="imprint_text"
+                        rows="9"
+                        placeholder="Angaben gemäß § 5 DDG:&#10;Max Mustermann&#10;Musterstraße 1&#10;12345 Musterstadt&#10;&#10;Kontakt:&#10;E-Mail: info@beispiel.de"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    ><?= e($currentSettings['imprint_text']) ?></textarea>
+                </div>
+
+                <div class="flex justify-end">
+                    <button
+                        type="submit"
+                        class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                        Branding &amp; Impressum speichern
+                    </button>
+                </div>
+            </div>
+        </form>
+    </section>
+</div>
+
+<!-- ======================================================================= -->
+<!-- TAB 4: E-MAIL & SMTP (Passwort-Reset & 2FA)                             -->
+<!-- ======================================================================= -->
+<div id="tab-mail" data-admin-tab-panel="tab-mail" class="hidden space-y-6 mb-10">
+    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 text-lg">
+                    ✉️
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">E-Mail- &amp; SMTP-Konfiguration</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Wird für das Zurücksetzen vergessener Passwörter (<code class="font-mono">forgot_password.php</code>) sowie für 6-stellige 2FA-Sicherheitscodes beim Login verwendet.
+                    </p>
+                </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                Aktiv: <?= $currentSettings['mail_transport'] === 'smtp' ? 'Externer SMTP-Server' : 'PHP mail() / Postfix' ?>
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <!-- Linke Spalte: Versandart & SMTP-Einstellungen -->
+            <form action="admin.php" method="post" class="lg:col-span-7 space-y-4">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_mail_settings">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Versandart
+                        </label>
+                        <select
+                            name="mail_transport"
+                            id="mailTransportSelect"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                            <option value="mail" <?= $currentSettings['mail_transport'] === 'mail' ? 'selected' : '' ?>>
+                                Standard PHP mail() / Lokaler Server (Postfix)
+                            </option>
+                            <option value="smtp" <?= $currentSettings['mail_transport'] === 'smtp' ? 'selected' : '' ?>>
+                                Externer SMTP-Server (z.B. STRATO / IONOS)
+                            </option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Absender-E-Mail-Adresse (From)
+                        </label>
+                        <input
+                            type="email"
+                            name="mail_from"
+                            maxlength="190"
+                            value="<?= e($currentSettings['mail_from']) ?>"
+                            placeholder="Standard: noreply@<?= e(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud')) ?: 'runready.cloud') ?>"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                </div>
+
+                <!-- Optionale SMTP-Zugangsdaten -->
                 <div
                     id="smtpSettingsBox"
-                    class="<?= $currentSettings['mail_transport'] === 'smtp' ? '' : 'hidden' ?> pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
+                    class="<?= $currentSettings['mail_transport'] === 'smtp' ? '' : 'hidden' ?> p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5"
                 >
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        🔐 SMTP-Verbindungsdaten
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div class="sm:col-span-2">
                             <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
                                 SMTP-Server (Host)
@@ -1143,6 +1818,20 @@ require_once __DIR__ . '/includes/header.php';
                                 placeholder="z.B. smtp.strato.de"
                                 class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
                             >
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Verschlüsselung
+                            </label>
+                            <select
+                                name="smtp_encryption"
+                                id="smtpEncryptionSelect"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                                <option value="ssl" <?= $currentSettings['smtp_encryption'] === 'ssl' ? 'selected' : '' ?>>SSL / TLS (465)</option>
+                                <option value="tls" <?= $currentSettings['smtp_encryption'] === 'tls' ? 'selected' : '' ?>>STARTTLS (587)</option>
+                                <option value="none" <?= $currentSettings['smtp_encryption'] === 'none' ? 'selected' : '' ?>>Keine (25)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -1160,22 +1849,7 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Verschlüsselung
-                        </label>
-                        <select
-                            name="smtp_encryption"
-                            id="smtpEncryptionSelect"
-                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-                        >
-                            <option value="ssl" <?= $currentSettings['smtp_encryption'] === 'ssl' ? 'selected' : '' ?>>SSL / TLS (Standard Port 465)</option>
-                            <option value="tls" <?= $currentSettings['smtp_encryption'] === 'tls' ? 'selected' : '' ?>>STARTTLS (Standard Port 587)</option>
-                            <option value="none" <?= $currentSettings['smtp_encryption'] === 'none' ? 'selected' : '' ?>>Keine Verschlüsselung (Port 25)</option>
-                        </select>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
                                 SMTP-Benutzername
@@ -1211,701 +1885,376 @@ require_once __DIR__ . '/includes/header.php';
                         </label>
                     <?php endif; ?>
                 </div>
-            </div>
 
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
-                <div class="flex items-center gap-3">
-                    <?php if ($currentSettings['logo_data_uri'] !== ''): ?>
-                        <img
-                            src="<?= e($currentSettings['logo_data_uri']) ?>"
-                            alt="Aktuelles Logo"
-                            class="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1 shrink-0"
-                        >
-                    <?php else: ?>
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 flex items-center justify-center text-white shrink-0">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                            </svg>
-                        </div>
-                    <?php endif; ?>
-                    <div class="min-w-0">
-                        <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">Eigenes Logo hochladen</p>
-                        <p class="text-[11px] text-slate-500 dark:text-slate-400">PNG, JPG, WEBP, GIF oder SVG (max. 2 MB)</p>
-                    </div>
-                </div>
-
-                <input
-                    type="file"
-                    name="logo_file"
-                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                    class="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 dark:file:bg-brand-950 file:text-brand-700 dark:file:text-brand-300 hover:file:bg-brand-100 cursor-pointer"
-                >
-
-                <?php if ($currentSettings['logo_data_uri'] !== ''): ?>
-                    <label class="inline-flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer">
-                        <input type="checkbox" name="remove_logo" value="1" class="rounded border-slate-300">
-                        <span>Eigenes Logo entfernen (Standard-Wolken-Icon verwenden)</span>
-                    </label>
-                <?php endif; ?>
-            </div>
-
-            <!-- Optionale Öffentliche Selbstregistrierung -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        👤 Öffentliche Selbstregistrierung
-                    </p>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
-                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
-                    </span>
-                </div>
-
-                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        name="allow_registration"
-                        value="1"
-                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'checked' : '' ?>
-                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                <div class="flex justify-end pt-1">
+                    <button
+                        type="submit"
+                        class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
                     >
-                    <span>
-                        <strong>Selbstregistrierung auf der Anmeldeseite erlauben</strong><br>
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Neue Benutzer sind in der Teilen-Auswahl standardmäßig unsichtbar.</span>
-                    </span>
-                </label>
+                        E-Mail-Einstellungen speichern
+                    </button>
+                </div>
+            </form>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <!-- Rechte Spalte: Live-Funktions-Test (Test-E-Mail senden) -->
+            <div class="lg:col-span-5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
+                <div>
+                    <p class="text-sm font-bold text-slate-900 dark:text-white">
+                        🧪 E-Mail-Versand live testen
+                    </p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Sendet eine Test-E-Mail über die aktuell gespeicherte Versandart (<strong><?= $currentSettings['mail_transport'] === 'smtp' ? 'Externer SMTP-Server' : 'Standard PHP mail() / Postfix' ?></strong>).
+                    </p>
+                </div>
+
+                <form action="admin.php" method="post" class="space-y-3">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="send_test_email">
                     <div>
-                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Einladungs-Code (optional)
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Empfänger-E-Mail für Test
+                        </label>
+                        <input
+                            type="email"
+                            name="test_email"
+                            required
+                            placeholder="z.B. ihre-adresse@beispiel.de"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                    <button
+                        type="submit"
+                        class="w-full py-2.5 px-4 rounded-xl bg-slate-200/80 dark:bg-slate-700 hover:bg-brand-600 hover:text-white text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                    >
+                        ✉️ Test-E-Mail jetzt senden
+                    </button>
+                </form>
+
+                <p class="text-[11px] text-slate-400 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                    💡 <strong>Hinweis für STRATO / IONOS:</strong> Die Absender-Adresse (<code class="font-mono">From</code>) muss als echtes E-Mail-Postfach Ihrer Domain angelegt sein.
+                </p>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- ======================================================================= -->
+<!-- TAB 5: SYSTEM, UPDATE & SERVER-STATUS                                   -->
+<!-- ======================================================================= -->
+<div id="tab-system" data-admin-tab-panel="tab-system" class="hidden space-y-6 mb-10">
+    <!-- 5a. SYSTEM-UPDATE ÜBER GITHUB (1-Klick-Updater) -->
+    <section id="system-update" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 text-lg">
+                    🔄
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">System-Update (GitHub)</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Prüfen Sie direkt über GitHub auf neue Versionen und installieren Sie Updates per 1-Klick (Benutzerdateien &amp; Datenbank-Zugangsdaten bleiben geschützt).
+                    </p>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                id="btnCheckGithubUpdate"
+                onclick="checkGithubUpdateNow()"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+            >
+                <span>🔍</span>
+                <span>Auf Updates prüfen</span>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <!-- Linke Info-Box: Installierter Stand & Update-Aktion -->
+            <div class="lg:col-span-5 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierte Version:</span>
+                    <span class="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                        <?= e($versionMeta['version']) ?>
+                    </span>
+                </div>
+
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierter Commit:</span>
+                    <span id="updInstalledCommit" class="text-xs font-mono text-slate-700 dark:text-slate-300">
+                        <?= $localCommitInfo['short'] !== '' ? '#' . e($localCommitInfo['short']) : 'Build #' . e($versionMeta['hash']) ?>
+                        <?= $localCommitInfo['date'] !== '' ? ' (' . e($localCommitInfo['date']) . ')' : '' ?>
+                    </span>
+                </div>
+
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Update-Status:</span>
+                    <span id="updStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                        Bereit zur Prüfung
+                    </span>
+                </div>
+
+                <form
+                    action="admin.php"
+                    method="post"
+                    class="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
+                    onsubmit="return confirm('Möchten Sie das System jetzt direkt von GitHub aktualisieren? Ihre Benutzerdateien (uploads/) und Datenbank-Zugangsdaten bleiben vollständig erhalten.');"
+                >
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="run_github_update">
+
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            GitHub-Repository (Branch: <code class="font-mono">main</code>)
                         </label>
                         <input
                             type="text"
-                            name="registration_code"
-                            maxlength="100"
-                            value="<?= e($currentSettings['registration_code'] ?? '') ?>"
-                            placeholder="Leer = ohne Code"
-                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            name="github_repo"
+                            value="<?= e($configuredRepo) ?>"
+                            placeholder="uwebenzelrath/MiniCloud"
+                            class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
                         >
                     </div>
-                    <div>
-                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Start-Quota (MB)
-                        </label>
-                        <input
-                            type="number"
-                            name="registration_default_quota_mb"
-                            min="1"
-                            max="102400"
-                            value="<?= e($currentSettings['registration_default_quota_mb'] ?? '100') ?>"
-                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-                        >
-                    </div>
-                </div>
+
+                    <button
+                        type="submit"
+                        id="btnRunGithubUpdate"
+                        class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    >
+                        <span>⬇️</span>
+                        <span>Jetzt von GitHub aktualisieren</span>
+                    </button>
+                </form>
             </div>
 
-            <!-- Optionales Kalender-Modul -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        📅 Kalender-Modul
-                    </p>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
-                        <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
-                    </span>
+            <!-- Rechte Box: Letzte Commits / Änderungen auf GitHub -->
+            <div class="lg:col-span-7 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Letzte Änderungen auf GitHub (<code class="font-mono">main</code>)
+                    </h3>
+                    <a
+                        href="https://github.com/<?= e($configuredRepo) ?>/commits/main"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                    >
+                        Auf GitHub öffnen &nearr;
+                    </a>
                 </div>
 
-                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        name="enable_calendar"
-                        value="1"
-                        <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'checked' : '' ?>
-                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                    >
-                    <span>
-                        <strong>Integrierten Kalender aktivieren</strong><br>
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Persönliche Termine, Kalender-Teilen (unter Beachtung der Datenschutz-Freigabe), Cloud-Datei-Anhänge &amp; .ics-Export.</span>
-                    </span>
-                </label>
-            </div>
-
-            <!-- Optionales Chat- & Rundnachrichten-Modul -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        💬 Chat- &amp; Rundnachrichten-Modul
+                <div id="githubCommitsList" class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                    <p class="text-slate-400 italic py-4 text-center">
+                        Klicken Sie oben rechts auf „🔍 Auf Updates prüfen“, um die neuesten Commits von GitHub abzurufen.
                     </p>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
-                        <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
-                    </span>
                 </div>
-
-                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        name="enable_chat"
-                        value="1"
-                        <?= ($currentSettings['enable_chat'] ?? '1') === '1' ? 'checked' : '' ?>
-                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                    >
-                    <span>
-                        <strong>Integrierten Messenger / Chat aktivieren</strong><br>
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Direktnachrichten zwischen Benutzern (nur bei aktivierter Teilen-Sichtbarkeit) sowie Admin-Rundnachrichten an alle Benutzer.</span>
-                    </span>
-                </label>
-
-                <?php if (($currentSettings['enable_chat'] ?? '1') === '1'): ?>
-                    <div class="pt-1">
-                        <a href="messages.php?channel=broadcast" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                            📢 Rundnachricht an alle Benutzer senden &rarr;
-                        </a>
-                    </div>
-                <?php endif; ?>
             </div>
         </div>
+    </section>
 
-        <!-- Rechte Spalte: Impressum -->
-        <div class="lg:col-span-7 flex flex-col justify-between space-y-4">
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Impressum-Text (wird unter <code class="text-brand-600 dark:text-brand-400">impressum.php</code> angezeigt)
-                </label>
-                <textarea
-                    name="imprint_text"
-                    rows="10"
-                    placeholder="Angaben gemäß § 5 DDG:&#10;Max Mustermann&#10;Musterstraße 1&#10;12345 Musterstadt&#10;&#10;Kontakt:&#10;E-Mail: info@beispiel.de"
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                ><?= e($currentSettings['imprint_text']) ?></textarea>
+    <!-- 5b. SERVER-STATUS & SYSTEM-DASHBOARD (Kompakt & Live-Aktualisierend) -->
+    <section id="server-status" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                    </svg>
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Server-Status &amp; Systemressourcen</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Host: <strong class="text-slate-700 dark:text-slate-200"><?= e($serverStats['hostname']) ?></strong>
+                        &bull; Uptime: <strong id="srvUptime" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['uptime']) ?></strong>
+                        &bull; PHP <?= e($serverStats['php_version']) ?>
+                    </p>
+                </div>
             </div>
 
-            <div class="flex justify-end">
+            <div class="flex items-center gap-2 text-xs">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live (<span id="srvTimestamp"><?= e($serverStats['timestamp']) ?></span>)</span>
+                </span>
                 <button
-                    type="submit"
-                    class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
+                    type="button"
+                    onclick="refreshServerDashboard()"
+                    class="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold transition-colors cursor-pointer"
+                    title="Jetzt aktualisieren"
                 >
-                    Einstellungen speichern
+                    ↻
                 </button>
             </div>
         </div>
-    </form>
 
-    <!-- Schneller Funktions-Test für den E-Mail-Versand (PHP mail() / Postfix oder SMTP) -->
-    <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-            <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                E-Mail-Versand testen
-            </p>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                Sendet eine Test-E-Mail über die aktuell gespeicherte Versandart (<strong><?= $currentSettings['mail_transport'] === 'smtp' ? 'Externer SMTP-Server' : 'Standard PHP mail() / Postfix' ?></strong>).
-            </p>
-        </div>
-        <form action="admin.php" method="post" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-            <input type="hidden" name="action" value="send_test_email">
-            <input
-                type="email"
-                name="test_email"
-                required
-                placeholder="Empfänger-E-Mail für Test..."
-                class="w-full sm:w-64 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-            <button
-                type="submit"
-                class="px-3.5 py-1.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
-            >
-                ✉️ Test-E-Mail senden
-            </button>
-        </form>
-    </div>
-
-    <script>
-    (() => {
-        const transportSel = document.getElementById('mailTransportSelect');
-        const smtpBox = document.getElementById('smtpSettingsBox');
-        const encSel = document.getElementById('smtpEncryptionSelect');
-        const portInput = document.getElementById('smtpPortInput');
-
-        if (transportSel && smtpBox) {
-            transportSel.addEventListener('change', () => {
-                if (transportSel.value === 'smtp') {
-                    smtpBox.classList.remove('hidden');
-                } else {
-                    smtpBox.classList.add('hidden');
-                }
-            });
-        }
-
-        if (encSel && portInput) {
-            encSel.addEventListener('change', () => {
-                if (encSel.value === 'ssl' && (portInput.value === '587' || portInput.value === '25')) {
-                    portInput.value = '465';
-                } else if (encSel.value === 'tls' && (portInput.value === '465' || portInput.value === '25')) {
-                    portInput.value = '587';
-                } else if (encSel.value === 'none' && (portInput.value === '465' || portInput.value === '587')) {
-                    portInput.value = '25';
-                }
-            });
-        }
-    })();
-    </script>
-</section>
-
-<!-- 1. BENUTZERVERWALTUNG -->
-<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-    <!-- Formular: Neuen Benutzer anlegen -->
-    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <h2 class="text-base font-bold text-slate-900 dark:text-white mb-1">Neuen Benutzer anlegen</h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-            Selbstregistrierung ist deaktiviert. Legen Sie hier neue Zugänge inkl. optionaler E-Mail-2FA an.
-        </p>
-
-        <form action="admin.php" method="post" class="space-y-3.5">
-            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-            <input type="hidden" name="action" value="create_user">
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Benutzername</label>
-                <input
-                    type="text"
-                    name="username"
-                    required
-                    minlength="3"
-                    maxlength="32"
-                    placeholder="z.B. anna_schmidt"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">E-Mail-Adresse (optional, für 2FA)</label>
-                <input
-                    type="email"
-                    name="email"
-                    maxlength="190"
-                    placeholder="z.B. anna@beispiel.de"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Initial-Passwort (BCRYPT)</label>
-                <input
-                    type="password"
-                    name="password"
-                    required
-                    minlength="8"
-                    placeholder="Mindestens 8 Zeichen"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Karte 1: Festplatten-Speicherplatz -->
+            <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Speicherplatz (MB)</label>
-                    <input
-                        type="number"
-                        name="quota_mb"
-                        value="100"
-                        min="1"
-                        max="102400"
-                        required
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Rolle</label>
-                    <select
-                        name="is_admin"
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                        <option value="0">Standardbenutzer</option>
-                        <option value="1">Administrator</option>
-                    </select>
-                </div>
-            </div>
-
-            <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
-                <input type="checkbox" name="two_factor_enabled" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
-                <span>🔒 <strong>2FA per E-Mail aktivieren</strong> (Sendet 6-stelligen Code beim Login)</span>
-            </label>
-
-            <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
-                <input type="checkbox" name="allow_user_sharing" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
-                <span>👁️ <strong>In Teilen-Auswahl sichtbar</strong> (Standardmäßig aus Datenschutzgründen deaktiviert)</span>
-            </label>
-
-            <button
-                type="submit"
-                class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
-            >
-                Benutzer erstellen
-            </button>
-        </form>
-    </div>
-
-    <!-- Liste aller Benutzer -->
-    <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h2 class="text-base font-bold text-slate-900 dark:text-white">Registrierte Cloud-Benutzer (<?= count($allUsers) ?>)</h2>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                        <th class="py-3 px-4">Benutzer &amp; E-Mail</th>
-                        <th class="py-3 px-4">Belegt / Quota</th>
-                        <th class="py-3 px-4">Anpassen (E-Mail, 2FA, Quota, Passwort)</th>
-                        <th class="py-3 px-4 text-right">Aktion</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
-                    <?php foreach ($allUsers as $u): ?>
-                        <?php
-                        $uId = (int)$u['id'];
-                        $uQuotaMb = (int)round(((int)$u['storage_quota']) / (1024 * 1024));
-                        $uEmail = trim((string)($u['email'] ?? ''));
-                        $u2fa = (int)($u['two_factor_enabled'] ?? 0) === 1;
-                        $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
-                        ?>
-                        <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                            <td class="py-3 px-4">
-                                <div class="font-semibold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
-                                    <span><?= e((string)$u['username']) ?></span>
-                                    <?php if ((int)$u['is_admin'] === 1): ?>
-                                        <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white">Admin</span>
-                                    <?php endif; ?>
-                                    <?php if ($u2fa && $uEmail !== ''): ?>
-                                        <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per E-Mail aktiviert">🔒 2FA</span>
-                                    <?php endif; ?>
-                                    <?php if ($uShareVis): ?>
-                                        <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600 text-white" title="Sichtbar in der Teilen-Auswahl anderer Benutzer">👁️ Teilen</span>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]" title="<?= e($uEmail !== '' ? $uEmail : 'Keine E-Mail-Adresse hinterlegt') ?>">
-                                    <?= $uEmail !== '' ? '✉️ ' . e($uEmail) : '<span class="italic text-slate-400">Keine E-Mail</span>' ?>
-                                </div>
-                                <div class="text-[11px] text-slate-400">ID #<?= $uId ?> &bull; Theme: <?= e((string)$u['theme']) ?></div>
-                            </td>
-                            <td class="py-3 px-4 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                <div><strong><?= e(formatBytes((int)$u['used_bytes'])) ?></strong> / <?= e(formatBytes((int)$u['storage_quota'], 0)) ?></div>
-                                <div class="text-slate-400"><?= (int)$u['file_count'] ?> Dateien</div>
-                            </td>
-                            <td class="py-3 px-4">
-                                <form action="admin.php" method="post" class="flex flex-wrap items-center gap-2">
-                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                    <input type="hidden" name="action" value="update_user">
-                                    <input type="hidden" name="user_id" value="<?= $uId ?>">
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value="<?= e($uEmail) ?>"
-                                        placeholder="E-Mail für 2FA (optional)"
-                                        title="E-Mail-Adresse des Benutzers"
-                                        class="w-full sm:w-44 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
-                                    >
-                                    <input
-                                        type="number"
-                                        name="quota_mb"
-                                        value="<?= $uQuotaMb ?>"
-                                        min="1"
-                                        title="Quota in MB"
-                                        class="w-24 sm:w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
-                                    >
-                                    <input
-                                        type="password"
-                                        name="new_password"
-                                        placeholder="Neues Passwort (optional)"
-                                        class="w-full sm:w-40 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
-                                    >
-                                    <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Optionale 2FA per E-Mail aktivieren">
-                                        <input type="checkbox" name="two_factor_enabled" value="1" <?= $u2fa ? 'checked' : '' ?>>
-                                        <span>2FA</span>
-                                    </label>
-                                    <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="In Teilen-Auswahl für andere Benutzer sichtbar">
-                                        <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?>>
-                                        <span>Teilen</span>
-                                    </label>
-                                    <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                                        <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>
-                                        <span>Admin</span>
-                                    </label>
-                                    <button type="submit" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-brand-600 hover:text-white text-xs font-medium transition-colors cursor-pointer">
-                                        Speichern
-                                    </button>
-                                </form>
-                            </td>
-                            <td class="py-3 px-4 text-right">
-                                <?php if ($uId !== $currentAdminId): ?>
-                                    <form action="admin.php" method="post" onsubmit="return confirm('Benutzer &quot;<?= e(addslashes((string)$u['username'])) ?>&quot; samt Dateien wirklich löschen?');">
-                                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                        <input type="hidden" name="action" value="delete_user">
-                                        <input type="hidden" name="user_id" value="<?= $uId ?>">
-                                        <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
-                                            Löschen
-                                        </button>
-                                    </form>
-                                <?php else: ?>
-                                    <span class="text-xs text-slate-400">Aktuell</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
-
-<!-- 3. SYSTEM-UPDATE ÜBER GITHUB (1-Klick-Updater) -->
-<?php
-$localCommitInfo = getLocalInstalledCommitInfo($pdo);
-$versionMeta     = getAppVersionInfo();
-$configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelrath/MiniCloud')) ?: 'uwebenzelrath/MiniCloud';
-?>
-<section id="system-update" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mt-10">
-    <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center gap-2.5">
-            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 text-lg">
-                🔄
-            </span>
-            <div>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">System-Update (GitHub)</h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">
-                    Prüfen Sie direkt über GitHub auf neue Versionen und installieren Sie Updates per 1-Klick (Benutzerdateien &amp; Datenbank-Zugangsdaten bleiben geschützt).
-                </p>
-            </div>
-        </div>
-
-        <button
-            type="button"
-            id="btnCheckGithubUpdate"
-            onclick="checkGithubUpdateNow()"
-            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
-        >
-            <span>🔍</span>
-            <span>Auf Updates prüfen</span>
-        </button>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        <!-- Linke Info-Box: Installierter Stand & Update-Aktion -->
-        <div class="lg:col-span-5 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierte Version:</span>
-                <span class="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                    <?= e($versionMeta['version']) ?>
-                </span>
-            </div>
-
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierter Commit:</span>
-                <span id="updInstalledCommit" class="text-xs font-mono text-slate-700 dark:text-slate-300">
-                    <?= $localCommitInfo['short'] !== '' ? '#' . e($localCommitInfo['short']) : 'Build #' . e($versionMeta['hash']) ?>
-                    <?= $localCommitInfo['date'] !== '' ? ' (' . e($localCommitInfo['date']) . ')' : '' ?>
-                </span>
-            </div>
-
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Update-Status:</span>
-                <span id="updStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    Bereit zur Prüfung
-                </span>
-            </div>
-
-            <form
-                action="admin.php"
-                method="post"
-                class="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
-                onsubmit="return confirm('Möchten Sie das System jetzt direkt von GitHub aktualisieren? Ihre Benutzerdateien (uploads/) und Datenbank-Zugangsdaten bleiben vollständig erhalten.');"
-            >
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="run_github_update">
-
-                <div>
-                    <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        GitHub-Repository (Branch: <code class="font-mono">main</code>)
-                    </label>
-                    <input
-                        type="text"
-                        name="github_repo"
-                        value="<?= e($configuredRepo) ?>"
-                        placeholder="uwebenzelrath/MiniCloud"
-                        class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
-                    >
-                </div>
-
-                <button
-                    type="submit"
-                    id="btnRunGithubUpdate"
-                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
-                >
-                    <span>⬇️</span>
-                    <span>Jetzt von GitHub aktualisieren</span>
-                </button>
-            </form>
-        </div>
-
-        <!-- Rechte Box: Letzte Commits / Änderungen auf GitHub -->
-        <div class="lg:col-span-7 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
-            <div class="flex items-center justify-between gap-2 mb-3">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Letzte Änderungen auf GitHub (<code class="font-mono">main</code>)
-                </h3>
-                <a
-                    href="https://github.com/<?= e($configuredRepo) ?>/commits/main"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
-                >
-                    Auf GitHub öffnen &nearr;
-                </a>
-            </div>
-
-            <div id="githubCommitsList" class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                <p class="text-slate-400 italic py-4 text-center">
-                    Klicken Sie oben rechts auf „🔍 Auf Updates prüfen“, um die neuesten Commits von GitHub abzurufen.
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- SERVER-STATUS & SYSTEM-DASHBOARD (Kompakt & Live-Aktualisierend) -->
-<section id="server-status" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mt-10">
-    <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center gap-2.5">
-            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                </svg>
-            </span>
-            <div>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Server-Status &amp; Systemressourcen</h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">
-                    Host: <strong class="text-slate-700 dark:text-slate-200"><?= e($serverStats['hostname']) ?></strong>
-                    &bull; Uptime: <strong id="srvUptime" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['uptime']) ?></strong>
-                    &bull; PHP <?= e($serverStats['php_version']) ?>
-                </p>
-            </div>
-        </div>
-
-        <div class="flex items-center gap-2 text-xs">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 font-medium">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Live (<span id="srvTimestamp"><?= e($serverStats['timestamp']) ?></span>)</span>
-            </span>
-            <button
-                type="button"
-                onclick="refreshServerDashboard()"
-                class="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold transition-colors cursor-pointer"
-                title="Jetzt aktualisieren"
-            >
-                ↻
-            </button>
-        </div>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Karte 1: Festplatten-Speicherplatz -->
-        <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
-            <div>
-                <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                    <span>💾 Speicherplatz (Server)</span>
-                    <span id="srvDiskPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['disk_pct'], 1, ',', '.')) ?>%</span>
-                </div>
-                <p id="srvDiskMain" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                    <?= e($serverStats['disk_used_fmt']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">von <?= e($serverStats['disk_total_fmt']) ?></span>
-                </p>
-                <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
-                    <div
-                        id="srvDiskBar"
-                        class="h-full <?= $serverStats['disk_pct'] >= 90 ? 'bg-red-600' : ($serverStats['disk_pct'] >= 75 ? 'bg-amber-500' : 'bg-brand-600') ?> rounded-full transition-all duration-300"
-                        style="width: <?= e((string)$serverStats['disk_pct']) ?>%"
-                    ></div>
-                </div>
-            </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Frei: <strong id="srvDiskFree" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['disk_free_fmt']) ?></strong></span>
-                <span>Cloud: <strong id="srvCloudUsed" class="text-brand-600 dark:text-brand-400"><?= e($serverStats['cloud_bytes_fmt']) ?></strong> (<?= (int)$serverStats['cloud_files'] ?>)</span>
-            </p>
-        </div>
-
-        <!-- Karte 2: Arbeitsspeicher (RAM) -->
-        <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
-            <div>
-                <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                    <span>🧠 Arbeitsspeicher (RAM)</span>
-                    <span id="srvRamPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['ram_pct'], 1, ',', '.')) ?>%</span>
-                </div>
-                <p id="srvRamMain" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                    <?= e($serverStats['ram_used_fmt']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">von <?= e($serverStats['ram_total_fmt']) ?></span>
-                </p>
-                <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
-                    <div
-                        id="srvRamBar"
-                        class="h-full <?= $serverStats['ram_pct'] >= 90 ? 'bg-red-600' : ($serverStats['ram_pct'] >= 75 ? 'bg-amber-500' : 'bg-indigo-600') ?> rounded-full transition-all duration-300"
-                        style="width: <?= e((string)$serverStats['ram_pct']) ?>%"
-                    ></div>
-                </div>
-            </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Verfügbar: <strong id="srvRamFree" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['ram_free_fmt']) ?></strong></span>
-                <span>DB: <?= e( strtok($serverStats['db_version'], '-') ?: 'MariaDB' ) ?></span>
-            </p>
-        </div>
-
-        <!-- Karte 3: CPU & Systemlast -->
-        <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
-            <div>
-                <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                    <span>⚡ CPU-Auslastung (<?= (int)$serverStats['cpu_cores'] ?> <?= (int)$serverStats['cpu_cores'] === 1 ? 'Kern' : 'Kerne' ?>)</span>
-                    <span id="srvCpuPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['cpu_pct'], 1, ',', '.')) ?>%</span>
-                </div>
-                <p id="srvCpuLoad" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                    Load: <?= e($serverStats['load_1']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">/ <?= e($serverStats['load_5']) ?> / <?= e($serverStats['load_15']) ?></span>
-                </p>
-                <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
-                    <div
-                        id="srvCpuBar"
-                        class="h-full <?= $serverStats['cpu_pct'] >= 85 ? 'bg-red-600' : ($serverStats['cpu_pct'] >= 65 ? 'bg-amber-500' : 'bg-emerald-600') ?> rounded-full transition-all duration-300"
-                        style="width: <?= e((string)$serverStats['cpu_pct']) ?>%"
-                    ></div>
-                </div>
-            </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate" title="<?= e($serverStats['cpu_model']) ?>">
-                <?= e($serverStats['cpu_model']) ?>
-            </p>
-        </div>
-
-        <!-- Karte 4: Netzwerkauslastung -->
-        <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
-            <div>
-                <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                    <span>🌐 Netzwerk (<?= e($serverStats['net_iface']) ?>)</span>
-                    <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">Aktiv</span>
-                </div>
-                <div class="grid grid-cols-2 gap-2 my-1.5">
-                    <div class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">
-                        <span class="block text-[10px] text-slate-400 uppercase">Empfangen (↓)</span>
-                        <span id="srvNetRxRate" class="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400"><?= e($serverStats['net_rx_rate']) ?></span>
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        <span>💾 Speicherplatz (Server)</span>
+                        <span id="srvDiskPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['disk_pct'], 1, ',', '.')) ?>%</span>
                     </div>
-                    <div class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">
-                        <span class="block text-[10px] text-slate-400 uppercase">Gesendet (↑)</span>
-                        <span id="srvNetTxRate" class="text-xs sm:text-sm font-bold text-brand-600 dark:text-brand-400"><?= e($serverStats['net_tx_rate']) ?></span>
+                    <p id="srvDiskMain" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                        <?= e($serverStats['disk_used_fmt']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">von <?= e($serverStats['disk_total_fmt']) ?></span>
+                    </p>
+                    <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
+                        <div
+                            id="srvDiskBar"
+                            class="h-full <?= $serverStats['disk_pct'] >= 90 ? 'bg-red-600' : ($serverStats['disk_pct'] >= 75 ? 'bg-amber-500' : 'bg-brand-600') ?> rounded-full transition-all duration-300"
+                            style="width: <?= e((string)$serverStats['disk_pct']) ?>%"
+                        ></div>
                     </div>
                 </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                    <span>Frei: <strong id="srvDiskFree" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['disk_free_fmt']) ?></strong></span>
+                    <span>Cloud: <strong id="srvCloudUsed" class="text-brand-600 dark:text-brand-400"><?= e($serverStats['cloud_bytes_fmt']) ?></strong> (<?= (int)$serverStats['cloud_files'] ?>)</span>
+                </p>
             </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1">
-                <span>Gesamt ↓ <strong id="srvNetRxTotal" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['net_rx_total']) ?></strong></span>
-                <span>Gesamt ↑ <strong id="srvNetTxTotal" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['net_tx_total']) ?></strong></span>
-            </p>
+
+            <!-- Karte 2: Arbeitsspeicher (RAM) -->
+            <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        <span>🧠 Arbeitsspeicher (RAM)</span>
+                        <span id="srvRamPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['ram_pct'], 1, ',', '.')) ?>%</span>
+                    </div>
+                    <p id="srvRamMain" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                        <?= e($serverStats['ram_used_fmt']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">von <?= e($serverStats['ram_total_fmt']) ?></span>
+                    </p>
+                    <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
+                        <div
+                            id="srvRamBar"
+                            class="h-full <?= $serverStats['ram_pct'] >= 90 ? 'bg-red-600' : ($serverStats['ram_pct'] >= 75 ? 'bg-amber-500' : 'bg-indigo-600') ?> rounded-full transition-all duration-300"
+                            style="width: <?= e((string)$serverStats['ram_pct']) ?>%"
+                        ></div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                    <span>Verfügbar: <strong id="srvRamFree" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['ram_free_fmt']) ?></strong></span>
+                    <span>DB: <?= e( strtok($serverStats['db_version'], '-') ?: 'MariaDB' ) ?></span>
+                </p>
+            </div>
+
+            <!-- Karte 3: CPU & Systemlast -->
+            <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        <span>⚡ CPU-Auslastung (<?= (int)$serverStats['cpu_cores'] ?> <?= (int)$serverStats['cpu_cores'] === 1 ? 'Kern' : 'Kerne' ?>)</span>
+                        <span id="srvCpuPctLabel" class="font-bold text-slate-900 dark:text-white"><?= e(number_format((float)$serverStats['cpu_pct'], 1, ',', '.')) ?>%</span>
+                    </div>
+                    <p id="srvCpuLoad" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                        Load: <?= e($serverStats['load_1']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">/ <?= e($serverStats['load_5']) ?> / <?= e($serverStats['load_15']) ?></span>
+                    </p>
+                    <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
+                        <div
+                            id="srvCpuBar"
+                            class="h-full <?= $serverStats['cpu_pct'] >= 85 ? 'bg-red-600' : ($serverStats['cpu_pct'] >= 65 ? 'bg-amber-500' : 'bg-emerald-600') ?> rounded-full transition-all duration-300"
+                            style="width: <?= e((string)$serverStats['cpu_pct']) ?>%"
+                        ></div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate" title="<?= e($serverStats['cpu_model']) ?>">
+                    <?= e($serverStats['cpu_model']) ?>
+                </p>
+            </div>
+
+            <!-- Karte 4: Netzwerkauslastung -->
+            <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                        <span>🌐 Netzwerk (<?= e($serverStats['net_iface']) ?>)</span>
+                        <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">Aktiv</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 my-1.5">
+                        <div class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">
+                            <span class="block text-[10px] text-slate-400 uppercase">Empfangen (↓)</span>
+                            <span id="srvNetRxRate" class="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400"><?= e($serverStats['net_rx_rate']) ?></span>
+                        </div>
+                        <div class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">
+                            <span class="block text-[10px] text-slate-400 uppercase">Gesendet (↑)</span>
+                            <span id="srvNetTxRate" class="text-xs sm:text-sm font-bold text-brand-600 dark:text-brand-400"><?= e($serverStats['net_tx_rate']) ?></span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1">
+                    <span>Gesamt ↓ <strong id="srvNetRxTotal" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['net_rx_total']) ?></strong></span>
+                    <span>Gesamt ↑ <strong id="srvNetTxTotal" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['net_tx_total']) ?></strong></span>
+                </p>
+            </div>
         </div>
-    </div>
-</section>
+    </section>
+</div>
 
 <script>
+function switchAdminTab(tabId, updateHash = true) {
+    const panels = document.querySelectorAll('[data-admin-tab-panel]');
+    const buttons = document.querySelectorAll('[data-admin-tab-btn]');
+
+    // Legacy-Hash-Namen automatisch auf die neuen Tab-Namen abbilden
+    const hashMap = {
+        'branding': 'tab-branding',
+        'system-update': 'tab-system',
+        'server-status': 'tab-system',
+        'users': 'tab-users'
+    };
+    const resolvedTab = hashMap[tabId] || tabId;
+
+    panels.forEach((panel) => {
+        const pId = panel.getAttribute('data-admin-tab-panel');
+        if (resolvedTab === 'all' || pId === resolvedTab) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    });
+
+    buttons.forEach((btn) => {
+        const bId = btn.getAttribute('data-admin-tab-btn');
+        if (bId === resolvedTab) {
+            btn.className = 'admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-brand-600 text-white shadow-xs' + (bId === 'all' ? ' sm:ml-auto' : '');
+        } else {
+            btn.className = 'admin-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' + (bId === 'all' ? ' sm:ml-auto' : '');
+        }
+    });
+
+    if (updateHash && history.replaceState) {
+        history.replaceState(null, '', '#' + resolvedTab);
+    }
+}
+
+(() => {
+    const initialHash = (window.location.hash || '').replace(/^#/, '');
+    const validTabs = ['tab-users', 'tab-modules', 'tab-branding', 'tab-mail', 'tab-system', 'all', 'branding', 'system-update', 'server-status', 'users'];
+    switchAdminTab(validTabs.includes(initialHash) ? initialHash : 'tab-users', false);
+
+    const transportSel = document.getElementById('mailTransportSelect');
+    const smtpBox = document.getElementById('smtpSettingsBox');
+    const encSel = document.getElementById('smtpEncryptionSelect');
+    const portInput = document.getElementById('smtpPortInput');
+
+    if (transportSel && smtpBox) {
+        transportSel.addEventListener('change', () => {
+            if (transportSel.value === 'smtp') {
+                smtpBox.classList.remove('hidden');
+            } else {
+                smtpBox.classList.add('hidden');
+            }
+        });
+    }
+
+    if (encSel && portInput) {
+        encSel.addEventListener('change', () => {
+            if (encSel.value === 'ssl' && (portInput.value === '587' || portInput.value === '25')) {
+                portInput.value = '465';
+            } else if (encSel.value === 'tls' && (portInput.value === '465' || portInput.value === '25')) {
+                portInput.value = '587';
+            } else if (encSel.value === 'none' && (portInput.value === '465' || portInput.value === '587')) {
+                portInput.value = '25';
+            }
+        });
+    }
+})();
+
 async function refreshServerDashboard() {
     try {
         const res = await fetch('admin.php?ajax_server_stats=1', {
