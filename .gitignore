@@ -1,0 +1,17 @@
+# Hochgeladene Benutzerdateien niemals ins Git-Repository aufnehmen
+uploads/*
+!uploads/.htaccess
+!uploads/index.php
+
+# Lokale Umgebungs- und Konfigurationsüberschreibungen
+.env
+.env.local
+config/database.local.php
+
+# Temporäre Dateien & Logs
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db

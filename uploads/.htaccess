@@ -1,0 +1,21 @@
+# Verhindert jeglichen direkten Web-Zugriff auf das Upload-Verzeichnis (Apache 2.2 & 2.4 / STRATO)
+Options -Indexes -ExecCGI
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+
+# Verhindert die Ausführung von Skripten, selbst falls der Zugriff erlaubt wäre
+<FilesMatch "\.(php|php[0-9]|phtml|phar|pl|py|cgi|sh|htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
