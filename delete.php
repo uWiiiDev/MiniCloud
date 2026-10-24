@@ -20,11 +20,12 @@ if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
     exit;
 }
 
-$userId       = (int)$_SESSION['user_id'];
-$isAdmin      = isAdmin();
-$pdo          = getDB();
-$returnFolder = isset($_POST['return_folder']) ? extractSanitizedFolderPath(trim((string)$_POST['return_folder']) . '/placeholder') : '';
-$returnGfId   = isset($_POST['return_group_folder']) ? (int)$_POST['return_group_folder'] : 0;
+$userId             = (int)$_SESSION['user_id'];
+$isAdmin            = isAdmin();
+$pdo                = getDB();
+$returnFolder       = isset($_POST['return_folder']) ? extractSanitizedFolderPath(trim((string)$_POST['return_folder']) . '/placeholder') : '';
+$returnGfId         = isset($_POST['return_group_folder']) ? (int)$_POST['return_group_folder'] : 0;
+$returnSharedFolder = isset($_POST['return_shared_folder']) ? (int)$_POST['return_shared_folder'] : 0;
 
 // Option A: Kompletten eigenen Ordner löschen (Dateien wandern für 30 Tage in den Papierkorb)
 if (isset($_POST['delete_folder']) && is_string($_POST['delete_folder']) && trim($_POST['delete_folder']) !== '') {
@@ -119,13 +120,15 @@ if ($fileId <= 0) {
     exit;
 }
 
-$stmt = $pdo->prepare('SELECT id, user_id, group_folder_id, filename, original_name FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, user_id, group_folder_id, folder_path, filename, original_name FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
 $stmt->execute([':id' => $fileId]);
 $file = $stmt->fetch();
 
 $canDelete = false;
 if ($file) {
     if ((int)$file['user_id'] === $userId) {
+        $canDelete = true;
+    } elseif (canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], (int)$file['id'], (string)$file['folder_path'])) {
         $canDelete = true;
     } elseif (!empty($file['group_folder_id']) && canUserAccessGroupFolder($pdo, $userId, (int)$file['group_folder_id'], true, $isAdmin)) {
         $canDelete = true;
@@ -152,7 +155,9 @@ setFlash(
 );
 
 $queryParams = [];
-if ($returnGfId > 0) {
+if ($returnSharedFolder > 0) {
+    $queryParams['shared_folder'] = (string)$returnSharedFolder;
+} elseif ($returnGfId > 0) {
     $queryParams['group_folder'] = (string)$returnGfId;
 }
 if ($returnFolder !== '') {

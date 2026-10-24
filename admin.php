@@ -545,9 +545,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $allowRegistration = isset($_POST['allow_registration']) && $_POST['allow_registration'] === '1' ? '1' : '0';
         $registrationCode  = mb_substr(trim((string)($_POST['registration_code'] ?? '')), 0, 100);
         $regQuotaMb        = max(1, min(102400, (int)($_POST['registration_default_quota_mb'] ?? 100)));
+        $enableCalendar    = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
         saveAppSetting($pdo, 'allow_registration', $allowRegistration);
         saveAppSetting($pdo, 'registration_code', $registrationCode);
         saveAppSetting($pdo, 'registration_default_quota_mb', (string)$regQuotaMb);
+        saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
 
         if ($clearSmtpPass) {
             saveAppSetting($pdo, 'smtp_pass', '');
@@ -698,7 +700,7 @@ require_once __DIR__ . '/includes/header.php';
     <div>
         <h1 class="text-2xl font-bold text-slate-900 dark:text-white">System-Administration</h1>
         <p class="text-sm text-slate-500 dark:text-slate-400">
-            Anwendungstitel, Logo &amp; Impressum anpassen, Benutzerkonten (inkl. E-Mail-2FA) anlegen und Gruppenordner verwalten.
+            Anwendungstitel, Logo &amp; Impressum anpassen, Systemeinstellungen steuern und Benutzerkonten verwalten.
         </p>
     </div>
     <a href="index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300/80 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors self-start sm:self-auto">
@@ -976,6 +978,32 @@ require_once __DIR__ . '/includes/header.php';
                         >
                     </div>
                 </div>
+            </div>
+
+            <!-- Optionales Kalender-Modul -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        📅 Kalender-Modul
+                    </p>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                        <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                    </span>
+                </div>
+
+                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        name="enable_calendar"
+                        value="1"
+                        <?= ($currentSettings['enable_calendar'] ?? '1') === '1' ? 'checked' : '' ?>
+                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    >
+                    <span>
+                        <strong>Integrierten Kalender aktivieren</strong><br>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Persönliche &amp; Gruppen-Termine, Kalender-Teilen (unter Beachtung der Datenschutz-Freigabe), Cloud-Datei-Anhänge &amp; .ics-Export.</span>
+                    </span>
+                </label>
             </div>
         </div>
 
@@ -1272,278 +1300,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<!-- 2. BENUTZERGRUPPEN VERWALTEN -->
-<section id="groups" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <h2 class="text-base font-bold text-slate-900 dark:text-white mb-1">Benutzergruppe erstellen</h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-            Fassen Sie mehrere Benutzer in Gruppen zusammen, um Gruppenordner mit einem Klick freizugeben.
-        </p>
-
-        <form action="admin.php" method="post" class="space-y-3.5">
-            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-            <input type="hidden" name="action" value="create_group">
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Gruppenname</label>
-                <input
-                    type="text"
-                    name="group_name"
-                    required
-                    placeholder="z.B. Projektteam-Alpha"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Beschreibung</label>
-                <input
-                    type="text"
-                    name="group_description"
-                    placeholder="Optional"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <button
-                type="submit"
-                class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
-            >
-                Gruppe anlegen
-            </button>
-        </form>
-    </div>
-
-    <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <h2 class="text-base font-bold text-slate-900 dark:text-white mb-4">Vorhandene Benutzergruppen (<?= count($allGroups) ?>)</h2>
-
-        <?php if (empty($allGroups)): ?>
-            <p class="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">Noch keine Benutzergruppen angelegt.</p>
-        <?php else: ?>
-            <div class="space-y-4">
-                <?php foreach ($allGroups as $grp): ?>
-                    <?php
-                    $gId = (int)$grp['id'];
-                    $members = $membersByGroup[$gId] ?? [];
-                    ?>
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700/80 p-4 bg-slate-50/50 dark:bg-slate-800/40">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <span class="font-bold text-slate-900 dark:text-white text-sm"><?= e((string)$grp['name']) ?></span>
-                                <?php if ((string)$grp['description'] !== ''): ?>
-                                    <span class="text-xs text-slate-500 dark:text-slate-400 ml-2">&ndash; <?= e((string)$grp['description']) ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <form action="admin.php" method="post" onsubmit="return confirm('Gruppe wirklich löschen?');">
-                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                <input type="hidden" name="action" value="delete_group">
-                                <input type="hidden" name="group_id" value="<?= $gId ?>">
-                                <button type="submit" class="text-xs text-red-600 hover:underline cursor-pointer">Gruppe löschen</button>
-                            </form>
-                        </div>
-
-                        <div class="flex flex-wrap items-center gap-2 mb-3">
-                            <?php if (empty($members)): ?>
-                                <span class="text-xs text-slate-400 italic">Keine Mitglieder</span>
-                            <?php else: ?>
-                                <?php foreach ($members as $m): ?>
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium">
-                                        <span><?= e((string)$m['username']) ?></span>
-                                        <form action="admin.php" method="post" class="inline">
-                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                            <input type="hidden" name="action" value="remove_group_member">
-                                            <input type="hidden" name="gm_id" value="<?= (int)$m['gm_id'] ?>">
-                                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold cursor-pointer">&times;</button>
-                                        </form>
-                                    </span>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </div>
-
-                        <form action="admin.php" method="post" class="flex items-center gap-2">
-                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                            <input type="hidden" name="action" value="add_group_member">
-                            <input type="hidden" name="group_id" value="<?= $gId ?>">
-                            <select name="user_id" required class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
-                                <option value="">Mitglied hinzufügen...</option>
-                                <?php foreach ($allUsers as $u): ?>
-                                    <option value="<?= (int)$u['id'] ?>"><?= e((string)$u['username']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium cursor-pointer">
-                                Hinzufügen
-                            </button>
-                        </form>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    </div>
-</section>
-
-<!-- 3. GRUPPENORDNER & BERECHTIGUNGEN -->
-<section id="group-folders" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Neuen Gruppenordner anlegen -->
-    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <h2 class="text-base font-bold text-slate-900 dark:text-white mb-1">Gruppenordner anlegen</h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-            Erstellen Sie gemeinsame Ordner und berechtigen Sie gezielt einzelne Benutzer oder ganze Benutzergruppen.
-        </p>
-
-        <form action="admin.php" method="post" class="space-y-3.5">
-            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-            <input type="hidden" name="action" value="create_group_folder">
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Name des Gruppenordners</label>
-                <input
-                    type="text"
-                    name="folder_name"
-                    required
-                    placeholder="z.B. Team-Projekte"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <div>
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Beschreibung (optional)</label>
-                <input
-                    type="text"
-                    name="folder_description"
-                    placeholder="z.B. Gemeinsame Dokumente für Marketing & Vertrieb"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
-
-            <button
-                type="submit"
-                class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
-            >
-                Gruppenordner erstellen
-            </button>
-        </form>
-    </div>
-
-    <!-- Bestehende Gruppenordner & Berechtigungen -->
-    <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <h2 class="text-base font-bold text-slate-900 dark:text-white mb-4">Gruppenordner &amp; Zugriffsrechte (<?= count($allGroupFolders) ?>)</h2>
-
-        <?php if (empty($allGroupFolders)): ?>
-            <p class="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
-                Noch keine Gruppenordner angelegt.
-            </p>
-        <?php else: ?>
-            <div class="space-y-4">
-                <?php foreach ($allGroupFolders as $gf): ?>
-                    <?php
-                    $gfId = (int)$gf['id'];
-                    $folderPerms = $permsByFolder[$gfId] ?? [];
-                    ?>
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700/80 p-4 bg-slate-50/50 dark:bg-slate-800/40">
-                        <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-slate-900 dark:text-white text-sm sm:text-base"><?= e((string)$gf['name']) ?></span>
-                                    <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium">
-                                        <?= (int)$gf['file_count'] ?> Dateien &bull; <?= e(formatBytes((int)$gf['folder_size'])) ?>
-                                    </span>
-                                </div>
-                                <?php if ((string)$gf['description'] !== ''): ?>
-                                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"><?= e((string)$gf['description']) ?></p>
-                                <?php endif; ?>
-                            </div>
-
-                            <form action="admin.php" method="post" onsubmit="return confirm('Gruppenordner &quot;<?= e(addslashes((string)$gf['name'])) ?>&quot; wirklich löschen?');">
-                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                <input type="hidden" name="action" value="delete_group_folder">
-                                <input type="hidden" name="group_folder_id" value="<?= $gfId ?>">
-                                <button type="submit" class="text-xs text-red-600 dark:text-red-400 hover:underline font-medium cursor-pointer">
-                                    Ordner löschen
-                                </button>
-                            </form>
-                        </div>
-
-                        <!-- Aktuelle Berechtigungen -->
-                        <div class="mb-3">
-                            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Berechtigte Benutzer &amp; Gruppen:</p>
-                            <?php if (empty($folderPerms)): ?>
-                                <p class="text-xs text-slate-400 italic">Derzeit nur für Administratoren sichtbar. Fügen Sie unten Benutzer oder Gruppen hinzu.</p>
-                            <?php else: ?>
-                                <div class="flex flex-wrap gap-2">
-                                    <?php foreach ($folderPerms as $perm): ?>
-                                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-                                            <?php if (!empty($perm['group_id'])): ?>
-                                                <span class="font-semibold text-indigo-600 dark:text-indigo-400">[Gruppe] <?= e((string)$perm['group_name']) ?></span>
-                                            <?php else: ?>
-                                                <span class="font-semibold text-emerald-700 dark:text-emerald-400">[Benutzer] <?= e((string)$perm['username']) ?></span>
-                                            <?php endif; ?>
-                                            <span class="text-slate-400">
-                                                (<?= (int)$perm['can_write'] === 1 ? 'Lesen & Schreiben' : 'Nur Lesen' ?>)
-                                            </span>
-                                            <form action="admin.php" method="post" class="inline">
-                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                                <input type="hidden" name="action" value="revoke_group_folder_permission">
-                                                <input type="hidden" name="permission_id" value="<?= (int)$perm['id'] ?>">
-                                                <button type="submit" class="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer" title="Berechtigung entfernen">&times;</button>
-                                            </form>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-
-                        <!-- Neue Berechtigung hinzufügen -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/60">
-                            <!-- Benutzer berechtigen -->
-                            <form action="admin.php" method="post" class="flex items-center gap-1.5">
-                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                <input type="hidden" name="action" value="grant_group_folder_permission">
-                                <input type="hidden" name="group_folder_id" value="<?= $gfId ?>">
-                                <input type="hidden" name="target_type" value="user">
-                                <select name="target_id" required class="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
-                                    <option value="">+ Benutzer wählen...</option>
-                                    <?php foreach ($allUsers as $u): ?>
-                                        <option value="<?= (int)$u['id'] ?>"><?= e((string)$u['username']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <select name="can_write" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
-                                    <option value="1">Schreiben</option>
-                                    <option value="0">Nur Lesen</option>
-                                </select>
-                                <button type="submit" class="px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium cursor-pointer">
-                                    Berechtigen
-                                </button>
-                            </form>
-
-                            <!-- Gruppe berechtigen -->
-                            <form action="admin.php" method="post" class="flex items-center gap-1.5">
-                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                <input type="hidden" name="action" value="grant_group_folder_permission">
-                                <input type="hidden" name="group_folder_id" value="<?= $gfId ?>">
-                                <input type="hidden" name="target_type" value="group">
-                                <select name="target_id" required class="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
-                                    <option value="">+ Gruppe wählen...</option>
-                                    <?php foreach ($allGroups as $grp): ?>
-                                        <option value="<?= (int)$grp['id'] ?>"><?= e((string)$grp['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <select name="can_write" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
-                                    <option value="1">Schreiben</option>
-                                    <option value="0">Nur Lesen</option>
-                                </select>
-                                <button type="submit" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium cursor-pointer">
-                                    Gruppe +
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    </div>
-</section>
-
-<!-- 4. SERVER-STATUS & SYSTEM-DASHBOARD (Kompakt & Live-Aktualisierend) -->
+<!-- SERVER-STATUS & SYSTEM-DASHBOARD (Kompakt & Live-Aktualisierend) -->
 <section id="server-status" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mt-10">
     <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center gap-2.5">

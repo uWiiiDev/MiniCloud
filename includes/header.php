@@ -280,6 +280,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     <span class="hidden sm:inline">Dateien</span>
                 </a>
 
+                <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
+                    <a
+                        href="calendar.php"
+                        class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Kalender &amp; Termine"
+                    >
+                        <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span class="hidden sm:inline">Kalender</span>
+                    </a>
+                <?php endif; ?>
+
                 <a
                     href="trash.php"
                     class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

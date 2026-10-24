@@ -37,9 +37,10 @@ if ($activeGroupFolderId > 0 && !$activeGroupFolder) {
 // 2. Von anderem Benutzer freigegebenen Ordner prüfen (?shared_folder=ID)
 $activeSharedFolderId = isset($_GET['shared_folder']) ? (int)$_GET['shared_folder'] : 0;
 $activeSharedFolder   = null;
+$canWriteSharedFolder = false;
 if ($activeSharedFolderId > 0 && $activeGroupFolder === null) {
     $stmtSf = $pdo->prepare(
-        'SELECT us.id, us.owner_id, us.folder_path, us.created_at, u.username AS owner_username
+        'SELECT us.id, us.owner_id, us.folder_path, us.can_write, us.created_at, u.username AS owner_username
          FROM user_shares us
          INNER JOIN users u ON u.id = us.owner_id
          WHERE us.id = :id AND us.shared_with_user_id = :uid AND us.folder_path IS NOT NULL
@@ -55,6 +56,7 @@ if ($activeSharedFolderId > 0 && $activeGroupFolder === null) {
         header('Location: index.php');
         exit;
     }
+    $canWriteSharedFolder = ((int)($activeSharedFolder['can_write'] ?? 0) === 1);
 }
 
 $rawFolderParam = isset($_GET['folder']) && is_string($_GET['folder']) ? trim($_GET['folder']) : '';
@@ -395,7 +397,7 @@ if ($activeSharedFolder === null && !$showAllFolders) {
 
 // Für mich freigegebene Ordner (von anderen Cloud-Benutzern via user_shares)
 $stmtSharedFoldersWithMe = $pdo->prepare(
-    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.created_at AS shared_at,
+    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.can_write, us.created_at AS shared_at,
             u.username AS owner_username,
             (SELECT COUNT(*) FROM files f
              WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
@@ -414,7 +416,7 @@ $sharedWithMeFolders = $stmtSharedFoldersWithMe->fetchAll();
 // Für mich freigegebene Einzeldateien (von anderen Cloud-Benutzern via user_shares, nur aktive Dateien)
 $stmtSharedWithMe = $pdo->prepare(
     'SELECT f.id, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
-            us.created_at AS shared_at, u.username AS owner_username
+            us.can_write, us.created_at AS shared_at, u.username AS owner_username
      FROM user_shares us
      INNER JOIN files f ON f.id = us.file_id
      INNER JOIN users u ON u.id = us.owner_id
@@ -431,7 +433,9 @@ $stmtOtherUsers = $pdo->prepare('SELECT id, username FROM users WHERE id <> :uid
 $stmtOtherUsers->execute([':uid' => $userId]);
 $otherCloudUsers = $stmtOtherUsers->fetchAll();
 
-$canUploadHere = ($activeSharedFolder === null) && (($activeGroupFolder === null) || $canWriteActiveGf);
+$canUploadHere = $activeSharedFolder !== null
+    ? $canWriteSharedFolder
+    : (($activeGroupFolder === null) || $canWriteActiveGf);
 
 $pageTitle = $activeGroupFolder
     ? 'Gruppenordner: ' . $activeGroupFolder['name']
@@ -444,7 +448,9 @@ require_once __DIR__ . '/includes/header.php';
 <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-xs mb-5">
     <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-        <?php if ($activeGroupFolder !== null): ?>
+        <?php if ($activeSharedFolder !== null): ?>
+            <input type="hidden" name="shared_folder_id" value="<?= (int)$activeSharedFolder['id'] ?>">
+        <?php elseif ($activeGroupFolder !== null): ?>
             <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
         <?php endif; ?>
 
@@ -1024,7 +1030,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $linkShares = (int)($file['link_share_count'] ?? 0);
                         $userShares = (int)($file['user_share_count'] ?? 0);
                         $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
-                        $canManageThisFile = ($activeSharedFolder === null) && (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
+                        $canManageThisFile = $activeSharedFolder !== null
+                            ? $canWriteSharedFolder
+                            : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
 
                         $previewItemsList[] = [
                             'id'          => $fId,
@@ -1215,7 +1223,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <?php if ($currentFolder !== ''): ?>
                                                 <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
                                             <?php endif; ?>
-                                            <?php if ($activeGroupFolder !== null): ?>
+                                            <?php if ($activeSharedFolder !== null): ?>
+                                                <input type="hidden" name="return_shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
+                                            <?php elseif ($activeGroupFolder !== null): ?>
                                                 <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
                                             <?php endif; ?>
                                             <button
@@ -1229,107 +1239,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 </svg>
                                             </button>
                                         </form>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
-</section>
-
-<!-- GRUPPENORDNER (Angezeigt im gleichen Stil wie "Für mich freigegeben") -->
-<section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8">
-    <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Gruppenordner</h2>
-            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                <?= count($accessibleGroupFolders) ?>
-            </span>
-        </div>
-        <?php if ($activeGroupFolder !== null): ?>
-            <a href="index.php" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                &larr; Zurück zu meinen Dateien
-            </a>
-        <?php endif; ?>
-    </div>
-
-    <?php if (empty($accessibleGroupFolders)): ?>
-        <div class="p-8 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Aktuell sind Ihnen noch keine Gruppenordner zugewiesen.
-        </div>
-    <?php else: ?>
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        <th class="py-3 px-4 sm:px-6">Ordnername</th>
-                        <th class="py-3 px-4">Berechtigung</th>
-                        <th class="py-3 px-4 hidden sm:table-cell">Inhalt / Größe</th>
-                        <th class="py-3 px-4 sm:px-6 text-right">Aktion</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800">
-                    <?php foreach ($accessibleGroupFolders as $gf): ?>
-                        <?php
-                        $gfId = (int)$gf['id'];
-                        $isSelectedGf = ($activeGroupFolderId === $gfId);
-                        $canWriteGf = ((int)$gf['can_write'] === 1);
-                        ?>
-                        <tr class="<?= $isSelectedGf ? 'bg-indigo-50/60 dark:bg-indigo-950/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40' ?> transition-colors">
-                            <td class="py-3 px-4 sm:px-6">
-                                <div class="flex items-center gap-3">
-                                    <span class="inline-flex items-center justify-center w-10 h-8 rounded-lg text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 shrink-0">
-                                        GRP
-                                    </span>
-                                    <div class="min-w-0">
-                                        <a href="<?= $isSelectedGf ? 'index.php' : 'index.php?group_folder=' . $gfId ?>" class="font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 truncate block max-w-[160px] sm:max-w-xs">
-                                            📁 <?= e((string)$gf['name']) ?>
-                                        </a>
-                                        <p class="sm:hidden text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                            <?= (int)$gf['file_count'] ?> <?= (int)$gf['file_count'] === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes((int)$gf['folder_size'])) ?>
-                                        </p>
-                                        <?php if (!empty($gf['description'])): ?>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[160px] sm:max-w-sm">
-                                                <?= e((string)$gf['description']) ?>
-                                            </p>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="py-3 px-4">
-                                <span
-                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $canWriteGf ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
-                                    title="<?= $canWriteGf ? 'Lesen & Schreiben' : 'Nur Lesen' ?>"
-                                    aria-label="<?= $canWriteGf ? 'Lesen & Schreiben' : 'Nur Lesen' ?>"
-                                >
-                                    <?= $canWriteGf ? '✏️' : '👁️' ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
-                                <?= (int)$gf['file_count'] ?> <?= (int)$gf['file_count'] === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes((int)$gf['folder_size'])) ?>
-                            </td>
-                            <td class="py-3 px-4 sm:px-6 text-right">
-                                <div class="inline-flex items-center justify-end gap-2">
-                                    <a
-                                        href="<?= $isSelectedGf ? 'index.php' : 'index.php?group_folder=' . $gfId ?>"
-                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg <?= $isSelectedGf ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-indigo-600 hover:bg-indigo-700 text-white' ?> font-semibold text-xs transition-colors"
-                                    >
-                                        <span><?= $isSelectedGf ? 'Schließen' : 'Öffnen' ?></span>
-                                    </a>
-                                    <?php if ((int)$gf['file_count'] > 0): ?>
-                                        <a
-                                            href="download.php?group_folder_zip=<?= $gfId ?>"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
-                                            title="Als ZIP herunterladen"
-                                            aria-label="Als ZIP herunterladen"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                                            </svg>
-                                        </a>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -1368,6 +1277,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         <th class="py-3 px-4 sm:px-6">Name</th>
                         <th class="py-3 px-4">Geteilt von</th>
+                        <th class="py-3 px-4">Berechtigung</th>
                         <th class="py-3 px-4 hidden sm:table-cell">Größe / Inhalt</th>
                         <th class="py-3 px-4 hidden md:table-cell">Freigegeben am</th>
                         <th class="py-3 px-4 sm:px-6 text-right">Aktion</th>
@@ -1382,6 +1292,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $sfDate = date('d.m.Y H:i', strtotime((string)$sFolder['shared_at']));
                         $sfCount = (int)$sFolder['file_count'];
                         $sfSize  = (int)$sFolder['folder_size'];
+                        $sfCanWrite = ((int)($sFolder['can_write'] ?? 0) === 1);
                         ?>
                         <tr class="<?= $isSelectedSf ? 'bg-blue-50/60 dark:bg-blue-950/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40' ?> transition-colors">
                             <td class="py-3 px-4 sm:px-6">
@@ -1397,6 +1308,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             <td class="py-3 px-4">
                                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-semibold">
                                     👤 <?= e((string)$sFolder['owner_username']) ?>
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $sfCanWrite ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
+                                    title="<?= $sfCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                    aria-label="<?= $sfCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                >
+                                    <?= $sfCanWrite ? '✏️' : '👁️' ?>
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
@@ -1435,6 +1355,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <?php
                         $sfBadge = getFileTypeBadge((string)$sf['original_name'], (string)$sf['mime_type']);
                         $sfDate  = date('d.m.Y H:i', strtotime((string)$sf['shared_at']));
+                        $sfFileCanWrite = ((int)($sf['can_write'] ?? 0) === 1);
                         ?>
                         <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                             <td class="py-3 px-4 sm:px-6">
@@ -1457,6 +1378,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     👤 <?= e((string)$sf['owner_username']) ?>
                                 </span>
                             </td>
+                            <td class="py-3 px-4">
+                                <span
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $sfFileCanWrite ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
+                                    title="<?= $sfFileCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                    aria-label="<?= $sfFileCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                >
+                                    <?= $sfFileCanWrite ? '✏️' : '👁️' ?>
+                                </span>
+                            </td>
                             <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
                                 <?= e(formatBytes((int)$sf['file_size'])) ?>
                             </td>
@@ -1464,16 +1394,39 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <?= e($sfDate) ?> Uhr
                             </td>
                             <td class="py-3 px-4 sm:px-6 text-right">
-                                <a
-                                    href="download.php?id=<?= (int)$sf['id'] ?>"
-                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
-                                    title="Herunterladen"
-                                    aria-label="Herunterladen"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                                    </svg>
-                                </a>
+                                <div class="inline-flex items-center justify-end gap-1.5">
+                                    <a
+                                        href="download.php?id=<?= (int)$sf['id'] ?>"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
+                                        title="Herunterladen"
+                                        aria-label="Herunterladen"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
+                                        </svg>
+                                    </a>
+                                    <?php if ($sfFileCanWrite): ?>
+                                        <form
+                                            action="delete.php"
+                                            method="post"
+                                            class="inline"
+                                            onsubmit="return confirm('Möchten Sie die freigegebene Datei &quot;<?= e(addslashes((string)$sf['original_name'])) ?>&quot; wirklich in den Papierkorb verschieben?');"
+                                        >
+                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                            <input type="hidden" name="file_id" value="<?= (int)$sf['id'] ?>">
+                                            <button
+                                                type="submit"
+                                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 transition-colors cursor-pointer"
+                                                title="Löschen"
+                                                aria-label="Löschen"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -1615,11 +1568,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <option value="<?= (int)$ou['id'] ?>"><?= e((string)$ou['username']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <select
+                            id="shareTargetCanWrite"
+                            class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                            <option value="0">👁️ Nur Lesen</option>
+                            <option value="1">✏️ Lesen, Schreiben &amp; Löschen</option>
+                        </select>
                         <button
                             type="submit"
                             class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm cursor-pointer shrink-0"
                         >
-                            Für Nutzer freigeben
+                            Freigeben
                         </button>
                     </form>
                 <?php endif; ?>
@@ -2459,9 +2419,14 @@ async function loadShareDetails(fileId, folderPath = '') {
             existingUserSharesList.innerHTML = '<p class="text-xs text-slate-400">Noch mit keinem anderen Cloud-Benutzer geteilt.</p>';
         } else {
             existingUserSharesList.innerHTML = data.user_shares.map(u => `
-                <div class="flex items-center justify-between p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/60 text-xs">
-                    <span class="font-medium text-blue-900 dark:text-blue-200">👤 Freigegeben für <strong>${escapeHtml(String(u.username || ''))}</strong></span>
-                    <button type="button" onclick="revokeUserShare(${Number(u.id) || 0})" class="text-red-600 dark:text-red-400 hover:underline font-medium cursor-pointer">
+                <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/60 text-xs">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-medium text-blue-900 dark:text-blue-200 truncate">👤 <strong>${escapeHtml(String(u.username || ''))}</strong></span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-[11px] font-semibold" title="${u.can_write ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen'}">
+                            ${u.can_write ? '✏️ Lesen, Schreiben & Löschen' : '👁️ Nur Lesen'}
+                        </span>
+                    </div>
+                    <button type="button" onclick="revokeUserShare(${Number(u.id) || 0})" class="text-red-600 dark:text-red-400 hover:underline font-medium cursor-pointer shrink-0">
                         Entfernen
                     </button>
                 </div>
@@ -2512,6 +2477,8 @@ if (shareWithUserForm) {
         const fileId = shareModalFileId.value;
         const folderPath = shareModalFolderPath.value;
         const targetUserId = document.getElementById('shareTargetUserId').value;
+        const canWriteEl = document.getElementById('shareTargetCanWrite');
+        const canWrite = canWriteEl ? canWriteEl.value : '0';
         if (!targetUserId) return;
 
         const fd = new FormData();
@@ -2520,6 +2487,7 @@ if (shareWithUserForm) {
         fd.append('file_id', fileId);
         fd.append('folder_path', folderPath);
         fd.append('target_user_id', targetUserId);
+        fd.append('can_write', canWrite);
 
         const res = await fetch('share_action.php', { method: 'POST', body: fd });
         const data = await res.json();
@@ -2591,6 +2559,10 @@ async function revokeUserShare(userShareId) {
         const vaultPwInput = document.getElementById('upload_vault_password');
         if (vaultPwInput && vaultPwInput.value !== '') {
             formData.append('vault_password', vaultPwInput.value);
+        }
+        const sfInput = uploadForm.querySelector('input[name="shared_folder_id"]');
+        if (sfInput) {
+            formData.append('shared_folder_id', sfInput.value);
         }
         const gfInput = uploadForm.querySelector('input[name="group_folder_id"]');
         if (gfInput) {

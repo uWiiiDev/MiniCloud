@@ -276,6 +276,51 @@ function getAuthorizedFileForDownload(PDO $pdo, int $userId, int $fileId, bool $
 }
 
 /**
+ * Prüft, ob ein Benutzer Schreib-/Löschberechtigung (can_write = 1) auf eine freigegebene Datei
+ * oder einen freigegebenen Ordner eines anderen Benutzers besitzt.
+ */
+function canUserWriteSharedFileOrFolder(PDO $pdo, int $userId, int $ownerId, ?int $fileId = null, string $folderPath = ''): bool
+{
+    if ($userId === $ownerId) {
+        return true;
+    }
+
+    if ($fileId !== null && $fileId > 0) {
+        $stmtFileShare = $pdo->prepare(
+            'SELECT id FROM user_shares
+             WHERE file_id = :file_id AND shared_with_user_id = :uid AND can_write = 1
+             LIMIT 1'
+        );
+        $stmtFileShare->execute([
+            ':file_id' => $fileId,
+            ':uid'     => $userId,
+        ]);
+        if ($stmtFileShare->fetch()) {
+            return true;
+        }
+    }
+
+    if ($folderPath !== '') {
+        $stmtFolderShares = $pdo->prepare(
+            'SELECT folder_path FROM user_shares
+             WHERE owner_id = :owner_id AND shared_with_user_id = :uid AND folder_path IS NOT NULL AND can_write = 1'
+        );
+        $stmtFolderShares->execute([
+            ':owner_id' => $ownerId,
+            ':uid'      => $userId,
+        ]);
+        foreach ($stmtFolderShares->fetchAll(PDO::FETCH_COLUMN) as $sharedFp) {
+            $sharedFpStr = (string)$sharedFp;
+            if ($sharedFpStr !== '' && ($folderPath === $sharedFpStr || str_starts_with($folderPath, $sharedFpStr . '/'))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Bereinigt einen Original-Dateinamen von Pfadbestandteilen und gefährlichen Steuerzeichen.
  */
 function sanitizeOriginalFilename(string $filename): string
@@ -558,6 +603,7 @@ function getAppSettings(?PDO $pdo = null): array
         'allow_registration'            => '0',
         'registration_code'             => '',
         'registration_default_quota_mb' => '100',
+        'enable_calendar'               => '1',
     ];
 
     try {

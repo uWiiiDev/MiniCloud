@@ -2215,6 +2215,158 @@ function getTranslationDictionary(): array
             'es' => '← Volver al inicio de sesión',
             'nl' => '← Terug naar inloggen',
         ],
+
+        // --- Kalender & Selbstverwaltete Freigabe-Berechtigungen ---
+        'Kalender' => [
+            'en' => 'Calendar',
+            'fr' => 'Calendrier',
+            'es' => 'Calendario',
+            'nl' => 'Kalender',
+        ],
+        'Kalender & Termine' => [
+            'en' => 'Calendar & Events',
+            'fr' => 'Calendrier et événements',
+            'es' => 'Calendario y eventos',
+            'nl' => 'Kalender & afspraken',
+        ],
+        'Persönliche Termine und mit anderen Cloud-Benutzern geteilte Kalender an einem Ort.' => [
+            'en' => 'Personal events and calendars shared with other cloud users in one place.',
+            'fr' => 'Événements personnels et calendriers partagés avec d’autres utilisateurs en un seul endroit.',
+            'es' => 'Eventos personales y calendarios compartidos con otros usuarios en un solo lugar.',
+            'nl' => 'Persoonlijke afspraken en met andere gebruikers gedeelde kalenders op één plek.',
+        ],
+        'Neuer Termin' => [
+            'en' => 'New Event',
+            'fr' => 'Nouvel événement',
+            'es' => 'Nuevo evento',
+            'nl' => 'Nieuwe afspraak',
+        ],
+        '📅 Neuer Termin' => [
+            'en' => '📅 New Event',
+            'fr' => '📅 Nouvel événement',
+            'es' => '📅 Nuevo evento',
+            'nl' => '📅 Nieuwe afspraak',
+        ],
+        '✏️ Termin bearbeiten' => [
+            'en' => '✏️ Edit Event',
+            'fr' => '✏️ Modifier l’événement',
+            'es' => '✏️ Editar evento',
+            'nl' => '✏️ Afspraak bewerken',
+        ],
+        'Kalender teilen & .ics' => [
+            'en' => 'Share Calendar & .ics',
+            'fr' => 'Partager le calendrier & .ics',
+            'es' => 'Compartir calendario y .ics',
+            'nl' => 'Kalender delen & .ics',
+        ],
+        'Heute' => [
+            'en' => 'Today',
+            'fr' => 'Aujourd’hui',
+            'es' => 'Hoy',
+            'nl' => 'Vandaag',
+        ],
+        'Mein Kalender' => [
+            'en' => 'My Calendar',
+            'fr' => 'Mon calendrier',
+            'es' => 'Mi calendario',
+            'nl' => 'Mijn kalender',
+        ],
+        'Geteilt' => [
+            'en' => 'Shared',
+            'fr' => 'Partagé',
+            'es' => 'Compartido',
+            'nl' => 'Gedeeld',
+        ],
+        '📅 Monat' => [
+            'en' => '📅 Month',
+            'fr' => '📅 Mois',
+            'es' => '📅 Mes',
+            'nl' => '📅 Maand',
+        ],
+        '📋 Liste' => [
+            'en' => '📋 List',
+            'fr' => '📋 Liste',
+            'es' => '📋 Lista',
+            'nl' => '📋 Lijst',
+        ],
+        '🔔 Nächste 14 Tage' => [
+            'en' => '🔔 Next 14 Days',
+            'fr' => '🔔 14 prochains jours',
+            'es' => '🔔 Próximos 14 días',
+            'nl' => '🔔 Komende 14 dagen',
+        ],
+        'Keine anstehenden Termine in den nächsten 14 Tagen.' => [
+            'en' => 'No upcoming events in the next 14 days.',
+            'fr' => 'Aucun événement à venir dans les 14 prochains jours.',
+            'es' => 'No hay eventos próximos en los siguientes 14 días.',
+            'nl' => 'Geen aankomende afspraken in de komende 14 dagen.',
+        ],
+        '🤝 Empfangene Kalender' => [
+            'en' => '🤝 Shared Calendars',
+            'fr' => '🤝 Calendriers reçus',
+            'es' => '🤝 Calendarios recibidos',
+            'nl' => '🤝 Ontvangen kalenders',
+        ],
+        'Derzeit hat noch kein anderer Benutzer seinen Kalender für Sie freigegeben.' => [
+            'en' => 'No other user has shared their calendar with you yet.',
+            'fr' => 'Aucun autre utilisateur n’a encore partagé son calendrier avec vous.',
+            'es' => 'Ningún otro usuario ha compartido aún su calendario con usted.',
+            'nl' => 'Er heeft nog geen andere gebruiker zijn kalender met u gedeeld.',
+        ],
+        'Ganztägig' => [
+            'en' => 'All-day',
+            'fr' => 'Toute la journée',
+            'es' => 'Todo el día',
+            'nl' => 'Hele dag',
+        ],
+        'Ganztägiger Termin' => [
+            'en' => 'All-day event',
+            'fr' => 'Événement sur toute la journée',
+            'es' => 'Evento de todo el día',
+            'nl' => 'Afspraak voor de hele dag',
+        ],
+        '👁️ Nur Lesen' => [
+            'en' => '👁️ Read Only',
+            'fr' => '👁️ Lecture seule',
+            'es' => '👁️ Solo lectura',
+            'nl' => '👁️ Alleen lezen',
+        ],
+        '✏️ Lesen, Schreiben & Löschen' => [
+            'en' => '✏️ Read, Write & Delete',
+            'fr' => '✏️ Lire, écrire et supprimer',
+            'es' => '✏️ Leer, escribir y eliminar',
+            'nl' => '✏️ Lezen, schrijven & verwijderen',
+        ],
+        '✏️ Lesen, Bearbeiten & Löschen' => [
+            'en' => '✏️ Read, Edit & Delete',
+            'fr' => '✏️ Lire, modifier et supprimer',
+            'es' => '✏️ Leer, editar y eliminar',
+            'nl' => '✏️ Lezen, bewerken & verwijderen',
+        ],
+        'Lesen, Schreiben & Löschen' => [
+            'en' => 'Read, Write & Delete',
+            'fr' => 'Lire, écrire et supprimer',
+            'es' => 'Leer, escribir y eliminar',
+            'nl' => 'Lezen, schrijven & verwijderen',
+        ],
+        'Benutzerverwaltung & Systemeinstellungen' => [
+            'en' => 'User Management & System Settings',
+            'fr' => 'Gestion des utilisateurs et paramètres système',
+            'es' => 'Gestión de usuarios y ajustes del sistema',
+            'nl' => 'Gebruikersbeheer & systeeminstellingen',
+        ],
+        '📅 Kalender-Modul' => [
+            'en' => '📅 Calendar Module',
+            'fr' => '📅 Module Calendrier',
+            'es' => '📅 Módulo de Calendario',
+            'nl' => '📅 Kalendermodule',
+        ],
+        'Integrierten Kalender in der Navigation anzeigen' => [
+            'en' => 'Show integrated calendar in navigation',
+            'fr' => 'Afficher le calendrier intégré dans la navigation',
+            'es' => 'Mostrar el calendario integrado en la navegación',
+            'nl' => 'Geïntegreerde kalender in de navigatie tonen',
+        ],
     ];
 
     return $dict;

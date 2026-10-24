@@ -13,16 +13,17 @@ $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERV
 /**
  * Hilfsfunktion für konsistente Antworten (Redirect oder JSON bei AJAX-Upload).
  */
-function respondUpload(bool $success, string $message, bool $isAjax, string $redirectFolder = '', int $groupFolderId = 0, int $httpCode = 200): never
+function respondUpload(bool $success, string $message, bool $isAjax, string $redirectFolder = '', int $groupFolderId = 0, int $httpCode = 200, int $sharedFolderId = 0): never
 {
     $type = $success ? 'success' : 'error';
     setFlash($type, $message);
 
     $queryParams = [];
-    if ($groupFolderId > 0) {
+    if ($sharedFolderId > 0) {
+        $queryParams['shared_folder'] = (string)$sharedFolderId;
+    } elseif ($groupFolderId > 0) {
         $queryParams['group_folder'] = (string)$groupFolderId;
-    }
-    if ($redirectFolder !== '') {
+    } elseif ($redirectFolder !== '') {
         $queryParams['folder'] = $redirectFolder;
     }
     $location = 'index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : '');
@@ -68,12 +69,33 @@ if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
 $userId = (int)$_SESSION['user_id'];
 $isAdmin = isAdmin();
 $pdo = getDB();
-$storageStats = getUserStorageStats($pdo, $userId);
+
+// Optionaler freigegebener Ordner eines anderen Benutzers mit Schreibrecht (can_write = 1)
+$sharedFolderId = isset($_POST['shared_folder_id']) ? (int)$_POST['shared_folder_id'] : 0;
+$effectiveOwnerId = $userId;
+$sharedBaseFolder = '';
+if ($sharedFolderId > 0) {
+    $stmtSf = $pdo->prepare(
+        'SELECT id, owner_id, folder_path, can_write
+         FROM user_shares
+         WHERE id = :id AND shared_with_user_id = :uid AND folder_path IS NOT NULL
+         LIMIT 1'
+    );
+    $stmtSf->execute([':id' => $sharedFolderId, ':uid' => $userId]);
+    $sfRow = $stmtSf->fetch();
+    if (!$sfRow || (int)($sfRow['can_write'] ?? 0) !== 1) {
+        respondUpload(false, 'Sie besitzen keine Schreibberechtigung für diesen freigegebenen Ordner.', $isAjax, '', 0, 403, $sharedFolderId);
+    }
+    $effectiveOwnerId = (int)$sfRow['owner_id'];
+    $sharedBaseFolder = (string)$sfRow['folder_path'];
+}
+
+$storageStats = getUserStorageStats($pdo, $effectiveOwnerId);
 $remainingQuota = $storageStats['free'];
 
 // Optionaler Gruppenordner
 $groupFolderId = isset($_POST['group_folder_id']) ? (int)$_POST['group_folder_id'] : 0;
-if ($groupFolderId > 0) {
+if ($groupFolderId > 0 && $sharedFolderId === 0) {
     if (!canUserAccessGroupFolder($pdo, $userId, $groupFolderId, true, $isAdmin)) {
         respondUpload(false, 'Sie besitzen keine Schreibberechtigung für diesen Gruppenordner.', $isAjax, '', 0, 403);
     }
@@ -81,20 +103,22 @@ if ($groupFolderId > 0) {
 
 // Optionaler Zielordner aus dem Formular
 $targetFolderInput = isset($_POST['target_folder']) ? trim((string)$_POST['target_folder']) : '';
-$baseTargetFolder = $targetFolderInput !== '' ? extractSanitizedFolderPath($targetFolderInput . '/placeholder') : '';
+$baseTargetFolder = $sharedFolderId > 0
+    ? $sharedBaseFolder
+    : ($targetFolderInput !== '' ? extractSanitizedFolderPath($targetFolderInput . '/placeholder') : '');
 
 // Optionales Tresor-Passwort direkt beim Upload
 $uploadVaultPassword = isset($_POST['vault_password']) ? (string)$_POST['vault_password'] : '';
 if ($uploadVaultPassword !== '' && mb_strlen($uploadVaultPassword, 'UTF-8') < 4) {
-    respondUpload(false, 'Das optionale Tresor-Passwort muss mindestens 4 Zeichen lang sein.', $isAjax, $baseTargetFolder, $groupFolderId);
+    respondUpload(false, 'Das optionale Tresor-Passwort muss mindestens 4 Zeichen lang sein.', $isAjax, $baseTargetFolder, $groupFolderId, 200, $sharedFolderId);
 }
 
 if (!isset($_FILES['files'])) {
-    respondUpload(false, 'Keine Dateien zum Hochladen empfangen.', $isAjax, $baseTargetFolder, $groupFolderId);
+    respondUpload(false, 'Keine Dateien zum Hochladen empfangen.', $isAjax, $baseTargetFolder, $groupFolderId, 200, $sharedFolderId);
 }
 
 if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0750, true) && !is_dir(UPLOAD_DIR)) {
-    respondUpload(false, 'Serverfehler: Upload-Verzeichnis konnte nicht erstellt werden.', $isAjax, $baseTargetFolder, $groupFolderId, 500);
+    respondUpload(false, 'Serverfehler: Upload-Verzeichnis konnte nicht erstellt werden.', $isAjax, $baseTargetFolder, $groupFolderId, 500, $sharedFolderId);
 }
 
 $rawFiles = $_FILES['files'];
@@ -226,7 +250,7 @@ foreach ($validCandidates as $fileItem) {
 
     try {
         $stmtInsert->execute([
-            ':user_id'         => $userId,
+            ':user_id'         => $effectiveOwnerId,
             ':group_folder_id' => $groupFolderId > 0 ? $groupFolderId : null,
             ':filename'        => $storedFilename,
             ':original_name'   => $originalName,
@@ -237,7 +261,7 @@ foreach ($validCandidates as $fileItem) {
         ]);
 
         if ($finalFolderPath !== '') {
-            registerFolderHierarchy($pdo, $userId, $finalFolderPath, $groupFolderId > 0 ? $groupFolderId : null);
+            registerFolderHierarchy($pdo, $effectiveOwnerId, $finalFolderPath, $groupFolderId > 0 ? $groupFolderId : null);
         }
 
         $remainingQuota -= $actualSize;
@@ -254,7 +278,7 @@ if ($uploadedCount > 0 && empty($errorMessages)) {
     $msg = $uploadedCount === 1
         ? sprintf('1 Datei (%s) wurde erfolgreich hochgeladen.', formatBytes($totalUploadedBytes))
         : sprintf('%d Dateien (insgesamt %s) wurden erfolgreich hochgeladen.', $uploadedCount, formatBytes($totalUploadedBytes));
-    respondUpload(true, $msg, $isAjax, $baseTargetFolder, $groupFolderId);
+    respondUpload(true, $msg, $isAjax, $baseTargetFolder, $groupFolderId, 200, $sharedFolderId);
 }
 
 if ($uploadedCount > 0 && !empty($errorMessages)) {
@@ -264,8 +288,8 @@ if ($uploadedCount > 0 && !empty($errorMessages)) {
         count($errorMessages),
         implode(' | ', array_slice($errorMessages, 0, 3))
     );
-    respondUpload(true, $msg, $isAjax, $baseTargetFolder, $groupFolderId);
+    respondUpload(true, $msg, $isAjax, $baseTargetFolder, $groupFolderId, 200, $sharedFolderId);
 }
 
 $fullErrorMsg = 'Upload fehlgeschlagen: ' . implode(' | ', array_slice($errorMessages, 0, 3));
-respondUpload(false, $fullErrorMsg, $isAjax, $baseTargetFolder, $groupFolderId, 400);
+respondUpload(false, $fullErrorMsg, $isAjax, $baseTargetFolder, $groupFolderId, 400, $sharedFolderId);

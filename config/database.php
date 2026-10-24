@@ -88,6 +88,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `theme` VARCHAR(24) NOT NULL DEFAULT 'light',
             `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30,
             `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0,
+            `calendar_token` VARCHAR(64) DEFAULT NULL,
             `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -123,6 +124,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('allow_user_sharing', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0 AFTER `session_timeout`");
+    }
+    if (!in_array('calendar_token', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `calendar_token` VARCHAR(64) DEFAULT NULL AFTER `allow_user_sharing`");
     }
 
     // Neue Tabellen anlegen, falls noch nicht vorhanden
@@ -252,6 +256,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `folder_path` VARCHAR(500) DEFAULT NULL,
             `owner_id` INT UNSIGNED NOT NULL,
             `shared_with_user_id` INT UNSIGNED NOT NULL,
+            `can_write` TINYINT(1) NOT NULL DEFAULT 0,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             UNIQUE KEY `idx_user_shares_unique` (`file_id`, `shared_with_user_id`),
@@ -266,6 +271,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     if (!in_array('folder_path', $colsUserShares, true)) {
         $pdo->exec("ALTER TABLE `user_shares` MODIFY COLUMN `file_id` INT UNSIGNED DEFAULT NULL");
         $pdo->exec("ALTER TABLE `user_shares` ADD COLUMN `folder_path` VARCHAR(500) DEFAULT NULL AFTER `file_id`");
+    }
+    if (!in_array('can_write', $colsUserShares, true)) {
+        $pdo->exec("ALTER TABLE `user_shares` ADD COLUMN `can_write` TINYINT(1) NOT NULL DEFAULT 0 AFTER `shared_with_user_id`");
     }
 
     $pdo->exec("
@@ -289,6 +297,54 @@ function ensureSchemaUpdated(PDO $pdo): void
             `setting_value` MEDIUMTEXT DEFAULT NULL,
             `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `calendar_events` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(190) NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            `location` VARCHAR(190) DEFAULT NULL,
+            `start_at` DATETIME NOT NULL,
+            `end_at` DATETIME NOT NULL,
+            `all_day` TINYINT(1) NOT NULL DEFAULT 0,
+            `recurrence` VARCHAR(20) NOT NULL DEFAULT 'none',
+            `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `group_can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `attached_file_id` INT UNSIGNED DEFAULT NULL,
+            `is_private` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_ce_user` (`user_id`),
+            KEY `idx_ce_dates` (`start_at`, `end_at`),
+            KEY `idx_ce_group` (`group_id`),
+            KEY `idx_ce_shared_user` (`shared_user_id`),
+            CONSTRAINT `fk_ce_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_ce_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_ce_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_ce_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `calendar_shares` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `owner_user_id` INT UNSIGNED NOT NULL,
+            `target_user_id` INT UNSIGNED DEFAULT NULL,
+            `target_group_id` INT UNSIGNED DEFAULT NULL,
+            `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_cs_owner` (`owner_user_id`),
+            KEY `idx_cs_target_user` (`target_user_id`),
+            KEY `idx_cs_target_group` (`target_group_id`),
+            CONSTRAINT `fk_cs_owner` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_cs_target_user` FOREIGN KEY (`target_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_cs_target_group` FOREIGN KEY (`target_group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
