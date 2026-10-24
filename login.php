@@ -5,6 +5,14 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
+if (isset($_GET['timeout'])) {
+    $_SESSION = [];
+    session_regenerate_id(true);
+    setFlash('error', 'Ihre Sitzung wurde nach Inaktivität automatisch beendet. Bitte melden Sie sich erneut an.');
+    header('Location: login.php');
+    exit;
+}
+
 redirectIfLoggedIn();
 
 $errors = [];
@@ -82,11 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['pending_2fa_email_masked'],
                     $_SESSION['pending_2fa_last_sent']
                 );
-                $_SESSION['user_id']    = (int)$user['id'];
-                $_SESSION['username']   = (string)$user['username'];
-                $_SESSION['is_admin']   = ((int)$user['is_admin'] === 1);
-                $_SESSION['theme']      = (string)($user['theme'] ?: 'light');
-                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                $_SESSION['user_id']       = (int)$user['id'];
+                $_SESSION['username']      = (string)$user['username'];
+                $_SESSION['is_admin']      = ((int)$user['is_admin'] === 1);
+                $_SESSION['theme']         = (string)($user['theme'] ?: 'light');
+                $_SESSION['last_activity'] = time();
+                $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
 
                 setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
                 header('Location: index.php');

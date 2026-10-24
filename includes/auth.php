@@ -15,6 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
+    ini_set('session.gc_maxlifetime', '86400');
 
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
@@ -39,7 +40,8 @@ if (!headers_sent()) {
 }
 
 /**
- * Prüft, ob ein Benutzer eingeloggt ist, und synchronisiert bei Bedarf Rolle & Theme aus der Datenbank.
+ * Prüft, ob ein Benutzer eingeloggt ist, synchronisiert Rolle, Theme & Timeout aus der Datenbank
+ * und prüft das vom Benutzer gewählte Inaktivitäts-Timeout.
  */
 function isLoggedIn(): bool
 {
@@ -52,25 +54,67 @@ function isLoggedIn(): bool
         $verifiedThisRequest = true;
         try {
             $pdo = getDB();
-            $stmt = $pdo->prepare('SELECT username, is_admin, theme FROM users WHERE id = :id LIMIT 1');
+            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout FROM users WHERE id = :id LIMIT 1');
             $stmt->execute([':id' => $_SESSION['user_id']]);
             $row = $stmt->fetch();
             if ($row) {
-                $_SESSION['username'] = (string)$row['username'];
-                $_SESSION['is_admin'] = ((int)$row['is_admin'] === 1);
-                $_SESSION['theme']    = (string)($row['theme'] ?: 'light');
+                $timeoutMin = isset($row['session_timeout']) ? (int)$row['session_timeout'] : 30;
+                if ($timeoutMin > 0 && isset($_SESSION['last_activity']) && is_int($_SESSION['last_activity'])) {
+                    if ((time() - $_SESSION['last_activity']) > ($timeoutMin * 60)) {
+                        $_SESSION = [];
+                        setFlash('error', 'Ihre Sitzung wurde nach Inaktivität automatisch beendet. Bitte melden Sie sich erneut an.');
+                        return false;
+                    }
+                }
+                $_SESSION['username']        = (string)$row['username'];
+                $_SESSION['is_admin']        = ((int)$row['is_admin'] === 1);
+                $_SESSION['theme']           = (string)($row['theme'] ?: 'light');
+                $_SESSION['session_timeout'] = $timeoutMin;
+                $_SESSION['last_activity']   = time();
             } else {
                 // Benutzer wurde gelöscht
                 $_SESSION = [];
                 return false;
             }
         } catch (Throwable) {
-            $_SESSION['is_admin'] = $_SESSION['is_admin'] ?? false;
-            $_SESSION['theme']    = $_SESSION['theme'] ?? 'light';
+            $_SESSION['is_admin']        = $_SESSION['is_admin'] ?? false;
+            $_SESSION['theme']           = $_SESSION['theme'] ?? 'light';
+            $_SESSION['session_timeout'] = $_SESSION['session_timeout'] ?? 30;
+            $_SESSION['last_activity']   = time();
         }
     }
 
     return true;
+}
+
+/**
+ * Liefert die erlaubten Werte für das automatische Sitzungs-Timeout (in Minuten, 0 = Kein Timeout).
+ *
+ * @return array<int, string>
+ */
+function getAllowedSessionTimeouts(): array
+{
+    return [
+        5   => '5 Minuten',
+        15  => '15 Minuten',
+        30  => '30 Minuten (Standard)',
+        60  => '60 Minuten (1 Stunde)',
+        120 => '120 Minuten (2 Stunden)',
+        240 => '240 Minuten (4 Stunden)',
+        480 => '480 Minuten (8 Stunden)',
+        0   => 'Kein Timeout (Angemeldet bleiben)',
+    ];
+}
+
+/**
+ * Liefert das aktuell für den Benutzer eingestellte Sitzungs-Timeout in Minuten (0 = deaktiviert).
+ */
+function getCurrentSessionTimeout(): int
+{
+    if (!isLoggedIn()) {
+        return 30;
+    }
+    return isset($_SESSION['session_timeout']) ? (int)$_SESSION['session_timeout'] : 30;
 }
 
 /**

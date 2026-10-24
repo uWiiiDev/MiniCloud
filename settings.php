@@ -11,7 +11,7 @@ $loggedIn = isLoggedIn();
 $userRow = null;
 
 if ($loggedIn) {
-    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, storage_quota FROM users WHERE id = :id LIMIT 1');
+    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, storage_quota FROM users WHERE id = :id LIMIT 1');
     $stmtU->execute([':id' => (int)$_SESSION['user_id']]);
     $userRow = $stmtU->fetch() ?: null;
 }
@@ -80,6 +80,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
                     : 'Ihre 2FA- und E-Mail-Einstellungen wurden gespeichert (2FA ist deaktiviert).'
             );
         }
+
+        header('Location: settings.php');
+        exit;
+    }
+
+    if ($action === 'update_session_timeout') {
+        $allowedTimeouts = getAllowedSessionTimeouts();
+        $newTimeout = isset($_POST['session_timeout']) ? (int)$_POST['session_timeout'] : 30;
+        if (!array_key_exists($newTimeout, $allowedTimeouts)) {
+            $newTimeout = 30;
+        }
+
+        $stmtUpdTimeout = $pdo->prepare('UPDATE users SET session_timeout = :t WHERE id = :id');
+        $stmtUpdTimeout->execute([
+            ':t'  => $newTimeout,
+            ':id' => (int)$userRow['id'],
+        ]);
+        $_SESSION['session_timeout'] = $newTimeout;
+        $_SESSION['last_activity']   = time();
+
+        setFlash(
+            'success',
+            $newTimeout > 0
+                ? 'Das Timeout bis zur automatischen Abmeldung wurde auf ' . $newTimeout . ' Minuten festgelegt.'
+                : 'Das automatische Timeout wurde deaktiviert (Sie bleiben angemeldet).'
+        );
 
         header('Location: settings.php');
         exit;
@@ -277,6 +303,46 @@ $themeGroups = [
                         2FA-Einstellung speichern
                     </button>
                 </div>
+            </form>
+        </section>
+
+        <!-- 3b. AUTOMATISCHE ABMELDUNG (SITZUNGS-TIMEOUT) -->
+        <?php
+        $userTimeoutMin = isset($userRow['session_timeout']) ? (int)$userRow['session_timeout'] : 30;
+        $allowedTimeouts = getAllowedSessionTimeouts();
+        if (!array_key_exists($userTimeoutMin, $allowedTimeouts)) {
+            $userTimeoutMin = 30;
+        }
+        ?>
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">⏱️ Automatische Abmeldung (Timeout)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userTimeoutMin > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($allowedTimeouts[$userTimeoutMin]) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Legen Sie fest, nach wie vielen Minuten ohne Aktivität sich die Anwendung zu Ihrer Sicherheit automatisch abmeldet.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_session_timeout">
+
+                <?php foreach ($allowedTimeouts as $tMin => $tLabel): ?>
+                    <?php $isSelectedTimeout = ($userTimeoutMin === (int)$tMin); ?>
+                    <button
+                        type="submit"
+                        name="session_timeout"
+                        value="<?= (int)$tMin ?>"
+                        class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedTimeout ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                    >
+                        <span class="truncate"><?= e($tLabel) ?></span>
+                        <?php if ($isSelectedTimeout): ?>
+                            <span class="text-xs font-bold shrink-0">✓</span>
+                        <?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
             </form>
         </section>
 

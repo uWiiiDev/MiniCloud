@@ -1923,6 +1923,116 @@ function getTranslationDictionary(): array
             'es' => 'La autenticación de dos factores (2FA) ha sido desactivada.',
             'nl' => 'Tweefactorauthenticatie (2FA) is uitgeschakeld.',
         ],
+        '🔒 Zwei-Faktor-Authentifizierung (2FA)' => [
+            'en' => '🔒 Two-Factor Authentication (2FA)',
+            'fr' => '🔒 Authentification à deux facteurs (2FA)',
+            'es' => '🔒 Autenticación de dos factores (2FA)',
+            'nl' => '🔒 Tweefactorauthenticatie (2FA)',
+        ],
+        '🔒 2FA Aktiv' => [
+            'en' => '🔒 2FA Active',
+            'fr' => '🔒 2FA Active',
+            'es' => '🔒 2FA Activo',
+            'nl' => '🔒 2FA Actief',
+        ],
+        '2FA Inaktiv' => [
+            'en' => '2FA Inactive',
+            'fr' => '2FA Inactive',
+            'es' => '2FA Inactivo',
+            'nl' => '2FA Inactief',
+        ],
+        'Sie können selbst entscheiden, ob Sie bei der Anmeldung zusätzlich zu Ihrem Passwort einen 6-stelligen Sicherheitscode per E-Mail erhalten möchten.' => [
+            'en' => 'You can decide for yourself whether to receive an additional 6-digit security code by email when signing in.',
+            'fr' => 'Vous pouvez choisir librement de recevoir un code de sécurité à 6 chiffres par e-mail lors de la connexion.',
+            'es' => 'Puede decidir si desea recibir un código de seguridad adicional de 6 dígitos por correo al iniciar sesión.',
+            'nl' => 'U kunt zelf bepalen of u bij het inloggen een extra 6-cijferige beveiligingscode per e-mail wilt ontvangen.',
+        ],
+        'Ihre E-Mail-Adresse für den 2FA-Code' => [
+            'en' => 'Your email address for the 2FA code',
+            'fr' => 'Votre adresse e-mail pour le code 2FA',
+            'es' => 'Su dirección de correo para el código 2FA',
+            'nl' => 'Uw e-mailadres voor de 2FA-code',
+        ],
+        '2FA per E-Mail beim Anmelden aktivieren' => [
+            'en' => 'Enable Email 2FA when signing in',
+            'fr' => 'Activer la 2FA par e-mail lors de la connexion',
+            'es' => 'Activar 2FA por correo al iniciar sesión',
+            'nl' => '2FA per e-mail bij het inloggen inschakelen',
+        ],
+
+        // --- Automatische Abmeldung (Sitzungs-Timeout) ---
+        '⏱️ Automatische Abmeldung (Timeout)' => [
+            'en' => '⏱️ Automatic Sign-Out (Timeout)',
+            'fr' => '⏱️ Déconnexion automatique (Délai)',
+            'es' => '⏱️ Cierre de sesión automático (Tiempo de espera)',
+            'nl' => '⏱️ Automatisch uitloggen (Time-out)',
+        ],
+        'Legen Sie fest, nach wie vielen Minuten ohne Aktivität sich die Anwendung zu Ihrer Sicherheit automatisch abmeldet.' => [
+            'en' => 'Choose after how many minutes of inactivity the application automatically signs you out for your security.',
+            'fr' => 'Définissez après combien de minutes d’inactivité l’application vous déconnecte automatiquement pour votre sécurité.',
+            'es' => 'Establezca tras cuántos minutos de inactividad la aplicación cerrará la sesión automáticamente por seguridad.',
+            'nl' => 'Stel in na hoeveel minuten zonder activiteit de applicatie u voor uw veiligheid automatisch uitlogt.',
+        ],
+        '5 Minuten' => [
+            'en' => '5 minutes',
+            'fr' => '5 minutes',
+            'es' => '5 minutos',
+            'nl' => '5 minuten',
+        ],
+        '15 Minuten' => [
+            'en' => '15 minutes',
+            'fr' => '15 minutes',
+            'es' => '15 minutos',
+            'nl' => '15 minuten',
+        ],
+        '30 Minuten (Standard)' => [
+            'en' => '30 minutes (Default)',
+            'fr' => '30 minutes (Par défaut)',
+            'es' => '30 minutos (Estándar)',
+            'nl' => '30 minuten (Standaard)',
+        ],
+        '60 Minuten (1 Stunde)' => [
+            'en' => '60 minutes (1 hour)',
+            'fr' => '60 minutes (1 heure)',
+            'es' => '60 minutos (1 hora)',
+            'nl' => '60 minuten (1 uur)',
+        ],
+        '120 Minuten (2 Stunden)' => [
+            'en' => '120 minutes (2 hours)',
+            'fr' => '120 minutes (2 heures)',
+            'es' => '120 minutos (2 horas)',
+            'nl' => '120 minuten (2 uur)',
+        ],
+        '240 Minuten (4 Stunden)' => [
+            'en' => '240 minutes (4 hours)',
+            'fr' => '240 minutes (4 heures)',
+            'es' => '240 minutos (4 horas)',
+            'nl' => '240 minuten (4 uur)',
+        ],
+        '480 Minuten (8 Stunden)' => [
+            'en' => '480 minutes (8 hours)',
+            'fr' => '480 minutes (8 heures)',
+            'es' => '480 minutos (8 horas)',
+            'nl' => '480 minuten (8 uur)',
+        ],
+        'Kein Timeout (Angemeldet bleiben)' => [
+            'en' => 'No timeout (Stay signed in)',
+            'fr' => 'Aucun délai (Rester connecté)',
+            'es' => 'Sin tiempo de espera (Permanecer conectado)',
+            'nl' => 'Geen time-out (Ingelogd blijven)',
+        ],
+        'Das automatische Timeout wurde deaktiviert (Sie bleiben angemeldet).' => [
+            'en' => 'Automatic timeout has been disabled (you will stay signed in).',
+            'fr' => 'La déconnexion automatique a été désactivée (vous restez connecté).',
+            'es' => 'El cierre automático se ha desactivado (permanecerá conectado).',
+            'nl' => 'Automatische time-out is uitgeschakeld (u blijft ingelogd).',
+        ],
+        'Ihre Sitzung wurde nach Inaktivität automatisch beendet. Bitte melden Sie sich erneut an.' => [
+            'en' => 'Your session was automatically ended due to inactivity. Please sign in again.',
+            'fr' => 'Votre session a été fermée automatiquement pour cause d’inactivité. Veuillez vous reconnecter.',
+            'es' => 'Su sesión se cerró automáticamente por inactividad. Por favor, inicie sesión de nuevo.',
+            'nl' => 'Uw sessie is vanwege inactiviteit automatisch beëindigd. Log opnieuw in.',
+        ],
     ];
 
     return $dict;
@@ -2123,6 +2233,13 @@ function translateTextSegment(string $text, string $lang): string
             'fr' => 'Mentions légales & Informations RGPD pour $1',
             'es' => 'Aviso legal e información RGPD para $1',
             'nl' => 'Juridische kennisgeving & AVG-informatie voor $1',
+        ],
+        // "Das Timeout bis zur automatischen Abmeldung wurde auf 30 Minuten festgelegt."
+        '/^Das Timeout bis zur automatischen Abmeldung wurde auf (\d+) Minuten festgelegt\.$/u' => [
+            'en' => 'The automatic sign-out timeout has been set to $1 minutes.',
+            'fr' => 'Le délai de déconnexion automatique a été défini sur $1 minutes.',
+            'es' => 'El tiempo de espera hasta el cierre automático se ha establecido en $1 minutos.',
+            'nl' => 'De time-out voor automatisch uitloggen is ingesteld op $1 minuten.',
         ],
     ];
 

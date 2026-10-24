@@ -1300,8 +1300,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </div>
                             </td>
                             <td class="py-3 px-4">
-                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg <?= $canWriteGf ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-xs font-semibold">
-                                    <?= $canWriteGf ? '✏️ Lesen & Schreiben' : '👁️ Nur Lesen' ?>
+                                <span
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $canWriteGf ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
+                                    title="<?= $canWriteGf ? 'Lesen & Schreiben' : 'Nur Lesen' ?>"
+                                    aria-label="<?= $canWriteGf ? 'Lesen & Schreiben' : 'Nur Lesen' ?>"
+                                >
+                                    <?= $canWriteGf ? '✏️' : '👁️' ?>
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">

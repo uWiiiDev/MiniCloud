@@ -86,6 +86,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0,
             `is_admin` TINYINT(1) NOT NULL DEFAULT 0,
             `theme` VARCHAR(24) NOT NULL DEFAULT 'light',
+            `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30,
             `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -115,6 +116,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('theme', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `theme` VARCHAR(24) NOT NULL DEFAULT 'light' AFTER `is_admin`");
+    }
+    if (!in_array('session_timeout', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30 AFTER `theme`");
     }
 
     // Neue Tabellen anlegen, falls noch nicht vorhanden

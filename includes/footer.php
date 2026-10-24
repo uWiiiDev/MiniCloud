@@ -262,6 +262,30 @@ $versionInfo    = getAppVersionInfo();
         });
     }
 })();
+
+<?php if (isLoggedIn() && getCurrentSessionTimeout() > 0): ?>
+(() => {
+    const timeoutMs = <?= (int)getCurrentSessionTimeout() * 60 * 1000 ?>;
+    let idleTimer = null;
+
+    const triggerAutoLogout = () => {
+        window.location.href = 'login.php?timeout=1';
+    };
+
+    const resetIdleTimer = () => {
+        if (idleTimer !== null) {
+            clearTimeout(idleTimer);
+        }
+        idleTimer = setTimeout(triggerAutoLogout, timeoutMs);
+    };
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach((evt) => {
+        window.addEventListener(evt, resetIdleTimer, { passive: true });
+    });
+
+    resetIdleTimer();
+})();
+<?php endif; ?>
 </script>
 </body>
 </html>
