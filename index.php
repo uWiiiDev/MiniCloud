@@ -596,18 +596,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 $activeGfIdOrNull = $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : null;
                 ?>
                 <div class="inline-flex flex-wrap items-center gap-1.5">
-                    <button
-                        type="button"
-                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
-                        title="Ordner verschieben oder kopieren"
-                        aria-label="Ordner verschieben oder kopieren"
-                        class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                        </svg>
-                    </button>
-
                     <?php if ($activeGroupFolder === null && $activeFolderMeta !== null && (int)$activeFolderMeta['file_count'] > 0): ?>
                         <a
                             href="download.php?folder=<?= rawurlencode($currentFolder) ?>"
@@ -620,6 +608,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </svg>
                         </a>
                     <?php endif; ?>
+
+                    <button
+                        type="button"
+                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
+                        title="Ordner verschieben oder kopieren"
+                        aria-label="Ordner verschieben oder kopieren"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                    </button>
 
                     <?php if ($activeGroupFolder === null): ?>
                         <button
@@ -940,19 +940,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
                             <td class="py-3 px-2.5 sm:px-6 whitespace-nowrap text-right align-top sm:align-middle">
                                 <div class="inline-flex items-center justify-end gap-1 sm:gap-2">
-                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon) -->
-                                    <button
-                                        type="button"
-                                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
-                                        title="Ordner verschieben oder kopieren"
-                                        aria-label="Ordner verschieben oder kopieren"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                                        </svg>
-                                    </button>
-
                                     <?php if ($activeGroupFolder === null && $subFileCount > 0): ?>
                                         <a
                                             href="download.php?folder=<?= rawurlencode($subPath) ?>"
@@ -965,6 +952,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </svg>
                                         </a>
                                     <?php endif; ?>
+
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon) -->
+                                    <button
+                                        type="button"
+                                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        title="Ordner verschieben oder kopieren"
+                                        aria-label="Ordner verschieben oder kopieren"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                        </svg>
+                                    </button>
 
                                     <?php if ($activeGroupFolder === null): ?>
                                         <button
@@ -1133,19 +1133,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </svg>
                                     </button>
 
-                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
-                                    <button
-                                        type="button"
-                                        onclick="openTransferModal('file', <?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= e((string)json_encode($folderPath)) ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
-                                        title="Datei verschieben oder kopieren"
-                                        aria-label="Datei verschieben oder kopieren"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                                        </svg>
-                                    </button>
-
                                     <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <?php if ($isEncrypted): ?>
                                         <button
@@ -1186,6 +1173,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </svg>
                                         </button>
                                     <?php endif; ?>
+
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                    <button
+                                        type="button"
+                                        onclick="openTransferModal('file', <?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= e((string)json_encode($folderPath)) ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        title="Datei verschieben oder kopieren"
+                                        aria-label="Datei verschieben oder kopieren"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                        </svg>
+                                    </button>
 
                                     <?php if ($canManageThisFile): ?>
                                         <!-- TEILEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
