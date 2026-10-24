@@ -91,6 +91,12 @@ function getTranslationDictionary(): array
             'es' => 'Elegir tema',
             'nl' => 'Thema kiezen',
         ],
+        'Design-Theme wählen' => [
+            'en' => 'Choose design theme',
+            'fr' => 'Choisir le thème visuel',
+            'es' => 'Elegir tema de diseño',
+            'nl' => 'Designthema kiezen',
+        ],
         'Sprache wählen' => [
             'en' => 'Choose language',
             'fr' => 'Choisir la langue',
@@ -192,6 +198,18 @@ function getTranslationDictionary(): array
             'fr' => 'Fichiers',
             'es' => 'Archivos',
             'nl' => 'Bestanden',
+        ],
+        'Ordner' => [
+            'en' => 'Folder',
+            'fr' => 'Dossier',
+            'es' => 'Carpeta',
+            'nl' => 'Map',
+        ],
+        'ORDNER' => [
+            'en' => 'FOLDER',
+            'fr' => 'DOSSIER',
+            'es' => 'CARPETA',
+            'nl' => 'MAP',
         ],
         'Meine Dateien' => [
             'en' => 'My Files',
@@ -361,6 +379,168 @@ function getTranslationDictionary(): array
         ],
 
         // --- Dashboard (index.php) ---
+        'Dateien oder Ordner hierher ziehen' => [
+            'en' => 'Drag & drop files or folders here',
+            'fr' => 'Glissez-déposez des fichiers ou dossiers ici',
+            'es' => 'Arrastre archivos o carpetas aquí',
+            'nl' => 'Sleep bestanden of mappen hierheen',
+        ],
+        '(lädt sofort automatisch hoch)' => [
+            'en' => '(uploads automatically)',
+            'fr' => '(téléversement automatique immédiat)',
+            'es' => '(se sube automáticamente)',
+            'nl' => '(wordt direct automatisch geüpload)',
+        ],
+        'Zielordner (optional)' => [
+            'en' => 'Target folder (optional)',
+            'fr' => 'Dossier cible (optionnel)',
+            'es' => 'Carpeta de destino (opcional)',
+            'nl' => 'Doelmap (optioneel)',
+        ],
+        'Optionaler Zielordner für den Upload' => [
+            'en' => 'Optional target folder for upload',
+            'fr' => 'Dossier cible optionnel pour l’envoi',
+            'es' => 'Carpeta de destino opcional para la subida',
+            'nl' => 'Optionele doelmap voor upload',
+        ],
+        'Dateien werden hochgeladen...' => [
+            'en' => 'Uploading files...',
+            'fr' => 'Téléversement des fichiers...',
+            'es' => 'Subiendo archivos...',
+            'nl' => 'Bestanden worden geüpload...',
+        ],
+        '📂 Alle Dateien anzeigen (Ordnerübergreifend)' => [
+            'en' => '📂 Show all files (across all folders)',
+            'fr' => '📂 Afficher tous les fichiers (tous les dossiers)',
+            'es' => '📂 Mostrar todos los archivos (todas las carpetas)',
+            'nl' => '📂 Alle bestanden tonen (alle mappen)',
+        ],
+        'Ordner anlegen' => [
+            'en' => 'Create folder',
+            'fr' => 'Créer un dossier',
+            'es' => 'Crear carpeta',
+            'nl' => 'Map aanmaken',
+        ],
+        'Neuer Ordnername (z.B. Projekte)...' => [
+            'en' => 'New folder name (e.g. Projects)...',
+            'fr' => 'Nom du nouveau dossier (ex. Projets)...',
+            'es' => 'Nombre de nueva carpeta (p. ej. Proyectos)...',
+            'nl' => 'Nieuwe mapnaam (bijv. Projecten)...',
+        ],
+        'Meine hochgeladenen Dateien' => [
+            'en' => 'My Uploaded Files',
+            'fr' => 'Mes fichiers téléversés',
+            'es' => 'Mis archivos subidos',
+            'nl' => 'Mijn geüploade bestanden',
+        ],
+        'Gefilterte Ansicht aktiv' => [
+            'en' => 'Filtered view active',
+            'fr' => 'Vue filtrée active',
+            'es' => 'Vista filtrada activa',
+            'nl' => 'Gefilterde weergave actief',
+        ],
+        '← Zurück zum Hauptverzeichnis' => [
+            'en' => '← Back to home directory',
+            'fr' => '← Retour au répertoire principal',
+            'es' => '← Volver al directorio principal',
+            'nl' => '← Terug naar hoofdmap',
+        ],
+        'Dateien durchsuchen...' => [
+            'en' => 'Search files...',
+            'fr' => 'Rechercher des fichiers...',
+            'es' => 'Buscar archivos...',
+            'nl' => 'Bestanden doorzoeken...',
+        ],
+        'Suchen' => [
+            'en' => 'Search',
+            'fr' => 'Rechercher',
+            'es' => 'Buscar',
+            'nl' => 'Zoeken',
+        ],
+        'Keine Dateien oder Ordner vorhanden' => [
+            'en' => 'No files or folders found',
+            'fr' => 'Aucun fichier ou dossier disponible',
+            'es' => 'No hay archivos ni carpetas disponibles',
+            'nl' => 'Geen bestanden of mappen aanwezig',
+        ],
+        'Laden Sie oben Ihre erste Datei oder einen Ordner hoch.' => [
+            'en' => 'Upload your first file or folder above.',
+            'fr' => 'Téléversez votre premier fichier ou dossier ci-dessus.',
+            'es' => 'Suba su primer archivo o carpeta arriba.',
+            'nl' => 'Upload hierboven uw eerste bestand of map.',
+        ],
+        'In diesem Ordner befinden sich aktuell keine Dateien.' => [
+            'en' => 'There are currently no files in this folder.',
+            'fr' => 'Ce dossier ne contient actuellement aucun fichier.',
+            'es' => 'Actualmente no hay archivos en esta carpeta.',
+            'nl' => 'Er bevinden zich momenteel geen bestanden in deze map.',
+        ],
+        'Name' => [
+            'en' => 'Name',
+            'fr' => 'Nom',
+            'es' => 'Nombre',
+            'nl' => 'Naam',
+        ],
+        'Ordner / Verschieben' => [
+            'en' => 'Folder / Move',
+            'fr' => 'Dossier / Déplacer',
+            'es' => 'Carpeta / Mover',
+            'nl' => 'Map / Verplaatsen',
+        ],
+        'Nach Ordner sortieren' => [
+            'en' => 'Sort by folder',
+            'fr' => 'Trier par dossier',
+            'es' => 'Ordenar por carpeta',
+            'nl' => 'Sorteren op map',
+        ],
+        'Nach Größe sortieren' => [
+            'en' => 'Sort by size',
+            'fr' => 'Trier par taille',
+            'es' => 'Ordenar por tamaño',
+            'nl' => 'Sorteren op grootte',
+        ],
+        'Nach Datum sortieren' => [
+            'en' => 'Sort by date',
+            'fr' => 'Trier par date',
+            'es' => 'Ordenar por fecha',
+            'nl' => 'Sorteren op datum',
+        ],
+        'Typ / Datum' => [
+            'en' => 'Type / Date',
+            'fr' => 'Type / Date',
+            'es' => 'Tipo / Fecha',
+            'nl' => 'Type / Datum',
+        ],
+        '📁 Unterordner' => [
+            'en' => '📁 Subfolder',
+            'fr' => '📁 Sous-dossier',
+            'es' => '📁 Subcarpeta',
+            'nl' => '📁 Submap',
+        ],
+        'Ordner öffnen' => [
+            'en' => 'Open folder',
+            'fr' => 'Ouvrir le dossier',
+            'es' => 'Abrir carpeta',
+            'nl' => 'Map openen',
+        ],
+        'Ordner teilen' => [
+            'en' => 'Share folder',
+            'fr' => 'Partager le dossier',
+            'es' => 'Compartir carpeta',
+            'nl' => 'Map delen',
+        ],
+        'Ordner löschen' => [
+            'en' => 'Delete folder',
+            'fr' => 'Supprimer le dossier',
+            'es' => 'Eliminar carpeta',
+            'nl' => 'Map verwijderen',
+        ],
+        'Vorschau öffnen' => [
+            'en' => 'Open preview',
+            'fr' => 'Ouvrir l’aperçu',
+            'es' => 'Abrir vista previa',
+            'nl' => 'Voorbeeld openen',
+        ],
         'Speicherplatz-Auslastung' => [
             'en' => 'Storage Usage',
             'fr' => 'Utilisation de l’espace de stockage',
@@ -397,12 +577,6 @@ function getTranslationDictionary(): array
             'es' => 'Crear nueva subcarpeta',
             'nl' => 'Nieuwe submap aanmaken',
         ],
-        'z.B. Rechnungen-2026' => [
-            'en' => 'e.g. Invoices-2026',
-            'fr' => 'ex. Factures-2026',
-            'es' => 'p. ej. Facturas-2026',
-            'nl' => 'bijv. Facturen-2026',
-        ],
         '+ Erstellen' => [
             'en' => '+ Create',
             'fr' => '+ Créer',
@@ -421,11 +595,59 @@ function getTranslationDictionary(): array
             'es' => 'Carpetas de grupo',
             'nl' => 'Groepsmappen',
         ],
-        'Vom Administrator für Sie oder Ihre Benutzergruppen freigegebene gemeinsame Ordner.' => [
-            'en' => 'Shared folders granted to you or your user groups by the administrator.',
-            'fr' => 'Dossiers partagés accordés à vous ou à vos groupes par l’administrateur.',
-            'es' => 'Carpetas compartidas habilitadas para usted o sus grupos por el administrador.',
-            'nl' => 'Gedeelde mappen die door de beheerder voor u of uw groepen zijn vrijgegeven.',
+        'Gruppenordner:' => [
+            'en' => 'Group folder:',
+            'fr' => 'Dossier de groupe :',
+            'es' => 'Carpeta de grupo:',
+            'nl' => 'Groepsmap:',
+        ],
+        'Freigegebener Ordner:' => [
+            'en' => 'Shared folder:',
+            'fr' => 'Dossier partagé :',
+            'es' => 'Carpeta compartida:',
+            'nl' => 'Gedeelde map:',
+        ],
+        'Ordner:' => [
+            'en' => 'Folder:',
+            'fr' => 'Dossier :',
+            'es' => 'Carpeta:',
+            'nl' => 'Map:',
+        ],
+        'Aktuell sind Ihnen noch keine Gruppenordner zugewiesen.' => [
+            'en' => 'No group folders are currently assigned to you.',
+            'fr' => 'Aucun dossier de groupe ne vous est actuellement attribué.',
+            'es' => 'Actualmente no tiene carpetas de grupo asignadas.',
+            'nl' => 'Er zijn momenteel nog geen groepsmappen aan u toegewezen.',
+        ],
+        'Ordnername' => [
+            'en' => 'Folder Name',
+            'fr' => 'Nom du dossier',
+            'es' => 'Nombre de carpeta',
+            'nl' => 'Mapnaam',
+        ],
+        'Berechtigung' => [
+            'en' => 'Permission',
+            'fr' => 'Permission',
+            'es' => 'Permiso',
+            'nl' => 'Machtiging',
+        ],
+        'Inhalt / Größe' => [
+            'en' => 'Contents / Size',
+            'fr' => 'Contenu / Taille',
+            'es' => 'Contenido / Tamaño',
+            'nl' => 'Inhoud / Grootte',
+        ],
+        'Größe / Inhalt' => [
+            'en' => 'Size / Contents',
+            'fr' => 'Taille / Contenu',
+            'es' => 'Tamaño / Contenido',
+            'nl' => 'Grootte / Inhoud',
+        ],
+        'Aktion' => [
+            'en' => 'Action',
+            'fr' => 'Action',
+            'es' => 'Acción',
+            'nl' => 'Actie',
         ],
         'Lesen & Schreiben' => [
             'en' => 'Read & Write',
@@ -433,11 +655,35 @@ function getTranslationDictionary(): array
             'es' => 'Lectura y Escritura',
             'nl' => 'Lezen & Schrijven',
         ],
+        '✏️ Lesen & Schreiben' => [
+            'en' => '✏️ Read & Write',
+            'fr' => '✏️ Lecture & Écriture',
+            'es' => '✏️ Lectura y Escritura',
+            'nl' => '✏️ Lezen & Schrijven',
+        ],
+        '(Lesen & Schreiben)' => [
+            'en' => '(Read & Write)',
+            'fr' => '(Lecture & Écriture)',
+            'es' => '(Lectura y Escritura)',
+            'nl' => '(Lezen & Schrijven)',
+        ],
         'Nur Lesen' => [
             'en' => 'Read Only',
             'fr' => 'Lecture seule',
             'es' => 'Solo lectura',
             'nl' => 'Alleen lezen',
+        ],
+        '👁️ Nur Lesen' => [
+            'en' => '👁️ Read Only',
+            'fr' => '👁️ Lecture seule',
+            'es' => '👁️ Solo lectura',
+            'nl' => '👁️ Alleen lezen',
+        ],
+        '(Nur Lesen)' => [
+            'en' => '(Read Only)',
+            'fr' => '(Lecture seule)',
+            'es' => '(Solo lectura)',
+            'nl' => '(Alleen lezen)',
         ],
         'Öffnen' => [
             'en' => 'Open',
@@ -451,47 +697,29 @@ function getTranslationDictionary(): array
             'es' => 'Compartido conmigo',
             'nl' => 'Gedeeld met mij',
         ],
-        'Dateien und Ordner, die andere Benutzer dieser Cloud direkt mit Ihnen geteilt haben.' => [
-            'en' => 'Files and folders that other users of this cloud have shared directly with you.',
-            'fr' => 'Fichiers et dossiers que d’autres utilisateurs ont partagés directement avec vous.',
-            'es' => 'Archivos y carpetas que otros usuarios han compartido directamente con usted.',
-            'nl' => 'Bestanden en mappen die andere gebruikers rechtstreeks met u hebben gedeeld.',
+        'Für mich freigegeben (Von Cloud-Benutzern)' => [
+            'en' => 'Shared with me (From Cloud Users)',
+            'fr' => 'Partagés avec moi (Par des utilisateurs du cloud)',
+            'es' => 'Compartido conmigo (Por usuarios de la nube)',
+            'nl' => 'Gedeeld met mij (Door cloudgebruikers)',
         ],
-        'Dateien oder Ordner hochladen' => [
-            'en' => 'Upload files or folders',
-            'fr' => 'Téléverser des fichiers ou des dossiers',
-            'es' => 'Subir archivos o carpetas',
-            'nl' => 'Bestanden of mappen uploaden',
+        'Aktuell wurden noch keine Ordner oder Dateien von anderen Cloud-Benutzern direkt mit Ihnen geteilt.' => [
+            'en' => 'No folders or files have currently been shared directly with you by other cloud users.',
+            'fr' => 'Aucun dossier ou fichier n’a encore été partagé directement avec vous par d’autres utilisateurs.',
+            'es' => 'Actualmente ningún otro usuario de la nube ha compartido carpetas o archivos directamente con usted.',
+            'nl' => 'Er zijn momenteel nog geen mappen of bestanden rechtstreeks door andere cloudgebruikers met u gedeeld.',
         ],
-        'Ziehen Sie Dateien per Drag & Drop hierher' => [
-            'en' => 'Drag & drop files here',
-            'fr' => 'Glissez-déposez vos fichiers ici',
-            'es' => 'Arrastre y suelte archivos aquí',
-            'nl' => 'Sleep bestanden hierheen',
+        'Geteilt von' => [
+            'en' => 'Shared by',
+            'fr' => 'Partagé par',
+            'es' => 'Compartido por',
+            'nl' => 'Gedeeld door',
         ],
-        'oder wählen Sie einzelne Dateien, mehrere Dateien oder einen ganzen Ordner von Ihrem Gerät' => [
-            'en' => 'or select single files, multiple files, or an entire folder from your device',
-            'fr' => 'ou sélectionnez des fichiers ou un dossier complet depuis votre appareil',
-            'es' => 'o seleccione archivos individuales, varios archivos o una carpeta completa de su dispositivo',
-            'nl' => 'of kies losse bestanden, meerdere bestanden of een hele map vanaf uw apparaat',
-        ],
-        '📄 Dateien auswählen' => [
-            'en' => '📄 Select Files',
-            'fr' => '📄 Choisir des fichiers',
-            'es' => '📄 Seleccionar archivos',
-            'nl' => '📄 Bestanden kiezen',
-        ],
-        '📁 Ordner auswählen' => [
-            'en' => '📁 Select Folder',
-            'fr' => '📁 Choisir un dossier',
-            'es' => '📁 Seleccionar carpeta',
-            'nl' => '📁 Map kiezen',
-        ],
-        'Optionaler Ziel-Unterordner (falls neu):' => [
-            'en' => 'Optional target subfolder (if new):',
-            'fr' => 'Sous-dossier cible optionnel (si nouveau) :',
-            'es' => 'Subcarpeta de destino opcional (si es nueva):',
-            'nl' => 'Optionele doelsubmap (indien nieuw):',
+        'Freigegeben am' => [
+            'en' => 'Shared on',
+            'fr' => 'Partagé le',
+            'es' => 'Compartido el',
+            'nl' => 'Gedeeld op',
         ],
         'Dateiname' => [
             'en' => 'Filename',
@@ -529,53 +757,47 @@ function getTranslationDictionary(): array
             'es' => 'Subcarpeta',
             'nl' => 'Submap',
         ],
-        'Verschieben nach...' => [
-            'en' => 'Move to...',
-            'fr' => 'Déplacer vers...',
-            'es' => 'Mover a...',
-            'nl' => 'Verplaatsen naar...',
+        '⇄ Verschieben – Meine Dateien' => [
+            'en' => '⇄ Move – My Files',
+            'fr' => '⇄ Déplacer – Mes fichiers',
+            'es' => '⇄ Mover – Mis archivos',
+            'nl' => '⇄ Verplaatsen – Mijn bestanden',
         ],
-        'Kopieren nach...' => [
-            'en' => 'Copy to...',
-            'fr' => 'Copier vers...',
-            'es' => 'Copiar a...',
-            'nl' => 'Kopiëren naar...',
+        '⇄ Verschieben – Gruppenordner' => [
+            'en' => '⇄ Move – Group Folders',
+            'fr' => '⇄ Déplacer – Dossiers de groupe',
+            'es' => '⇄ Mover – Carpetas de grupo',
+            'nl' => '⇄ Verplaatsen – Groepsmappen',
         ],
-        'Ordner verschieben nach...' => [
-            'en' => 'Move folder to...',
-            'fr' => 'Déplacer le dossier vers...',
-            'es' => 'Mover carpeta a...',
-            'nl' => 'Map verplaatsen naar...',
+        '📋 Kopieren – Meine Dateien' => [
+            'en' => '📋 Copy – My Files',
+            'fr' => '📋 Copier – Mes fichiers',
+            'es' => '📋 Copiar – Mis archivos',
+            'nl' => '📋 Kopiëren – Mijn bestanden',
         ],
-        'Ordner kopieren nach...' => [
-            'en' => 'Copy folder to...',
-            'fr' => 'Copier le dossier vers...',
-            'es' => 'Copiar carpeta a...',
-            'nl' => 'Map kopiëren naar...',
+        '📋 Kopieren – Gruppenordner' => [
+            'en' => '📋 Copy – Group Folders',
+            'fr' => '📋 Copier – Dossiers de groupe',
+            'es' => '📋 Copiar – Carpetas de grupo',
+            'nl' => '📋 Kopiëren – Groepsmappen',
         ],
-        'Datei verschieben nach...' => [
-            'en' => 'Move file to...',
-            'fr' => 'Déplacer le fichier vers...',
-            'es' => 'Mover archivo a...',
-            'nl' => 'Bestand verplaatsen naar...',
+        '⇄ 🏠 Mein Hauptverzeichnis' => [
+            'en' => '⇄ 🏠 My Home Directory',
+            'fr' => '⇄ 🏠 Mon répertoire principal',
+            'es' => '⇄ 🏠 Mi directorio principal',
+            'nl' => '⇄ 🏠 Mijn hoofdmap',
         ],
-        'Datei kopieren nach...' => [
-            'en' => 'Copy file to...',
-            'fr' => 'Copier le fichier vers...',
-            'es' => 'Copiar archivo a...',
-            'nl' => 'Bestand kopiëren naar...',
+        '📋 🏠 Mein Hauptverzeichnis' => [
+            'en' => '📋 🏠 My Home Directory',
+            'fr' => '📋 🏠 Mon répertoire principal',
+            'es' => '📋 🏠 Mi directorio principal',
+            'nl' => '📋 🏠 Mijn hoofdmap',
         ],
         'Vorschau' => [
             'en' => 'Preview',
             'fr' => 'Aperçu',
             'es' => 'Vista previa',
             'nl' => 'Voorbeeld',
-        ],
-        'Datei direkt im Browser ansehen' => [
-            'en' => 'Preview file directly in browser',
-            'fr' => 'Prévisualiser le fichier dans le navigateur',
-            'es' => 'Ver archivo directamente en el navegador',
-            'nl' => 'Bestand direct in de browser bekijken',
         ],
         'Herunterladen' => [
             'en' => 'Download',
@@ -589,17 +811,17 @@ function getTranslationDictionary(): array
             'es' => 'Descargar como ZIP',
             'nl' => 'Downloaden als ZIP',
         ],
+        'Ordner als ZIP herunterladen' => [
+            'en' => 'Download folder as ZIP',
+            'fr' => 'Télécharger le dossier en ZIP',
+            'es' => 'Descargar carpeta como ZIP',
+            'nl' => 'Map downloaden als ZIP',
+        ],
         'Teilen' => [
             'en' => 'Share',
             'fr' => 'Partager',
             'es' => 'Compartir',
             'nl' => 'Delen',
-        ],
-        'Öffentlichen Link erstellen oder für Benutzer freigeben' => [
-            'en' => 'Create public link or share with users',
-            'fr' => 'Créer un lien public ou partager avec des utilisateurs',
-            'es' => 'Crear enlace público o compartir con usuarios',
-            'nl' => 'Openbare link maken of delen met gebruikers',
         ],
         'Löschen' => [
             'en' => 'Delete',
@@ -607,32 +829,20 @@ function getTranslationDictionary(): array
             'es' => 'Eliminar',
             'nl' => 'Verwijderen',
         ],
-        'In den Papierkorb verschieben' => [
-            'en' => 'Move to trash',
-            'fr' => 'Mettre à la corbeille',
-            'es' => 'Mover a la papelera',
-            'nl' => 'Naar prullenbak verplaatsen',
+        '← Vorherige Datei' => [
+            'en' => '← Previous file',
+            'fr' => '← Fichier précédent',
+            'es' => '← Archivo anterior',
+            'nl' => '← Vorig bestand',
         ],
-        'Dieser Ordner ist noch leer' => [
-            'en' => 'This folder is still empty',
-            'fr' => 'Ce dossier est encore vide',
-            'es' => 'Esta carpeta aún está vacía',
-            'nl' => 'Deze map is nog leeg',
-        ],
-        'Laden Sie oben Ihre erste Datei oder einen Ordner hoch.' => [
-            'en' => 'Upload your first file or folder above.',
-            'fr' => 'Téléversez votre premier fichier ou dossier ci-dessus.',
-            'es' => 'Suba su primer archivo o carpeta arriba.',
-            'nl' => 'Upload hierboven uw eerste bestand of map.',
+        'Nächste Datei →' => [
+            'en' => 'Next file →',
+            'fr' => 'Fichier suivant →',
+            'es' => 'Siguiente archivo →',
+            'nl' => 'Volgend bestand →',
         ],
 
         // --- Papierkorb (trash.php) ---
-        'Gelöschte Dateien werden hier für 30 Tage aufbewahrt und danach automatisch endgültig entfernt.' => [
-            'en' => 'Deleted files are kept here for 30 days and then permanently removed automatically.',
-            'fr' => 'Les fichiers supprimés sont conservés ici pendant 30 jours avant d’être définitivement effacés.',
-            'es' => 'Los archivos eliminados se conservan aquí durante 30 días y luego se eliminan definitivamente.',
-            'nl' => 'Verwijderde bestanden worden hier 30 dagen bewaard en daarna automatisch definitief verwijderd.',
-        ],
         '← Zurück zu meinen Dateien' => [
             'en' => '← Back to my files',
             'fr' => '← Retour à mes fichiers',
@@ -827,6 +1037,72 @@ function getTranslationDictionary(): array
             'es' => 'Crear nuevo usuario',
             'nl' => 'Nieuwe gebruiker aanmaken',
         ],
+        'Selbstregistrierung ist deaktiviert. Legen Sie hier neue Zugänge inkl. optionaler E-Mail-2FA an.' => [
+            'en' => 'Self-registration is disabled. Create new user accounts (incl. optional email 2FA) here.',
+            'fr' => 'L’auto-inscription est désactivée. Créez ici de nouveaux comptes (avec 2FA e-mail optionnel).',
+            'es' => 'El autorregistro está desactivado. Cree aquí nuevas cuentas de usuario (incl. 2FA opcional por correo).',
+            'nl' => 'Zelfregistratie is uitgeschakeld. Maak hier nieuwe accounts aan (incl. optionele e-mail-2FA).',
+        ],
+        'E-Mail-Adresse (optional, für 2FA)' => [
+            'en' => 'Email address (optional, for 2FA)',
+            'fr' => 'Adresse e-mail (optionnelle, pour 2FA)',
+            'es' => 'Correo electrónico (opcional, para 2FA)',
+            'nl' => 'E-mailadres (optioneel, voor 2FA)',
+        ],
+        'Initial-Passwort (BCRYPT)' => [
+            'en' => 'Initial Password (BCRYPT)',
+            'fr' => 'Mot de passe initial (BCRYPT)',
+            'es' => 'Contraseña inicial (BCRYPT)',
+            'nl' => 'Initieel wachtwoord (BCRYPT)',
+        ],
+        'Mindestens 8 Zeichen' => [
+            'en' => 'At least 8 characters',
+            'fr' => 'Au moins 8 caractères',
+            'es' => 'Mínimo 8 caracteres',
+            'nl' => 'Minimaal 8 tekens',
+        ],
+        'Speicherplatz (MB)' => [
+            'en' => 'Storage Quota (MB)',
+            'fr' => 'Quota de stockage (Mo)',
+            'es' => 'Cuota de almacenamiento (MB)',
+            'nl' => 'Opslagruimte (MB)',
+        ],
+        'Rolle' => [
+            'en' => 'Role',
+            'fr' => 'Rôle',
+            'es' => 'Rol',
+            'nl' => 'Rol',
+        ],
+        'Standardbenutzer' => [
+            'en' => 'Standard User',
+            'fr' => 'Utilisateur standard',
+            'es' => 'Usuario estándar',
+            'nl' => 'Standaardgebruiker',
+        ],
+        'Administrator' => [
+            'en' => 'Administrator',
+            'fr' => 'Administrateur',
+            'es' => 'Administrador',
+            'nl' => 'Beheerder',
+        ],
+        '2FA per E-Mail aktivieren' => [
+            'en' => 'Enable Email 2FA',
+            'fr' => 'Activer la 2FA par e-mail',
+            'es' => 'Activar 2FA por correo',
+            'nl' => '2FA per e-mail inschakelen',
+        ],
+        '(Sendet 6-stelligen Code beim Login)' => [
+            'en' => '(Sends 6-digit code on login)',
+            'fr' => '(Envoie un code à 6 chiffres à la connexion)',
+            'es' => '(Envía un código de 6 dígitos al iniciar sesión)',
+            'nl' => '(Stuurt 6-cijferige code bij inloggen)',
+        ],
+        'Benutzer erstellen' => [
+            'en' => 'Create user',
+            'fr' => 'Créer l’utilisateur',
+            'es' => 'Crear usuario',
+            'nl' => 'Gebruiker aanmaken',
+        ],
         'Benutzerkonto erstellen' => [
             'en' => 'Create user account',
             'fr' => 'Créer le compte utilisateur',
@@ -838,6 +1114,42 @@ function getTranslationDictionary(): array
             'fr' => 'Gérer les utilisateurs existants',
             'es' => 'Gestionar usuarios existentes',
             'nl' => 'Bestaande gebruikers beheren',
+        ],
+        'Benutzer & E-Mail' => [
+            'en' => 'User & Email',
+            'fr' => 'Utilisateur & E-mail',
+            'es' => 'Usuario y Correo',
+            'nl' => 'Gebruiker & E-mail',
+        ],
+        'Belegt / Quota' => [
+            'en' => 'Used / Quota',
+            'fr' => 'Utilisé / Quota',
+            'es' => 'Usado / Cuota',
+            'nl' => 'Gebruikt / Quota',
+        ],
+        'Anpassen (E-Mail, 2FA, Quota, Passwort)' => [
+            'en' => 'Edit (Email, 2FA, Quota, Password)',
+            'fr' => 'Modifier (E-mail, 2FA, Quota, Mot de passe)',
+            'es' => 'Editar (Correo, 2FA, Cuota, Contraseña)',
+            'nl' => 'Aanpassen (E-mail, 2FA, Quota, Wachtwoord)',
+        ],
+        'Keine E-Mail' => [
+            'en' => 'No email',
+            'fr' => 'Aucun e-mail',
+            'es' => 'Sin correo',
+            'nl' => 'Geen e-mail',
+        ],
+        'E-Mail für 2FA (optional)' => [
+            'en' => 'Email for 2FA (optional)',
+            'fr' => 'E-mail pour 2FA (optionnel)',
+            'es' => 'Correo para 2FA (opcional)',
+            'nl' => 'E-mail voor 2FA (optioneel)',
+        ],
+        'Neues Passwort (optional)' => [
+            'en' => 'New password (optional)',
+            'fr' => 'Nouveau mot de passe (optionnel)',
+            'es' => 'Nueva contraseña (opcional)',
+            'nl' => 'Nieuw wachtwoord (optioneel)',
         ],
         'Speichern' => [
             'en' => 'Save',
@@ -857,11 +1169,65 @@ function getTranslationDictionary(): array
             'es' => 'Crear grupo de usuarios',
             'nl' => 'Gebruikersgroep aanmaken',
         ],
+        'Fassen Sie mehrere Benutzer in Gruppen zusammen, um Gruppenordner mit einem Klick freizugeben.' => [
+            'en' => 'Combine multiple users into groups to grant access to group folders with a single click.',
+            'fr' => 'Regroupez plusieurs utilisateurs pour partager des dossiers de groupe en un clic.',
+            'es' => 'Agrupe varios usuarios para compartir carpetas de grupo con un solo clic.',
+            'nl' => 'Voeg meerdere gebruikers samen in groepen om groepsmappen met één klik vrij te geven.',
+        ],
+        'Gruppenname' => [
+            'en' => 'Group Name',
+            'fr' => 'Nom du groupe',
+            'es' => 'Nombre del grupo',
+            'nl' => 'Groepsnaam',
+        ],
+        'Beschreibung' => [
+            'en' => 'Description',
+            'fr' => 'Description',
+            'es' => 'Descripción',
+            'nl' => 'Beschrijving',
+        ],
+        'Beschreibung (optional)' => [
+            'en' => 'Description (optional)',
+            'fr' => 'Description (optionnel)',
+            'es' => 'Descripción (opcional)',
+            'nl' => 'Beschrijving (optioneel)',
+        ],
+        'Optional' => [
+            'en' => 'Optional',
+            'fr' => 'Optionnel',
+            'es' => 'Opcional',
+            'nl' => 'Optioneel',
+        ],
         'Gruppe anlegen' => [
             'en' => 'Create group',
             'fr' => 'Créer le groupe',
             'es' => 'Crear grupo',
             'nl' => 'Groep aanmaken',
+        ],
+        'Noch keine Benutzergruppen angelegt.' => [
+            'en' => 'No user groups created yet.',
+            'fr' => 'Aucun groupe d’utilisateurs créé pour le moment.',
+            'es' => 'Aún no se han creado grupos de usuarios.',
+            'nl' => 'Nog geen gebruikersgroepen aangemaakt.',
+        ],
+        'Gruppe löschen' => [
+            'en' => 'Delete group',
+            'fr' => 'Supprimer le groupe',
+            'es' => 'Eliminar grupo',
+            'nl' => 'Groep verwijderen',
+        ],
+        'Keine Mitglieder' => [
+            'en' => 'No members',
+            'fr' => 'Aucun membre',
+            'es' => 'Sin miembros',
+            'nl' => 'Geen leden',
+        ],
+        'Mitglied hinzufügen...' => [
+            'en' => 'Add member...',
+            'fr' => 'Ajouter un membre...',
+            'es' => 'Añadir miembro...',
+            'nl' => 'Lid toevoegen...',
         ],
         'Gruppen & Mitglieder' => [
             'en' => 'Groups & Members',
@@ -882,10 +1248,70 @@ function getTranslationDictionary(): array
             'nl' => 'Groepsmap aanmaken',
         ],
         'Gruppenordner anlegen' => [
-            'en' => 'Create group folder',
-            'fr' => 'Créer le dossier de groupe',
+            'en' => 'Create Group Folder',
+            'fr' => 'Créer un dossier de groupe',
             'es' => 'Crear carpeta de grupo',
             'nl' => 'Groepsmap aanmaken',
+        ],
+        'Erstellen Sie gemeinsame Ordner und berechtigen Sie gezielt einzelne Benutzer oder ganze Benutzergruppen.' => [
+            'en' => 'Create shared folders and grant permissions to specific users or entire user groups.',
+            'fr' => 'Créez des dossiers partagés et accordez des droits à des utilisateurs ou groupes.',
+            'es' => 'Cree carpetas compartidas y otorgue permisos a usuarios individuales o grupos.',
+            'nl' => 'Maak gedeelde mappen aan en geef specifieke gebruikers of groepen toegang.',
+        ],
+        'Name des Gruppenordners' => [
+            'en' => 'Group Folder Name',
+            'fr' => 'Nom du dossier de groupe',
+            'es' => 'Nombre de la carpeta de grupo',
+            'nl' => 'Naam van de groepsmap',
+        ],
+        'Noch keine Gruppenordner angelegt.' => [
+            'en' => 'No group folders created yet.',
+            'fr' => 'Aucun dossier de groupe créé pour le moment.',
+            'es' => 'Aún no se han creado carpetas de grupo.',
+            'nl' => 'Nog geen groepsmappen aangemaakt.',
+        ],
+        'Berechtigte Benutzer & Gruppen:' => [
+            'en' => 'Authorized Users & Groups:',
+            'fr' => 'Utilisateurs & groupes autorisés :',
+            'es' => 'Usuarios y grupos autorizados:',
+            'nl' => 'Gemachtigde gebruikers & groepen:',
+        ],
+        'Derzeit nur für Administratoren sichtbar. Fügen Sie unten Benutzer oder Gruppen hinzu.' => [
+            'en' => 'Currently visible to administrators only. Add users or groups below.',
+            'fr' => 'Actuellement visible uniquement par les administrateurs. Ajoutez des utilisateurs ou groupes ci-dessous.',
+            'es' => 'Actualmente solo visible para administradores. Añada usuarios o grupos abajo.',
+            'nl' => 'Momenteel alleen zichtbaar voor beheerders. Voeg hieronder gebruikers of groepen toe.',
+        ],
+        '+ Benutzer wählen...' => [
+            'en' => '+ Select user...',
+            'fr' => '+ Choisir un utilisateur...',
+            'es' => '+ Seleccionar usuario...',
+            'nl' => '+ Gebruiker kiezen...',
+        ],
+        '+ Gruppe wählen...' => [
+            'en' => '+ Select group...',
+            'fr' => '+ Choisir un groupe...',
+            'es' => '+ Seleccionar grupo...',
+            'nl' => '+ Groep kiezen...',
+        ],
+        'Schreiben' => [
+            'en' => 'Read & Write',
+            'fr' => 'Écriture',
+            'es' => 'Escritura',
+            'nl' => 'Schrijven',
+        ],
+        'Berechtigen' => [
+            'en' => 'Grant',
+            'fr' => 'Autoriser',
+            'es' => 'Autorizar',
+            'nl' => 'Machtigen',
+        ],
+        'Gruppe +' => [
+            'en' => 'Group +',
+            'fr' => 'Groupe +',
+            'es' => 'Grupo +',
+            'nl' => 'Groep +',
         ],
         'Gruppenordner & Zugriffsrechte' => [
             'en' => 'Group Folders & Access Permissions',
@@ -899,11 +1325,41 @@ function getTranslationDictionary(): array
             'es' => 'Guardar permiso',
             'nl' => 'Machtiging opslaan',
         ],
-        'Server-Auslastung & System-Ressourcen' => [
-            'en' => 'Server Load & System Resources',
-            'fr' => 'Charge du serveur & Ressources système',
-            'es' => 'Carga del servidor y Recursos del sistema',
-            'nl' => 'Serverbelasting & Systeemstatus',
+        'Server-Status & Systemressourcen' => [
+            'en' => 'Server Status & System Resources',
+            'fr' => 'État du serveur & Ressources système',
+            'es' => 'Estado del servidor y Recursos del sistema',
+            'nl' => 'Serverstatus & Systeemstatus',
+        ],
+        '💾 Speicherplatz (Server)' => [
+            'en' => '💾 Disk Space (Server)',
+            'fr' => '💾 Espace disque (Serveur)',
+            'es' => '💾 Espacio en disco (Servidor)',
+            'nl' => '💾 Schijfruimte (Server)',
+        ],
+        '🧠 Arbeitsspeicher (RAM)' => [
+            'en' => '🧠 Memory (RAM)',
+            'fr' => '🧠 Mémoire vive (RAM)',
+            'es' => '🧠 Memoria (RAM)',
+            'nl' => '🧠 Werkgeheugen (RAM)',
+        ],
+        'Aktiv' => [
+            'en' => 'Active',
+            'fr' => 'Actif',
+            'es' => 'Activo',
+            'nl' => 'Actief',
+        ],
+        'Empfangen (↓)' => [
+            'en' => 'Received (↓)',
+            'fr' => 'Reçu (↓)',
+            'es' => 'Recibido (↓)',
+            'nl' => 'Ontvangen (↓)',
+        ],
+        'Gesendet (↑)' => [
+            'en' => 'Sent (↑)',
+            'fr' => 'Envoyé (↑)',
+            'es' => 'Enviado (↑)',
+            'nl' => 'Verzonden (↑)',
         ],
 
         // --- Impressum & Rechtlicher Hinweis ---
@@ -927,11 +1383,23 @@ function getTranslationDictionary(): array
         ],
 
         // --- Teilen-Modal & Öffentliche Freigabe ---
+        'Element teilen' => [
+            'en' => 'Share Item',
+            'fr' => 'Partager l’élément',
+            'es' => 'Compartir elemento',
+            'nl' => 'Item delen',
+        ],
         'Datei / Ordner teilen' => [
             'en' => 'Share File / Folder',
             'fr' => 'Partager un fichier / dossier',
             'es' => 'Compartir archivo / carpeta',
             'nl' => 'Bestand / map delen',
+        ],
+        '1. Öffentlicher Freigabelink (für Freunde)' => [
+            'en' => '1. Public Share Link (for external users)',
+            'fr' => '1. Lien de partage public (pour vos proches)',
+            'es' => '1. Enlace público compartido (para amigos)',
+            'nl' => '1. Openbare deellink (voor vrienden)',
         ],
         'Öffentlicher Freigabelink' => [
             'en' => 'Public Share Link',
@@ -951,11 +1419,47 @@ function getTranslationDictionary(): array
             'es' => 'Protección con contraseña (opcional)',
             'nl' => 'Wachtwoordbeveiliging (optioneel)',
         ],
+        'Kein Passwort' => [
+            'en' => 'No password',
+            'fr' => 'Aucun mot de passe',
+            'es' => 'Sin contraseña',
+            'nl' => 'Geen wachtwoord',
+        ],
         'Ablaufdatum (optional)' => [
             'en' => 'Expiration date (optional)',
             'fr' => 'Date d’expiration (optionnel)',
             'es' => 'Fecha de caducidad (opcional)',
             'nl' => 'Vervaldatum (optioneel)',
+        ],
+        'Unbegrenzt gültig' => [
+            'en' => 'Valid indefinitely',
+            'fr' => 'Valable sans limite',
+            'es' => 'Válido indefinidamente',
+            'nl' => 'Onbeperkt geldig',
+        ],
+        '1 Tag gültig' => [
+            'en' => 'Valid for 1 day',
+            'fr' => 'Valable 1 jour',
+            'es' => 'Válido 1 día',
+            'nl' => '1 dag geldig',
+        ],
+        '7 Tage gültig' => [
+            'en' => 'Valid for 7 days',
+            'fr' => 'Valable 7 jours',
+            'es' => 'Válido 7 días',
+            'nl' => '7 dagen geldig',
+        ],
+        '30 Tage gültig' => [
+            'en' => 'Valid for 30 days',
+            'fr' => 'Valable 30 jours',
+            'es' => 'Válido 30 días',
+            'nl' => '30 dagen geldig',
+        ],
+        'Link generieren' => [
+            'en' => 'Generate link',
+            'fr' => 'Générer le lien',
+            'es' => 'Generar enlace',
+            'nl' => 'Link genereren',
         ],
         'Link erzeugen' => [
             'en' => 'Generate link',
@@ -963,11 +1467,47 @@ function getTranslationDictionary(): array
             'es' => 'Generar enlace',
             'nl' => 'Link genereren',
         ],
+        'Fertiger Freigabelink:' => [
+            'en' => 'Generated share link:',
+            'fr' => 'Lien de partage prêt :',
+            'es' => 'Enlace compartido listo:',
+            'nl' => 'Gegenereerde deellink:',
+        ],
+        '✓ Kopiert!' => [
+            'en' => '✓ Copied!',
+            'fr' => '✓ Copié !',
+            'es' => '✓ ¡Copiado!',
+            'nl' => '✓ Gekopieerd!',
+        ],
+        '2. Direkt mit Cloud-Benutzer teilen' => [
+            'en' => '2. Share directly with Cloud User',
+            'fr' => '2. Partager directement avec un utilisateur du cloud',
+            'es' => '2. Compartir directamente con usuario de la nube',
+            'nl' => '2. Direct delen met cloudgebruiker',
+        ],
         'Direkt mit Cloud-Benutzer teilen' => [
             'en' => 'Share directly with cloud user',
             'fr' => 'Partager directement avec un utilisateur du cloud',
             'es' => 'Compartir directamente con un usuario de la nube',
             'nl' => 'Direct delen met cloudgebruiker',
+        ],
+        'Es sind noch keine weiteren Cloud-Benutzer im System angelegt.' => [
+            'en' => 'No other cloud users have been created in the system yet.',
+            'fr' => 'Aucun autre utilisateur n’est encore enregistré dans le système.',
+            'es' => 'Aún no hay otros usuarios creados en el sistema.',
+            'nl' => 'Er zijn nog geen andere cloudgebruikers in het systeem aangemaakt.',
+        ],
+        'Benutzer auswählen...' => [
+            'en' => 'Select user...',
+            'fr' => 'Choisir un utilisateur...',
+            'es' => 'Seleccionar usuario...',
+            'nl' => 'Gebruiker kiezen...',
+        ],
+        'Für Nutzer freigeben' => [
+            'en' => 'Share with user',
+            'fr' => 'Partager avec l’utilisateur',
+            'es' => 'Compartir con usuario',
+            'nl' => 'Delen met gebruiker',
         ],
         'Freigeben' => [
             'en' => 'Share',
@@ -992,12 +1532,6 @@ function getTranslationDictionary(): array
             'fr' => 'Télécharger maintenant',
             'es' => 'Descargar ahora',
             'nl' => 'Nu downloaden',
-        ],
-        'Ordner als ZIP herunterladen' => [
-            'en' => 'Download folder as ZIP',
-            'fr' => 'Télécharger le dossier en ZIP',
-            'es' => 'Descargar carpeta como ZIP',
-            'nl' => 'Map downloaden als ZIP',
         ],
         'Freigabe entsperren' => [
             'en' => 'Unlock share',
@@ -1030,7 +1564,8 @@ function translateTextSegment(string $text, string $lang): string
     }
 
     // HTML-Entities wie &amp; oder &larr; für den Wörterbuch-Abgleich normalisieren
-    $decodedCore = html_entity_decode($core, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // Mehrfache Leerzeichen/Zeilenumbrüche innerhalb eines Buttons/Titels auf ein Leerzeichen reduzieren
+    $decodedCore = preg_replace('/\s+/u', ' ', html_entity_decode($core, ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '';
     $dict = getTranslationDictionary();
 
     if (isset($dict[$decodedCore][$lang])) {
@@ -1060,6 +1595,53 @@ function translateTextSegment(string $text, string $lang): string
             'es' => 'Instalar $1 como aplicación',
             'nl' => '$1 als app installeren',
         ],
+        // "Ordner (3):"
+        '/^Ordner \((\d+)\):$/u' => [
+            'en' => 'Folders ($1):',
+            'fr' => 'Dossiers ($1) :',
+            'es' => 'Carpetas ($1):',
+            'nl' => 'Mappen ($1):',
+        ],
+        // "🏠 Hauptverzeichnis (0 • 0 B)"
+        '/^🏠 (.+) – Hauptverzeichnis \((.+)\)$/u' => [
+            'en' => '🏠 $1 – Home Directory ($2)',
+            'fr' => '🏠 $1 – Répertoire principal ($2)',
+            'es' => '🏠 $1 – Directorio principal ($2)',
+            'nl' => '🏠 $1 – Hoofdmap ($2)',
+        ],
+        '/^🏠 Hauptverzeichnis \((.+)\)$/u' => [
+            'en' => '🏠 Home Directory ($1)',
+            'fr' => '🏠 Répertoire principal ($1)',
+            'es' => '🏠 Directorio principal ($1)',
+            'nl' => '🏠 Hoofdmap ($1)',
+        ],
+        // "Neuer Unterordner in X..."
+        '/^Neuer Unterordner in (.+)\.\.\.$/u' => [
+            'en' => 'New subfolder in $1...',
+            'fr' => 'Nouveau sous-dossier dans $1...',
+            'es' => 'Nueva subcarpeta en $1...',
+            'nl' => 'Nieuwe submap in $1...',
+        ],
+        // "Frei: 500 MB • Max. pro Upload: 512 MB"
+        '/^Frei: (.+) • Max\. pro Upload: (.+)$/u' => [
+            'en' => 'Free: $1 • Max per upload: $2',
+            'fr' => 'Libre : $1 • Max. par envoi : $2',
+            'es' => 'Libre: $1 • Máx. por subida: $2',
+            'nl' => 'Vrij: $1 • Max. per upload: $2',
+        ],
+        // "2 Ordner • 5 Dateien" oder "0 Dateien" oder "1 Datei"
+        '/^(\d+) Ordner • (\d+) Dateien?$/u' => [
+            'en' => '$1 folders • $2 files',
+            'fr' => '$1 dossiers • $2 fichiers',
+            'es' => '$1 carpetas • $2 archivos',
+            'nl' => '$1 mappen • $2 bestanden',
+        ],
+        '/^(\d+) Dateien?$/u' => [
+            'en' => '$1 files',
+            'fr' => '$1 fichiers',
+            'es' => '$1 archivos',
+            'nl' => '$1 bestanden',
+        ],
         // "Noch 30 Tage" / "Noch 1 Tag"
         '/^Noch (\d+) Tage?$/u' => [
             'en' => '$1 days left',
@@ -1080,6 +1662,13 @@ function translateTextSegment(string $text, string $lang): string
             'fr' => 'Supprimé le $1',
             'es' => 'Eliminado el $1',
             'nl' => 'Verwijderd op $1',
+        ],
+        // "24.10.2026 11:00 Uhr"
+        '/^(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}) Uhr$/u' => [
+            'en' => '$1',
+            'fr' => '$1',
+            'es' => '$1',
+            'nl' => '$1',
         ],
         // "3 Dateien • 1,2 MB"
         '/^(\d+) Dateien? • (.+)$/u' => [
@@ -1102,12 +1691,40 @@ function translateTextSegment(string $text, string $lang): string
             'es' => 'Usado: $1 de $2 ($3 libres)',
             'nl' => 'Gebruikt: $1 van $2 ($3 vrij)',
         ],
-        // "Max. 512 MB pro Upload • 500 MB freier Speicherplatz"
-        '/^Max\. (.+) pro Upload • (.+) freier Speicherplatz$/u' => [
-            'en' => 'Max. $1 per upload • $2 free storage',
-            'fr' => 'Max. $1 par envoi • $2 d’espace libre',
-            'es' => 'Máx. $1 por subida • $2 de espacio libre',
-            'nl' => 'Max. $1 per upload • $2 vrije opslagruimte',
+        // "Registrierte Cloud-Benutzer (2)"
+        '/^Registrierte Cloud-Benutzer \((\d+)\)$/u' => [
+            'en' => 'Registered Cloud Users ($1)',
+            'fr' => 'Utilisateurs enregistrés ($1)',
+            'es' => 'Usuarios registrados ($1)',
+            'nl' => 'Geregistreerde cloudgebruikers ($1)',
+        ],
+        // "Vorhandene Benutzergruppen (1)"
+        '/^Vorhandene Benutzergruppen \((\d+)\)$/u' => [
+            'en' => 'Existing User Groups ($1)',
+            'fr' => 'Groupes d’utilisateurs existants ($1)',
+            'es' => 'Grupos de usuarios existentes ($1)',
+            'nl' => 'Bestaande gebruikersgroepen ($1)',
+        ],
+        // "Gruppenordner & Zugriffsrechte (1)"
+        '/^Gruppenordner & Zugriffsrechte \((\d+)\)$/u' => [
+            'en' => 'Group Folders & Access Permissions ($1)',
+            'fr' => 'Dossiers de groupe & Droits d’accès ($1)',
+            'es' => 'Carpetas de grupo y Permisos de acceso ($1)',
+            'nl' => 'Groepsmappen & Toegangsrechten ($1)',
+        ],
+        // "⚡ CPU-Auslastung (4 Kerne)"
+        '/^⚡ CPU-Auslastung \((\d+) Kerne?\)$/u' => [
+            'en' => '⚡ CPU Load ($1 cores)',
+            'fr' => '⚡ Charge CPU ($1 cœurs)',
+            'es' => '⚡ Carga de CPU ($1 núcleos)',
+            'nl' => '⚡ CPU-belasting ($1 kernen)',
+        ],
+        // "🌐 Netzwerk (eth0)"
+        '/^🌐 Netzwerk \((.+)\)$/u' => [
+            'en' => '🌐 Network ($1)',
+            'fr' => '🌐 Réseau ($1)',
+            'es' => '🌐 Red ($1)',
+            'nl' => '🌐 Netwerk ($1)',
         ],
         // "© 2026 MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher"
         '/^© (\d{4}) (.+) – Leichtgewichtiger, sicherer Cloud-Speicher$/u' => [
@@ -1134,7 +1751,7 @@ function translateTextSegment(string $text, string $lang): string
         }
     }
 
-    // Meharzeiliger Standard-Rechtshinweis im Impressum übersetzen, falls unverändert
+    // Mehrzeiliger Standard-Rechtshinweis im Impressum übersetzen, falls unverändert
     if (str_contains($decodedCore, 'Hinweis gemäß § 5 DDG (Digitale-Dienste-Gesetz)')) {
         $imprintTranslations = [
             'en' => "Legal Notice pursuant to Section 5 DDG & Art. 2(2)(c) GDPR\n\nThis web application is a purely private, non-commercial system operated exclusively for personal and family purposes within a closed user group.\n\n1. No Imprint Obligation (Section 5(1) DDG / Section 18(1) MStV)\nThis is not a commercial, paid, or journalistic-editorial service. Public self-registration is disabled. Therefore, there is no statutory obligation to publish a full provider identification.\n\n2. Data Protection & Household Exemption (Art. 2(2)(c) GDPR)\nUse takes place exclusively in a private and family context. No analytics, advertising, or tracking services are used, and no data is transmitted to third parties or external servers (CDNs). Only technically necessary session data is processed for signed-in users.\n\n3. Technical Contact\nFor technical inquiries, please contact the administrator via email.",
