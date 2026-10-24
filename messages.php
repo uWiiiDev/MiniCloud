@@ -98,12 +98,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
     if ($channel === 'broadcast') {
         markBroadcastsAsRead($pdo, $userId);
         $stmtNew = $pdo->prepare(
-            'SELECT m.id, m.sender_id, m.recipient_id, m.is_broadcast, m.message_text, m.attached_file_id,
-                    m.is_read, m.created_at, u.username AS sender_username, u.is_admin AS sender_is_admin,
-                    f.original_name AS file_name, f.file_size
+            'SELECT m.id, m.sender_id, m.recipient_id, m.is_broadcast, m.message_text,
+                    m.is_read, m.created_at, u.username AS sender_username, u.is_admin AS sender_is_admin
              FROM messages m
              INNER JOIN users u ON u.id = m.sender_id
-             LEFT JOIN files f ON f.id = m.attached_file_id AND f.deleted_at IS NULL
              WHERE m.is_broadcast = 1 AND m.id > :last_id
              ORDER BY m.id ASC'
         );
@@ -120,12 +118,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
             )->execute([':pid' => $partnerId, ':uid' => $userId]);
 
             $stmtNew = $pdo->prepare(
-                'SELECT m.id, m.sender_id, m.recipient_id, m.is_broadcast, m.message_text, m.attached_file_id,
-                        m.is_read, m.created_at, u.username AS sender_username, u.is_admin AS sender_is_admin,
-                        f.original_name AS file_name, f.file_size
+                'SELECT m.id, m.sender_id, m.recipient_id, m.is_broadcast, m.message_text,
+                        m.is_read, m.created_at, u.username AS sender_username, u.is_admin AS sender_is_admin
                  FROM messages m
                  INNER JOIN users u ON u.id = m.sender_id
-                 LEFT JOIN files f ON f.id = m.attached_file_id AND f.deleted_at IS NULL
                  WHERE m.is_broadcast = 0
                    AND m.id > :last_id
                    AND ((m.sender_id = :u1 AND m.recipient_id = :p1) OR (m.sender_id = :p2 AND m.recipient_id = :u2))
@@ -153,9 +149,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
             'is_mine'         => ((int)$m['sender_id'] === $userId),
             'is_broadcast'    => ((int)$m['is_broadcast'] === 1),
             'message_text'    => (string)$m['message_text'],
-            'file_id'         => $m['attached_file_id'] !== null && $m['file_name'] !== null ? (int)$m['attached_file_id'] : null,
-            'file_name'       => $m['file_name'] !== null ? (string)$m['file_name'] : null,
-            'file_size_fmt'   => $m['file_size'] !== null ? formatBytes((int)$m['file_size']) : null,
             'is_read'         => ((int)$m['is_read'] === 1),
             'time_str'        => date('H:i', $ts),
             'date_str'        => date('d.m.Y', $ts),
@@ -184,26 +177,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // A) Nachricht senden (Direktnachricht oder Admin-Rundnachricht)
     if ($action === 'send_message') {
-        $targetChannel  = trim((string)($_POST['target_channel'] ?? ''));
-        $messageText    = mb_substr(trim((string)($_POST['message_text'] ?? '')), 0, 5000);
-        $attachedFileId = (int)($_POST['attached_file_id'] ?? 0);
-
-        // Prüfen, ob eine gültige eigene Cloud-Datei angehängt wurde
-        $validFileId = null;
-        if ($attachedFileId > 0) {
-            $stmtFile = $pdo->prepare('SELECT id, original_name FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL LIMIT 1');
-            $stmtFile->execute([':id' => $attachedFileId, ':uid' => $userId]);
-            $fileRow = $stmtFile->fetch();
-            if ($fileRow) {
-                $validFileId = (int)$fileRow['id'];
-                if ($messageText === '') {
-                    $messageText = '📎 Datei: ' . (string)$fileRow['original_name'];
-                }
-            }
-        }
+        $targetChannel = trim((string)($_POST['target_channel'] ?? ''));
+        $messageText   = mb_substr(trim((string)($_POST['message_text'] ?? '')), 0, 5000);
 
         if ($messageText === '') {
-            setFlash('error', 'Bitte geben Sie einen Nachrichtentext ein oder hängen Sie eine Datei an.');
+            setFlash('error', 'Bitte geben Sie einen Nachrichtentext ein.');
             header('Location: messages.php' . ($targetChannel !== '' ? '?channel=' . urlencode($targetChannel) : ''));
             exit;
         }
@@ -216,13 +194,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $stmtIns = $pdo->prepare(
-                'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, attached_file_id, is_read)
-                 VALUES (:sid, NULL, 1, :txt, :fid, 0)'
+                'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, is_read)
+                 VALUES (:sid, NULL, 1, :txt, 0)'
             );
             $stmtIns->execute([
                 ':sid' => $userId,
                 ':txt' => $messageText,
-                ':fid' => $validFileId,
             ]);
             markBroadcastsAsRead($pdo, $userId);
             header('Location: messages.php?channel=broadcast');
@@ -238,14 +215,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $stmtIns = $pdo->prepare(
-            'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, attached_file_id, is_read)
-             VALUES (:sid, :rid, 0, :txt, :fid, 0)'
+            'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, is_read)
+             VALUES (:sid, :rid, 0, :txt, 0)'
         );
         $stmtIns->execute([
             ':sid' => $userId,
             ':rid' => $recipientId,
             ':txt' => $messageText,
-            ':fid' => $validFileId,
         ]);
 
         header('Location: messages.php?channel=' . $recipientId);
@@ -389,11 +365,9 @@ if ($rawChannel === 'broadcast') {
     $unreadBroadcastCount = 0;
 
     $stmtMsgs = $pdo->query(
-        'SELECT m.*, u.username AS sender_username, u.is_admin AS sender_is_admin,
-                f.original_name AS file_name, f.file_size
+        'SELECT m.*, u.username AS sender_username, u.is_admin AS sender_is_admin
          FROM messages m
          INNER JOIN users u ON u.id = m.sender_id
-         LEFT JOIN files f ON f.id = m.attached_file_id AND f.deleted_at IS NULL
          WHERE m.is_broadcast = 1
          ORDER BY m.id ASC
          LIMIT 300'
@@ -430,11 +404,9 @@ if ($rawChannel === 'broadcast') {
         )->execute([':pid' => $partnerId, ':uid' => $userId]);
 
         $stmtMsgs = $pdo->prepare(
-            'SELECT m.*, u.username AS sender_username, u.is_admin AS sender_is_admin,
-                    f.original_name AS file_name, f.file_size
+            'SELECT m.*, u.username AS sender_username, u.is_admin AS sender_is_admin
              FROM messages m
              INNER JOIN users u ON u.id = m.sender_id
-             LEFT JOIN files f ON f.id = m.attached_file_id AND f.deleted_at IS NULL
              WHERE m.is_broadcast = 0
                AND ((m.sender_id = :u1 AND m.recipient_id = :p1) OR (m.sender_id = :p2 AND m.recipient_id = :u2))
              ORDER BY m.id ASC
@@ -453,17 +425,6 @@ if ($rawChannel === 'broadcast') {
         exit;
     }
 }
-
-// Eigene Dateien für das Datei-Anhängen im Chat laden
-$stmtMyFiles = $pdo->prepare(
-    'SELECT id, original_name, file_size
-     FROM files
-     WHERE user_id = :uid AND deleted_at IS NULL
-     ORDER BY original_name ASC
-     LIMIT 250'
-);
-$stmtMyFiles->execute([':uid' => $userId]);
-$myAttachableFiles = $stmtMyFiles->fetchAll();
 
 // Eigene Sichtbarkeits-Einstellung abrufen
 $stmtSelfVis = $pdo->prepare('SELECT allow_user_sharing FROM users WHERE id = :id LIMIT 1');
@@ -718,7 +679,6 @@ require_once __DIR__ . '/includes/header.php';
                         $msgDateStr   = date('d.m.Y', $ts);
                         $msgTimeStr   = date('H:i', $ts);
                         $canDeleteMsg = ($isMine || ($isAdmin && $isBroad));
-                        $hasFile      = ($msg['attached_file_id'] !== null && $msg['file_name'] !== null);
                         ?>
                         <?php if ($msgDateStr !== $lastRenderedDate): ?>
                             <?php $lastRenderedDate = $msgDateStr; ?>
@@ -746,19 +706,6 @@ require_once __DIR__ . '/includes/header.php';
                                 <?php endif; ?>
 
                                 <div class="text-xs sm:text-sm whitespace-pre-line break-words leading-relaxed"><?= e((string)$msg['message_text']) ?></div>
-
-                                <?php if ($hasFile): ?>
-                                    <div class="mt-2 pt-2 border-t <?= $isMine ? 'border-white/20' : 'border-slate-200 dark:border-slate-700' ?>">
-                                        <a
-                                            href="download.php?id=<?= (int)$msg['attached_file_id'] ?>"
-                                            class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold <?= $isMine ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-brand-600 dark:text-brand-300' ?> transition-colors"
-                                        >
-                                            <span>📎</span>
-                                            <span class="truncate max-w-[200px]"><?= e((string)$msg['file_name']) ?></span>
-                                            <span class="text-[10px] opacity-75">(<?= e(formatBytes((int)$msg['file_size'])) ?>)</span>
-                                        </a>
-                                    </div>
-                                <?php endif; ?>
 
                                 <div class="flex items-center justify-end gap-2 mt-1 text-[10px] <?= $isMine ? 'text-white/75' : 'text-slate-400 dark:text-slate-500' ?>">
                                     <span><?= e($msgTimeStr) ?> Uhr</span>
@@ -789,7 +736,7 @@ require_once __DIR__ . '/includes/header.php';
                     ℹ️ Im Ankündigungs-Kanal können nur Administratoren Rundnachrichten an alle Benutzer veröffentlichen.
                 </div>
             <?php else: ?>
-                <form action="messages.php" method="post" id="chatSendForm" class="p-3 sm:p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-2 shrink-0">
+                <form action="messages.php" method="post" id="chatSendForm" class="p-3 sm:p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 shrink-0">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                     <input type="hidden" name="action" value="send_message">
                     <input type="hidden" name="target_channel" value="<?= e($rawChannel) ?>">
@@ -814,26 +761,6 @@ require_once __DIR__ . '/includes/header.php';
                             </svg>
                         </button>
                     </div>
-
-                    <?php if (!empty($myAttachableFiles)): ?>
-                        <div class="flex items-center gap-2 pt-0.5">
-                            <label for="chatAttachFileSelect" class="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
-                                📎 Cloud-Datei anhängen:
-                            </label>
-                            <select
-                                name="attached_file_id"
-                                id="chatAttachFileSelect"
-                                class="flex-1 max-w-xs px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200"
-                            >
-                                <option value="0">– Keine Datei –</option>
-                                <?php foreach ($myAttachableFiles as $af): ?>
-                                    <option value="<?= (int)$af['id'] ?>">
-                                        <?= e((string)$af['original_name']) ?> (<?= e(formatBytes((int)$af['file_size'])) ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    <?php endif; ?>
                 </form>
             <?php endif; ?>
         <?php endif; ?>
@@ -860,7 +787,7 @@ require_once __DIR__ . '/includes/header.php';
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (input.value.trim() !== '' || (document.getElementById('chatAttachFileSelect') && document.getElementById('chatAttachFileSelect').value !== '0')) {
+                if (input.value.trim() !== '') {
                     form.submit();
                 }
             }
@@ -912,19 +839,6 @@ require_once __DIR__ . '/includes/header.php';
                                 ? 'bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/80 text-slate-900 dark:text-slate-100 rounded-bl-xs'
                                 : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-bl-xs');
 
-                        let fileHtml = '';
-                        if (m.file_id && m.file_name) {
-                            fileHtml = `
-                                <div class="mt-2 pt-2 border-t ${m.is_mine ? 'border-white/20' : 'border-slate-200 dark:border-slate-700'}">
-                                    <a href="download.php?id=${Number(m.file_id)}" class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold ${m.is_mine ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-slate-100 dark:bg-slate-700 text-brand-600 dark:text-brand-300'}">
-                                        <span>📎</span>
-                                        <span class="truncate max-w-[200px]">${escapeHtml(m.file_name)}</span>
-                                        <span class="text-[10px] opacity-75">(${escapeHtml(m.file_size_fmt || '')})</span>
-                                    </a>
-                                </div>
-                            `;
-                        }
-
                         let headerHtml = '';
                         if (!m.is_mine || m.is_broadcast) {
                             headerHtml = `
@@ -940,7 +854,6 @@ require_once __DIR__ . '/includes/header.php';
                             <div class="max-w-[85%] sm:max-w-[72%] rounded-2xl px-3.5 py-2.5 shadow-2xs ${bubbleClass}">
                                 ${headerHtml}
                                 <div class="text-xs sm:text-sm whitespace-pre-line break-words leading-relaxed">${escapeHtml(m.message_text)}</div>
-                                ${fileHtml}
                                 <div class="flex items-center justify-end gap-2 mt-1 text-[10px] ${m.is_mine ? 'text-white/75' : 'text-slate-400 dark:text-slate-500'}">
                                     <span>${escapeHtml(m.time_str)} Uhr</span>
                                 </div>
