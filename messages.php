@@ -800,7 +800,6 @@ require_once __DIR__ . '/includes/header.php';
                             id="chatMessageInput"
                             rows="2"
                             maxlength="5000"
-                            placeholder="<?= $activeChannelType === 'broadcast' ? '📢 Rundnachricht an alle Cloud-Benutzer eingeben (Enter zum Senden)...' : 'Nachricht schreiben (Enter zum Senden, Shift+Enter für Zeilenumbruch)...' ?>"
                             class="flex-1 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                         ></textarea>
 
