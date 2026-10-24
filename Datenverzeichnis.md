@@ -27,6 +27,8 @@ Speichert alle registrierten Benutzerkonten, deren Rollen, Darstellungspräferen
 | `two_factor_code_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Temporärer BCRYPT-Hash des 6-stelligen 2FA-Einmalcodes |
 | `two_factor_expires_at` | `DATETIME` | Ja | `NULL` | – | Ablaufzeitpunkt des aktuellen 2FA-Codes (10 Minuten Gültigkeit) |
 | `two_factor_attempts` | `TINYINT UNSIGNED` | Nein | `0` | – | Zähler für Fehlversuche beim aktuellen 2FA-Code (max. 5 Versuche) |
+| `reset_token_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Temporärer SHA-256-Hash des 256-Bit-Einmaltokens zum Zurücksetzen eines vergessenen Passworts |
+| `reset_expires_at` | `DATETIME` | Ja | `NULL` | – | Ablaufzeitpunkt des aktuellen Passwort-Reset-Links (30 Minuten Gültigkeit) |
 | `is_admin` | `TINYINT(1)` | Nein | `0` | – | Administrator-Rolle (`1` = Admin, `0` = Standardbenutzer) |
 | `theme` | `VARCHAR(24)` | Nein | `'light'` | – | Gewähltes Farbschema (13 Themes: `light`, `sand`, `sage`, `nordic`, `lavender`, `dusk`, `mocha`, `petrol`, `plum`, `dark`, `ocean`, `forest`, `obsidian`) |
 | `session_timeout` | `INT UNSIGNED` | Nein | `30` | – | Inaktivitäts-Timeout in Minuten (`0` = dauerhaft eingeloggt) |

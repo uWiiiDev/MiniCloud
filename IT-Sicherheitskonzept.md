@@ -35,6 +35,7 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 - **Schutz gegen Timing-Angriffe:** Bei Anmeldeversuchen mit einem nicht existierenden Benutzernamen führt `login.php` dennoch eine `password_verify()`-Operation gegen einen konstanten Dummy-BCRYPT-Hash aus.
 - **Brute-Force-Schutz (Rate Limiting):** Sowohl beim Benutzer-Login (`login.php`) als auch bei passwortgeschützten Freigabelinks (`share.php`) werden fehlgeschlagene Passworteingaben nach **5 Fehlversuchen innerhalb von 5 Minuten** temporär gesperrt.
 - **Optionale Zwei-Faktor-Authentifizierung per E-Mail (2FA):** Kryptografisch zufälliger 6-stelliger Einmalcode (`random_int`), als BCRYPT-Hash mit 10 Minuten Gültigkeit gespeichert und nach 5 Fehlversuchen gesperrt.
+- **Sichere Passwort-Wiederherstellung (`forgot_password.php`):** Benutzer mit hinterlegter E-Mail-Adresse können einen Einmal-Reset-Link anfordern. Das 256-Bit-Zufallstoken (`bin2hex(random_bytes(32))`) wird in der Datenbank ausschließlich als `SHA-256`-Hash (`reset_token_hash`) mit 30 Minuten Gültigkeit (`reset_expires_at`) gespeichert, zeitkonstant per `hash_equals()` geprüft und nach einmaliger Verwendung sofort gelöscht. Eine einheitliche Bestätigungsmeldung verhindert Benutzer-/E-Mail-Enumeration.
 
 ### 3.2 Session-Management, Inaktivitäts-Timeout & Echtzeit-Rechteabgleich (`includes/auth.php`, `logout.php`)
 - **Gehärtete Session-Konfiguration:** `session.use_strict_mode = 1`, `session.use_only_cookies = 1`, Cookie-Flags `HttpOnly = true`, `SameSite = Lax`, `Secure = true` (bei HTTPS).

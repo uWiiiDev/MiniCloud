@@ -84,6 +84,8 @@ function ensureSchemaUpdated(PDO $pdo): void
             `two_factor_code_hash` VARCHAR(255) DEFAULT NULL,
             `two_factor_expires_at` DATETIME DEFAULT NULL,
             `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            `reset_token_hash` VARCHAR(255) DEFAULT NULL,
+            `reset_expires_at` DATETIME DEFAULT NULL,
             `is_admin` TINYINT(1) NOT NULL DEFAULT 0,
             `theme` VARCHAR(24) NOT NULL DEFAULT 'light',
             `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30,
@@ -114,6 +116,12 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('two_factor_attempts', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `two_factor_expires_at`");
+    }
+    if (!in_array('reset_token_hash', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `reset_token_hash` VARCHAR(255) DEFAULT NULL AFTER `two_factor_attempts`");
+    }
+    if (!in_array('reset_expires_at', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `reset_expires_at` DATETIME DEFAULT NULL AFTER `reset_token_hash`");
     }
     if (!in_array('is_admin', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_admin` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`");

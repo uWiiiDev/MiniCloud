@@ -25,7 +25,8 @@
    - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
 5. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
    - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
-6. **Zwei-Faktor-Authentifizierung (2FA), Einstellungen & Optionale Registrierung (`login.php`, `settings.php`, `register.php`)**
+6. **Passwort-Wiederherstellung, 2FA, Einstellungen & Optionale Registrierung (`forgot_password.php`, `login.php`, `settings.php`, `register.php`)**
+   - **Passwort vergessen / Selbst-Reset (`forgot_password.php`):** Benutzer mit hinterlegter E-Mail-Adresse können auf der Login-Seite einen 30 Minuten gültigen, kryptografisch gesicherten Einmal-Link zum Zurücksetzen ihres Passworts anfordern.
    - Pro Benutzer optional aktivierbarer 2FA-Schutz mit 6-stelligem Einmalcode per E-Mail (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button).
    - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
    - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
@@ -201,7 +202,8 @@ MiniCloud/
 ├── share.php                 # Öffentliche Freigabe-Seite (optionaler BCRYPT-Passwortschutz & Ablaufdatum)
 ├── share_action.php          # API-Endpunkt für öffentliche Freigabelinks & 3-stufige Benutzer-Direktfreigaben
 ├── admin.php                 # Administration (Branding, Module, 1-Klick-GitHub-Updater, Server-Monitor, Benutzer, Gruppen)
-├── login.php                 # Login mit Brute-Force-Schutz & optionaler 2FA per E-Mail-Sicherheitscode
+├── login.php                 # Login mit Brute-Force-Schutz, Passwort-vergessen-Link & optionaler 2FA per E-Mail
+├── forgot_password.php       # Passwort-Wiederherstellung per 30-Minuten-Einmal-Link (SHA-256-Token)
 ├── logout.php                # Sicheres Beenden der PHP-Session (CSRF-geschützt)
 ├── register.php              # Optionale Selbstregistrierung (standardmäßig aus, optional mit Einladungs-Code)
 ├── upload.php                # Upload-Controller (Einzeldatei, Mehrfachdateien, ganze Ordner, freigegebene Ordner)

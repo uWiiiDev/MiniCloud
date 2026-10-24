@@ -1030,6 +1030,34 @@ function sendTwoFactorEmail(PDO $pdo, string $toEmail, string $username, string 
 }
 
 /**
+ * Versendet einen einmaligen, 30 Minuten gültigen Link zum Zurücksetzen eines vergessenen Passworts per E-Mail.
+ */
+function sendPasswordResetEmail(PDO $pdo, string $toEmail, string $username, string $resetUrl): bool
+{
+    $settings = getAppSettings($pdo);
+    $cleanTitle = preg_replace('/[\r\n"]/', '', $settings['app_title'] ?: APP_NAME) ?: APP_NAME;
+    $rawSubject = sprintf('[%s] Passwort zurücksetzen', $cleanTitle);
+
+    $body = implode("\r\n", [
+        sprintf('Hallo %s,', $username),
+        '',
+        sprintf('für Ihr Benutzerkonto bei %s wurde das Zurücksetzen des Passworts angefordert.', $cleanTitle),
+        'Über den folgenden Link können Sie innerhalb der nächsten 30 Minuten ein neues Passwort vergeben:',
+        '',
+        $resetUrl,
+        '',
+        'Dieser Link ist aus Sicherheitsgründen nur 30 Minuten lang und nur für eine einmalige Verwendung gültig.',
+        '',
+        'Falls Sie diese Anfrage nicht selbst gestellt haben, können Sie diese E-Mail einfach ignorieren – Ihr bisheriges Passwort bleibt dann unverändert gültig.',
+        '',
+        '--',
+        $cleanTitle . ' (' . getBaseUrl() . ')',
+    ]);
+
+    return sendSystemEmail($pdo, $toEmail, $rawSubject, $body);
+}
+
+/**
  * Ermittelt vollautomatisch die aktuelle Anwendungs-Versionsnummer anhand des jüngsten
  * Änderungszeitpunkts und Fingerabdrucks aller PHP-Projektdateien (Option 1: Zero-Touch).
  *

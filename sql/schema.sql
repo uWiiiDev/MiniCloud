@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `two_factor_code_hash` VARCHAR(255) DEFAULT NULL COMMENT 'BCRYPT-Hash des aktuellen 6-stelligen 2FA-Codes',
     `two_factor_expires_at` DATETIME DEFAULT NULL COMMENT 'Ablaufzeitpunkt des aktuellen 2FA-Codes (10 Min.)',
     `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Fehlversuche beim aktuellen 2FA-Code',
+    `reset_token_hash` VARCHAR(255) DEFAULT NULL COMMENT 'SHA-256-Hash des einmaligen Passwort-Reset-Tokens',
+    `reset_expires_at` DATETIME DEFAULT NULL COMMENT 'Ablaufzeitpunkt des Passwort-Reset-Tokens (30 Min.)',
     `is_admin` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Administrator, 0 = Standardbenutzer',
     `theme` VARCHAR(24) NOT NULL DEFAULT 'light' COMMENT '13 Farbthemes inkl. light, dark, ocean, forest, obsidian',
     `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30 COMMENT 'Inaktivitäts-Timeout in Minuten (0 = Nie)',

@@ -356,7 +356,12 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
 
                 <div>
-                    <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Passwort</label>
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Passwort</label>
+                        <a href="forgot_password.php" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            Passwort vergessen?
+                        </a>
+                    </div>
                     <input
                         type="password"
                         id="password"

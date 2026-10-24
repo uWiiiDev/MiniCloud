@@ -315,16 +315,16 @@ $themeGroups = [
     </section>
 
     <?php if ($loggedIn && $userRow !== null): ?>
-        <!-- 3. ZWEI-FAKTOR-AUTHENTIFIZIERUNG (2FA PER E-MAIL) -->
+        <!-- 3. E-MAIL-ADRESSE (PASSWORT-WIEDERHERSTELLUNG) & ZWEI-FAKTOR-AUTHENTIFIZIERUNG (2FA) -->
         <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
             <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔒 Zwei-Faktor-Authentifizierung (2FA)</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✉️ E-Mail-Adresse (Passwort-Reset) &amp; 2FA</h2>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= (int)$userRow['two_factor_enabled'] === 1 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
                     <?= (int)$userRow['two_factor_enabled'] === 1 ? '🔒 2FA Aktiv' : '2FA Inaktiv' ?>
                 </span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Sie können selbst entscheiden, ob Sie bei der Anmeldung zusätzlich zu Ihrem Passwort einen 6-stelligen Sicherheitscode per E-Mail erhalten möchten.
+                Hinterlegen Sie hier Ihre E-Mail-Adresse, um bei vergessenem Passwort jederzeit einen Wiederherstellungs-Link anfordern zu können, und aktivieren Sie optional die Zwei-Faktor-Authentifizierung (2FA per E-Mail).
             </p>
 
             <form action="settings.php" method="post" class="space-y-4">
@@ -334,7 +334,7 @@ $themeGroups = [
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                     <div>
                         <label for="user_2fa_email" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Ihre E-Mail-Adresse für den 2FA-Code
+                            Ihre E-Mail-Adresse (für Passwort-Reset &amp; 2FA)
                         </label>
                         <input
                             type="email"
