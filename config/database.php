@@ -257,6 +257,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `owner_id` INT UNSIGNED NOT NULL,
             `shared_with_user_id` INT UNSIGNED NOT NULL,
             `can_write` TINYINT(1) NOT NULL DEFAULT 0,
+            `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             UNIQUE KEY `idx_user_shares_unique` (`file_id`, `shared_with_user_id`),
@@ -274,6 +275,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('can_write', $colsUserShares, true)) {
         $pdo->exec("ALTER TABLE `user_shares` ADD COLUMN `can_write` TINYINT(1) NOT NULL DEFAULT 0 AFTER `shared_with_user_id`");
+    }
+    if (!in_array('can_delete', $colsUserShares, true)) {
+        $pdo->exec("ALTER TABLE `user_shares` ADD COLUMN `can_delete` TINYINT(1) NOT NULL DEFAULT 0 AFTER `can_write`");
     }
 
     $pdo->exec("
@@ -337,6 +341,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `target_user_id` INT UNSIGNED DEFAULT NULL,
             `target_group_id` INT UNSIGNED DEFAULT NULL,
             `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+            `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             KEY `idx_cs_owner` (`owner_user_id`),
@@ -347,6 +352,11 @@ function ensureSchemaUpdated(PDO $pdo): void
             CONSTRAINT `fk_cs_target_group` FOREIGN KEY (`target_group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $colsCalendarShares = $pdo->query("SHOW COLUMNS FROM `calendar_shares`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('can_delete', $colsCalendarShares, true)) {
+        $pdo->exec("ALTER TABLE `calendar_shares` ADD COLUMN `can_delete` TINYINT(1) NOT NULL DEFAULT 0 AFTER `can_edit`");
+    }
 
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();

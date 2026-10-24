@@ -2331,6 +2331,30 @@ function getTranslationDictionary(): array
             'es' => '👁️ Solo lectura',
             'nl' => '👁️ Alleen lezen',
         ],
+        '✏️ Lesen & Schreiben' => [
+            'en' => '✏️ Read & Write',
+            'fr' => '✏️ Lire et écrire',
+            'es' => '✏️ Leer y escribir',
+            'nl' => '✏️ Lezen & schrijven',
+        ],
+        '✏️ Lesen & Bearbeiten' => [
+            'en' => '✏️ Read & Edit',
+            'fr' => '✏️ Lire et modifier',
+            'es' => '✏️ Leer y editar',
+            'nl' => '✏️ Lezen & bewerken',
+        ],
+        '🗑️ Lesen, Schreiben & Löschen' => [
+            'en' => '🗑️ Read, Write & Delete',
+            'fr' => '🗑️ Lire, écrire et supprimer',
+            'es' => '🗑️ Leer, escribir y eliminar',
+            'nl' => '🗑️ Lezen, schrijven & verwijderen',
+        ],
+        '🗑️ Lesen, Bearbeiten & Löschen' => [
+            'en' => '🗑️ Read, Edit & Delete',
+            'fr' => '🗑️ Lire, modifier et supprimer',
+            'es' => '🗑️ Leer, editar y eliminar',
+            'nl' => '🗑️ Lezen, bewerken & verwijderen',
+        ],
         '✏️ Lesen, Schreiben & Löschen' => [
             'en' => '✏️ Read, Write & Delete',
             'fr' => '✏️ Lire, écrire et supprimer',
@@ -2343,11 +2367,29 @@ function getTranslationDictionary(): array
             'es' => '✏️ Leer, editar y eliminar',
             'nl' => '✏️ Lezen, bewerken & verwijderen',
         ],
+        'Lesen & Schreiben' => [
+            'en' => 'Read & Write',
+            'fr' => 'Lire et écrire',
+            'es' => 'Leer y escribir',
+            'nl' => 'Lezen & schrijven',
+        ],
+        'Lesen & Bearbeiten' => [
+            'en' => 'Read & Edit',
+            'fr' => 'Lire et modifier',
+            'es' => 'Leer y editar',
+            'nl' => 'Lezen & bewerken',
+        ],
         'Lesen, Schreiben & Löschen' => [
             'en' => 'Read, Write & Delete',
             'fr' => 'Lire, écrire et supprimer',
             'es' => 'Leer, escribir y eliminar',
             'nl' => 'Lezen, schrijven & verwijderen',
+        ],
+        'Lesen, Bearbeiten & Löschen' => [
+            'en' => 'Read, Edit & Delete',
+            'fr' => 'Lire, modifier et supprimer',
+            'es' => 'Leer, editar y eliminar',
+            'nl' => 'Lezen, bewerken & verwijderen',
         ],
         'Benutzerverwaltung & Systemeinstellungen' => [
             'en' => 'User Management & System Settings',

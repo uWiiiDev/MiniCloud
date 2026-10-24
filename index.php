@@ -35,12 +35,13 @@ if ($activeGroupFolderId > 0 && !$activeGroupFolder) {
 }
 
 // 2. Von anderem Benutzer freigegebenen Ordner prüfen (?shared_folder=ID)
-$activeSharedFolderId = isset($_GET['shared_folder']) ? (int)$_GET['shared_folder'] : 0;
-$activeSharedFolder   = null;
-$canWriteSharedFolder = false;
+$activeSharedFolderId  = isset($_GET['shared_folder']) ? (int)$_GET['shared_folder'] : 0;
+$activeSharedFolder    = null;
+$canWriteSharedFolder  = false;
+$canDeleteSharedFolder = false;
 if ($activeSharedFolderId > 0 && $activeGroupFolder === null) {
     $stmtSf = $pdo->prepare(
-        'SELECT us.id, us.owner_id, us.folder_path, us.can_write, us.created_at, u.username AS owner_username
+        'SELECT us.id, us.owner_id, us.folder_path, us.can_write, us.can_delete, us.created_at, u.username AS owner_username
          FROM user_shares us
          INNER JOIN users u ON u.id = us.owner_id
          WHERE us.id = :id AND us.shared_with_user_id = :uid AND us.folder_path IS NOT NULL
@@ -56,7 +57,8 @@ if ($activeSharedFolderId > 0 && $activeGroupFolder === null) {
         header('Location: index.php');
         exit;
     }
-    $canWriteSharedFolder = ((int)($activeSharedFolder['can_write'] ?? 0) === 1);
+    $canWriteSharedFolder  = ((int)($activeSharedFolder['can_write'] ?? 0) === 1);
+    $canDeleteSharedFolder = ((int)($activeSharedFolder['can_delete'] ?? 0) === 1);
 }
 
 $rawFolderParam = isset($_GET['folder']) && is_string($_GET['folder']) ? trim($_GET['folder']) : '';
@@ -397,7 +399,7 @@ if ($activeSharedFolder === null && !$showAllFolders) {
 
 // Für mich freigegebene Ordner (von anderen Cloud-Benutzern via user_shares)
 $stmtSharedFoldersWithMe = $pdo->prepare(
-    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.can_write, us.created_at AS shared_at,
+    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.can_write, us.can_delete, us.created_at AS shared_at,
             u.username AS owner_username,
             (SELECT COUNT(*) FROM files f
              WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
@@ -416,7 +418,7 @@ $sharedWithMeFolders = $stmtSharedFoldersWithMe->fetchAll();
 // Für mich freigegebene Einzeldateien (von anderen Cloud-Benutzern via user_shares, nur aktive Dateien)
 $stmtSharedWithMe = $pdo->prepare(
     'SELECT f.id, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
-            us.can_write, us.created_at AS shared_at, u.username AS owner_username
+            us.can_write, us.can_delete, us.created_at AS shared_at, u.username AS owner_username
      FROM user_shares us
      INNER JOIN files f ON f.id = us.file_id
      INNER JOIN users u ON u.id = us.owner_id
@@ -1033,6 +1035,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $canManageThisFile = $activeSharedFolder !== null
                             ? $canWriteSharedFolder
                             : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
+                        $canDeleteThisFile = $activeSharedFolder !== null
+                            ? $canDeleteSharedFolder
+                            : $canManageThisFile;
 
                         $previewItemsList[] = [
                             'id'          => $fId,
@@ -1210,7 +1215,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </button>
                                     <?php endif; ?>
 
-                                    <?php if ($canManageThisFile): ?>
+                                    <?php if ($canDeleteThisFile): ?>
                                         <!-- LÖSCHEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                         <form
                                             action="delete.php"
@@ -1292,7 +1297,13 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $sfDate = date('d.m.Y H:i', strtotime((string)$sFolder['shared_at']));
                         $sfCount = (int)$sFolder['file_count'];
                         $sfSize  = (int)$sFolder['folder_size'];
-                        $sfCanWrite = ((int)($sFolder['can_write'] ?? 0) === 1);
+                        $sfCanWrite  = ((int)($sFolder['can_write'] ?? 0) === 1);
+                        $sfCanDelete = ((int)($sFolder['can_delete'] ?? 0) === 1);
+                        $sfPermLabel = $sfCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
+                        $sfPermIcon  = $sfCanDelete ? '✏️🗑️' : ($sfCanWrite ? '✏️' : '👁️');
+                        $sfPermBg    = $sfCanDelete
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            : ($sfCanWrite ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
                         ?>
                         <tr class="<?= $isSelectedSf ? 'bg-blue-50/60 dark:bg-blue-950/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40' ?> transition-colors">
                             <td class="py-3 px-4 sm:px-6">
@@ -1312,11 +1323,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-4">
                                 <span
-                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $sfCanWrite ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
-                                    title="<?= $sfCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
-                                    aria-label="<?= $sfCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                    class="inline-flex items-center justify-center px-2 h-8 rounded-lg <?= $sfPermBg ?> text-xs font-semibold"
+                                    title="<?= e($sfPermLabel) ?>"
+                                    aria-label="<?= e($sfPermLabel) ?>"
                                 >
-                                    <?= $sfCanWrite ? '✏️' : '👁️' ?>
+                                    <?= $sfPermIcon ?>
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
@@ -1355,7 +1366,13 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <?php
                         $sfBadge = getFileTypeBadge((string)$sf['original_name'], (string)$sf['mime_type']);
                         $sfDate  = date('d.m.Y H:i', strtotime((string)$sf['shared_at']));
-                        $sfFileCanWrite = ((int)($sf['can_write'] ?? 0) === 1);
+                        $sfFileCanWrite  = ((int)($sf['can_write'] ?? 0) === 1);
+                        $sfFileCanDelete = ((int)($sf['can_delete'] ?? 0) === 1);
+                        $sfFilePermLabel = $sfFileCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfFileCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
+                        $sfFilePermIcon  = $sfFileCanDelete ? '✏️🗑️' : ($sfFileCanWrite ? '✏️' : '👁️');
+                        $sfFilePermBg    = $sfFileCanDelete
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            : ($sfFileCanWrite ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
                         ?>
                         <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                             <td class="py-3 px-4 sm:px-6">
@@ -1380,11 +1397,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-4">
                                 <span
-                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $sfFileCanWrite ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> text-sm font-semibold"
-                                    title="<?= $sfFileCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
-                                    aria-label="<?= $sfFileCanWrite ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen' ?>"
+                                    class="inline-flex items-center justify-center px-2 h-8 rounded-lg <?= $sfFilePermBg ?> text-xs font-semibold"
+                                    title="<?= e($sfFilePermLabel) ?>"
+                                    aria-label="<?= e($sfFilePermLabel) ?>"
                                 >
-                                    <?= $sfFileCanWrite ? '✏️' : '👁️' ?>
+                                    <?= $sfFilePermIcon ?>
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
@@ -1405,7 +1422,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
                                         </svg>
                                     </a>
-                                    <?php if ($sfFileCanWrite): ?>
+                                    <?php if ($sfFileCanDelete): ?>
                                         <form
                                             action="delete.php"
                                             method="post"
@@ -1573,7 +1590,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         >
                             <option value="0">👁️ Nur Lesen</option>
-                            <option value="1">✏️ Lesen, Schreiben &amp; Löschen</option>
+                            <option value="1">✏️ Lesen &amp; Schreiben</option>
+                            <option value="2">🗑️ Lesen, Schreiben &amp; Löschen</option>
                         </select>
                         <button
                             type="submit"
@@ -2418,19 +2436,24 @@ async function loadShareDetails(fileId, folderPath = '') {
         if (data.user_shares.length === 0) {
             existingUserSharesList.innerHTML = '<p class="text-xs text-slate-400">Noch mit keinem anderen Cloud-Benutzer geteilt.</p>';
         } else {
-            existingUserSharesList.innerHTML = data.user_shares.map(u => `
+            existingUserSharesList.innerHTML = data.user_shares.map(u => {
+                const permLabel = u.can_delete
+                    ? '🗑️ Lesen, Schreiben & Löschen'
+                    : (u.can_write ? '✏️ Lesen & Schreiben' : '👁️ Nur Lesen');
+                return `
                 <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/60 text-xs">
                     <div class="flex items-center gap-2 min-w-0">
                         <span class="font-medium text-blue-900 dark:text-blue-200 truncate">👤 <strong>${escapeHtml(String(u.username || ''))}</strong></span>
-                        <span class="px-1.5 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-[11px] font-semibold" title="${u.can_write ? 'Lesen, Schreiben & Löschen' : 'Nur Lesen'}">
-                            ${u.can_write ? '✏️ Lesen, Schreiben & Löschen' : '👁️ Nur Lesen'}
+                        <span class="px-1.5 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-[11px] font-semibold">
+                            ${permLabel}
                         </span>
                     </div>
                     <button type="button" onclick="revokeUserShare(${Number(u.id) || 0})" class="text-red-600 dark:text-red-400 hover:underline font-medium cursor-pointer shrink-0">
                         Entfernen
                     </button>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
     } catch {
         existingLinksList.innerHTML = '';

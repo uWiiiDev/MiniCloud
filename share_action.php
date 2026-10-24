@@ -70,7 +70,7 @@ if ($action === 'list') {
         }
 
         $stmtUsers = $pdo->prepare(
-            'SELECT us.id, us.shared_with_user_id, us.can_write, u.username, us.created_at
+            'SELECT us.id, us.shared_with_user_id, us.can_write, us.can_delete, u.username, us.created_at
              FROM user_shares us
              INNER JOIN users u ON u.id = us.shared_with_user_id
              WHERE us.owner_id = :uid AND us.folder_path = :fp
@@ -84,6 +84,7 @@ if ($action === 'list') {
                 'user_id'    => (int)$uRow['shared_with_user_id'],
                 'username'   => (string)$uRow['username'],
                 'can_write'  => ((int)($uRow['can_write'] ?? 0) === 1),
+                'can_delete' => ((int)($uRow['can_delete'] ?? 0) === 1),
                 'created_at' => date('d.m.Y H:i', strtotime((string)$uRow['created_at'])),
             ];
         }
@@ -124,7 +125,7 @@ if ($action === 'list') {
     }
 
     $stmtUsers = $pdo->prepare(
-        'SELECT us.id, us.shared_with_user_id, us.can_write, u.username, us.created_at
+        'SELECT us.id, us.shared_with_user_id, us.can_write, us.can_delete, u.username, us.created_at
          FROM user_shares us
          INNER JOIN users u ON u.id = us.shared_with_user_id
          WHERE us.file_id = :file_id
@@ -138,6 +139,7 @@ if ($action === 'list') {
             'user_id'    => (int)$uRow['shared_with_user_id'],
             'username'   => (string)$uRow['username'],
             'can_write'  => ((int)($uRow['can_write'] ?? 0) === 1),
+            'can_delete' => ((int)($uRow['can_delete'] ?? 0) === 1),
             'created_at' => date('d.m.Y H:i', strtotime((string)$uRow['created_at'])),
         ];
     }
@@ -262,7 +264,12 @@ if ($action === 'share_user') {
     $fileId       = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
     $folderPath   = isset($_POST['folder_path']) ? sanitizeFolderPathInput((string)$_POST['folder_path']) : '';
     $targetUserId = isset($_POST['target_user_id']) ? (int)$_POST['target_user_id'] : 0;
-    $canWrite     = isset($_POST['can_write']) && (string)$_POST['can_write'] === '1' ? 1 : 0;
+    $permRaw      = (string)($_POST['can_write'] ?? '0');
+    $canWrite     = ($permRaw === '1' || $permRaw === '2') ? 1 : 0;
+    $canDelete    = ($permRaw === '2' || (isset($_POST['can_delete']) && (string)$_POST['can_delete'] === '1')) ? 1 : 0;
+    if ($canDelete === 1) {
+        $canWrite = 1;
+    }
 
     if ($folderPath === '') {
         $file = getManageableFile($pdo, $userId, $fileId, $isAdmin);
@@ -295,14 +302,14 @@ if ($action === 'share_user') {
         $stmtCheck->execute([':oid' => $userId, ':fp' => $folderPath, ':tid' => $targetUserId]);
         $existingRow = $stmtCheck->fetch();
         if ($existingRow) {
-            $pdo->prepare('UPDATE user_shares SET can_write = :cw WHERE id = :id')
-                ->execute([':cw' => $canWrite, ':id' => (int)$existingRow['id']]);
+            $pdo->prepare('UPDATE user_shares SET can_write = :cw, can_delete = :cd WHERE id = :id')
+                ->execute([':cw' => $canWrite, ':cd' => $canDelete, ':id' => (int)$existingRow['id']]);
         } else {
             $stmtIns = $pdo->prepare(
-                'INSERT INTO user_shares (file_id, folder_path, owner_id, shared_with_user_id, can_write)
-                 VALUES (NULL, :fp, :oid, :tid, :cw)'
+                'INSERT INTO user_shares (file_id, folder_path, owner_id, shared_with_user_id, can_write, can_delete)
+                 VALUES (NULL, :fp, :oid, :tid, :cw, :cd)'
             );
-            $stmtIns->execute([':fp' => $folderPath, ':oid' => $userId, ':tid' => $targetUserId, ':cw' => $canWrite]);
+            $stmtIns->execute([':fp' => $folderPath, ':oid' => $userId, ':tid' => $targetUserId, ':cw' => $canWrite, ':cd' => $canDelete]);
         }
     } else {
         $stmtCheck = $pdo->prepare(
@@ -311,27 +318,29 @@ if ($action === 'share_user') {
         $stmtCheck->execute([':fid' => $fileId, ':tid' => $targetUserId]);
         $existingRow = $stmtCheck->fetch();
         if ($existingRow) {
-            $pdo->prepare('UPDATE user_shares SET can_write = :cw WHERE id = :id')
-                ->execute([':cw' => $canWrite, ':id' => (int)$existingRow['id']]);
+            $pdo->prepare('UPDATE user_shares SET can_write = :cw, can_delete = :cd WHERE id = :id')
+                ->execute([':cw' => $canWrite, ':cd' => $canDelete, ':id' => (int)$existingRow['id']]);
         } else {
             $stmtInsert = $pdo->prepare(
-                'INSERT INTO user_shares (file_id, folder_path, owner_id, shared_with_user_id, can_write)
-                 VALUES (:file_id, NULL, :owner_id, :shared_with, :cw)'
+                'INSERT INTO user_shares (file_id, folder_path, owner_id, shared_with_user_id, can_write, can_delete)
+                 VALUES (:file_id, NULL, :owner_id, :shared_with, :cw, :cd)'
             );
             $stmtInsert->execute([
                 ':file_id'     => $fileId,
                 ':owner_id'    => $userId,
                 ':shared_with' => $targetUserId,
                 ':cw'          => $canWrite,
+                ':cd'          => $canDelete,
             ]);
         }
     }
 
     echo json_encode([
-        'success'   => true,
-        'message'   => sprintf('Wurde für "%s" freigegeben und erscheint automatisch in dessen Dashboard.', (string)$targetUser['username']),
-        'username'  => (string)$targetUser['username'],
-        'can_write' => ($canWrite === 1),
+        'success'    => true,
+        'message'    => sprintf('Wurde für "%s" freigegeben und erscheint automatisch in dessen Dashboard.', (string)$targetUser['username']),
+        'username'   => (string)$targetUser['username'],
+        'can_write'  => ($canWrite === 1),
+        'can_delete' => ($canDelete === 1),
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

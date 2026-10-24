@@ -135,7 +135,17 @@ function getAccessibleEventsForUser(PDO $pdo, int $uid): array
                       )
                 ) THEN 1
                 ELSE 0
-            END AS can_edit_event
+            END AS can_edit_event,
+            CASE
+                WHEN ce.user_id = :uid_self_del THEN 1
+                WHEN EXISTS (
+                    SELECT 1 FROM calendar_shares csd
+                    WHERE csd.owner_user_id = ce.user_id
+                      AND csd.can_delete = 1
+                      AND csd.target_user_id = :uid_cs_del
+                ) THEN 1
+                ELSE 0
+            END AS can_delete_event
          FROM calendar_events ce
          JOIN users u ON u.id = ce.user_id
          LEFT JOIN `groups` g ON g.id = ce.group_id
@@ -167,6 +177,8 @@ function getAccessibleEventsForUser(PDO $pdo, int $uid): array
         ':uid_gm_edit'     => $uid,
         ':uid_cs_edit'     => $uid,
         ':uid_cs_grp_edit' => $uid,
+        ':uid_self_del'    => $uid,
+        ':uid_cs_del'      => $uid,
         ':uid_own'         => $uid,
         ':uid_shared'      => $uid,
         ':uid_gm'          => $uid,
@@ -491,7 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
             }
-            if ($existing && (int)($existing['can_edit_event'] ?? 0) === 1) {
+            if ($existing && (int)($existing['can_delete_event'] ?? 0) === 1) {
                 $pdo->prepare('DELETE FROM calendar_events WHERE id = :id')->execute([':id' => $eventId]);
                 setFlash('success', sprintf('Termin „%s“ wurde gelöscht.', (string)$existing['title']));
             } else {
@@ -505,7 +517,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // C) Eigenen Kalender mit einem anderen Benutzer (nur wenn allow_user_sharing = 1!) oder einer Gruppe teilen
     if ($action === 'share_calendar') {
         $targetType = (string)($_POST['target_type'] ?? 'user');
-        $canEdit    = isset($_POST['can_edit']) && $_POST['can_edit'] === '1' ? 1 : 0;
+        $permRaw    = (string)($_POST['can_edit'] ?? '0');
+        $canEdit    = ($permRaw === '1' || $permRaw === '2') ? 1 : 0;
+        $canDelete  = ($permRaw === '2' || (isset($_POST['can_delete']) && (string)$_POST['can_delete'] === '1')) ? 1 : 0;
+        if ($canDelete === 1) {
+            $canEdit = 1;
+        }
 
         if ($targetType === 'group') {
             $targetGroupId = (int)($_POST['target_group_id'] ?? 0);
@@ -525,8 +542,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->prepare('DELETE FROM calendar_shares WHERE owner_user_id = :uid AND target_group_id = :gid')
                 ->execute([':uid' => $userId, ':gid' => $targetGroupId]);
-            $pdo->prepare('INSERT INTO calendar_shares (owner_user_id, target_group_id, can_edit) VALUES (:uid, :gid, :ce)')
-                ->execute([':uid' => $userId, ':gid' => $targetGroupId, ':ce' => $canEdit]);
+            $pdo->prepare('INSERT INTO calendar_shares (owner_user_id, target_group_id, can_edit, can_delete) VALUES (:uid, :gid, :ce, :cd)')
+                ->execute([':uid' => $userId, ':gid' => $targetGroupId, ':ce' => $canEdit, ':cd' => $canDelete]);
 
             setFlash('success', sprintf('Ihr Kalender wurde für die Gruppe „%s“ freigegeben.', (string)$grp['name']));
         } else {
@@ -550,8 +567,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->prepare('DELETE FROM calendar_shares WHERE owner_user_id = :uid AND target_user_id = :tuid')
                 ->execute([':uid' => $userId, ':tuid' => $targetUserId]);
-            $pdo->prepare('INSERT INTO calendar_shares (owner_user_id, target_user_id, can_edit) VALUES (:uid, :tuid, :ce)')
-                ->execute([':uid' => $userId, ':tuid' => $targetUserId, ':ce' => $canEdit]);
+            $pdo->prepare('INSERT INTO calendar_shares (owner_user_id, target_user_id, can_edit, can_delete) VALUES (:uid, :tuid, :ce, :cd)')
+                ->execute([':uid' => $userId, ':tuid' => $targetUserId, ':ce' => $canEdit, ':cd' => $canDelete]);
 
             setFlash('success', sprintf('Ihr Kalender wurde für „%s“ freigegeben.', (string)$tu['username']));
         }
@@ -894,7 +911,7 @@ $myCalendarShares = $stmtMyCalendarShares->fetchAll();
 
 // Kalender anderer Benutzer, die mit mir (oder einer meiner Gruppen) geteilt wurden
 $stmtSharedWithMeCalendars = $pdo->prepare(
-    'SELECT DISTINCT u.id AS owner_id, u.username AS owner_username, MAX(cs.can_edit) AS can_edit
+    'SELECT DISTINCT u.id AS owner_id, u.username AS owner_username, MAX(cs.can_edit) AS can_edit, MAX(cs.can_delete) AS can_delete
      FROM calendar_shares cs
      JOIN users u ON u.id = cs.owner_user_id
      WHERE cs.owner_user_id <> :uid1
@@ -1254,12 +1271,18 @@ require_once __DIR__ . '/includes/header.php';
             <?php else: ?>
                 <ul class="space-y-1.5 text-xs">
                     <?php foreach ($sharedWithMeCalendars as $sc): ?>
+                        <?php
+                        $scCanEdit   = ((int)($sc['can_edit'] ?? 0) === 1);
+                        $scCanDelete = ((int)($sc['can_delete'] ?? 0) === 1);
+                        $scPermTitle = $scCanDelete ? 'Lesen, Bearbeiten & Löschen' : ($scCanEdit ? 'Lesen & Bearbeiten' : 'Nur Lesen');
+                        $scPermIcon  = $scCanDelete ? '✏️🗑️' : ($scCanEdit ? '✏️' : '👁️');
+                        ?>
                         <li class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/60">
                             <span class="font-medium text-slate-800 dark:text-slate-200 truncate">
                                 👤 <?= e((string)$sc['owner_username']) ?>
                             </span>
-                            <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0" title="<?= (int)$sc['can_edit'] === 1 ? 'Lesen & Bearbeiten' : 'Nur Lesen' ?>">
-                                <?= (int)$sc['can_edit'] === 1 ? '✏️' : '👁️' ?>
+                            <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0" title="<?= e($scPermTitle) ?>">
+                                <?= $scPermIcon ?>
                             </span>
                         </li>
                     <?php endforeach; ?>
@@ -1536,7 +1559,7 @@ require_once __DIR__ . '/includes/header.php';
                     class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold cursor-pointer"
                 >✏️ Bearbeiten</button>
 
-                <form action="calendar.php" method="post" class="inline" onsubmit="return confirm('Diesen Termin wirklich löschen?');">
+                <form id="detailDeleteForm" action="calendar.php" method="post" class="inline" onsubmit="return confirm('Diesen Termin wirklich löschen?');">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                     <input type="hidden" name="action" value="delete_event">
                     <input type="hidden" name="event_id" id="detailDeleteId" value="0">
@@ -1545,6 +1568,7 @@ require_once __DIR__ . '/includes/header.php';
                     <button
                         type="submit"
                         class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold cursor-pointer"
+                        title="Termin löschen"
                     >🗑️</button>
                 </form>
             </div>
@@ -1599,7 +1623,8 @@ require_once __DIR__ . '/includes/header.php';
                         class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
                     >
                         <option value="0">👁️ Nur Lesen</option>
-                        <option value="1">✏️ Lesen, Bearbeiten &amp; Löschen</option>
+                        <option value="1">✏️ Lesen &amp; Bearbeiten</option>
+                        <option value="2">🗑️ Lesen, Bearbeiten &amp; Löschen</option>
                     </select>
 
                     <button
@@ -1618,6 +1643,12 @@ require_once __DIR__ . '/includes/header.php';
                 </h4>
                 <div class="divide-y divide-slate-200/70 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden">
                     <?php foreach ($myCalendarShares as $cs): ?>
+                        <?php
+                        $csCanEdit   = ((int)($cs['can_edit'] ?? 0) === 1);
+                        $csCanDelete = ((int)($cs['can_delete'] ?? 0) === 1);
+                        $csPermTitle = $csCanDelete ? 'Lesen, Bearbeiten & Löschen' : ($csCanEdit ? 'Lesen & Bearbeiten' : 'Nur Lesen');
+                        $csPermIcon  = $csCanDelete ? '✏️🗑️' : ($csCanEdit ? '✏️' : '👁️');
+                        ?>
                         <div class="px-3 py-2 bg-white dark:bg-slate-900 flex items-center justify-between gap-2 text-xs">
                             <div class="flex items-center gap-2 min-w-0">
                                 <?php if ($cs['target_user_id'] !== null): ?>
@@ -1625,8 +1656,8 @@ require_once __DIR__ . '/includes/header.php';
                                 <?php else: ?>
                                     <span class="font-semibold text-indigo-700 dark:text-indigo-300 truncate">👥 <?= e((string)$cs['target_group_name']) ?></span>
                                 <?php endif; ?>
-                                <span class="text-[11px] text-slate-500 dark:text-slate-400" title="<?= (int)$cs['can_edit'] === 1 ? 'Lesen, Bearbeiten & Löschen' : 'Nur Lesen' ?>">
-                                    <?= (int)$cs['can_edit'] === 1 ? '✏️' : '👁️' ?>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400" title="<?= e($csPermTitle) ?>">
+                                    <?= $csPermIcon ?>
                                 </span>
                             </div>
 
@@ -1862,13 +1893,29 @@ function openEventDetailModal(ev) {
     document.getElementById('detailIcsLink').href = 'calendar.php?export_ics=1&event_id=' + parseInt(ev.id, 10);
 
     const editActions = document.getElementById('detailEditActions');
-    if (parseInt(ev.can_edit_event || 0, 10) === 1) {
+    const editBtn = document.getElementById('detailEditBtn');
+    const deleteForm = document.getElementById('detailDeleteForm');
+    const canEdit = parseInt(ev.can_edit_event || 0, 10) === 1;
+    const canDelete = parseInt(ev.can_delete_event || 0, 10) === 1;
+
+    if (canEdit || canDelete) {
         editActions.classList.remove('hidden');
-        document.getElementById('detailDeleteId').value = ev.id;
-        document.getElementById('detailEditBtn').onclick = function () {
-            document.getElementById('eventDetailModal').classList.add('hidden');
-            openEventModal(null, ev);
-        };
+        if (canEdit) {
+            editBtn.classList.remove('hidden');
+            editBtn.onclick = function () {
+                document.getElementById('eventDetailModal').classList.add('hidden');
+                openEventModal(null, ev);
+            };
+        } else {
+            editBtn.classList.add('hidden');
+        }
+
+        if (canDelete && deleteForm) {
+            deleteForm.classList.remove('hidden');
+            document.getElementById('detailDeleteId').value = ev.id;
+        } else if (deleteForm) {
+            deleteForm.classList.add('hidden');
+        }
     } else {
         editActions.classList.add('hidden');
     }

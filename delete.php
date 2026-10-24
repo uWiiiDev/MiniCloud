@@ -128,7 +128,7 @@ $canDelete = false;
 if ($file) {
     if ((int)$file['user_id'] === $userId) {
         $canDelete = true;
-    } elseif (canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], (int)$file['id'], (string)$file['folder_path'])) {
+    } elseif (canUserDeleteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], (int)$file['id'], (string)$file['folder_path'])) {
         $canDelete = true;
     } elseif (!empty($file['group_folder_id']) && canUserAccessGroupFolder($pdo, $userId, (int)$file['group_folder_id'], true, $isAdmin)) {
         $canDelete = true;
