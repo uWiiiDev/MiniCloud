@@ -3,6 +3,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/i18n.php';
+
+$currentLang = getCurrentLang();
+if ($currentLang !== 'de') {
+    ob_start('translateHtmlBuffer');
+}
 
 $appSettings = getAppSettings();
 $appTitle    = $appSettings['app_title'];
@@ -243,6 +249,23 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 
         <!-- Right Navigation & Controls -->
         <nav class="flex items-center gap-1 sm:gap-2.5 shrink-0">
+            <!-- Sprachauswahl (5 Sprachen: DE, EN, FR, ES, NL) -->
+            <form action="lang.php" method="post" id="langForm" class="inline-flex items-center">
+                <label for="langSelect" class="sr-only">Sprache wählen</label>
+                <select
+                    id="langSelect"
+                    name="lang"
+                    aria-label="Sprache wählen"
+                    title="Sprache wählen"
+                    onchange="this.form.submit()"
+                    class="max-w-[68px] sm:max-w-none text-xs sm:text-sm font-medium rounded-xl px-1.5 sm:px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer transition-colors truncate"
+                >
+                    <?php foreach (getAllowedLanguages() as $lCode => $lLabel): ?>
+                        <option value="<?= e($lCode) ?>" <?= $currentLang === $lCode ? 'selected' : '' ?>><?= e($lLabel) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+
             <!-- Theme Switcher -->
             <form action="theme.php" method="post" id="themeForm" class="inline-flex items-center">
                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">

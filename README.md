@@ -1,6 +1,7 @@
 # MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher (PHP 8.2+ & MySQL)
 
-Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces auf Basis von **PHP 8.2+** und **MySQL / MariaDB**.
+**🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces auf Basis von **PHP 8.2+** und **MySQL / MariaDB** (100 % DSGVO-konform, ohne externe Abhängigkeiten).  
+**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage alternative built with **PHP 8.2+** and **MySQL / MariaDB** — featuring optional Email 2FA, group folders, public/internal file sharing, trash retention, 12 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL).
 
 ---
 
@@ -14,8 +15,9 @@ MiniCloud/
 │   └── database.php          # PDO-Datenbankverbindung, Auto-Migration, Speicher-Quota & Konstanten
 ├── includes/
 │   ├── auth.php              # Session-Management, Admin-/Login-Guards, Theme-State & CSRF-Schutz
-│   ├── functions.php         # Hilfsfunktionen (Quota, Gruppenordner-Rechte, 2FA-Mail, Auto-Versionierung)
-│   ├── header.php            # Voll responsives Tailwind-CSS-Layout, 12 Themes, PWA-Header & Navigation
+│   ├── functions.php         # Hilfsfunktionen (Quota, Gruppenordner-Rechte, 2FA-Mail/SMTP, Auto-Versionierung)
+│   ├── i18n.php              # Mehrsprachigkeits-Modul für 5 Sprachen (DE, EN, FR, ES, NL)
+│   ├── header.php            # Voll responsives Tailwind-CSS-Layout, 12 Themes, Sprachwahl, PWA-Header
 │   └── footer.php            # Footer mit automatischer Versionsanzeige, PWA-Installationsdialog & Theme-Umschalter
 ├── sql/
 │   └── schema.sql            # Vollständige MySQL-Datenbankstruktur (Zero-Click Auto-Migration integriert)
