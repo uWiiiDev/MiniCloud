@@ -46,7 +46,8 @@ require_once __DIR__ . '/includes/header.php';
             <a href="#upload-ordner" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">📤 Upload &amp; Folders</a>
             <a href="#vorschau-sortierung" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">👁️ Preview &amp; Sorting</a>
             <a href="#verschieben-kopieren" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">⇄ Move &amp; Copy</a>
-            <a href="#teilen-gruppen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">🔗 Share &amp; Group Folders</a>
+            <a href="#teilen-gruppen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">🔗 Share &amp; Permissions</a>
+            <a href="#kalender-chat" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">📅 Calendar &amp; 💬 Chat</a>
             <a href="#tresor-modus" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">🔒 Vault Mode</a>
             <a href="#papierkorb-themes" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">🗑️ Trash &amp; Settings</a>
             <?php if ($isAdminUser): ?>
@@ -91,19 +92,30 @@ require_once __DIR__ . '/includes/header.php';
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Compact ⇄ Icon in Actions Column:</strong> Click the <strong>⇄</strong> icon button in the <em>Actions</em> column of any file or subfolder row to open the move/copy dialog and choose the desired target folder under <strong>⇄ Move</strong> or <strong>📋 Copy</strong>.</li>
                 <li><strong>Entire Folders Including Contents:</strong> Both via the <strong>⇄</strong> icon in the top folder bar and in every subfolder row, complete folders including all subfolders and files can be moved or copied.</li>
-                <li><strong>Between Personal Cloud &amp; Group Folders:</strong> Move or copy files and folders in both directions between your personal folders and any group folder where you have write permissions.</li>
+                <li><strong>Shared Folders:</strong> Move or copy files and folders between your personal folders and shared folders where you have write permissions.</li>
             </ul>
         </section>
 
         <section id="teilen-gruppen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">🔗</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Sharing &amp; Group Folders</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Sharing &amp; 3-Level Permissions</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Public Share Links:</strong> Click the share icon to generate a cryptographically secure link for files or folders – optionally protected by a <strong>password</strong> and <strong>expiration date</strong>.</li>
-                <li><strong>Direct Sharing with Cloud Users:</strong> In the same dialog, share files or folders directly with other registered cloud users. They appear under <em>“Shared with me”</em>.</li>
-                <li><strong>Group Folders:</strong> Shared team folders are listed under <em>“Group Folders”</em> with either read-only access (👁️ Read Only) or full write access (✏️ Read &amp; Write).</li>
+                <li><strong>Direct Sharing with Cloud Users (3 Levels):</strong> Share files or folders directly with other users who have enabled their privacy visibility in Settings. For shared folders, choose between <strong>👁️ Read Only</strong>, <strong>✏️ Read &amp; Write</strong> (upload &amp; create subfolders), or <strong>🗑️ Read, Write &amp; Delete</strong>.</li>
+                <li><strong>Privacy Protection by Default:</strong> New accounts are hidden from the sharing/chat user list by default and can opt in anytime in Settings.</li>
+            </ul>
+        </section>
+
+        <section id="kalender-chat" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3 md:col-span-2">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold">📅</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Calendar &amp; Integrated Messenger (Chat)</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Calendar &amp; Appointments (<a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Calendar</a>):</strong> Manage personal, group, and shared events in month or list view with recurrence rules (daily, weekly, monthly, yearly), colors, file attachments, <code>.ics</code> import/export, and a personal <code>.ics</code> subscription link for smartphones, Thunderbird, or Outlook. Share your calendar with users or groups using 3 permission levels (Read, Edit, Edit &amp; Delete).</li>
+                <li><strong>Messenger &amp; Announcements (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Exchange real-time 1:1 messages with visible cloud users or receive official admin broadcasts. Includes one-click chat history clearing, automatic 1-column mobile view, and configurable desktop/mobile system notifications.</li>
             </ul>
         </section>
     </div>
@@ -131,11 +143,11 @@ require_once __DIR__ . '/includes/header.php';
         <section id="papierkorb-themes" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">🗑️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Trash, Themes, Language &amp; 2FA Settings</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Trash, Themes, Notifications &amp; 2FA</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30-Day Trash Retention:</strong> Deleted files go to the <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Trash</a> first, where they can be restored with one click for 30 days or permanently deleted.</li>
-                <li><strong>Settings (⚙️ Gear Icon):</strong> Click the gear icon in the top header (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Settings</a>) to choose between 5 languages, 8 eye-friendly color themes, change your password, or enable/disable optional <strong>Two-Factor Authentication (Email 2FA)</strong>.</li>
+                <li><strong>Settings (⚙️ Gear Icon):</strong> In <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Settings</a>, choose between 5 languages, 13 eye-friendly color themes (5 light, 8 dark incl. <em>🌌 Midnight</em>), configure status message display duration (1–300s or manual), session timeout, chat system notifications, privacy visibility, password, and optional <strong>Email 2FA</strong>.</li>
             </ul>
         </section>
 
@@ -146,9 +158,9 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Administrator Notes</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Branding, SMTP &amp; Legal Notice:</strong> In <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> (accessible via ⚙️ Settings), customize the application title, subtitle, logo, SMTP mail settings, and legal notice.</li>
-                <li><strong>Users &amp; Storage Quotas:</strong> Create accounts, assign individual storage quotas (in MB), and reset passwords if needed.</li>
-                <li><strong>User Groups &amp; Group Folders:</strong> Create user groups and grant read or write permissions for shared group folders to entire groups or individual users.</li>
+                <li><strong>Branding, Modules, SMTP &amp; Legal Notice:</strong> In <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, customize title, logo, SMTP mail settings, legal notice, and globally enable/disable the Calendar and Chat modules or optional user registration with an invite code.</li>
+                <li><strong>1-Click GitHub System Updater &amp; Server Monitor:</strong> Check for new commits on GitHub and update all application files with one click while preserving <code>uploads/</code> and database credentials. Monitor CPU, RAM, and disk usage live.</li>
+                <li><strong>Users, Groups &amp; Quotas:</strong> Create accounts, assign individual storage quotas (in MB), manage user groups, and reset passwords.</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -218,33 +230,33 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, storage_quota, created_at</code></td>
-                        <td class="py-3 px-4">User authentication, optional Email 2FA, role control, quota &amp; UI theme</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota</code></td>
+                        <td class="py-3 px-4">User authentication, optional Email 2FA, role control, quota, UI preferences &amp; privacy settings</td>
                         <td class="py-3 px-4">Until user account deletion by administrator (cascade delete)</td>
                     </tr>
                     <tr>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files</td>
-                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
-                        <td class="py-3 px-4">Metadata of uploaded files &amp; assignment to users/group folders</td>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files &amp; user_folders</td>
+                        <td class="py-3 px-4"><code>id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
+                        <td class="py-3 px-4">Metadata of uploaded files &amp; directory hierarchy (incl. empty folders)</td>
                         <td class="py-3 px-4">Active until deleted; automatic permanent deletion after 30 days in Trash (<code>deleted_at</code>)</td>
                     </tr>
                     <tr>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">user_folders</td>
-                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, folder_path, created_at</code></td>
-                        <td class="py-3 px-4">Directory structure (incl. empty folders) in personal cloud &amp; group folders</td>
-                        <td class="py-3 px-4">Until folder deletion/move or deletion of user/group folder</td>
-                    </tr>
-                    <tr>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">groups &amp; group_folders</td>
-                        <td class="py-3 px-4"><code>groups, group_members, group_folders, group_folder_permissions</code></td>
-                        <td class="py-3 px-4">User groups, shared group folders, and read/write permissions</td>
-                        <td class="py-3 px-4">Until revocation of permission or deletion of group/folder by admin</td>
-                    </tr>
-                    <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">shares &amp; user_shares</td>
-                        <td class="py-3 px-4"><code>share_token, password_hash, expires_at</code> / <code>owner_id, shared_with_user_id</code></td>
-                        <td class="py-3 px-4">Public share links and internal direct shares between cloud users</td>
+                        <td class="py-3 px-4"><code>share_token, password_hash, expires_at</code> / <code>owner_id, shared_with_user_id, can_write, can_delete</code></td>
+                        <td class="py-3 px-4">Public share links and internal 3-level direct shares between cloud users</td>
                         <td class="py-3 px-4">Until manual revocation, expiration (<code>expires_at</code>), or deletion of file/folder</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">calendar_events &amp; calendar_shares</td>
+                        <td class="py-3 px-4"><code>title, start_at, end_at, recurrence, group_id, shared_user_id, attached_file_id</code> / <code>owner_user_id, target_user_id, target_group_id, can_edit, can_delete</code></td>
+                        <td class="py-3 px-4">Appointments, recurring events, and 3-level calendar sharing permissions</td>
+                        <td class="py-3 px-4">Until event/share deletion or user account deletion</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">messages &amp; message_broadcast_reads</td>
+                        <td class="py-3 px-4"><code>sender_id, recipient_id, is_broadcast, message_text, is_read, created_at</code></td>
+                        <td class="py-3 px-4">Direct 1:1 chat messages and administrator announcements to all users</td>
+                        <td class="py-3 px-4">Until individual deletion, chat history clearing, or user account deletion</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">Filesystem: uploads/</td>
@@ -915,7 +927,13 @@ require_once __DIR__ . '/includes/header.php';
                 ⇄ Verschieben &amp; Kopieren
             </a>
             <a href="#teilen-gruppen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
-                🔗 Teilen &amp; Gruppenordner
+                🔗 Teilen &amp; Berechtigungen
+            </a>
+            <a href="#kalender-termine" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                📅 Kalender &amp; .ics-Abo
+            </a>
+            <a href="#chat-nachrichten" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                💬 Chat &amp; Meldungen
             </a>
             <a href="#tresor-modus" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">
                 🔒 Tresor-Modus
@@ -925,7 +943,7 @@ require_once __DIR__ . '/includes/header.php';
             </a>
             <?php if ($isAdminUser): ?>
                 <a href="#admin-hilfe" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">
-                    ⚙️ Administration
+                    ⚙️ Administration &amp; Update
                 </a>
             <?php endif; ?>
             <a href="#it-sicherheit" class="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors">
@@ -948,7 +966,7 @@ require_once __DIR__ . '/includes/header.php';
                 <li><strong>Sofort-Upload per Drag &amp; Drop:</strong> Ziehen Sie einzelne Dateien oder komplette Ordner aus Ihrem Dateimanager direkt auf die gestrichelte Upload-Fläche. Der Upload startet automatisch.</li>
                 <li><strong>Auswahl-Buttons:</strong> Über <em>„+ Dateien“</em> wählen Sie mehrere Einzeldateien aus, über <em>„Ordner“</em> laden Sie eine komplette Ordnerstruktur samt Unterordnern hoch.</li>
                 <li><strong>Zielordner festlegen:</strong> Im Feld <em>„Zielordner (optional)“</em> ist automatisch Ihr aktuell geöffneter Ordner voreingestellt. Sie können dort auch direkt einen neuen Pfad (z. B. <code>Projekte/2026</code>) eintragen.</li>
-                <li><strong>Unterordner anlegen:</strong> Über die Ordnerleiste erstellen Sie jederzeit neue Ordner oder Unterordner im aktuell geöffneten Verzeichnis.</li>
+                <li><strong>Unterordner anlegen:</strong> Über die Ordnerleiste erstellen Sie jederzeit neue Ordner oder Unterordner im aktuell geöffneten Verzeichnis (auch in für Sie mit Schreibrecht freigegebenen Ordnern).</li>
             </ul>
         </section>
 
@@ -974,25 +992,57 @@ require_once __DIR__ . '/includes/header.php';
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Kompaktes ⇄ Symbol in der Aktionsspalte:</strong> Klicken Sie in der Spalte <em>„Aktionen“</em> einer Datei oder eines Unterordners auf das <strong>⇄</strong>-Symbol, um im Dialogfenster unter <strong>⇄ Verschieben</strong> oder <strong>📋 Kopieren</strong> den gewünschten Zielordner auszuwählen.</li>
                 <li><strong>Ganze Ordner samt Inhalt:</strong> Sowohl über das <strong>⇄</strong>-Symbol in der oberen Ordnerleiste als auch direkt in jeder Unterordner-Zeile der Tabelle können komplette Ordner inklusive aller Unterordner und Dateien verschoben oder kopiert werden.</li>
-                <li><strong>Zwischen persönlicher Cloud &amp; Gruppenordnern:</strong> Sie können Dateien und komplette Ordner in beiden Richtungen zwischen Ihren persönlichen Ordnern und allen Gruppenordnern (mit Schreibrecht) verschieben oder kopieren.</li>
+                <li><strong>In freigegebene Ordner übertragen:</strong> Haben andere Benutzer Ihnen für einen Ordner Schreibrechte (<strong>✏️ Lesen &amp; Schreiben</strong>) eingeräumt, können Sie Dateien direkt dorthin hochladen, kopieren oder verschieben.</li>
             </ul>
         </section>
 
-        <!-- 4. Teilen & Gruppenordner -->
+        <!-- 4. Teilen & 3-stufiges Berechtigungssystem -->
         <section id="teilen-gruppen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">🔗</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Freigaben &amp; Gruppenordner</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Freigaben &amp; 3-stufige Berechtigungen</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Öffentliche Freigabelinks:</strong> Über das Teilen-Symbol erstellen Sie für Dateien oder ganze Ordner einen kryptografisch gesicherten Link – optional mit <strong>Passwortschutz</strong> und <strong>Ablaufdatum</strong>.</li>
-                <li><strong>Direktes Teilen mit Cloud-Benutzern:</strong> Im selben Teilen-Dialog können Sie Dateien oder Ordner für andere registrierte Benutzer freigeben. Diese erscheinen dort unter <em>„Für mich freigegeben“</em>.</li>
-                <li><strong>Gruppenordner:</strong> Gemeinsame Team-Ordner finden Sie im Bereich <em>„Gruppenordner“</em>. Je nach Berechtigung haben Sie dort Lesezugriff (👁️ Nur Lesen) oder vollen Schreibzugriff (✏️ Lesen &amp; Schreiben).</li>
+                <li><strong>Direktes Teilen mit Cloud-Benutzern (3 Stufen):</strong> Geben Sie Dateien oder Ordner gezielt für andere Benutzer frei (sichtbar unter <em>„Für mich freigegeben“</em>). Für Ordner wählen Sie zwischen:
+                    <ul class="list-disc pl-4 mt-1 space-y-0.5">
+                        <li><strong>👁️ Nur Lesen:</strong> Ansehen &amp; Herunterladen</li>
+                        <li><strong>✏️ Lesen &amp; Schreiben:</strong> Zusätzlich eigene Dateien hochladen &amp; Unterordner anlegen</li>
+                        <li><strong>🗑️ Lesen, Schreiben &amp; Löschen:</strong> Vollzugriff inkl. Löschen von Dateien &amp; Unterordnern</li>
+                    </ul>
+                </li>
+                <li><strong>Datenschutz-Standard:</strong> Neue Benutzerkonten sind standardmäßig in der Teilen- und Chat-Auswahl anderer Nutzer verborgen und können ihre Sichtbarkeit jederzeit in den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> aktivieren.</li>
+            </ul>
+        </section>
+
+        <!-- 4a. Kalender & Terminverwaltung -->
+        <section id="kalender-termine" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold">📅</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Kalender, Freigaben &amp; .ics-Abo</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Monats- &amp; Listenansicht (<a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kalender</a>):</strong> Erstellen Sie Einzel- oder Ganztagestermine mit Farbkodierung, Ort, Beschreibung, Wiederholungen (täglich, wöchentlich, monatlich, jährlich) und verknüpften Cloud-Dateien.</li>
+                <li><strong>Kalender teilen (3 Berechtigungsstufen):</strong> Teilen Sie Ihren Kalender mit sichtbaren Benutzern oder ganzen Benutzergruppen – wahlweise mit <strong>👁️ Nur Lesen</strong>, <strong>✏️ Lesen &amp; Bearbeiten</strong> oder <strong>🗑️ Lesen, Bearbeiten &amp; Löschen</strong>. Termine mit dem Häkchen <em>„🔒 Privat“</em> bleiben trotz Kalender-Freigabe nur für Sie selbst sichtbar.</li>
+                <li><strong>.ics-Import, Export &amp; Smartphone-Abo:</strong> Importieren oder exportieren Sie <code>.ics</code>-Kalenderdateien oder aktivieren Sie Ihren persönlichen <strong>.ics-Abo-Link</strong> zur Live-Synchronisation mit iPhone/iPad, Android, Thunderbird oder Outlook.</li>
+            </ul>
+        </section>
+
+        <!-- 4b. Integrierter Messenger / Chat & System-Benachrichtigungen -->
+        <section id="chat-nachrichten" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold">💬</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Chat, Rundnachrichten &amp; Meldungen</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Direktnachrichten &amp; Ankündigungen (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Schreiben Sie 1:1-Nachrichten mit freigegebenen Cloud-Benutzern oder lesen Sie offizielle Rundnachrichten des Administrators im Kanal <em>„📢 Ankündigungen (Alle)“</em>.</li>
+                <li><strong>Verlauf leeren &amp; Mobil-Darstellung:</strong> Über den Button <em>„🗑️ Verlauf leeren“</em> können Sie einen Chatverlauf jederzeit vollständig bereinigen. Auf Smartphones schaltet der Messenger automatisch in eine übersichtliche 1-Spalten-Navigation (Kontaktliste &leftrightarrow; Vollbild-Chat).</li>
+                <li><strong>System-Benachrichtigungen am PC &amp; Mobilgerät:</strong> Bei neuen Nachrichten blendet MiniCloud auf Wunsch native Betriebssystem-/Smartphone-Meldungen ein. In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> legen Sie fest, ob Sie <em>Nur System-Benachrichtigungen</em> (Standard), zusätzlich ein <em>In-App-Banner</em> oder gar keine Meldungen wünschen.</li>
             </ul>
         </section>
     </div>
 
-    <!-- 4b. TRESOR-MODUS (Einzeldatei-Verschlüsselung AES-256 Zero-Knowledge) -->
+    <!-- 4c. TRESOR-MODUS (Einzeldatei-Verschlüsselung AES-256 Zero-Knowledge) -->
     <section id="tresor-modus" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-800/70 p-5 sm:p-6 shadow-xs mb-6 space-y-4">
         <div class="flex items-center gap-2.5">
             <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">🔒</span>
@@ -1018,11 +1068,12 @@ require_once __DIR__ . '/includes/header.php';
         <section id="papierkorb-themes" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">🗑️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Papierkorb, Farbdesigns, Sprache &amp; 2FA</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Papierkorb, Farbdesigns, Meldungsdauer &amp; 2FA</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 Tage Papierkorb-Aufbewahrung:</strong> Gelöschte Dateien wandern zunächst in den <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Papierkorb</a>. Dort können sie 30 Tage lang mit einem Klick wiederhergestellt oder sofort endgültig gelöscht werden.</li>
-                <li><strong>Einstellungen (⚙️ Zahnrad-Symbol):</strong> Über das Zahnrad-Symbol oben rechts in der Kopfzeile (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a>) wählen Sie zwischen 5 Sprachen, 8 augenfreundlichen Farbdesigns, ändern Ihr Passwort oder schalten die optionale <strong>Zwei-Faktor-Authentifizierung (2FA per E-Mail)</strong> selbstständig ein oder aus.</li>
+                <li><strong>13 Farbdesigns &amp; 5 Sprachen:</strong> In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> (⚙️ Zahnrad-Symbol) wählen Sie zwischen 5 Sprachen sowie 13 augenfreundlichen Farbschemata (5 helle und 8 dunkle Designs inkl. <em>🌌 Mitternacht</em>).</li>
+                <li><strong>Individuelle Komfort- &amp; Sicherheitsoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie optional die <strong>Zwei-Faktor-Authentifizierung (2FA per E-Mail)</strong> fest.</li>
             </ul>
         </section>
 
@@ -1033,9 +1084,9 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Hinweise für Administratoren</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Branding, SMTP &amp; Impressum:</strong> Unter <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> (erreichbar über ⚙️ Einstellungen) passen Sie Anwendungstitel, Untertitel, Logo, SMTP-Versand und den Impressumstext an.</li>
-                <li><strong>Benutzer &amp; Speicher-Quotas:</strong> Legen Sie neue Konten an, vergeben Sie individuelles Speicherkontingent (in MB) und setzen Sie bei Bedarf Passwörter zurück.</li>
-                <li><strong>Benutzergruppen &amp; Gruppenordner:</strong> Erstellen Sie zuerst unter <em>„Benutzergruppen verwalten“</em> Gruppen und weisen Sie anschließend unter <em>„Gruppenordner &amp; Zugriffsrechte“</em> Lese- oder Schreibrechte an ganze Gruppen oder einzelne Benutzer zu.</li>
+                <li><strong>1-Klick-System-Update über GitHub:</strong> Unter <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> prüft MiniCloud per Klick den aktuellen Commit-Stand auf GitHub und aktualisiert alle Programmdateien vollautomatisch, während <code>uploads/</code> und die Datenbank-Zugangsdaten in <code>config/database.php</code> geschützt bleiben.</li>
+                <li><strong>Module, Selbstregistrierung &amp; Branding:</strong> Schalten Sie das Kalender- oder Chat-Modul global ein/aus, aktivieren Sie bei Bedarf die Selbstregistrierung (optional mit Einladungs-Code &amp; Start-Kontingent) und passen Sie Titel, Logo, SMTP-Server und Impressum an.</li>
+                <li><strong>Live-Server-Monitoring, Benutzer &amp; Gruppen:</strong> Überwachen Sie CPU-Last, RAM und Festplattenplatz in Echtzeit, verwalten Sie Benutzerkonten, Speicher-Quotas (in MB) und Benutzergruppen (z. B. für gemeinsame Kalender-Freigaben).</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -1060,14 +1111,14 @@ require_once __DIR__ . '/includes/header.php';
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
                 <h3 class="font-bold text-slate-900 dark:text-white">1. Authentifizierung, 2FA &amp; Brute-Force-Schutz</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Geschlossenes Benutzersystem ohne öffentliche Selbstregistrierung. Passwörter werden ausschließlich mittels <strong>BCRYPT (Cost-Faktor 12)</strong> gehasht. Benutzer können optional eine E-Mail-2FA aktivieren. Nach <strong>5 Fehlversuchen innerhalb von 5 Minuten</strong> greift eine automatische temporäre Sperre (sowohl beim Login als auch bei passwortgeschützten Freigabelinks).
+                    Geschlossenes Benutzersystem (Selbstregistrierung standardmäßig deaktiviert und optional nur per Einladungs-Code). Passwörter werden ausschließlich mittels <strong>BCRYPT (Cost-Faktor 12)</strong> gehasht. Benutzer können optional eine E-Mail-2FA aktivieren. Nach <strong>5 Fehlversuchen innerhalb von 5 Minuten</strong> greift eine automatische temporäre Sperre (Login, Registrierung und passwortgeschützte Freigabelinks).
                 </p>
             </div>
 
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">2. Session- &amp; Zugriffsschutz (RBAC)</h3>
+                <h3 class="font-bold text-slate-900 dark:text-white">2. Session-, Timeout- &amp; Zugriffsschutz (RBAC)</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Sessions nutzen <code>session.use_strict_mode</code>, <code>HttpOnly</code>, <code>SameSite=Lax</code> und bei HTTPS <code>Secure</code>. Nach erfolgreichem Login erfolgt <code>session_regenerate_id(true)</code> gegen Session-Fixation. Bei jedem Seitenaufruf gleicht das System Benutzerexistenz und Administrator-Status in Echtzeit mit der Datenbank ab, sodass gelöschte Konten oder entzogene Rechte sofort wirksam sind.
+                    Sessions nutzen <code>session.use_strict_mode</code>, <code>HttpOnly</code>, <code>SameSite=Lax</code>, bei HTTPS <code>Secure</code> sowie ein konfigurierbares Inaktivitäts-Timeout (Standard: 30 Min.). Nach erfolgreichem Login erfolgt <code>session_regenerate_id(true)</code> gegen Session-Fixation. Bei jedem Seitenaufruf gleicht das System Benutzerexistenz und Administrator-Status in Echtzeit mit der Datenbank ab.
                 </p>
             </div>
 
@@ -1081,7 +1132,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
                 <h3 class="font-bold text-slate-900 dark:text-white">4. Schutz vor SQLi, XSS, CSRF &amp; Path-Traversal</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Alle Datenbankabfragen nutzen echte <strong>PDO Prepared Statements</strong> (<code>ATTR_EMULATE_PREPARES = false</code>). Sämtliche Ausgaben werden per <code>htmlspecialchars(..., ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')</code> bzw. <code>JSON_HEX_TAG</code> maskiert. Jede zustandsändernde Aktion erfordert einen <code>POST</code>-Request mit kryptografischem 256-Bit-CSRF-Token (<code>hash_equals</code>). Pfadangaben werden strikt gegen <code>..</code> und SQL-Wildcards (<code>%</code>) bereinigt.
+                    Alle Datenbankabfragen nutzen echte <strong>PDO Prepared Statements</strong> (<code>ATTR_EMULATE_PREPARES = false</code>). Sämtliche Ausgaben werden per <code>htmlspecialchars(..., ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')</code> bzw. <code>JSON_HEX_TAG</code> maskiert. Jede zustandsändernde Aktion erfordert einen <code>POST</code>-Request mit kryptografischem 256-Bit-CSRF-Token (<code>hash_equals</code>). Pfadangaben und ZIP-Update-Archive werden strikt gegen <code>..</code> und SQL-Wildcards (<code>%</code>) bereinigt.
                 </p>
             </div>
         </div>
@@ -1092,12 +1143,11 @@ require_once __DIR__ . '/includes/header.php';
                 Ergebnisse der durchgeführten Sicherheitsüberprüfung &amp; Härtung
             </h3>
             <ul class="text-xs sm:text-sm text-emerald-900 dark:text-emerald-200/90 space-y-1.5 list-disc pl-5">
-                <li><strong>Script-Kontext-Härtung (XSS-Prävention):</strong> JSON-Serialisierung für die Dateivorschau und CSRF-Tokens mit <code>JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT</code> abgesichert.</li>
-                <li><strong>DOM-XSS-Schutz im Teilen-Dialog:</strong> Vollständige HTML-Maskierung (<code>escapeHtml</code>) aller dynamisch geladenen Freigabe-URLs, Ablaufdaten und Benutzernamen.</li>
-                <li><strong>Host-Header- &amp; Open-Redirect-Schutz:</strong> Strikte Regex-Validierung von <code>HTTP_HOST</code> bei der Link-Generierung sowie Whitelist-Prüfung lokaler Zielseiten beim Theme-Wechsel.</li>
-                <li><strong>Forced-Logout-Schutz:</strong> Abmeldung (<code>logout.php</code>) akzeptiert ausschließlich CSRF-geschützte <code>POST</code>-Anfragen.</li>
-                <li><strong>Brute-Force-Sperre:</strong> Ratenbegrenzung (max. 5 Fehlversuche pro 5 Minuten) für Benutzer-Login und passwortgeschützte Freigabelinks.</li>
-                <li><strong>SVG-Sanitisierung &amp; Verzeichnisrechte:</strong> Abwehr aktiver Skriptelemente in hochgeladenen SVG-Logos sowie Härtung der Verzeichnisberechtigungen auf <code>0750</code>.</li>
+                <li><strong>Script-Kontext- &amp; DOM-XSS-Härtung:</strong> JSON-Serialisierung in Inline-Skripten (Dateivorschau, Chat-Kanal, CSRF-Tokens) mit <code>JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT</code> sowie vollständige HTML-Maskierung (<code>escapeHtml</code>) im Teilen-Dialog, Chat-Polling und GitHub-Updater.</li>
+                <li><strong>Datenschutz-Sichtbarkeit &amp; 3-Stufen-Rechteprüfung:</strong> Strikte serverseitige Prüfung von <code>allow_user_sharing = 1</code> sowie granulare Berechtigungsprüfung (<code>can_write</code>, <code>can_delete</code>, <code>can_edit</code>) für Datei-, Ordner- und Kalender-Freigaben.</li>
+                <li><strong>Abgesicherter GitHub-Updater:</strong> Zertifikatsvalidierung (<code>CURLOPT_SSL_VERIFYPEER</code> / <code>CURLOPT_SSL_VERIFYHOST = 2</code>), Schutz vor Zip-Slip (<code>..</code>-Filter) sowie automatischer Erhalt von <code>uploads/</code> und <code>config/database.php</code>-Zugangsdaten.</li>
+                <li><strong>Host-Header-, Open-Redirect- &amp; Forced-Logout-Schutz:</strong> Strikte Regex-Validierung von <code>HTTP_HOST</code>, Whitelist-Prüfung lokaler Zielseiten und CSRF-geschützter <code>POST</code>-Logout.</li>
+                <li><strong>Brute-Force-Sperre &amp; SVG-Sanitisierung:</strong> Ratenbegrenzung für Login, Registrierung und Freigabelinks sowie Abwehr aktiver Skriptelemente in SVG-Logos.</li>
             </ul>
         </div>
     </section>
@@ -1125,33 +1175,27 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, two_factor_code_hash, two_factor_expires_at, is_admin, theme, storage_quota, created_at</code></td>
-                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale 2FA per E-Mail, Rollensteuerung, Kontingent &amp; UI-Theme (personenbezogen)</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota, created_at</code></td>
+                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale E-Mail-2FA, Rollensteuerung, Kontingent, UI-Präferenzen &amp; Datenschutz-Sichtbarkeit (personenbezogen)</td>
                         <td class="py-3 px-4">Bis zur Löschung des Benutzerkontos durch den Administrator (Kaskadenlöschung)</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files</td>
-                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
-                        <td class="py-3 px-4">Metadaten hochgeladener Dateien &amp; Zuordnung zu Benutzern/Gruppenordnern</td>
+                        <td class="py-3 px-4"><code>id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
+                        <td class="py-3 px-4">Metadaten hochgeladener Dateien &amp; Zuordnung zu Benutzern und Ordnerpfaden</td>
                         <td class="py-3 px-4">Aktiv bis zum Löschen; im Papierkorb (<code>deleted_at</code>) automatische Endlöschung nach 30 Tagen</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">user_folders</td>
-                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, folder_path, created_at</code></td>
-                        <td class="py-3 px-4">Verzeichnisstruktur (inkl. leerer Ordner) in der persönlichen Cloud &amp; in Gruppenordnern</td>
-                        <td class="py-3 px-4">Bis zum Löschen/Verschieben des Ordners oder Löschung des Benutzers/Gruppenordners</td>
+                        <td class="py-3 px-4"><code>id, user_id, folder_path, created_at</code></td>
+                        <td class="py-3 px-4">Verzeichnisstruktur (inkl. leerer Ordner) in der persönlichen Cloud</td>
+                        <td class="py-3 px-4">Bis zum Löschen/Verschieben des Ordners oder Löschung des Benutzers</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">groups &amp; group_members</td>
                         <td class="py-3 px-4"><code>id, name, description</code> / <code>group_id, user_id</code></td>
-                        <td class="py-3 px-4">Benutzergruppen und Mitgliedschaftszuordnung für Team-Berechtigungen</td>
+                        <td class="py-3 px-4">Benutzergruppen und Mitgliedschaftszuordnung (z. B. für gemeinsame Kalender-Termine &amp; Kalender-Freigaben)</td>
                         <td class="py-3 px-4">Bis zum Entfernen der Mitgliedschaft oder Löschen der Gruppe / des Benutzers</td>
-                    </tr>
-                    <tr>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">group_folders &amp; group_folder_permissions</td>
-                        <td class="py-3 px-4"><code>id, name, description, created_by</code> / <code>group_folder_id, user_id, group_id, can_write</code></td>
-                        <td class="py-3 px-4">Gemeinsame Gruppenordner sowie Lese-/Schreibberechtigungen für Benutzer &amp; Gruppen</td>
-                        <td class="py-3 px-4">Bis zum Widerruf der Berechtigung oder Löschung des Gruppenordners durch den Admin</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">shares</td>
@@ -1161,14 +1205,26 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">user_shares</td>
-                        <td class="py-3 px-4"><code>id, file_id, folder_path, owner_id, shared_with_user_id, created_at</code></td>
-                        <td class="py-3 px-4">Interne Direktfreigaben von Dateien oder Ordnern zwischen Cloud-Benutzern</td>
+                        <td class="py-3 px-4"><code>id, file_id, folder_path, owner_id, shared_with_user_id, can_write, can_delete, created_at</code></td>
+                        <td class="py-3 px-4">Interne Direktfreigaben von Dateien oder Ordnern zwischen Cloud-Benutzern mit 3-stufigen Rechten (Nur Lesen, Schreiben, Löschen)</td>
                         <td class="py-3 px-4">Bis zum Widerruf durch den Eigentümer oder Löschung der Datei / des Benutzers</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">calendar_events &amp; calendar_shares</td>
+                        <td class="py-3 px-4"><code>user_id, title, start_at, end_at, all_day, recurrence, group_id, shared_user_id, attached_file_id, is_private</code> / <code>owner_user_id, target_user_id, target_group_id, can_edit, can_delete</code></td>
+                        <td class="py-3 px-4">Persönliche und geteilte Kalendertermine, Serien-Wiederholungen sowie 3-stufige Kalender-Freigaben an Benutzer oder Gruppen</td>
+                        <td class="py-3 px-4">Bis zur Löschung des Termins / Widerruf der Kalender-Freigabe oder Löschung des Benutzers</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">messages &amp; message_broadcast_reads</td>
+                        <td class="py-3 px-4"><code>id, sender_id, recipient_id, is_broadcast, message_text, is_read, created_at</code> / <code>user_id, last_read_broadcast_id</code></td>
+                        <td class="py-3 px-4">Direkte 1:1-Chat-Nachrichten zwischen Cloud-Benutzern sowie offizielle Admin-Rundnachrichten samt Lesestatus</td>
+                        <td class="py-3 px-4">Bis zur Einzellöschung, Leerung des Chatverlaufs (<em>„Verlauf leeren“</em>) oder Kontolöschung</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">settings</td>
                         <td class="py-3 px-4"><code>setting_key, setting_value, updated_at</code></td>
-                        <td class="py-3 px-4">Systemeinstellungen (<code>app_title, app_subtitle, logo_data_uri, imprint_text</code>)</td>
+                        <td class="py-3 px-4">Systemeinstellungen (Branding, SMTP, Modulschalter <code>enable_calendar</code>/<code>enable_chat</code>, Registrierung, <code>installed_commit_sha</code>)</td>
                         <td class="py-3 px-4">Dauerhaft (durch Administrator jederzeit änderbar)</td>
                     </tr>
                     <tr>

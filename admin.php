@@ -207,6 +207,8 @@ function fetchUrlBytes(string $url, ?string &$errorOut = null): ?string
                 CURLOPT_MAXREDIRS      => 5,
                 CURLOPT_TIMEOUT        => 30,
                 CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
                 CURLOPT_USERAGENT      => 'MiniCloud-Updater/1.5 (+https://github.com/uwebenzelrath/MiniCloud)',
                 CURLOPT_HTTPHEADER     => ['Accept: application/vnd.github+json'],
             ]);
@@ -228,6 +230,10 @@ function fetchUrlBytes(string $url, ?string &$errorOut = null): ?string
             'timeout'         => 30,
             'follow_location' => 1,
             'header'          => "User-Agent: MiniCloud-Updater/1.5\r\nAccept: application/vnd.github+json\r\n",
+        ],
+        'ssl' => [
+            'verify_peer'      => true,
+            'verify_peer_name' => true,
         ],
     ]);
     $res = @file_get_contents($url, false, $ctx);
@@ -1963,10 +1969,15 @@ async function checkGithubUpdateNow() {
             headers: { 'Accept': 'application/json' }
         });
         const d = await res.json();
+        const esc = (s) => {
+            const div = document.createElement('div');
+            div.textContent = s ?? '';
+            return div.innerHTML;
+        };
         if (!d || !d.ok) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300';
             badge.textContent = 'Prüfung fehlgeschlagen';
-            list.innerHTML = `<p class="text-red-600 dark:text-red-400 py-3">${d && d.error ? d.error : 'GitHub-API nicht erreichbar.'}</p>`;
+            list.innerHTML = `<p class="text-red-600 dark:text-red-400 py-3">${esc(d && d.error ? d.error : 'GitHub-API nicht erreichbar.')}</p>`;
             return;
         }
 
@@ -1979,11 +1990,6 @@ async function checkGithubUpdateNow() {
         }
 
         if (Array.isArray(d.commits) && d.commits.length > 0) {
-            const esc = (s) => {
-                const div = document.createElement('div');
-                div.textContent = s ?? '';
-                return div.innerHTML;
-            };
             list.innerHTML = d.commits.map((c, idx) => {
                 const isInstalled = d.installed_sha && c.sha === d.installed_sha;
                 return `

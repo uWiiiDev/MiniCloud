@@ -15,7 +15,12 @@ CREATE TABLE IF NOT EXISTS `users` (
     `two_factor_expires_at` DATETIME DEFAULT NULL COMMENT 'Ablaufzeitpunkt des aktuellen 2FA-Codes (10 Min.)',
     `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Fehlversuche beim aktuellen 2FA-Code',
     `is_admin` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Administrator, 0 = Standardbenutzer',
-    `theme` VARCHAR(24) NOT NULL DEFAULT 'light' COMMENT 'light, dark, ocean, forest',
+    `theme` VARCHAR(24) NOT NULL DEFAULT 'light' COMMENT '13 Farbthemes inkl. light, dark, ocean, forest, obsidian',
+    `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30 COMMENT 'Inaktivitäts-Timeout in Minuten (0 = Nie)',
+    `flash_duration` SMALLINT UNSIGNED NOT NULL DEFAULT 5 COMMENT 'Anzeigedauer für Statusmeldungen in Sekunden (0 = manuell schließen)',
+    `chat_notify_mode` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1 = Nur System-Benachrichtigung, 2 = System + In-App, 3 = Nur In-App, 0 = Aus',
+    `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Für andere Nutzer beim Teilen/Chat sichtbar, 0 = Datenschutz (verborgen)',
+    `calendar_token` VARCHAR(64) DEFAULT NULL COMMENT 'Persönlicher Token für .ics Kalender-Abo-Feed',
     `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600 COMMENT 'Standard: 100 MB in Bytes',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -84,6 +89,7 @@ CREATE TABLE IF NOT EXISTS `files` (
     `folder_path` VARCHAR(512) NOT NULL DEFAULT '' COMMENT 'Optionaler relativer Ordnerpfad bei Ordner-Uploads',
     `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Dateigröße in Bytes',
     `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
+    `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Mit individuellem Tresor-Passwort (AES-256-GCM) verschlüsselt',
     `upload_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL COMMENT 'Zeitstempel bei Verschiebung in den Papierkorb (30 Tage Aufbewahrung)',
     PRIMARY KEY (`id`),
@@ -120,6 +126,8 @@ CREATE TABLE IF NOT EXISTS `user_shares` (
     `folder_path` VARCHAR(500) DEFAULT NULL,
     `owner_id` INT UNSIGNED NOT NULL,
     `shared_with_user_id` INT UNSIGNED NOT NULL,
+    `can_write` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Lesen & Schreiben (Upload & Unterordner), 0 = Nur Lesen',
+    `can_delete` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Darf Dateien/Unterordner im geteilten Ordner löschen',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `idx_user_shares_unique` (`file_id`, `shared_with_user_id`),
@@ -143,10 +151,83 @@ CREATE TABLE IF NOT EXISTS `user_folders` (
     CONSTRAINT `fk_uf_group_folder` FOREIGN KEY (`group_folder_id`) REFERENCES `group_folders` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 10. Tabelle für Systemeinstellungen (Anwendungstitel, Logo, Impressum)
+-- 10. Tabelle für Systemeinstellungen (Anwendungstitel, Logo, Impressum, Module, GitHub-Updater)
 CREATE TABLE IF NOT EXISTS `settings` (
     `setting_key` VARCHAR(64) NOT NULL,
     `setting_value` MEDIUMTEXT DEFAULT NULL,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. Tabelle für Kalender-Termine (Einzeltermine, Ganztagestermine, Serien, Gruppen- & Direktfreigaben)
+CREATE TABLE IF NOT EXISTS `calendar_events` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL COMMENT 'Ersteller / Eigentümer des Termins',
+    `title` VARCHAR(190) NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `location` VARCHAR(190) DEFAULT NULL,
+    `start_at` DATETIME NOT NULL,
+    `end_at` DATETIME NOT NULL,
+    `all_day` TINYINT(1) NOT NULL DEFAULT 0,
+    `recurrence` VARCHAR(20) NOT NULL DEFAULT 'none' COMMENT 'none, daily, weekly, monthly, yearly',
+    `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
+    `group_id` INT UNSIGNED DEFAULT NULL COMMENT 'Optional: Geteilt mit Benutzergruppe',
+    `group_can_edit` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Gruppenmitglieder dürfen bearbeiten',
+    `shared_user_id` INT UNSIGNED DEFAULT NULL COMMENT 'Optional: Direkt geteilt mit einzelnem Benutzer',
+    `attached_file_id` INT UNSIGNED DEFAULT NULL COMMENT 'Optional: Verknüpfte Datei aus der Cloud',
+    `is_private` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Privat (trotz Kalender-Freigabe nur für Eigentümer sichtbar)',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ce_user` (`user_id`),
+    KEY `idx_ce_start` (`start_at`),
+    KEY `idx_ce_group` (`group_id`),
+    KEY `idx_ce_shared_user` (`shared_user_id`),
+    CONSTRAINT `fk_ce_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_ce_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_ce_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_ce_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 12. Tabelle für vollständige Kalender-Freigaben (eigenen Kalender mit Benutzern oder Gruppen teilen)
+CREATE TABLE IF NOT EXISTS `calendar_shares` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_user_id` INT UNSIGNED NOT NULL COMMENT 'Kalender-Eigentümer',
+    `target_user_id` INT UNSIGNED DEFAULT NULL COMMENT 'Freigegeben für einzelnen Benutzer',
+    `target_group_id` INT UNSIGNED DEFAULT NULL COMMENT 'Freigegeben für Benutzergruppe',
+    `can_edit` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Darf Termine eintragen/bearbeiten, 0 = Nur Lesen',
+    `can_delete` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Darf Termine im geteilten Kalender auch löschen',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cs_owner` (`owner_user_id`),
+    KEY `idx_cs_target_user` (`target_user_id`),
+    KEY `idx_cs_target_group` (`target_group_id`),
+    CONSTRAINT `fk_cs_owner` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_cs_target_user` FOREIGN KEY (`target_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_cs_target_group` FOREIGN KEY (`target_group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 13. Tabelle für interne Nachrichten (Direkt-Chat zwischen Benutzern & Admin-Rundnachrichten)
+CREATE TABLE IF NOT EXISTS `messages` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `sender_id` INT UNSIGNED NOT NULL,
+    `recipient_id` INT UNSIGNED DEFAULT NULL COMMENT 'NULL bei Rundnachricht an alle (is_broadcast = 1)',
+    `is_broadcast` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Admin-Rundnachricht an alle Benutzer',
+    `message_text` TEXT NOT NULL,
+    `is_read` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Vom Empfänger gelesen (bei Direktnachrichten)',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_msg_sender` (`sender_id`),
+    KEY `idx_msg_recipient_read` (`recipient_id`, `is_read`),
+    KEY `idx_msg_broadcast` (`is_broadcast`, `id`),
+    CONSTRAINT `fk_msg_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_msg_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14. Tabelle für gelesene Admin-Rundnachrichten pro Benutzer
+CREATE TABLE IF NOT EXISTS `message_broadcast_reads` (
+    `user_id` INT UNSIGNED NOT NULL,
+    `last_read_broadcast_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`),
+    CONSTRAINT `fk_mbr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

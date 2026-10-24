@@ -914,7 +914,7 @@ require_once __DIR__ . '/includes/header.php';
     const input = document.getElementById('chatMessageInput');
     const form = document.getElementById('chatSendForm');
     const btnQuickPush = document.getElementById('btnQuickEnablePush');
-    const activeChannel = <?= json_encode($rawChannel) ?>;
+    const activeChannel = <?= json_encode($rawChannel, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const chatNotifyMode = <?= (int)getCurrentChatNotifyMode() ?>;
     let lastMsgId = <?= (int)$lastMessageId ?>;
 

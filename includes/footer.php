@@ -56,7 +56,7 @@ $versionInfo    = getAppVersionInfo();
             <span class="text-slate-300 dark:text-slate-700">&bull;</span>
             <p class="flex items-center gap-1.5">
                 <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>BCRYPT-geschützt &bull; Freigabelinks &bull; Gruppenordner</span>
+                <span>BCRYPT &amp; AES-256 &bull; Freigaben &bull; Kalender &amp; Chat</span>
             </p>
         </div>
     </div>
@@ -147,7 +147,7 @@ $versionInfo    = getAppVersionInfo();
     themeSelect.addEventListener('change', () => {
         const val = themeSelect.value;
         const html = document.documentElement;
-        const darkThemes = ['dusk', 'mocha', 'petrol', 'plum', 'dark', 'ocean', 'forest'];
+        const darkThemes = ['dusk', 'mocha', 'petrol', 'plum', 'dark', 'ocean', 'forest', 'obsidian'];
         html.classList.remove(
             'dark',
             'theme-light',
@@ -161,7 +161,8 @@ $versionInfo    = getAppVersionInfo();
             'theme-plum',
             'theme-dark',
             'theme-ocean',
-            'theme-forest'
+            'theme-forest',
+            'theme-obsidian'
         );
         html.classList.add('theme-' + val);
         if (darkThemes.includes(val)) {

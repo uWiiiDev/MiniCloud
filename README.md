@@ -1,33 +1,41 @@
 # ☁️ MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher (PHP 8.2+ & MySQL)
 
-**🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces (z. B. STRATO, IONOS, All-Inkl, Netcup) auf Basis von **PHP 8.2+** und **MySQL / MariaDB** – **100 % DSGVO-konform**, ohne externe Abhängigkeiten und ohne komplizierte Einrichtung.  
-**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage alternative built with **PHP 8.2+** and **MySQL / MariaDB** — featuring optional Email 2FA (Postfix or SMTP), group folders, public/internal file sharing, trash retention, 12 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
+**🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces (z. B. STRATO, IONOS, All-Inkl, Netcup) auf Basis von **PHP 8.2+** und **MySQL / MariaDB** – **100 % DSGVO-konform**, inklusive Datei- & Ordnerverwaltung, Tresor-Verschlüsselung (AES-256), Kalender mit `.ics`-Abo, integriertem Messenger mit System-Benachrichtigungen und **1-Klick-GitHub-Updater**.  
+**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, Email 2FA (Postfix or SMTP), 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
 
 ---
 
 ## ✨ Kernfunktionen im Überblick
 
-1. **Dateiverwaltung & Direkt-Vorschau (`index.php`)**
+1. **Dateiverwaltung, Tresor-Modus & Direkt-Vorschau (`index.php`, `vault_action.php`)**
    - Drag-&-Drop-Upload für einzelne Dateien, Mehrfachauswahl und komplette Ordnerstrukturen.
+   - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio und Text-/Codedateien (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
    - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
-2. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
-   - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick an ihren ursprünglichen Ort wiederhergestellt werden.
-3. **Öffentliche Freigabelinks & Interne Direktfreigaben (`share.php`)**
+2. **Öffentliche Freigabelinks & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
    - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz und Ablaufdatum.
-   - Direktfreigabe einzelner Dateien oder ganzer Ordner an andere Cloud-Benutzer (*„Für mich freigegeben“*).
-4. **Gruppen & Gruppenordner (`admin.php`)**
-   - Administratoren können gemeinsame Gruppenordner anlegen und gezielt einzelne Benutzer oder ganze Benutzergruppen berechtigen (*Lesen & Schreiben* oder *Nur Lesen*).
-5. **Zwei-Faktor-Authentifizierung (2FA) per E-Mail (`login.php`, `admin.php`)**
-   - Pro Benutzer optional aktivierbarer 2FA-Schutz mit 6-stelligem Einmalcode per E-Mail.
-   - Unterstützt sowohl lokalen Versand (`PHP mail()` / Postfix) als auch **externe SMTP-Server** (z. B. `smtp.strato.de`, `smtp.ionos.de`) inklusive integriertem **Test-E-Mail-Button** im Admin-Bereich.
-6. **Smartphone-App (PWA) für Android & Apple iOS (`manifest.php`, `app-icon.php`)**
-   - Direkt über den Browser als Vollbild-App auf Android-Smartphones und iPhones/iPads installierbar – inklusive automatischer App-Icon-Erzeugung aus dem eigenen Logo.
-7. **5 Sprachen, 12 Farbthemes & Eigenes Branding**
+   - Direktfreigabe einzelner Dateien oder ganzer Ordner an andere Cloud-Benutzer (*„Für mich freigegeben“*) mit **3 Berechtigungsstufen** für Ordner: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** (eigene Dateien hochladen & Unterordner anlegen) oder **🗑️ Lesen, Schreiben & Löschen**.
+   - **Datenschutz-Standard (`allow_user_sharing = 0`):** Benutzer sind standardmäßig in der Teilen- und Chat-Auswahl anderer Nutzer verborgen und können ihre Sichtbarkeit selbst in den Einstellungen freigeben.
+3. **Kalender, Terminserien & Smartphone-.ics-Abo (`calendar.php`)**
+   - Übersichtliche Monats- und Listenansicht für Einzel- und Ganztagestermine mit Farbkodierung, Wiederholungen (täglich, wöchentlich, monatlich, jährlich) und verknüpften Cloud-Dateien.
+   - **Kalender teilen (3 Berechtigungsstufen):** Eigenen Kalender für sichtbare Benutzer oder Benutzergruppen freigeben (*Nur Lesen*, *Lesen & Bearbeiten*, *Lesen, Bearbeiten & Löschen*) – private Termine (`🔒 Privat`) bleiben geschützt.
+   - `.ics`-Import/Export sowie persönlicher **`.ics`-Abo-Link** zur Live-Synchronisation mit Smartphone (iOS/Android), Thunderbird oder Outlook.
+4. **Integrierter Messenger, Rundnachrichten & System-Benachrichtigungen (`messages.php`)**
+   - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
+   - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
+5. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
+   - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
+6. **Zwei-Faktor-Authentifizierung (2FA), Einstellungen & Optionale Registrierung (`login.php`, `settings.php`, `register.php`)**
+   - Pro Benutzer optional aktivierbarer 2FA-Schutz mit 6-stelligem Einmalcode per E-Mail (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button).
+   - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
+   - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
+7. **1-Klick-GitHub-Updater & Live-Server-Monitoring (`admin.php`)**
+   - Direkt in der Administration prüft MiniCloud auf neue Commits im GitHub-Repository und aktualisiert alle Programmdateien per 1-Klick-Update, während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` vollständig erhalten bleiben.
+   - Echtzeit-Monitoring für CPU-Auslastung, Arbeitsspeicher (RAM), Festplattenspeicher und Cloud-Belegung.
+8. **Smartphone-App (PWA), 5 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
+   - Als Vollbild-App (PWA) auf Android, iPhone/iPad und Desktop installierbar.
    - **5 Sprachen integriert:** 🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇳🇱 Nederlands.
-   - **12 augenschonende Farbthemes** (5 sanfte helle, 4 halbdunkle und 3 dunkle Designs).
-   - Frei anpassbarer Anwendungstitel, Untertitel, eigenes Logo (inkl. Browser-Tab-Favicon) und Impressum.
-8. **100 % DSGVO-konform & ohne externe Serveraufrufe**
+   - **13 augenschonende Farbthemes** (5 sanfte helle, 4 halbdunkle und 4 dunkle Designs inkl. *🌌 Mitternacht*).
    - Keine Google Fonts, keine externen CDNs (Tailwind CSS liegt lokal unter `assets/tailwind.js`) und keine Tracking-Cookies.
 
 ---
@@ -171,39 +179,43 @@ MiniCloud/
 ├── assets/
 │   └── tailwind.js           # Lokal eingebundenes Tailwind CSS (100 % DSGVO-konform ohne externe CDN-Aufrufe)
 ├── config/
-│   └── database.php          # PDO-Datenbankverbindung, Auto-Migration, Speicher-Quota & Konstanten
+│   └── database.php          # PDO-Datenbankverbindung, Auto-Migration aller 14 Tabellen & Konstanten
 ├── includes/
-│   ├── auth.php              # Session-Management, Admin-/Login-Guards, Theme-State & CSRF-Schutz
-│   ├── functions.php         # Hilfsfunktionen (Quota, Gruppenordner-Rechte, 2FA-Mail/SMTP, Auto-Versionierung)
+│   ├── auth.php              # Session-Management, Timeout, Admin-/Login-Guards, 13 Themes & CSRF-Schutz
+│   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, 2FA-Mail/SMTP, Versionierung)
 │   ├── i18n.php              # Mehrsprachigkeits-Modul für 5 Sprachen (DE, EN, FR, ES, NL)
-│   ├── header.php            # Voll responsives Tailwind-CSS-Layout, 12 Themes, Sprachwahl, PWA-Header
-│   └── footer.php            # Footer mit automatischer Versionsanzeige, PWA-Installationsdialog & Theme-Umschalter
+│   ├── header.php            # Responsives Layout, 13 Farbthemes, Sprachwahl, Statusmeldungen & PWA-Header
+│   └── footer.php            # Footer mit Versionsanzeige, PWA-Dialog, Theme-Umschalter & Chat-System-Benachrichtigungen
 ├── sql/
 │   └── schema.sql            # Vollständige MySQL-Datenbankstruktur (wird beim Erststart automatisch angelegt)
 ├── uploads/
 │   ├── .htaccess             # Verhindert direkten Web-Zugriff & Skriptausführung auf Apache
 │   └── index.php             # 403-Fallback-Schutz
-├── index.php                 # Geschütztes Dashboard (Uploads, Vorschau-Modal mit Touch-Swipe, Teilen, Gruppenordner)
-├── trash.php                 # Papierkorb mit konfigurierbarer Aufbewahrungsfrist (Standard: 30 Tage)
+├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Vorschau-Modal, Tresor, 3-Stufen-Freigaben)
+├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
+├── messages.php              # Integrierter Messenger (1:1-Chat, Admin-Rundnachrichten, Verlauf leeren, Mobil-Ansicht)
+├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, Chat-Meldungen, 2FA)
+├── trash.php                 # Papierkorb mit 30 Tagen Aufbewahrungsfrist
 ├── folder_action.php         # Ordner erstellen, verschieben, kopieren und umbenennen
+├── vault_action.php          # Einzeldatei-Verschlüsselung & Entschlüsselung mit AES-256-GCM (Zero-Knowledge)
 ├── share.php                 # Öffentliche Freigabe-Seite (optionaler BCRYPT-Passwortschutz & Ablaufdatum)
-├── share_action.php          # API-Endpunkt für öffentliche Freigabelinks & interne Direktfreigaben
-├── admin.php                 # Administrationsbereich (Benutzer, 2FA, SMTP, Quotas, Gruppen, Gruppenordner, Branding)
+├── share_action.php          # API-Endpunkt für öffentliche Freigabelinks & 3-stufige Benutzer-Direktfreigaben
+├── admin.php                 # Administration (Branding, Module, 1-Klick-GitHub-Updater, Server-Monitor, Benutzer, Gruppen)
 ├── login.php                 # Login mit Brute-Force-Schutz & optionaler 2FA per E-Mail-Sicherheitscode
-├── logout.php                # Sicheres Beenden der PHP-Session
-├── register.php              # Deaktivierte Selbstregistrierung (Verwaltung ausschließlich durch Admins)
-├── upload.php                # Upload-Controller (Einzeldatei, Mehrfachdateien, ganze Ordner, Gruppenordner)
-├── download.php              # Geschützter Datei- & Ordner-ZIP-Download mit Berechtigungsprüfung
-├── delete.php                # Soft-Delete in den Papierkorb & Löschen von Ordnern
+├── logout.php                # Sicheres Beenden der PHP-Session (CSRF-geschützt)
+├── register.php              # Optionale Selbstregistrierung (standardmäßig aus, optional mit Einladungs-Code)
+├── upload.php                # Upload-Controller (Einzeldatei, Mehrfachdateien, ganze Ordner, freigegebene Ordner)
+├── download.php              # Geschützter Datei- & Ordner-ZIP-Download mit Berechtigungs- & Tresor-Prüfung
+├── delete.php                # Soft-Delete in den Papierkorb & Löschen von Ordnern (inkl. 3-Stufen-Rechteprüfung)
 ├── theme.php                 # Speichert das gewählte Farbschema pro Benutzer
 ├── lang.php                  # Speichert die gewählte Sprache (DE, EN, FR, ES, NL)
-├── help.php                  # Integriertes Benutzer- und Administratorenhandbuch
-├── impressum.php             # Im Admin-Bereich frei konfigurierbares Impressum (inkl. Vorlage für Privat-Clouds)
+├── help.php                  # Integriertes Benutzer- und Administratorenhandbuch (5-sprachig)
+├── impressum.php             # Im Admin-Bereich frei konfigurierbares Impressum
 ├── manifest.php              # Dynamisches Web-App-Manifest (PWA für Android & iOS)
 ├── app-icon.php              # Dynamischer PNG-Icon-Generator (180x180, 192x192, 512x512 & Maskable)
-├── sw.js                     # Service Worker für PWA-Installation & Offline-Fallback
+├── sw.js                     # Service Worker für PWA-Installation & native Chat-System-Benachrichtigungen
 ├── Datenverzeichnis.md       # Vollständige Dokumentation aller Datenbanktabellen und Felder
-├── IT-Sicherheitskonzept.md  # Sicherheitsarchitektur, Kryptografie und Schutzmaßnahmen
+├── IT-Sicherheitskonzept.md  # Sicherheitsarchitektur, Kryptografie und Ergebnisse des Security Audits
 ├── LICENSE                   # MIT Open-Source-Lizenz
 └── start.sh                  # Lokales Startskript für MariaDB + PHP-Entwicklungsserver
 ```

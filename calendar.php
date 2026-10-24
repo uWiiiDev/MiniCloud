@@ -142,7 +142,12 @@ function getAccessibleEventsForUser(PDO $pdo, int $uid): array
                     SELECT 1 FROM calendar_shares csd
                     WHERE csd.owner_user_id = ce.user_id
                       AND csd.can_delete = 1
-                      AND csd.target_user_id = :uid_cs_del
+                      AND (
+                          csd.target_user_id = :uid_cs_del
+                          OR (csd.target_group_id IS NOT NULL AND EXISTS (
+                              SELECT 1 FROM group_members gm_del WHERE gm_del.group_id = csd.target_group_id AND gm_del.user_id = :uid_cs_grp_del
+                          ))
+                      )
                 ) THEN 1
                 ELSE 0
             END AS can_delete_event
@@ -179,6 +184,7 @@ function getAccessibleEventsForUser(PDO $pdo, int $uid): array
         ':uid_cs_grp_edit' => $uid,
         ':uid_self_del'    => $uid,
         ':uid_cs_del'      => $uid,
+        ':uid_cs_grp_del'  => $uid,
         ':uid_own'         => $uid,
         ':uid_shared'      => $uid,
         ':uid_gm'          => $uid,
