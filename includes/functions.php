@@ -955,3 +955,394 @@ function getAppVersionInfo(): array
 
     return $cached;
 }
+
+/**
+ * Prüft anhand des 8-Byte-Magics "MCVAULT1", ob eine physische Datei im Tresor-Format verschlüsselt ist.
+ */
+function isVaultEncryptedFile(string $filePath): bool
+{
+    if (!is_file($filePath) || !is_readable($filePath)) {
+        return false;
+    }
+    $fh = @fopen($filePath, 'rb');
+    if ($fh === false) {
+        return false;
+    }
+    $magic = (string)fread($fh, 8);
+    fclose($fh);
+
+    return $magic === 'MCVAULT1';
+}
+
+/**
+ * Verschlüsselt eine bestehende Datei speicherschonend (Chunked AES-256-GCM mit PBKDF2-HMAC-SHA256)
+ * direkt vor Ort. Das Passwort wird nirgendwo gespeichert (Zero-Knowledge).
+ *
+ * Dateiaufbau (Header = 72 Bytes):
+ * - 8 Bytes : Magic "MCVAULT1"
+ * - 8 Bytes : Original-Dateigröße (uint64 Big-Endian)
+ * - 16 Bytes: PBKDF2 Salt
+ * - 8 Bytes : Nonce-Präfix
+ * - 16 Bytes: Verschlüsselter Prüfblock ("MCVAULT1_VERIFY!")
+ * - 16 Bytes: GCM-Tag des Prüfblocks
+ * Gefolgt von 1-MB-Chunks: [4 Bytes Chunk-Länge][16 Bytes GCM-Tag][Ciphertext]
+ */
+function encryptFileInPlaceWithVault(string $filePath, string $password): bool
+{
+    if ($password === '' || !is_file($filePath) || !is_readable($filePath)) {
+        return false;
+    }
+    if (isVaultEncryptedFile($filePath)) {
+        return false;
+    }
+
+    $origSize = (int)filesize($filePath);
+    $salt = random_bytes(16);
+    $noncePrefix = random_bytes(8);
+    $key = hash_pbkdf2('sha256', $password, $salt, 100000, 32, true);
+
+    $verifyTag = '';
+    $verifyCipher = openssl_encrypt(
+        'MCVAULT1_VERIFY!',
+        'aes-256-gcm',
+        $key,
+        OPENSSL_RAW_DATA,
+        $noncePrefix . pack('N', 0),
+        $verifyTag,
+        'HEADER',
+        16
+    );
+    if ($verifyCipher === false || strlen($verifyCipher) !== 16 || strlen($verifyTag) !== 16) {
+        return false;
+    }
+
+    $tmpPath = $filePath . '.vault_enc_' . bin2hex(random_bytes(4));
+    $inFh = @fopen($filePath, 'rb');
+    if ($inFh === false) {
+        return false;
+    }
+
+    $outFh = @fopen($tmpPath, 'wb');
+    if ($outFh === false) {
+        fclose($inFh);
+        return false;
+    }
+
+    $header = 'MCVAULT1'
+        . pack('J', $origSize)
+        . $salt
+        . $noncePrefix
+        . $verifyCipher
+        . $verifyTag;
+
+    if (fwrite($outFh, $header) !== 72) {
+        fclose($inFh);
+        fclose($outFh);
+        @unlink($tmpPath);
+        return false;
+    }
+
+    $chunkIndex = 1;
+    $chunkSize = 1024 * 1024; // 1 MB pro Block
+    $ok = true;
+
+    while (!feof($inFh)) {
+        $plainChunk = fread($inFh, $chunkSize);
+        if ($plainChunk === false) {
+            $ok = false;
+            break;
+        }
+        if ($plainChunk === '') {
+            break;
+        }
+
+        $chunkTag = '';
+        $iv = $noncePrefix . pack('N', $chunkIndex);
+        $aad = pack('N', $chunkIndex);
+        $cipherChunk = openssl_encrypt(
+            $plainChunk,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $chunkTag,
+            $aad,
+            16
+        );
+
+        if ($cipherChunk === false || strlen($chunkTag) !== 16) {
+            $ok = false;
+            break;
+        }
+
+        $lenBytes = pack('N', strlen($cipherChunk));
+        if (
+            fwrite($outFh, $lenBytes) !== 4
+            || fwrite($outFh, $chunkTag) !== 16
+            || fwrite($outFh, $cipherChunk) !== strlen($cipherChunk)
+        ) {
+            $ok = false;
+            break;
+        }
+
+        $chunkIndex++;
+    }
+
+    fclose($inFh);
+    fclose($outFh);
+
+    if (!$ok) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    if (!@rename($tmpPath, $filePath)) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    @chmod($filePath, 0640);
+    return true;
+}
+
+/**
+ * Prüft in wenigen Millisekunden anhand des 72-Byte-Headers, ob das Tresor-Passwort für eine Datei stimmt.
+ *
+ * @param array{orig_size: int, key: string, nonce_prefix: string}|null $headerInfoOut
+ */
+function verifyVaultFilePassword(string $filePath, string $password, ?array &$headerInfoOut = null): bool
+{
+    if ($password === '' || !is_file($filePath) || !is_readable($filePath)) {
+        return false;
+    }
+
+    $fh = @fopen($filePath, 'rb');
+    if ($fh === false) {
+        return false;
+    }
+    $hdr = (string)fread($fh, 72);
+    fclose($fh);
+
+    if (strlen($hdr) !== 72 || substr($hdr, 0, 8) !== 'MCVAULT1') {
+        return false;
+    }
+
+    $unpacked = unpack('Jorig_size', substr($hdr, 8, 8));
+    $origSize = isset($unpacked['orig_size']) ? (int)$unpacked['orig_size'] : 0;
+    $salt = substr($hdr, 16, 16);
+    $noncePrefix = substr($hdr, 32, 8);
+    $verifyCipher = substr($hdr, 40, 16);
+    $verifyTag = substr($hdr, 56, 16);
+
+    $key = hash_pbkdf2('sha256', $password, $salt, 100000, 32, true);
+    $decryptedVerify = openssl_decrypt(
+        $verifyCipher,
+        'aes-256-gcm',
+        $key,
+        OPENSSL_RAW_DATA,
+        $noncePrefix . pack('N', 0),
+        $verifyTag,
+        'HEADER'
+    );
+
+    if ($decryptedVerify !== 'MCVAULT1_VERIFY!') {
+        return false;
+    }
+
+    $headerInfoOut = [
+        'orig_size'    => $origSize,
+        'key'          => $key,
+        'nonce_prefix' => $noncePrefix,
+    ];
+    return true;
+}
+
+/**
+ * Entschlüsselt eine im Tresor-Format verschlüsselte Datei dauerhaft zurück in die Originaldatei.
+ */
+function decryptFileInPlaceFromVault(string $filePath, string $password): bool
+{
+    $headerInfo = null;
+    if (!verifyVaultFilePassword($filePath, $password, $headerInfo) || !is_array($headerInfo)) {
+        return false;
+    }
+
+    $inFh = @fopen($filePath, 'rb');
+    if ($inFh === false) {
+        return false;
+    }
+    if (fseek($inFh, 72) !== 0) {
+        fclose($inFh);
+        return false;
+    }
+
+    $tmpPath = $filePath . '.vault_dec_' . bin2hex(random_bytes(4));
+    $outFh = @fopen($tmpPath, 'wb');
+    if ($outFh === false) {
+        fclose($inFh);
+        return false;
+    }
+
+    $key = $headerInfo['key'];
+    $noncePrefix = $headerInfo['nonce_prefix'];
+    $chunkIndex = 1;
+    $ok = true;
+
+    while (!feof($inFh)) {
+        $lenBytes = fread($inFh, 4);
+        if ($lenBytes === false || $lenBytes === '') {
+            break;
+        }
+        if (strlen($lenBytes) !== 4) {
+            $ok = false;
+            break;
+        }
+
+        $chunkLen = (int)(unpack('Nlen', $lenBytes)['len'] ?? 0);
+        if ($chunkLen <= 0 || $chunkLen > 4 * 1024 * 1024) {
+            $ok = false;
+            break;
+        }
+
+        $chunkTag = fread($inFh, 16);
+        if ($chunkTag === false || strlen($chunkTag) !== 16) {
+            $ok = false;
+            break;
+        }
+
+        $cipherChunk = '';
+        $remaining = $chunkLen;
+        while ($remaining > 0 && !feof($inFh)) {
+            $part = fread($inFh, $remaining);
+            if ($part === false || $part === '') {
+                break;
+            }
+            $cipherChunk .= $part;
+            $remaining -= strlen($part);
+        }
+
+        if (strlen($cipherChunk) !== $chunkLen) {
+            $ok = false;
+            break;
+        }
+
+        $iv = $noncePrefix . pack('N', $chunkIndex);
+        $aad = pack('N', $chunkIndex);
+        $plainChunk = openssl_decrypt(
+            $cipherChunk,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $chunkTag,
+            $aad
+        );
+
+        if ($plainChunk === false || fwrite($outFh, $plainChunk) !== strlen($plainChunk)) {
+            $ok = false;
+            break;
+        }
+
+        $chunkIndex++;
+    }
+
+    fclose($inFh);
+    fclose($outFh);
+
+    if (!$ok) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    if (!@rename($tmpPath, $filePath)) {
+        @unlink($tmpPath);
+        return false;
+    }
+
+    @chmod($filePath, 0640);
+    return true;
+}
+
+/**
+ * Streamt eine verschlüsselte Tresor-Datei nach erfolgreicher Passwortprüfung direkt entschlüsselt an den Browser.
+ *
+ * @param array{orig_size: int, key: string, nonce_prefix: string} $headerInfo
+ */
+function streamDecryptedVaultFile(string $filePath, array $headerInfo, int $maxBytes = 0): void
+{
+    $inFh = @fopen($filePath, 'rb');
+    if ($inFh === false) {
+        return;
+    }
+    if (fseek($inFh, 72) !== 0) {
+        fclose($inFh);
+        return;
+    }
+
+    $key = $headerInfo['key'];
+    $noncePrefix = $headerInfo['nonce_prefix'];
+    $chunkIndex = 1;
+    $sentBytes = 0;
+
+    while (!feof($inFh)) {
+        $lenBytes = fread($inFh, 4);
+        if ($lenBytes === false || strlen($lenBytes) !== 4) {
+            break;
+        }
+        $chunkLen = (int)(unpack('Nlen', $lenBytes)['len'] ?? 0);
+        if ($chunkLen <= 0 || $chunkLen > 4 * 1024 * 1024) {
+            break;
+        }
+        $chunkTag = fread($inFh, 16);
+        if ($chunkTag === false || strlen($chunkTag) !== 16) {
+            break;
+        }
+
+        $cipherChunk = '';
+        $remaining = $chunkLen;
+        while ($remaining > 0 && !feof($inFh)) {
+            $part = fread($inFh, $remaining);
+            if ($part === false || $part === '') {
+                break;
+            }
+            $cipherChunk .= $part;
+            $remaining -= strlen($part);
+        }
+        if (strlen($cipherChunk) !== $chunkLen) {
+            break;
+        }
+
+        $iv = $noncePrefix . pack('N', $chunkIndex);
+        $aad = pack('N', $chunkIndex);
+        $plainChunk = openssl_decrypt(
+            $cipherChunk,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $chunkTag,
+            $aad
+        );
+        if ($plainChunk === false) {
+            break;
+        }
+
+        if ($maxBytes > 0 && ($sentBytes + strlen($plainChunk)) > $maxBytes) {
+            $sliceLen = max(0, $maxBytes - $sentBytes);
+            if ($sliceLen > 0) {
+                echo substr($plainChunk, 0, $sliceLen);
+            }
+            break;
+        }
+
+        echo $plainChunk;
+        $sentBytes += strlen($plainChunk);
+        if (function_exists('flush')) {
+            flush();
+        }
+
+        $chunkIndex++;
+    }
+
+    fclose($inFh);
+}

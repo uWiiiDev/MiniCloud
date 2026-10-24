@@ -46,6 +46,7 @@ function streamZipArchive(array $folderFiles, string $archiveBaseName): never
     }
 
     $addedFiles = 0;
+    $skippedVaultFiles = [];
     foreach ($folderFiles as $f) {
         $storedName = basename((string)$f['filename']);
         $physicalPath = UPLOAD_DIR . $storedName;
@@ -54,7 +55,21 @@ function streamZipArchive(array $folderFiles, string $archiveBaseName): never
         }
         $relFolder = (string)$f['folder_path'];
         $entryName = ($relFolder !== '' ? $relFolder . '/' : '') . sanitizeOriginalFilename((string)$f['original_name']);
+        if (isVaultEncryptedFile($physicalPath)) {
+            $skippedVaultFiles[] = $entryName;
+            continue;
+        }
         $zip->addFile($physicalPath, $entryName);
+        $addedFiles++;
+    }
+    if (!empty($skippedVaultFiles)) {
+        $vaultNote = "HINWEIS ZU VERSCHLÜSSELTEN TRESOR-DATEIEN\r\n"
+            . "=========================================\r\n\r\n"
+            . "Die folgenden Dateien in diesem Ordner sind mit einem persönlichen Tresor-Passwort (AES-256) geschützt\r\n"
+            . "und können daher nicht unverschlüsselt in ein Sammel-ZIP-Archiv gepackt werden:\r\n\r\n"
+            . "- " . implode("\r\n- ", $skippedVaultFiles) . "\r\n\r\n"
+            . "Bitte laden Sie diese Dateien einzeln über die Web-Oberfläche mit Ihrem Tresor-Passwort herunter.\r\n";
+        $zip->addFromString('TRESOR_HINWEIS.txt', $vaultNote);
         $addedFiles++;
     }
     $zip->close();
@@ -183,7 +198,7 @@ if (isset($_GET['group_folder_zip'])) {
 }
 
 // Option D: Einzelne Datei herunterladen (?id=...) – prüft Eigentümer, Benutzer-Freigabe oder Gruppenordner-Recht
-$fileId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$fileId = isset($_REQUEST['id']) ? (int)$_REQUEST['id'] : 0;
 if ($fileId <= 0) {
     setFlash('error', 'Ungültige Datei-ID.');
     header('Location: index.php');
@@ -211,8 +226,120 @@ if (!is_file($filePath) || !is_readable($filePath)) {
 
 $originalName = sanitizeOriginalFilename((string)$file['original_name']);
 $fileSize = (int)filesize($filePath);
-$isInline = isset($_GET['inline']) && $_GET['inline'] === '1';
-$asText   = isset($_GET['as_text']) && $_GET['as_text'] === '1';
+$isInline = isset($_REQUEST['inline']) && $_REQUEST['inline'] === '1';
+$asText   = isset($_REQUEST['as_text']) && $_REQUEST['as_text'] === '1';
+
+// Prüfen, ob die Datei im Tresor-Modus (AES-256-GCM) verschlüsselt ist
+if ((int)($file['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($filePath)) {
+    $vaultError = '';
+    $attemptKey = 'vault_dl_attempts_' . $fileId;
+    $lockoutWindow = 300;
+    $maxAttempts = 5;
+    $failedAttempts = isset($_SESSION[$attemptKey]) && is_array($_SESSION[$attemptKey])
+        ? array_values(array_filter($_SESSION[$attemptKey], static fn($ts): bool => is_int($ts) && $ts > (time() - $lockoutWindow)))
+        : [];
+    $_SESSION[$attemptKey] = $failedAttempts;
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vault_password'])) {
+        $csrfToken = $_POST['csrf_token'] ?? null;
+        $vaultPassword = (string)$_POST['vault_password'];
+        $vaultHeaderInfo = null;
+
+        if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
+            $vaultError = 'Ungültiges Sicherheits-Token (CSRF). Bitte versuchen Sie es erneut.';
+        } elseif (count($failedAttempts) >= $maxAttempts) {
+            $waitSecs = max(1, ($failedAttempts[0] + $lockoutWindow) - time());
+            $vaultError = sprintf('Zu viele Fehlversuche für diese Tresor-Datei. Bitte warten Sie %d Sekunden.', $waitSecs);
+        } elseif ($vaultPassword === '') {
+            $vaultError = 'Bitte geben Sie das Tresor-Passwort für diese Datei ein.';
+        } elseif (!verifyVaultFilePassword($filePath, $vaultPassword, $vaultHeaderInfo) || !is_array($vaultHeaderInfo)) {
+            $_SESSION[$attemptKey][] = time();
+            $vaultError = 'Das eingegebene Tresor-Passwort ist falsch.';
+        } else {
+            unset($_SESSION[$attemptKey]);
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+
+            $origPlainSize = (int)$vaultHeaderInfo['orig_size'];
+            header('Content-Description: File Transfer');
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
+            if ($origPlainSize > 0) {
+                header('Content-Length: ' . (string)$origPlainSize);
+            }
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, no-transform, no-store, must-revalidate');
+            header('Pragma: no-cache');
+
+            streamDecryptedVaultFile($filePath, $vaultHeaderInfo);
+            exit;
+        }
+    }
+
+    // Tresor-Passwort-Eingabeseite anzeigen
+    $pageTitle = 'Tresor-Datei entschlüsseln';
+    require_once __DIR__ . '/includes/header.php';
+    ?>
+    <div class="max-w-md mx-auto mt-8 sm:mt-14 px-1">
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 sm:p-8">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-4 border border-amber-200/70 dark:border-amber-800/60 text-2xl">
+                    🔒
+                </div>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Tresor-geschützte Datei</h1>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 break-all">
+                    <strong><?= e($originalName) ?></strong> ist mit <strong>AES-256</strong> verschlüsselt.
+                </p>
+            </div>
+
+            <?php if ($vaultError !== ''): ?>
+                <div class="mb-5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 text-xs sm:text-sm flex items-center gap-2">
+                    <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span><?= e($vaultError) ?></span>
+                </div>
+            <?php endif; ?>
+
+            <form action="download.php?id=<?= (int)$fileId ?>" method="post" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="id" value="<?= (int)$fileId ?>">
+
+                <div>
+                    <label for="vault_dl_password" class="block text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Tresor-Passwort eingeben
+                    </label>
+                    <input
+                        type="password"
+                        id="vault_dl_password"
+                        name="vault_password"
+                        required
+                        autofocus
+                        placeholder="Persönliches Tresor-Passwort..."
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <button
+                    type="submit"
+                    class="w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                    <span>🔓 Entschlüsseln &amp; Herunterladen</span>
+                </button>
+            </form>
+
+            <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
+                <a href="index.php" class="text-xs font-semibold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400">
+                    &larr; Zurück zu meinen Dateien
+                </a>
+            </div>
+        </div>
+    </div>
+    <?php
+    require_once __DIR__ . '/includes/footer.php';
+    exit;
+}
 
 if (ob_get_level()) {
     ob_end_clean();

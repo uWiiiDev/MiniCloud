@@ -184,6 +184,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `folder_path` VARCHAR(512) NOT NULL DEFAULT '',
             `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
             `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
+            `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0,
             `upload_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`id`),
@@ -196,12 +197,15 @@ function ensureSchemaUpdated(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    // Prüfen, ob Spalte group_folder_id und deleted_at in files existieren
+    // Prüfen, ob Spalte group_folder_id, is_encrypted und deleted_at in files existieren
     $colsFiles = $pdo->query("SHOW COLUMNS FROM `files`")->fetchAll(PDO::FETCH_COLUMN);
     if (!in_array('group_folder_id', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `group_folder_id` INT UNSIGNED DEFAULT NULL AFTER `user_id`");
         $pdo->exec("ALTER TABLE `files` ADD KEY `idx_files_group_folder` (`group_folder_id`)");
         $pdo->exec("ALTER TABLE `files` ADD CONSTRAINT `fk_files_group_folder` FOREIGN KEY (`group_folder_id`) REFERENCES `group_folders` (`id`) ON DELETE CASCADE");
+    }
+    if (!in_array('is_encrypted', $colsFiles, true)) {
+        $pdo->exec("ALTER TABLE `files` ADD COLUMN `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `mime_type`");
     }
     if (!in_array('deleted_at', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `deleted_at` DATETIME DEFAULT NULL AFTER `upload_date`");

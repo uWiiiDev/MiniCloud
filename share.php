@@ -20,7 +20,7 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
     $stmt = $pdo->prepare(
         'SELECT s.id AS share_id, s.file_id, s.folder_path AS shared_folder_path, s.user_id,
                 s.share_token, s.password_hash, s.expires_at, s.created_at AS share_date,
-                f.filename, f.original_name, f.file_size, f.mime_type, f.upload_date, f.deleted_at AS file_deleted_at,
+                f.filename, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date, f.deleted_at AS file_deleted_at,
                 u.username AS owner_username
          FROM shares s
          LEFT JOIN files f ON f.id = s.file_id
@@ -41,7 +41,7 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
         $ownerId = (int)$share['user_id'];
 
         $stmtFiles = $pdo->prepare(
-            'SELECT id, filename, original_name, folder_path, file_size, mime_type, upload_date
+            'SELECT id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date
              FROM files
              WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL
                AND (folder_path = :fp_exact OR folder_path LIKE :fp_prefix)
@@ -121,11 +121,14 @@ if ($requiresPassword && !$isUnlocked && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
 }
 
+$vaultShareError = '';
+$vaultPromptFile = null; // Falls eine Tresor-Datei in einem freigegebenen Ordner heruntergeladen werden soll
+
 // Download-Aktionen (nur wenn entsperrt und gültig)
 if ($errorState === null && $share !== null && $isUnlocked) {
     // A) Einzelne Datei aus einem freigegebenen Ordner herunterladen (?download_file=ID)
-    if ($isFolderShare && isset($_GET['download_file'])) {
-        $reqFileId = (int)$_GET['download_file'];
+    if ($isFolderShare && isset($_REQUEST['download_file'])) {
+        $reqFileId = (int)$_REQUEST['download_file'];
         $targetFile = null;
         foreach ($sharedFolderFiles as $candidate) {
             if ((int)$candidate['id'] === $reqFileId) {
@@ -141,20 +144,52 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 $originalName = sanitizeOriginalFilename((string)$targetFile['original_name']);
                 $fileSize = (int)filesize($filePath);
 
-                if (ob_get_level()) {
-                    ob_end_clean();
+                if ((int)($targetFile['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($filePath)) {
+                    $vaultPromptFile = $targetFile;
+                    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vault_password'])) {
+                        $csrfToken = $_POST['csrf_token'] ?? null;
+                        $vaultPw = (string)$_POST['vault_password'];
+                        $vInfo = null;
+                        if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
+                            $vaultShareError = 'Ungültiges Sicherheits-Token (CSRF).';
+                        } elseif ($vaultPw === '') {
+                            $vaultShareError = 'Bitte geben Sie das Tresor-Passwort ein.';
+                        } elseif (!verifyVaultFilePassword($filePath, $vaultPw, $vInfo) || !is_array($vInfo)) {
+                            $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
+                        } else {
+                            if (ob_get_level()) {
+                                ob_end_clean();
+                            }
+                            $origPlainSize = (int)$vInfo['orig_size'];
+                            header('Content-Description: File Transfer');
+                            header('Content-Type: application/octet-stream');
+                            header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
+                            if ($origPlainSize > 0) {
+                                header('Content-Length: ' . (string)$origPlainSize);
+                            }
+                            header('X-Content-Type-Options: nosniff');
+                            header('Cache-Control: private, no-transform, no-store, must-revalidate');
+                            header('Pragma: no-cache');
+                            streamDecryptedVaultFile($filePath, $vInfo);
+                            exit;
+                        }
+                    }
+                } else {
+                    if (ob_get_level()) {
+                        ob_end_clean();
+                    }
+
+                    header('Content-Description: File Transfer');
+                    header('Content-Type: application/octet-stream');
+                    header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
+                    header('Content-Length: ' . (string)$fileSize);
+                    header('X-Content-Type-Options: nosniff');
+                    header('Cache-Control: private, no-transform, no-store, must-revalidate');
+                    header('Pragma: no-cache');
+
+                    readfile($filePath);
+                    exit;
                 }
-
-                header('Content-Description: File Transfer');
-                header('Content-Type: application/octet-stream');
-                header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
-                header('Content-Length: ' . (string)$fileSize);
-                header('X-Content-Type-Options: nosniff');
-                header('Cache-Control: private, no-transform, no-store, must-revalidate');
-                header('Pragma: no-cache');
-
-                readfile($filePath);
-                exit;
             }
         }
     }
@@ -167,6 +202,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
             $zip = new ZipArchive();
             if ($zip->open($tmpZip, ZipArchive::OVERWRITE) === true) {
                 $addedFiles = 0;
+                $skippedVaultFiles = [];
                 foreach ($sharedFolderFiles as $f) {
                     $storedName = basename((string)$f['filename']);
                     $physicalPath = UPLOAD_DIR . $storedName;
@@ -175,7 +211,20 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                     }
                     $relFolder = (string)$f['folder_path'];
                     $entryName = ($relFolder !== '' ? $relFolder . '/' : '') . sanitizeOriginalFilename((string)$f['original_name']);
+                    if ((int)($f['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($physicalPath)) {
+                        $skippedVaultFiles[] = $entryName;
+                        continue;
+                    }
                     $zip->addFile($physicalPath, $entryName);
+                    $addedFiles++;
+                }
+                if (!empty($skippedVaultFiles)) {
+                    $vaultNote = "HINWEIS ZU VERSCHLÜSSELTEN TRESOR-DATEIEN\r\n"
+                        . "=========================================\r\n\r\n"
+                        . "Die folgenden Dateien in diesem Ordner sind mit einem persönlichen Tresor-Passwort (AES-256) geschützt:\r\n\r\n"
+                        . "- " . implode("\r\n- ", $skippedVaultFiles) . "\r\n\r\n"
+                        . "Bitte laden Sie diese Dateien einzeln über die Freigabeseite mit dem Tresor-Passwort herunter.\r\n";
+                    $zip->addFromString('TRESOR_HINWEIS.txt', $vaultNote);
                     $addedFiles++;
                 }
                 $zip->close();
@@ -202,26 +251,57 @@ if ($errorState === null && $share !== null && $isUnlocked) {
     }
 
     // C) Einzeldatei-Freigabe über PHP-Header herunterladen (?download=1)
-    if (!$isFolderShare && isset($_GET['download']) && $_GET['download'] === '1') {
+    if (!$isFolderShare && (isset($_GET['download']) && $_GET['download'] === '1' || isset($_POST['vault_password']))) {
         $storedFilename = basename((string)$share['filename']);
         $filePath = UPLOAD_DIR . $storedFilename;
         $originalName = sanitizeOriginalFilename((string)$share['original_name']);
         $fileSize = (int)filesize($filePath);
 
-        if (ob_get_level()) {
-            ob_end_clean();
+        if ((int)($share['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($filePath)) {
+            if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vault_password'])) {
+                $csrfToken = $_POST['csrf_token'] ?? null;
+                $vaultPw = (string)$_POST['vault_password'];
+                $vInfo = null;
+                if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
+                    $vaultShareError = 'Ungültiges Sicherheits-Token (CSRF).';
+                } elseif ($vaultPw === '') {
+                    $vaultShareError = 'Bitte geben Sie das Tresor-Passwort ein.';
+                } elseif (!verifyVaultFilePassword($filePath, $vaultPw, $vInfo) || !is_array($vInfo)) {
+                    $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
+                } else {
+                    if (ob_get_level()) {
+                        ob_end_clean();
+                    }
+                    $origPlainSize = (int)$vInfo['orig_size'];
+                    header('Content-Description: File Transfer');
+                    header('Content-Type: application/octet-stream');
+                    header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
+                    if ($origPlainSize > 0) {
+                        header('Content-Length: ' . (string)$origPlainSize);
+                    }
+                    header('X-Content-Type-Options: nosniff');
+                    header('Cache-Control: private, no-transform, no-store, must-revalidate');
+                    header('Pragma: no-cache');
+                    streamDecryptedVaultFile($filePath, $vInfo);
+                    exit;
+                }
+            }
+        } else {
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+
+            header('Content-Description: File Transfer');
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
+            header('Content-Length: ' . (string)$fileSize);
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, no-transform, no-store, must-revalidate');
+            header('Pragma: no-cache');
+
+            readfile($filePath);
+            exit;
         }
-
-        header('Content-Description: File Transfer');
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
-        header('Content-Length: ' . (string)$fileSize);
-        header('X-Content-Type-Options: nosniff');
-        header('Cache-Control: private, no-transform, no-store, must-revalidate');
-        header('Pragma: no-cache');
-
-        readfile($filePath);
-        exit;
     }
 }
 
@@ -356,6 +436,39 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             </div>
 
+            <?php if ($vaultPromptFile !== null): ?>
+                <div class="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-200">
+                            🔒 Tresor-Datei entschlüsseln: <?= e((string)$vaultPromptFile['original_name']) ?>
+                        </p>
+                        <a href="share.php?token=<?= rawurlencode($token) ?>" class="text-xs text-slate-500 hover:underline">Abbrechen</a>
+                    </div>
+                    <?php if ($vaultShareError !== ''): ?>
+                        <p class="text-xs font-semibold text-red-600 dark:text-red-400"><?= e($vaultShareError) ?></p>
+                    <?php endif; ?>
+                    <form action="share.php?token=<?= rawurlencode($token) ?>&amp;download_file=<?= (int)$vaultPromptFile['id'] ?>" method="post" class="flex flex-col sm:flex-row gap-2">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="token" value="<?= e($token) ?>">
+                        <input type="hidden" name="download_file" value="<?= (int)$vaultPromptFile['id'] ?>">
+                        <input
+                            type="password"
+                            name="vault_password"
+                            required
+                            autofocus
+                            placeholder="Persönliches Tresor-Passwort..."
+                            class="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                        <button
+                            type="submit"
+                            class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs sm:text-sm cursor-pointer shrink-0"
+                        >
+                            🔓 Entschlüsseln &amp; Herunterladen
+                        </button>
+                    </form>
+                </div>
+            <?php endif; ?>
+
             <?php if (!empty($sharedFolderFiles)): ?>
                 <a
                     href="share.php?token=<?= rawurlencode($token) ?>&amp;download=1"
@@ -390,6 +503,11 @@ require_once __DIR__ . '/includes/header.php';
                                             <span class="font-medium text-slate-900 dark:text-white truncate max-w-xs">
                                                 <?= e((string)$sff['original_name']) ?>
                                             </span>
+                                            <?php if ((int)($sff['is_encrypted'] ?? 0) === 1): ?>
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Tresor-geschützt (AES-256)">
+                                                    🔒 Tresor
+                                                </span>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                     <td class="py-2.5 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
@@ -455,15 +573,46 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             </div>
 
-            <a
-                href="share.php?token=<?= rawurlencode($token) ?>&amp;download=1"
-                class="w-full py-3.5 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-base shadow-sm transition-all flex items-center justify-center gap-2.5"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-                <span>Datei herunterladen</span>
-            </a>
+            <?php if ((int)($share['is_encrypted'] ?? 0) === 1): ?>
+                <?php if ($vaultShareError !== ''): ?>
+                    <div class="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 text-xs sm:text-sm flex items-center gap-2">
+                        <span><?= e($vaultShareError) ?></span>
+                    </div>
+                <?php endif; ?>
+                <form action="share.php?token=<?= rawurlencode($token) ?>" method="post" class="space-y-3">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="token" value="<?= e($token) ?>">
+                    <div>
+                        <label for="share_vault_pw" class="block text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            🔒 Tresor-Passwort der Datei eingeben
+                        </label>
+                        <input
+                            type="password"
+                            id="share_vault_pw"
+                            name="vault_password"
+                            required
+                            placeholder="Persönliches Tresor-Passwort..."
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                    <button
+                        type="submit"
+                        class="w-full py-3.5 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-base shadow-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                    >
+                        <span>🔓 Entschlüsseln &amp; Herunterladen</span>
+                    </button>
+                </form>
+            <?php else: ?>
+                <a
+                    href="share.php?token=<?= rawurlencode($token) ?>&amp;download=1"
+                    class="w-full py-3.5 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-base shadow-sm transition-all flex items-center justify-center gap-2.5"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    <span>Datei herunterladen</span>
+                </a>
+            <?php endif; ?>
         <?php endif; ?>
 
     </div>

@@ -83,6 +83,12 @@ if ($groupFolderId > 0) {
 $targetFolderInput = isset($_POST['target_folder']) ? trim((string)$_POST['target_folder']) : '';
 $baseTargetFolder = $targetFolderInput !== '' ? extractSanitizedFolderPath($targetFolderInput . '/placeholder') : '';
 
+// Optionales Tresor-Passwort direkt beim Upload
+$uploadVaultPassword = isset($_POST['vault_password']) ? (string)$_POST['vault_password'] : '';
+if ($uploadVaultPassword !== '' && mb_strlen($uploadVaultPassword, 'UTF-8') < 4) {
+    respondUpload(false, 'Das optionale Tresor-Passwort muss mindestens 4 Zeichen lang sein.', $isAjax, $baseTargetFolder, $groupFolderId);
+}
+
 if (!isset($_FILES['files'])) {
     respondUpload(false, 'Keine Dateien zum Hochladen empfangen.', $isAjax, $baseTargetFolder, $groupFolderId);
 }
@@ -134,8 +140,8 @@ $totalUploadedBytes = 0;
 $errorMessages = [];
 
 $stmtInsert = $pdo->prepare(
-    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type)
-     VALUES (:user_id, :group_folder_id, :filename, :original_name, :folder_path, :file_size, :mime_type)'
+    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+     VALUES (:user_id, :group_folder_id, :filename, :original_name, :folder_path, :file_size, :mime_type, :is_encrypted)'
 );
 
 foreach ($validCandidates as $fileItem) {
@@ -206,6 +212,18 @@ foreach ($validCandidates as $fileItem) {
 
     @chmod($destinationPath, 0640);
 
+    $isEncryptedFlag = 0;
+    if ($uploadVaultPassword !== '') {
+        if (!encryptFileInPlaceWithVault($destinationPath, $uploadVaultPassword)) {
+            @unlink($destinationPath);
+            $errorMessages[] = sprintf('"%s": Tresor-Verschlüsselung beim Upload fehlgeschlagen.', $originalName);
+            continue;
+        }
+        clearstatcache(true, $destinationPath);
+        $actualSize = (int)(@filesize($destinationPath) ?: $actualSize);
+        $isEncryptedFlag = 1;
+    }
+
     try {
         $stmtInsert->execute([
             ':user_id'         => $userId,
@@ -215,6 +233,7 @@ foreach ($validCandidates as $fileItem) {
             ':folder_path'     => $finalFolderPath,
             ':file_size'       => $actualSize,
             ':mime_type'       => $mimeType,
+            ':is_encrypted'    => $isEncryptedFlag,
         ]);
 
         if ($finalFolderPath !== '') {

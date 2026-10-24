@@ -413,7 +413,7 @@ $sharedWithMeFolders = $stmtSharedFoldersWithMe->fetchAll();
 
 // Für mich freigegebene Einzeldateien (von anderen Cloud-Benutzern via user_shares, nur aktive Dateien)
 $stmtSharedWithMe = $pdo->prepare(
-    'SELECT f.id, f.original_name, f.file_size, f.mime_type, f.upload_date,
+    'SELECT f.id, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
             us.created_at AS shared_at, u.username AS owner_username
      FROM user_shares us
      INNER JOIN files f ON f.id = us.file_id
@@ -490,6 +490,18 @@ require_once __DIR__ . '/includes/header.php';
                             <option value="<?= e((string)$ufOpt['folder_path']) ?>"></option>
                         <?php endforeach; ?>
                     </datalist>
+                </div>
+
+                <div class="relative w-full sm:w-48">
+                    <input
+                        type="password"
+                        id="upload_vault_password"
+                        name="vault_password"
+                        autocomplete="new-password"
+                        placeholder="🔒 Tresor-Passwort (optional)"
+                        title="Optional: Dateien direkt beim Hochladen mit AES-256 verschlüsseln (mind. 4 Zeichen)"
+                        class="w-full px-2.5 py-1.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-800/70 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
                 </div>
 
                 <button
@@ -1047,6 +1059,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $formattedSize = formatBytes((int)$file['file_size']);
                         $linkShares = (int)($file['link_share_count'] ?? 0);
                         $userShares = (int)($file['user_share_count'] ?? 0);
+                        $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
                         $canManageThisFile = ($activeSharedFolder === null) && (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
 
                         $previewItemsList[] = [
@@ -1060,6 +1073,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             'badgeLabel'  => $badge['label'],
                             'badgeBg'     => $badge['bg'],
                             'badgeText'   => $badge['text'],
+                            'isEncrypted' => $isEncrypted,
+                            'canManage'   => $canManageThisFile,
                             'downloadUrl' => 'download.php?id=' . $fId,
                             'inlineUrl'   => 'download.php?id=' . $fId . '&inline=1',
                             'textUrl'     => 'download.php?id=' . $fId . '&inline=1&as_text=1',
@@ -1094,6 +1109,16 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             >
                                                 <?= e($origName) ?>
                                             </button>
+                                            <?php if ($isEncrypted): ?>
+                                                <button
+                                                    type="button"
+                                                    onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, true, <?= $canManageThisFile ? 'true' : 'false' ?>)"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/70 hover:bg-amber-200/70 cursor-pointer transition-colors"
+                                                    title="Tresor-geschützte Datei (AES-256 Zero-Knowledge)"
+                                                >
+                                                    🔒 Tresor
+                                                </button>
+                                            <?php endif; ?>
                                             <?php if ($linkShares > 0): ?>
                                                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300" title="<?= $linkShares ?> öffentliche(r) Freigabelink(s)">
                                                     🔗 <?= $linkShares ?>
@@ -1173,16 +1198,45 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     </button>
 
                                     <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
-                                    <a
-                                        href="download.php?id=<?= $fId ?>"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
-                                        title="Herunterladen"
-                                        aria-label="Herunterladen"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                                        </svg>
-                                    </a>
+                                    <?php if ($isEncrypted): ?>
+                                        <button
+                                            type="button"
+                                            onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, true, <?= $canManageThisFile ? 'true' : 'false' ?>)"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors cursor-pointer"
+                                            title="Entschlüsseln &amp; Herunterladen"
+                                            aria-label="Entschlüsseln &amp; Herunterladen"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
+                                            </svg>
+                                        </button>
+                                    <?php else: ?>
+                                        <a
+                                            href="download.php?id=<?= $fId ?>"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
+                                            title="Herunterladen"
+                                            aria-label="Herunterladen"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
+                                            </svg>
+                                        </a>
+                                    <?php endif; ?>
+
+                                    <?php if ($canManageThisFile || $isEncrypted): ?>
+                                        <!-- TRESOR-BUTTON (Einzeldatei-Verschlüsselung AES-256) -->
+                                        <button
+                                            type="button"
+                                            onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= $isEncrypted ? 'true' : 'false' ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $isEncrypted ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 hover:bg-amber-200/80 border border-amber-300/70 dark:border-amber-800/70' : 'bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300' ?> transition-colors cursor-pointer"
+                                            title="<?= $isEncrypted ? 'Tresor-Schutz verwalten / entschlüsseln' : 'Im Tresor verschlüsseln (AES-256)' ?>"
+                                            aria-label="<?= $isEncrypted ? 'Tresor-Schutz verwalten / entschlüsseln' : 'Im Tresor verschlüsseln (AES-256)' ?>"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                            </svg>
+                                        </button>
+                                    <?php endif; ?>
 
                                     <?php if ($canManageThisFile): ?>
                                         <!-- TEILEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
@@ -1438,6 +1492,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <span class="font-medium text-slate-900 dark:text-white truncate max-w-xs">
                                         <?= e((string)$sf['original_name']) ?>
                                     </span>
+                                    <?php if ((int)($sf['is_encrypted'] ?? 0) === 1): ?>
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Tresor-geschützt (AES-256)">
+                                            🔒 Tresor
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                             <td class="py-3 px-4">
@@ -1613,6 +1672,165 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 <?php endif; ?>
 
                 <div id="existingUserSharesList" class="space-y-1.5"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TRESOR-MODAL (Einzeldatei-Verschlüsselung AES-256 Zero-Knowledge) -->
+<div
+    id="vaultModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="vaultModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-base shrink-0">
+                    🔒
+                </span>
+                <div class="min-w-0">
+                    <h3 id="vaultModalTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                        Tresor-Verschlüsselung
+                    </h3>
+                    <p id="vaultModalFilename" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeVaultModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-5 overflow-y-auto space-y-5">
+            <!-- Wichtiger Zero-Knowledge-Warnhinweis -->
+            <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/70 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                <strong>⚠️ Wichtiger Hinweis (Zero-Knowledge):</strong> Ihr Tresor-Passwort wird <strong>nirgendwo gespeichert</strong>. Wenn Sie dieses Passwort vergessen, kann die Datei <strong>auch vom Administrator nicht wiederhergestellt werden!</strong>
+            </div>
+
+            <!-- A) ANSICHT: Datei verschlüsseln -->
+            <form id="vaultEncryptForm" action="vault_action.php" method="post" class="space-y-3.5 hidden">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="encrypt_file">
+                <input type="hidden" name="file_id" id="vaultEncryptFileId" value="">
+                <?php if ($currentFolder !== ''): ?>
+                    <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+                <?php endif; ?>
+                <?php if ($activeGroupFolder !== null): ?>
+                    <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
+                <?php endif; ?>
+
+                <div>
+                    <label for="vaultEncPw" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Tresor-Passwort festlegen (mind. 4 Zeichen)
+                    </label>
+                    <input
+                        type="password"
+                        id="vaultEncPw"
+                        name="vault_password"
+                        required
+                        minlength="4"
+                        autocomplete="new-password"
+                        placeholder="Geheimes Tresor-Passwort..."
+                        class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                </div>
+
+                <div>
+                    <label for="vaultEncPwConfirm" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Tresor-Passwort wiederholen
+                    </label>
+                    <input
+                        type="password"
+                        id="vaultEncPwConfirm"
+                        name="vault_password_confirm"
+                        required
+                        minlength="4"
+                        autocomplete="new-password"
+                        placeholder="Passwort zur Sicherheit bestätigen..."
+                        class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                </div>
+
+                <button
+                    type="submit"
+                    class="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                    <span>🔒 Jetzt mit AES-256 verschlüsseln</span>
+                </button>
+            </form>
+
+            <!-- B) ANSICHT: Bereits verschlüsselte Tresor-Datei herunterladen oder dauerhaft entschlüsseln -->
+            <div id="vaultProtectedSection" class="space-y-5 hidden">
+                <!-- 1. Entschlüsselt herunterladen (Datei bleibt in der Cloud geschützt) -->
+                <form id="vaultDownloadForm" action="download.php" method="post" class="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="id" id="vaultDownloadFileId" value="">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                        1. Entschlüsselt herunterladen
+                    </h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                        Lädt die Datei entschlüsselt auf Ihr Gerät herunter. In der Cloud bleibt der Tresor-Schutz weiter bestehen.
+                    </p>
+                    <input
+                        type="password"
+                        id="vaultDlPw"
+                        name="vault_password"
+                        required
+                        placeholder="Tresor-Passwort eingeben..."
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                    <button
+                        type="submit"
+                        class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    >
+                        <span>📥 Entschlüsseln &amp; Herunterladen</span>
+                    </button>
+                </form>
+
+                <!-- 2. Tresor-Schutz dauerhaft in der Cloud aufheben -->
+                <form id="vaultDecryptForm" action="vault_action.php" method="post" class="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="decrypt_file">
+                    <input type="hidden" name="file_id" id="vaultDecryptFileId" value="">
+                    <?php if ($currentFolder !== ''): ?>
+                        <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+                    <?php endif; ?>
+                    <?php if ($activeGroupFolder !== null): ?>
+                        <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
+                    <?php endif; ?>
+
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                        2. Tresor-Schutz dauerhaft aufheben
+                    </h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                        Entschlüsselt die Datei dauerhaft auf dem Server, sodass sie wieder als normale Datei vorliegt.
+                    </p>
+                    <input
+                        type="password"
+                        id="vaultDecPw"
+                        name="vault_password"
+                        required
+                        placeholder="Tresor-Passwort eingeben..."
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                    <button
+                        type="submit"
+                        class="w-full py-2 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    >
+                        <span>🔓 Tresor-Schutz dauerhaft entfernen</span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -1822,7 +2040,29 @@ async function renderPreviewItem(index) {
 
     previewStage.innerHTML = '<div class="text-xs text-slate-400 py-12">Lade Vorschau...</div>';
 
-    if (isImagePreviewable(item)) {
+    if (item.isEncrypted) {
+        previewStage.innerHTML = `
+            <div class="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/80 shadow-xs text-center max-w-md space-y-4">
+                <div class="mx-auto w-16 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-2xl">
+                    🔒
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm break-all">${escapeHtml(item.name)}</h4>
+                    <p class="text-xs text-amber-700 dark:text-amber-400 font-semibold mt-1">Im Tresor verschlüsselt (AES-256 Zero-Knowledge)</p>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Diese Datei ist mit einem persönlichen Tresor-Passwort verschlüsselt. Bitte geben Sie das Passwort ein, um die Datei zu entschlüsseln.
+                </p>
+                <button
+                    type="button"
+                    onclick="closePreviewModal(); openVaultModal(${Number(item.id)}, ${escapeHtml(JSON.stringify(item.name))}, true, ${item.canManage ? 'true' : 'false'});"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                    <span>🔓 Tresor-Passwort eingeben</span>
+                </button>
+            </div>
+        `;
+    } else if (isImagePreviewable(item)) {
         previewStage.innerHTML = `
             <img
                 src="${item.inlineUrl}"
@@ -1948,6 +2188,57 @@ previewModal.addEventListener('click', (e) => {
         }
     }, { passive: true });
 })();
+
+// --- TRESOR MODAL LOGIK (AES-256 Einzeldatei-Verschlüsselung) ---
+const vaultModal = document.getElementById('vaultModal');
+const vaultModalTitle = document.getElementById('vaultModalTitle');
+const vaultModalFilename = document.getElementById('vaultModalFilename');
+const vaultEncryptForm = document.getElementById('vaultEncryptForm');
+const vaultProtectedSection = document.getElementById('vaultProtectedSection');
+const vaultDecryptForm = document.getElementById('vaultDecryptForm');
+
+function openVaultModal(fileId, fileName, isEncrypted, canManage = true) {
+    vaultModalFilename.textContent = fileName || '';
+    document.getElementById('vaultEncryptFileId').value = String(fileId || 0);
+    document.getElementById('vaultDownloadFileId').value = String(fileId || 0);
+    document.getElementById('vaultDecryptFileId').value = String(fileId || 0);
+
+    document.getElementById('vaultEncPw').value = '';
+    document.getElementById('vaultEncPwConfirm').value = '';
+    document.getElementById('vaultDlPw').value = '';
+    document.getElementById('vaultDecPw').value = '';
+
+    if (isEncrypted) {
+        vaultModalTitle.textContent = 'Tresor-geschützte Datei';
+        vaultEncryptForm.classList.add('hidden');
+        vaultProtectedSection.classList.remove('hidden');
+        if (canManage) {
+            vaultDecryptForm.classList.remove('hidden');
+        } else {
+            vaultDecryptForm.classList.add('hidden');
+        }
+        setTimeout(() => document.getElementById('vaultDlPw').focus(), 50);
+    } else {
+        vaultModalTitle.textContent = 'Datei im Tresor verschlüsseln';
+        vaultProtectedSection.classList.add('hidden');
+        vaultEncryptForm.classList.remove('hidden');
+        setTimeout(() => document.getElementById('vaultEncPw').focus(), 50);
+    }
+
+    vaultModal.classList.remove('hidden');
+    vaultModal.classList.add('flex');
+}
+
+function closeVaultModal() {
+    vaultModal.classList.add('hidden');
+    vaultModal.classList.remove('flex');
+}
+
+vaultModal.addEventListener('click', (e) => {
+    if (e.target === vaultModal) {
+        closeVaultModal();
+    }
+});
 
 // --- SHARE MODAL LOGIK (für Dateien UND Ordner) ---
 const shareModal = document.getElementById('shareModal');
@@ -2167,6 +2458,10 @@ async function revokeUserShare(userShareId) {
         const formData = new FormData();
         formData.append('csrf_token', csrfToken);
         formData.append('target_folder', document.getElementById('target_folder').value);
+        const vaultPwInput = document.getElementById('upload_vault_password');
+        if (vaultPwInput && vaultPwInput.value !== '') {
+            formData.append('vault_password', vaultPwInput.value);
+        }
         const gfInput = uploadForm.querySelector('input[name="group_folder_id"]');
         if (gfInput) {
             formData.append('group_folder_id', gfInput.value);

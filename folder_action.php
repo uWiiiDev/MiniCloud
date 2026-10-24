@@ -140,7 +140,7 @@ if ($action === 'move_file') {
     $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
 
     $stmtFile = $pdo->prepare(
-        'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type
+        'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
          FROM files
          WHERE id = :id AND deleted_at IS NULL
          LIMIT 1'
@@ -253,8 +253,8 @@ if ($action === 'move_file') {
         }
 
         $stmtCopy = $pdo->prepare(
-            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type)
-             VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime)'
+            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+             VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, :enc)'
         );
         $stmtCopy->execute([
             ':uid'   => $userId,
@@ -264,6 +264,7 @@ if ($action === 'move_file') {
             ':fp'    => $targetFolder,
             ':sz'    => $fileSize,
             ':mime'  => (string)$file['mime_type'],
+            ':enc'   => (int)($file['is_encrypted'] ?? 0),
         ]);
 
         setFlash('success', sprintf('Datei "%s" wurde in %s kopiert.', (string)$file['original_name'], $destLabel));
@@ -430,7 +431,7 @@ if ($action === 'move_folder') {
     // Quelldateien und Quell-Ordnerstruktur laden
     if ($groupFolderId !== null) {
         $stmtFiles = $pdo->prepare(
-            'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type
+            'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
              FROM files
              WHERE group_folder_id = :gf_id AND deleted_at IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
         );
@@ -453,7 +454,7 @@ if ($action === 'move_folder') {
         $sourceUfRows = $stmtUf->fetchAll();
     } else {
         $stmtFiles = $pdo->prepare(
-            'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type
+            'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
              FROM files
              WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
         );
@@ -569,8 +570,8 @@ if ($action === 'move_folder') {
 
         $copiedCount = 0;
         $stmtInsertCopy = $pdo->prepare(
-            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type)
-             VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime)'
+            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+             VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, :enc)'
         );
 
         foreach ($sourceFiles as $fRow) {
@@ -598,6 +599,7 @@ if ($action === 'move_folder') {
                 ':fp'    => $updatedPath,
                 ':sz'    => (int)$fRow['file_size'],
                 ':mime'  => (string)$fRow['mime_type'],
+                ':enc'   => (int)($fRow['is_encrypted'] ?? 0),
             ]);
             $copiedCount++;
         }

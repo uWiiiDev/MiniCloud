@@ -55,6 +55,9 @@ require_once __DIR__ . '/includes/header.php';
             <a href="#teilen-gruppen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                 🔗 Teilen &amp; Gruppenordner
             </a>
+            <a href="#tresor-modus" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">
+                🔒 Tresor-Modus
+            </a>
             <a href="#papierkorb-themes" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                 🗑️ Papierkorb &amp; Designs
             </a>
@@ -126,6 +129,27 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
         </section>
     </div>
+
+    <!-- 4b. TRESOR-MODUS (Einzeldatei-Verschlüsselung AES-256 Zero-Knowledge) -->
+    <section id="tresor-modus" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-800/70 p-5 sm:p-6 shadow-xs mb-6 space-y-4">
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">🔒</span>
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Tresor-Modus – Einzeldatei-Verschlüsselung (AES-256)</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Sensible Dokumente mit einem nur Ihnen bekannten Passwort schützen (Zero-Knowledge-Prinzip)</p>
+            </div>
+        </div>
+
+        <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+            <li><strong>Beim Upload oder nachträglich verschlüsseln:</strong> Sie können sensible Dateien entweder direkt beim Hochladen über das Feld <em>„🔒 Tresor-Passwort (optional)“</em> oder jederzeit nachträglich über das <strong>🔒 Schloss-Symbol</strong> in der Dateiliste mit <strong>AES-256-GCM (PBKDF2-HMAC-SHA256)</strong> verschlüsseln.</li>
+            <li><strong>Entschlüsseln &amp; Teilen:</strong> Tresor-Dateien sind mit dem Abzeichen <strong>🔒 Tresor</strong> markiert. Beim Herunterladen (auch über geteilte Links oder Freigaben an andere Benutzer) wird das Tresor-Passwort abgefragt. Zudem können Sie den Tresor-Schutz über das Schloss-Symbol jederzeit wieder dauerhaft aufheben.</li>
+        </ul>
+
+        <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-800 text-xs sm:text-sm text-amber-950 dark:text-amber-200 leading-relaxed">
+            <strong>⚠️ Wichtiger Hinweis zum Tresor-Passwort (Zero-Knowledge):</strong><br>
+            Das von Ihnen gewählte Tresor-Passwort wird <strong>nirgendwo auf dem Server gespeichert</strong> – weder in der Datenbank noch in einer Konfigurationsdatei. Nach dem Verschlüsseln wird der Schlüssel sofort aus dem Arbeitsspeicher verworfen. <strong>Wenn Sie das Tresor-Passwort für eine Datei vergessen, kann niemand – auch nicht der Administrator – die Datei wiederherstellen!</strong>
+        </div>
+    </section>
 
     <!-- 5. Papierkorb, Designs & Admin-Hilfe -->
     <div class="grid grid-cols-1 <?= $isAdminUser ? 'md:grid-cols-2' : '' ?> gap-6 mb-8">
@@ -245,7 +269,7 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files</td>
-                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, upload_date, deleted_at</code></td>
+                        <td class="py-3 px-4"><code>id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
                         <td class="py-3 px-4">Metadaten hochgeladener Dateien &amp; Zuordnung zu Benutzern/Gruppenordnern</td>
                         <td class="py-3 px-4">Aktiv bis zum Löschen; im Papierkorb (<code>deleted_at</code>) automatische Endlöschung nach 30 Tagen</td>
                     </tr>
