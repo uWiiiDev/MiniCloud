@@ -426,8 +426,8 @@ $sharedWithMeFiles = $stmtSharedWithMe->fetchAll();
 
 $totalSharedWithMeCount = count($sharedWithMeFolders) + count($sharedWithMeFiles);
 
-// Liste anderer Cloud-Benutzer für das Teilen-Modal
-$stmtOtherUsers = $pdo->prepare('SELECT id, username FROM users WHERE id <> :uid ORDER BY username ASC');
+// Liste anderer Cloud-Benutzer für das Teilen-Modal (nur Benutzer, die ihre Sichtbarkeit für Direktfreigaben aktiviert haben)
+$stmtOtherUsers = $pdo->prepare('SELECT id, username FROM users WHERE id <> :uid AND allow_user_sharing = 1 ORDER BY username ASC');
 $stmtOtherUsers->execute([':uid' => $userId]);
 $otherCloudUsers = $stmtOtherUsers->fetchAll();
 
@@ -1601,7 +1601,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
                 <?php if (empty($otherCloudUsers)): ?>
                     <p class="text-xs text-slate-500 dark:text-slate-400 italic">
-                        Es sind noch keine weiteren Cloud-Benutzer im System angelegt.
+                        Es hat noch kein anderer Cloud-Benutzer die Sichtbarkeit für Direktfreigaben in seinen Einstellungen aktiviert.
                     </p>
                 <?php else: ?>
                     <form id="shareWithUserForm" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">

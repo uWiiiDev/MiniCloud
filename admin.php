@@ -211,12 +211,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- 1. Neuen Benutzer anlegen ---
     if ($action === 'create_user') {
-        $username  = trim((string)($_POST['username'] ?? ''));
-        $email     = trim((string)($_POST['email'] ?? ''));
-        $password  = (string)($_POST['password'] ?? '');
-        $quotaMb   = max(1, (int)($_POST['quota_mb'] ?? 100));
-        $makeAdmin = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
-        $twoFactor = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $username         = trim((string)($_POST['username'] ?? ''));
+        $email            = trim((string)($_POST['email'] ?? ''));
+        $password         = (string)($_POST['password'] ?? '');
+        $quotaMb          = max(1, (int)($_POST['quota_mb'] ?? 100));
+        $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
+        $twoFactor        = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
 
         if (!preg_match('/^[a-zA-Z0-9_.-]{3,32}$/', $username)) {
             setFlash('error', 'Benutzername muss 3–32 Zeichen lang sein (Buchstaben, Zahlen, . _ -).');
@@ -234,8 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
                 $stmtIns = $pdo->prepare(
-                    'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, theme, storage_quota)
-                     VALUES (:u, :em, :h, :tfa, :adm, :theme, :q)'
+                    'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, theme, allow_user_sharing, storage_quota)
+                     VALUES (:u, :em, :h, :tfa, :adm, :theme, :aus, :q)'
                 );
                 $stmtIns->execute([
                     ':u'     => $username,
@@ -244,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':tfa'   => $twoFactor,
                     ':adm'   => $makeAdmin,
                     ':theme' => 'light',
+                    ':aus'   => $allowUserSharing,
                     ':q'     => $quotaMb * 1024 * 1024,
                 ]);
                 setFlash('success', sprintf('Benutzer "%s" (%d MB) wurde erfolgreich angelegt.', $username, $quotaMb));
@@ -275,14 +277,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 3. Benutzer Passwort / Quota / E-Mail / 2FA aktualisieren ---
+    // --- 3. Benutzer Passwort / Quota / E-Mail / 2FA / Teilen-Sichtbarkeit aktualisieren ---
     if ($action === 'update_user') {
-        $targetUserId = (int)($_POST['user_id'] ?? 0);
-        $email        = trim((string)($_POST['email'] ?? ''));
-        $quotaMb      = max(1, (int)($_POST['quota_mb'] ?? 100));
-        $newPassword  = (string)($_POST['new_password'] ?? '');
-        $makeAdmin    = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
-        $twoFactor    = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $targetUserId     = (int)($_POST['user_id'] ?? 0);
+        $email            = trim((string)($_POST['email'] ?? ''));
+        $quotaMb          = max(1, (int)($_POST['quota_mb'] ?? 100));
+        $newPassword      = (string)($_POST['new_password'] ?? '');
+        $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
+        $twoFactor        = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
 
         if ($targetUserId === $currentAdminId) {
             $makeAdmin = 1; // Eigenen Admin-Status nicht entziehen
@@ -311,6 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'UPDATE users
                      SET email = :em,
                          two_factor_enabled = :tfa,
+                         allow_user_sharing = :aus,
                          password_hash = :h,
                          storage_quota = :q,
                          is_admin = :adm
@@ -319,6 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtUpd->execute([
                     ':em'  => $email !== '' ? $email : null,
                     ':tfa' => $twoFactor,
+                    ':aus' => $allowUserSharing,
                     ':h'   => $hash,
                     ':q'   => $quotaMb * 1024 * 1024,
                     ':adm' => $makeAdmin,
@@ -329,6 +334,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'UPDATE users
                      SET email = :em,
                          two_factor_enabled = :tfa,
+                         allow_user_sharing = :aus,
                          storage_quota = :q,
                          is_admin = :adm
                      WHERE id = :id'
@@ -336,6 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtUpd->execute([
                     ':em'  => $email !== '' ? $email : null,
                     ':tfa' => $twoFactor,
+                    ':aus' => $allowUserSharing,
                     ':q'   => $quotaMb * 1024 * 1024,
                     ':adm' => $makeAdmin,
                     ':id'  => $targetUserId,
@@ -535,6 +542,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'smtp_encryption', $smtpEncryption);
         saveAppSetting($pdo, 'smtp_user', $smtpUser);
 
+        $allowRegistration = isset($_POST['allow_registration']) && $_POST['allow_registration'] === '1' ? '1' : '0';
+        $registrationCode  = mb_substr(trim((string)($_POST['registration_code'] ?? '')), 0, 100);
+        $regQuotaMb        = max(1, min(102400, (int)($_POST['registration_default_quota_mb'] ?? 100)));
+        saveAppSetting($pdo, 'allow_registration', $allowRegistration);
+        saveAppSetting($pdo, 'registration_code', $registrationCode);
+        saveAppSetting($pdo, 'registration_default_quota_mb', (string)$regQuotaMb);
+
         if ($clearSmtpPass) {
             saveAppSetting($pdo, 'smtp_pass', '');
         } elseif ($smtpPassInput !== '') {
@@ -633,7 +647,7 @@ $currentSettings = getAppSettings($pdo);
 
 // Daten für die Admin-Übersicht laden
 $allUsers = $pdo->query(
-    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.is_admin, u.theme, u.storage_quota, u.created_at,
+    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.allow_user_sharing, u.is_admin, u.theme, u.storage_quota, u.created_at,
             COALESCE(SUM(f.file_size), 0) AS used_bytes, COUNT(f.id) AS file_count
      FROM users u
      LEFT JOIN files f ON f.user_id = u.id
@@ -908,6 +922,61 @@ require_once __DIR__ . '/includes/header.php';
                     </label>
                 <?php endif; ?>
             </div>
+
+            <!-- Optionale Öffentliche Selbstregistrierung -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        👤 Öffentliche Selbstregistrierung
+                    </p>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                    </span>
+                </div>
+
+                <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        name="allow_registration"
+                        value="1"
+                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'checked' : '' ?>
+                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    >
+                    <span>
+                        <strong>Selbstregistrierung auf der Anmeldeseite erlauben</strong><br>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Neue Benutzer sind in der Teilen-Auswahl standardmäßig unsichtbar.</span>
+                    </span>
+                </label>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Einladungs-Code (optional)
+                        </label>
+                        <input
+                            type="text"
+                            name="registration_code"
+                            maxlength="100"
+                            value="<?= e($currentSettings['registration_code'] ?? '') ?>"
+                            placeholder="Leer = ohne Code"
+                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Start-Quota (MB)
+                        </label>
+                        <input
+                            type="number"
+                            name="registration_default_quota_mb"
+                            min="1"
+                            max="102400"
+                            value="<?= e($currentSettings['registration_default_quota_mb'] ?? '100') ?>"
+                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        >
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Rechte Spalte: Impressum -->
@@ -1075,6 +1144,11 @@ require_once __DIR__ . '/includes/header.php';
                 <span>🔒 <strong>2FA per E-Mail aktivieren</strong> (Sendet 6-stelligen Code beim Login)</span>
             </label>
 
+            <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                <input type="checkbox" name="allow_user_sharing" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                <span>👁️ <strong>In Teilen-Auswahl sichtbar</strong> (Standardmäßig aus Datenschutzgründen deaktiviert)</span>
+            </label>
+
             <button
                 type="submit"
                 class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
@@ -1107,6 +1181,7 @@ require_once __DIR__ . '/includes/header.php';
                         $uQuotaMb = (int)round(((int)$u['storage_quota']) / (1024 * 1024));
                         $uEmail = trim((string)($u['email'] ?? ''));
                         $u2fa = (int)($u['two_factor_enabled'] ?? 0) === 1;
+                        $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
                         ?>
                         <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                             <td class="py-3 px-4">
@@ -1117,6 +1192,9 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php endif; ?>
                                     <?php if ($u2fa && $uEmail !== ''): ?>
                                         <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per E-Mail aktiviert">🔒 2FA</span>
+                                    <?php endif; ?>
+                                    <?php if ($uShareVis): ?>
+                                        <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600 text-white" title="Sichtbar in der Teilen-Auswahl anderer Benutzer">👁️ Teilen</span>
                                     <?php endif; ?>
                                 </div>
                                 <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]" title="<?= e($uEmail !== '' ? $uEmail : 'Keine E-Mail-Adresse hinterlegt') ?>">
@@ -1158,6 +1236,10 @@ require_once __DIR__ . '/includes/header.php';
                                     <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Optionale 2FA per E-Mail aktivieren">
                                         <input type="checkbox" name="two_factor_enabled" value="1" <?= $u2fa ? 'checked' : '' ?>>
                                         <span>2FA</span>
+                                    </label>
+                                    <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="In Teilen-Auswahl für andere Benutzer sichtbar">
+                                        <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?>>
+                                        <span>Teilen</span>
                                     </label>
                                     <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
                                         <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>

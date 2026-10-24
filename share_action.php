@@ -276,12 +276,12 @@ if ($action === 'share_user') {
         exit;
     }
 
-    $stmtTarget = $pdo->prepare('SELECT id, username FROM users WHERE id = :id LIMIT 1');
+    $stmtTarget = $pdo->prepare('SELECT id, username, allow_user_sharing FROM users WHERE id = :id LIMIT 1');
     $stmtTarget->execute([':id' => $targetUserId]);
     $targetUser = $stmtTarget->fetch();
-    if (!$targetUser) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => 'Zielbenutzer existiert nicht.']);
+    if (!$targetUser || (int)($targetUser['allow_user_sharing'] ?? 0) !== 1) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Dieser Benutzer hat Direktfreigaben in seinen Einstellungen nicht aktiviert.']);
         exit;
     }
 

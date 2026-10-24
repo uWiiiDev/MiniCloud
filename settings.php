@@ -11,7 +11,7 @@ $loggedIn = isLoggedIn();
 $userRow = null;
 
 if ($loggedIn) {
-    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, storage_quota FROM users WHERE id = :id LIMIT 1');
+    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
     $stmtU->execute([':id' => (int)$_SESSION['user_id']]);
     $userRow = $stmtU->fetch() ?: null;
 }
@@ -105,6 +105,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
             $newTimeout > 0
                 ? 'Das Timeout bis zur automatischen Abmeldung wurde auf ' . $newTimeout . ' Minuten festgelegt.'
                 : 'Das automatische Timeout wurde deaktiviert (Sie bleiben angemeldet).'
+        );
+
+        header('Location: settings.php');
+        exit;
+    }
+
+    if ($action === 'update_share_visibility') {
+        $allowShare = isset($_POST['allow_user_sharing']) && (string)$_POST['allow_user_sharing'] === '1' ? 1 : 0;
+        $stmtUpdShareVis = $pdo->prepare('UPDATE users SET allow_user_sharing = :v WHERE id = :id');
+        $stmtUpdShareVis->execute([
+            ':v'  => $allowShare,
+            ':id' => (int)$userRow['id'],
+        ]);
+
+        setFlash(
+            'success',
+            $allowShare === 1
+                ? 'Sie sind nun in der Teilen-Auswahl für andere Cloud-Benutzer sichtbar.'
+                : 'Sie werden in der Teilen-Auswahl anderer Cloud-Benutzer nicht mehr angezeigt.'
         );
 
         header('Location: settings.php');
@@ -343,6 +362,49 @@ $themeGroups = [
                         <?php endif; ?>
                     </button>
                 <?php endforeach; ?>
+            </form>
+        </section>
+
+        <!-- 3c. SICHTBARKEIT IN DER TEILEN-AUSWAHL (DATENSCHUTZ BEI DIREKTFREIGABEN) -->
+        <?php $allowUserSharing = isset($userRow['allow_user_sharing']) && (int)$userRow['allow_user_sharing'] === 1; ?>
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">👥 Sichtbarkeit in der Teilen-Auswahl</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $allowUserSharing ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= $allowUserSharing ? '👁️ Sichtbar für Direktfreigaben' : '🔒 Versteckt (Standard)' ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Standardmäßig ist Ihr Konto zu Ihrem Schutz versteckt, sodass andere Benutzer Ihren Namen nicht in der Teilen-Auswahl sehen. Wenn Sie die Sichtbarkeit aktivieren, können andere angemeldete Cloud-Benutzer Dateien und Ordner direkt mit Ihnen teilen.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_share_visibility">
+
+                <button
+                    type="submit"
+                    name="allow_user_sharing"
+                    value="0"
+                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= !$allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                >
+                    <span>🔒 Nicht in Teilen-Auswahl anzeigen (Standard)</span>
+                    <?php if (!$allowUserSharing): ?>
+                        <span class="text-xs font-bold shrink-0">✓</span>
+                    <?php endif; ?>
+                </button>
+
+                <button
+                    type="submit"
+                    name="allow_user_sharing"
+                    value="1"
+                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                >
+                    <span>👁️ In Teilen-Auswahl anzeigen (Direktfreigaben erlauben)</span>
+                    <?php if ($allowUserSharing): ?>
+                        <span class="text-xs font-bold shrink-0">✓</span>
+                    <?php endif; ?>
+                </button>
             </form>
         </section>
 

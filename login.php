@@ -378,7 +378,14 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
 
         <div class="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
-            Geschlossenes Cloud-System &bull; Benutzerkonten werden durch den Administrator angelegt.
+            <?php if (($appSettings['allow_registration'] ?? '0') === '1'): ?>
+                <span>Noch kein Benutzerkonto?</span>
+                <a href="register.php" class="ml-1 font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                    Jetzt registrieren &rarr;
+                </a>
+            <?php else: ?>
+                Geschlossenes Cloud-System &bull; Benutzerkonten werden durch den Administrator angelegt.
+            <?php endif; ?>
         </div>
     </div>
 </div>

@@ -544,17 +544,20 @@ function getUploadErrorMessage(int $errorCode): string
 function getAppSettings(?PDO $pdo = null): array
 {
     $defaults = [
-        'app_title'       => APP_NAME,
-        'app_subtitle'    => 'Private Cloud',
-        'logo_data_uri'   => '',
-        'imprint_text'    => '',
-        'mail_from'       => '',
-        'mail_transport'  => 'mail',
-        'smtp_host'       => '',
-        'smtp_port'       => '465',
-        'smtp_encryption' => 'ssl',
-        'smtp_user'       => '',
-        'smtp_pass'       => '',
+        'app_title'                     => APP_NAME,
+        'app_subtitle'                  => 'Private Cloud',
+        'logo_data_uri'                 => '',
+        'imprint_text'                  => '',
+        'mail_from'                     => '',
+        'mail_transport'                => 'mail',
+        'smtp_host'                     => '',
+        'smtp_port'                     => '465',
+        'smtp_encryption'               => 'ssl',
+        'smtp_user'                     => '',
+        'smtp_pass'                     => '',
+        'allow_registration'            => '0',
+        'registration_code'             => '',
+        'registration_default_quota_mb' => '100',
     ];
 
     try {
