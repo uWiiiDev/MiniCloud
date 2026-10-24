@@ -434,16 +434,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                 </div>
             <?php endforeach; ?>
         </div>
-        <script>
-            setTimeout(() => {
-                const wrap = document.getElementById('flashContainer');
-                if (!wrap) return;
-                wrap.querySelectorAll('.mc-flash-msg').forEach((msg) => {
-                    msg.classList.add('opacity-0', '-translate-y-1');
-                });
+        <?php $flashDurationSec = getCurrentFlashDuration(); ?>
+        <?php if ($flashDurationSec > 0): ?>
+            <script>
                 setTimeout(() => {
-                    wrap.remove();
-                }, 300);
-            }, 10000);
-        </script>
+                    const wrap = document.getElementById('flashContainer');
+                    if (!wrap) return;
+                    wrap.querySelectorAll('.mc-flash-msg').forEach((msg) => {
+                        msg.classList.add('opacity-0', '-translate-y-1');
+                    });
+                    setTimeout(() => {
+                        wrap.remove();
+                    }, 300);
+                }, <?= (int)($flashDurationSec * 1000) ?>);
+            </script>
+        <?php endif; ?>
     <?php endif; ?>

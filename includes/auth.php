@@ -54,11 +54,12 @@ function isLoggedIn(): bool
         $verifiedThisRequest = true;
         try {
             $pdo = getDB();
-            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout FROM users WHERE id = :id LIMIT 1');
+            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout, flash_duration FROM users WHERE id = :id LIMIT 1');
             $stmt->execute([':id' => $_SESSION['user_id']]);
             $row = $stmt->fetch();
             if ($row) {
                 $timeoutMin = isset($row['session_timeout']) ? (int)$row['session_timeout'] : 30;
+                $flashSec   = isset($row['flash_duration']) ? max(0, min(300, (int)$row['flash_duration'])) : 10;
                 if ($timeoutMin > 0 && isset($_SESSION['last_activity']) && is_int($_SESSION['last_activity'])) {
                     if ((time() - $_SESSION['last_activity']) > ($timeoutMin * 60)) {
                         $_SESSION = [];
@@ -70,6 +71,7 @@ function isLoggedIn(): bool
                 $_SESSION['is_admin']        = ((int)$row['is_admin'] === 1);
                 $_SESSION['theme']           = (string)($row['theme'] ?: 'light');
                 $_SESSION['session_timeout'] = $timeoutMin;
+                $_SESSION['flash_duration']  = $flashSec;
                 $_SESSION['last_activity']   = time();
             } else {
                 // Benutzer wurde gelöscht
@@ -80,6 +82,7 @@ function isLoggedIn(): bool
             $_SESSION['is_admin']        = $_SESSION['is_admin'] ?? false;
             $_SESSION['theme']           = $_SESSION['theme'] ?? 'light';
             $_SESSION['session_timeout'] = $_SESSION['session_timeout'] ?? 30;
+            $_SESSION['flash_duration']  = $_SESSION['flash_duration'] ?? 10;
             $_SESSION['last_activity']   = time();
         }
     }
@@ -115,6 +118,17 @@ function getCurrentSessionTimeout(): int
         return 30;
     }
     return isset($_SESSION['session_timeout']) ? (int)$_SESSION['session_timeout'] : 30;
+}
+
+/**
+ * Liefert die vom Benutzer eingestellte Anzeigedauer für Statusmeldungen in Sekunden (0 = nicht automatisch ausblenden).
+ */
+function getCurrentFlashDuration(): int
+{
+    if (!isLoggedIn()) {
+        return 10;
+    }
+    return isset($_SESSION['flash_duration']) ? max(0, min(300, (int)$_SESSION['flash_duration'])) : 10;
 }
 
 /**

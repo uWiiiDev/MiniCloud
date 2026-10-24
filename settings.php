@@ -11,7 +11,7 @@ $loggedIn = isLoggedIn();
 $userRow = null;
 
 if ($loggedIn) {
-    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
+    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
     $stmtU->execute([':id' => (int)$_SESSION['user_id']]);
     $userRow = $stmtU->fetch() ?: null;
 }
@@ -105,6 +105,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
             $newTimeout > 0
                 ? 'Das Timeout bis zur automatischen Abmeldung wurde auf ' . $newTimeout . ' Minuten festgelegt.'
                 : 'Das automatische Timeout wurde deaktiviert (Sie bleiben angemeldet).'
+        );
+
+        header('Location: settings.php');
+        exit;
+    }
+
+    if ($action === 'update_flash_duration') {
+        if (isset($_POST['flash_duration_preset']) && $_POST['flash_duration_preset'] !== '') {
+            $newFlashSec = max(0, min(300, (int)$_POST['flash_duration_preset']));
+        } else {
+            $newFlashSec = max(0, min(300, (int)($_POST['custom_flash_duration'] ?? 10)));
+        }
+
+        $stmtUpdFlash = $pdo->prepare('UPDATE users SET flash_duration = :fd WHERE id = :id');
+        $stmtUpdFlash->execute([
+            ':fd' => $newFlashSec,
+            ':id' => (int)$userRow['id'],
+        ]);
+        $_SESSION['flash_duration'] = $newFlashSec;
+
+        setFlash(
+            'success',
+            $newFlashSec > 0
+                ? sprintf('Die Anzeigedauer für Statusmeldungen wurde auf %d Sekunde(n) festgelegt.', $newFlashSec)
+                : 'Statusmeldungen bleiben nun dauerhaft sichtbar, bis Sie diese manuell schließen.'
         );
 
         header('Location: settings.php');
@@ -362,6 +387,79 @@ $themeGroups = [
                         <?php endif; ?>
                     </button>
                 <?php endforeach; ?>
+            </form>
+        </section>
+
+        <!-- 3b-2. ANZEIGEDAUER VON STATUSMELDUNGEN -->
+        <?php
+        $userFlashSec = isset($userRow['flash_duration']) ? max(0, min(300, (int)$userRow['flash_duration'])) : 10;
+        $flashPresets = [
+            1  => '1 Sekunde',
+            3  => '3 Sekunden',
+            5  => '5 Sekunden',
+            10 => '10 Sekunden (Standard)',
+            15 => '15 Sekunden',
+            0  => 'Nicht ausblenden (Manuell)',
+        ];
+        $flashBadgeLabel = $userFlashSec === 0
+            ? 'Manuell schließen'
+            : ($userFlashSec === 1 ? '1 Sekunde' : $userFlashSec . ' Sekunden');
+        ?>
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔔 Anzeigedauer von Statusmeldungen</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userFlashSec > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($flashBadgeLabel) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Bestimmen Sie, nach wie vielen Sekunden grüne, gelbe oder rote Rückmeldungen oben auf der Seite automatisch ausgeblendet werden – oder geben Sie eine eigene Sekundenzahl ein.
+            </p>
+
+            <form action="settings.php" method="post" class="space-y-3.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_flash_duration">
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <?php foreach ($flashPresets as $fSec => $fLabel): ?>
+                        <?php $isSelectedFlash = ($userFlashSec === (int)$fSec); ?>
+                        <button
+                            type="submit"
+                            name="flash_duration_preset"
+                            value="<?= (int)$fSec ?>"
+                            class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedFlash ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                        >
+                            <span class="truncate"><?= e($fLabel) ?></span>
+                            <?php if ($isSelectedFlash): ?>
+                                <span class="text-xs font-bold shrink-0">✓</span>
+                            <?php endif; ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <label for="custom_flash_duration" class="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Eigene Dauer in Sekunden (1–300 s, oder 0 = nie automatisch ausblenden):
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <input
+                            type="number"
+                            id="custom_flash_duration"
+                            name="custom_flash_duration"
+                            min="0"
+                            max="300"
+                            value="<?= (int)$userFlashSec ?>"
+                            class="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Sek.</span>
+                        <button
+                            type="submit"
+                            class="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                            Übernehmen
+                        </button>
+                    </div>
+                </div>
             </form>
         </section>
 

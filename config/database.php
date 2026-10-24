@@ -87,6 +87,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `is_admin` TINYINT(1) NOT NULL DEFAULT 0,
             `theme` VARCHAR(24) NOT NULL DEFAULT 'light',
             `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30,
+            `flash_duration` INT UNSIGNED NOT NULL DEFAULT 10,
             `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0,
             `calendar_token` VARCHAR(64) DEFAULT NULL,
             `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600,
@@ -121,6 +122,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('session_timeout', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30 AFTER `theme`");
+    }
+    if (!in_array('flash_duration', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `flash_duration` INT UNSIGNED NOT NULL DEFAULT 10 AFTER `session_timeout`");
     }
     if (!in_array('allow_user_sharing', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0 AFTER `session_timeout`");

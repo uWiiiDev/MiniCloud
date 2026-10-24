@@ -2493,6 +2493,90 @@ function getTranslationDictionary(): array
             'es' => 'Activar mensajería / chat integrado',
             'nl' => 'Geïntegreerde messenger / chat inschakelen',
         ],
+        '🔔 Anzeigedauer von Statusmeldungen' => [
+            'en' => '🔔 Status Message Display Duration',
+            'fr' => '🔔 Durée d’affichage des notifications',
+            'es' => '🔔 Duración de visualización de avisos',
+            'nl' => '🔔 Weergaveduur van statusmeldingen',
+        ],
+        'Bestimmen Sie, nach wie vielen Sekunden grüne, gelbe oder rote Rückmeldungen oben auf der Seite automatisch ausgeblendet werden – oder geben Sie eine eigene Sekundenzahl ein.' => [
+            'en' => 'Choose after how many seconds status notifications at the top of the page automatically hide — or enter a custom number of seconds.',
+            'fr' => 'Choisissez après combien de secondes les notifications en haut de page disparaissent automatiquement — ou saisissez une durée personnalisée.',
+            'es' => 'Elija después de cuántos segundos se ocultan automáticamente los avisos en la parte superior — o introduzca un número personalizado de segundos.',
+            'nl' => 'Bepaal na hoeveel seconden statusmeldingen bovenaan de pagina automatisch verdwijnen — of voer zelf een aantal seconden in.',
+        ],
+        '1 Sekunde' => [
+            'en' => '1 second',
+            'fr' => '1 seconde',
+            'es' => '1 segundo',
+            'nl' => '1 seconde',
+        ],
+        '3 Sekunden' => [
+            'en' => '3 seconds',
+            'fr' => '3 secondes',
+            'es' => '3 segundos',
+            'nl' => '3 seconden',
+        ],
+        '5 Sekunden' => [
+            'en' => '5 seconds',
+            'fr' => '5 secondes',
+            'es' => '5 segundos',
+            'nl' => '5 seconden',
+        ],
+        '10 Sekunden (Standard)' => [
+            'en' => '10 seconds (Default)',
+            'fr' => '10 secondes (Par défaut)',
+            'es' => '10 segundos (Predeterminado)',
+            'nl' => '10 seconden (Standaard)',
+        ],
+        '15 Sekunden' => [
+            'en' => '15 seconds',
+            'fr' => '15 secondes',
+            'es' => '15 segundos',
+            'nl' => '15 seconden',
+        ],
+        'Nicht ausblenden (Manuell)' => [
+            'en' => 'Do not auto-hide (Manual)',
+            'fr' => 'Ne pas masquer (Manuel)',
+            'es' => 'No ocultar (Manual)',
+            'nl' => 'Niet verbergen (Handmatig)',
+        ],
+        'Manuell schließen' => [
+            'en' => 'Close manually',
+            'fr' => 'Fermer manuellement',
+            'es' => 'Cerrar manualmente',
+            'nl' => 'Handmatig sluiten',
+        ],
+        'Eigene Dauer in Sekunden (1–300 s, oder 0 = nie automatisch ausblenden):' => [
+            'en' => 'Custom duration in seconds (1–300 s, or 0 = never auto-hide):',
+            'fr' => 'Durée personnalisée en secondes (1–300 s, ou 0 = ne jamais masquer) :',
+            'es' => 'Duración personalizada en segundos (1–300 s, o 0 = no ocultar nunca):',
+            'nl' => 'Eigen duur in seconden (1–300 s, of 0 = nooit automatisch verbergen):',
+        ],
+        'Sek.' => [
+            'en' => 'sec.',
+            'fr' => 'sec.',
+            'es' => 'seg.',
+            'nl' => 'sec.',
+        ],
+        'Übernehmen' => [
+            'en' => 'Apply',
+            'fr' => 'Appliquer',
+            'es' => 'Aplicar',
+            'nl' => 'Toepassen',
+        ],
+        'Statusmeldungen bleiben nun dauerhaft eingeblendet, bis sie manuell geschlossen werden.' => [
+            'en' => 'Status messages will now stay visible until closed manually.',
+            'fr' => 'Les notifications resteront désormais affichées jusqu’à leur fermeture manuelle.',
+            'es' => 'Los avisos de estado permanecerán visibles hasta que se cierren manualmente.',
+            'nl' => 'Statusmeldingen blijven nu zichtbaar totdat ze handmatig worden gesloten.',
+        ],
+        'Die Anzeigedauer für Statusmeldungen wurde auf 1 Sekunde festgelegt.' => [
+            'en' => 'Status message display duration has been set to 1 second.',
+            'fr' => 'La durée d’affichage des notifications a été définie sur 1 seconde.',
+            'es' => 'La duración de los avisos de estado se ha establecido en 1 segundo.',
+            'nl' => 'De weergaveduur voor statusmeldingen is ingesteld op 1 seconde.',
+        ],
     ];
 
     return $dict;
@@ -2700,6 +2784,20 @@ function translateTextSegment(string $text, string $lang): string
             'fr' => 'Le délai de déconnexion automatique a été défini sur $1 minutes.',
             'es' => 'El tiempo de espera hasta el cierre automático se ha establecido en $1 minutos.',
             'nl' => 'De time-out voor automatisch uitloggen is ingesteld op $1 minuten.',
+        ],
+        // "Die Anzeigedauer für Statusmeldungen wurde auf 5 Sekunden festgelegt."
+        '/^Die Anzeigedauer für Statusmeldungen wurde auf (\d+) Sekunden festgelegt\.$/u' => [
+            'en' => 'Status message display duration has been set to $1 seconds.',
+            'fr' => 'La durée d’affichage des notifications a été définie sur $1 secondes.',
+            'es' => 'La duración de los avisos de estado se ha establecido en $1 segundos.',
+            'nl' => 'De weergaveduur voor statusmeldingen is ingesteld op $1 seconden.',
+        ],
+        // "12 Sekunden"
+        '/^(\d+) Sekunden$/u' => [
+            'en' => '$1 seconds',
+            'fr' => '$1 secondes',
+            'es' => '$1 segundos',
+            'nl' => '$1 seconden',
         ],
     ];
 
