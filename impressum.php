@@ -9,6 +9,34 @@ $pdo         = getDB();
 $appSettings = getAppSettings($pdo);
 $imprintText = trim((string)($appSettings['imprint_text'] ?? ''));
 
+$rawHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud'));
+$domain  = preg_replace('/:\d+$/', '', $rawHost) ?: 'runready.cloud';
+if ($domain === 'localhost' || filter_var($domain, FILTER_VALIDATE_IP) !== false) {
+    $domain = 'runready.cloud';
+}
+$contactMail = trim((string)($appSettings['mail_from'] ?? ''));
+if (filter_var($contactMail, FILTER_VALIDATE_EMAIL) === false) {
+    $contactMail = 'noreply@' . $domain;
+}
+
+$defaultPrivateNotice = implode("\n", [
+    'Hinweis gemäß § 5 DDG (Digitale-Dienste-Gesetz) & Art. 2 Abs. 2 Buchst. c DSGVO',
+    '',
+    'Bei dieser Webanwendung handelt es sich um ein rein privates, nicht-kommerzielles System, das ausschließlich zu persönlichen und familiären Zwecken innerhalb eines geschlossenen Benutzerkreises betrieben wird.',
+    '',
+    '1. Keine Impressumspflicht (§ 5 Abs. 1 DDG / § 18 Abs. 1 MStV)',
+    'Es liegt kein geschäftsmäßiges, entgeltliches oder journalistisch-redaktionelles Angebot vor. Eine öffentliche Selbstregistrierung ist ausgeschlossen. Daher besteht für diese private Instanz keine gesetzliche Pflicht zur Anbieterkennzeichnung (Impressumspflicht).',
+    '',
+    '2. Datenschutz & Haushaltsausnahme (Art. 2 Abs. 2 Buchst. c DSGVO)',
+    'Die Nutzung erfolgt ausschließlich im privaten und familiären Rahmen. Es werden keinerlei Analyse-, Werbe- oder Tracking-Dienste eingesetzt und keine Daten an Dritte oder externe Server (CDNs) übertragen. Es werden lediglich technisch notwendige Sitzungsdaten für angemeldete Benutzer verarbeitet.',
+    '',
+    '3. Kontakt bei technischen Fragen',
+    'Bei technischen Rückfragen erreichen Sie den Administrator unter:',
+    'E-Mail: ' . $contactMail,
+]);
+
+$displayImprint = $imprintText !== '' ? $imprintText : $defaultPrivateNotice;
+
 $pageTitle = 'Impressum';
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -17,9 +45,9 @@ require_once __DIR__ . '/includes/header.php';
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-6 sm:p-8">
         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-200 dark:border-slate-800">
             <div>
-                <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Impressum</h1>
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Impressum &amp; Rechtlicher Hinweis</h1>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                    Angaben gemäß § 5 DDG (ehemals § 5 TMG) für <?= e($appSettings['app_title']) ?>
+                    Rechtliche Hinweise gemäß § 5 DDG &amp; DSGVO für <?= e($appSettings['app_title']) ?>
                 </p>
             </div>
 
@@ -29,7 +57,7 @@ require_once __DIR__ . '/includes/header.php';
                         href="admin.php#branding"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors"
                     >
-                        ✏️ Impressum bearbeiten
+                        ✏️ Text anpassen
                     </a>
                 <?php endif; ?>
                 <a
@@ -41,25 +69,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
 
-        <?php if ($imprintText !== ''): ?>
-            <div class="prose dark:prose-invert max-w-none text-sm sm:text-base text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line">
-                <?= e($imprintText) ?>
-            </div>
-        <?php else: ?>
-            <div class="py-8 text-center">
-                <p class="text-sm text-slate-500 dark:text-slate-400">
-                    Für diese Cloud-Instanz wurde vom Administrator noch kein Impressum hinterlegt.
-                </p>
-                <?php if (isAdmin()): ?>
-                    <a
-                        href="admin.php#branding"
-                        class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold transition-colors"
-                    >
-                        Jetzt Impressum in der Administration hinterlegen
-                    </a>
-                <?php endif; ?>
-            </div>
-        <?php endif; ?>
+        <div class="prose dark:prose-invert max-w-none text-sm sm:text-base text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line"><?= e($displayImprint) ?></div>
     </div>
 </div>
 
