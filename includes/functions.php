@@ -681,6 +681,9 @@ function getAppSettings(?PDO $pdo = null): array
         'registration_default_quota_mb' => '100',
         'enable_calendar'               => '1',
         'enable_chat'                   => '1',
+        'github_repo'                   => 'uwebenzelrath/MiniCloud',
+        'installed_commit_sha'          => '',
+        'installed_commit_date'         => '',
     ];
 
     try {

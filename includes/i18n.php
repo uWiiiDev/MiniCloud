@@ -2655,6 +2655,60 @@ function getTranslationDictionary(): array
             'es' => 'El historial del chat se ha vaciado por completo.',
             'nl' => 'De chatgeschiedenis is volledig gewist.',
         ],
+        'System-Update (GitHub)' => [
+            'en' => 'System Update (GitHub)',
+            'fr' => 'Mise à jour du système (GitHub)',
+            'es' => 'Actualización del sistema (GitHub)',
+            'nl' => 'Systeemupdate (GitHub)',
+        ],
+        'Prüfen Sie direkt über GitHub auf neue Versionen und installieren Sie Updates per 1-Klick (Benutzerdateien & Datenbank-Zugangsdaten bleiben geschützt).' => [
+            'en' => 'Check directly on GitHub for new versions and install updates with 1 click (user files & database credentials remain protected).',
+            'fr' => 'Vérifiez directement sur GitHub les nouvelles versions et installez les mises à jour en 1 clic (vos fichiers et identifiants restent protégés).',
+            'es' => 'Compruebe directamente en GitHub si hay nuevas versiones e instale actualizaciones con 1 clic (los archivos y credenciales permanecen protegidos).',
+            'nl' => 'Controleer direct via GitHub op nieuwe versies en installeer updates met 1 klik (gebruikersbestanden & databasegegevens blijven beschermd).',
+        ],
+        'Auf Updates prüfen' => [
+            'en' => 'Check for Updates',
+            'fr' => 'Vérifier les mises à jour',
+            'es' => 'Buscar actualizaciones',
+            'nl' => 'Controleren op updates',
+        ],
+        'Installierte Version:' => [
+            'en' => 'Installed Version:',
+            'fr' => 'Version installée :',
+            'es' => 'Versión instalada:',
+            'nl' => 'Geïnstalleerde versie:',
+        ],
+        'Installierter Commit:' => [
+            'en' => 'Installed Commit:',
+            'fr' => 'Commit installé :',
+            'es' => 'Commit instalado:',
+            'nl' => 'Geïnstalleerde commit:',
+        ],
+        'Update-Status:' => [
+            'en' => 'Update Status:',
+            'fr' => 'État de la mise à jour :',
+            'es' => 'Estado de actualización:',
+            'nl' => 'Updatestatus:',
+        ],
+        'Bereit zur Prüfung' => [
+            'en' => 'Ready to check',
+            'fr' => 'Prêt à vérifier',
+            'es' => 'Listo para comprobar',
+            'nl' => 'Klaar voor controle',
+        ],
+        'Jetzt von GitHub aktualisieren' => [
+            'en' => 'Update from GitHub Now',
+            'fr' => 'Mettre à jour depuis GitHub maintenant',
+            'es' => 'Actualizar desde GitHub ahora',
+            'nl' => 'Nu bijwerken vanaf GitHub',
+        ],
+        'Auf GitHub öffnen ↗' => [
+            'en' => 'Open on GitHub ↗',
+            'fr' => 'Ouvrir sur GitHub ↗',
+            'es' => 'Abrir en GitHub ↗',
+            'nl' => 'Openen op GitHub ↗',
+        ],
     ];
 
     return $dict;

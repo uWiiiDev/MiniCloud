@@ -193,9 +193,308 @@ function numberformat_de(float $val): string
     return number_format($val, 2, ',', '.');
 }
 
+/**
+ * Lädt eine HTTPS-URL (JSON oder ZIP) über cURL oder Stream-Context herunter.
+ */
+function fetchUrlBytes(string $url, ?string &$errorOut = null): ?string
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        if ($ch !== false) {
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+                CURLOPT_TIMEOUT        => 30,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_USERAGENT      => 'MiniCloud-Updater/1.5 (+https://github.com/uwebenzelrath/MiniCloud)',
+                CURLOPT_HTTPHEADER     => ['Accept: application/vnd.github+json'],
+            ]);
+            $res = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            curl_close($ch);
+            if (is_string($res) && $code >= 200 && $code < 300) {
+                return $res;
+            }
+            $errorOut = $err !== '' ? $err : sprintf('HTTP-Statuscode %d von GitHub erhalten.', $code);
+            return null;
+        }
+    }
+
+    $ctx = stream_context_create([
+        'http' => [
+            'method'          => 'GET',
+            'timeout'         => 30,
+            'follow_location' => 1,
+            'header'          => "User-Agent: MiniCloud-Updater/1.5\r\nAccept: application/vnd.github+json\r\n",
+        ],
+    ]);
+    $res = @file_get_contents($url, false, $ctx);
+    if ($res === false) {
+        $errorOut = 'Verbindung zu GitHub fehlgeschlagen.';
+        return null;
+    }
+    return $res;
+}
+
+/**
+ * Ermittelt den aktuell auf dem Server installierten GitHub-Commit (aus settings oder lokalem .git).
+ *
+ * @return array{sha: string, short: string, date: string}
+ */
+function getLocalInstalledCommitInfo(PDO $pdo): array
+{
+    $settings = getAppSettings($pdo);
+    $sha  = trim((string)($settings['installed_commit_sha'] ?? ''));
+    $date = trim((string)($settings['installed_commit_date'] ?? ''));
+
+    $gitHeadFile = __DIR__ . '/.git/refs/heads/main';
+    if ($sha === '' && is_readable($gitHeadFile)) {
+        $rawHead = trim((string)@file_get_contents($gitHeadFile));
+        if (preg_match('/^[0-9a-f]{40}$/i', $rawHead)) {
+            $sha = strtolower($rawHead);
+        }
+    }
+
+    return [
+        'sha'   => $sha,
+        'short' => $sha !== '' ? substr($sha, 0, 7) : '',
+        'date'  => $date,
+    ];
+}
+
+/**
+ * Prüft über die GitHub-API die neuesten Commits des main-Branches.
+ *
+ * @return array<string, mixed>
+ */
+function checkGitHubUpdates(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud'): array
+{
+    if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo)) {
+        $repo = 'uwebenzelrath/MiniCloud';
+    }
+
+    $err = null;
+    $apiUrl = sprintf('https://api.github.com/repos/%s/commits?sha=main&per_page=5', $repo);
+    $rawJson = fetchUrlBytes($apiUrl, $err);
+    if ($rawJson === null) {
+        return [
+            'ok'    => false,
+            'error' => $err ?? 'GitHub-API konnte nicht erreicht werden.',
+        ];
+    }
+
+    $data = json_decode($rawJson, true);
+    if (!is_array($data) || empty($data[0]['sha'])) {
+        return [
+            'ok'    => false,
+            'error' => 'Ungültige Antwort der GitHub-API.',
+        ];
+    }
+
+    $local = getLocalInstalledCommitInfo($pdo);
+    $commits = [];
+    foreach ($data as $item) {
+        if (!is_array($item) || empty($item['sha'])) {
+            continue;
+        }
+        $cSha = strtolower((string)$item['sha']);
+        $cMsg = trim((string)($item['commit']['message'] ?? ''));
+        $firstLine = strtok($cMsg, "\r\n") ?: $cMsg;
+        $rawDate = (string)($item['commit']['committer']['date'] ?? ($item['commit']['author']['date'] ?? ''));
+        $ts = $rawDate !== '' ? (strtotime($rawDate) ?: time()) : time();
+        $dt = (new DateTimeImmutable('@' . $ts))->setTimezone(new DateTimeZone('Europe/Berlin'));
+
+        $commits[] = [
+            'sha'       => $cSha,
+            'short'     => substr($cSha, 0, 7),
+            'message'   => $firstLine,
+            'date_fmt'  => $dt->format('d.m.Y H:i') . ' Uhr',
+            'author'    => (string)($item['commit']['author']['name'] ?? 'GitHub'),
+            'html_url'  => (string)($item['html_url'] ?? ('https://github.com/' . $repo . '/commit/' . $cSha)),
+        ];
+    }
+
+    $latest = $commits[0];
+    $isUpToDate = ($local['sha'] !== '' && $local['sha'] === $latest['sha']);
+
+    return [
+        'ok'                 => true,
+        'repo'               => $repo,
+        'installed_sha'      => $local['sha'],
+        'installed_short'    => $local['short'],
+        'installed_date'     => $local['date'],
+        'latest_sha'         => $latest['sha'],
+        'latest_short'       => $latest['short'],
+        'latest_message'     => $latest['message'],
+        'latest_date'        => $latest['date_fmt'],
+        'is_up_to_date'      => $isUpToDate,
+        'commits'            => $commits,
+    ];
+}
+
+/**
+ * Lädt das neueste Release-/Branch-Archiv von GitHub herunter und aktualisiert alle Programmdateien,
+ * während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` geschützt bleiben.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud'): array
+{
+    if (!class_exists('ZipArchive')) {
+        return [
+            'ok'      => false,
+            'message' => 'Die PHP-Erweiterung ZipArchive ist auf diesem Server nicht aktiviert.',
+        ];
+    }
+
+    if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo)) {
+        $repo = 'uwebenzelrath/MiniCloud';
+    }
+
+    $check = checkGitHubUpdates($pdo, $repo);
+    $latestSha  = (string)($check['latest_sha'] ?? '');
+    $latestDate = (string)($check['latest_date'] ?? date('d.m.Y H:i') . ' Uhr');
+
+    $zipUrl = sprintf('https://github.com/%s/archive/refs/heads/main.zip', $repo);
+    $dlErr = null;
+    $zipBytes = fetchUrlBytes($zipUrl, $dlErr);
+    if ($zipBytes === null || strlen($zipBytes) < 1000) {
+        return [
+            'ok'      => false,
+            'message' => 'Download des Update-Pakets von GitHub fehlgeschlagen: ' . ($dlErr ?? 'Leeres Archiv.'),
+        ];
+    }
+
+    $tmpZip = tempnam(sys_get_temp_dir(), 'mc_upd_');
+    if ($tmpZip === false || file_put_contents($tmpZip, $zipBytes) === false) {
+        return [
+            'ok'      => false,
+            'message' => 'Temporäre Update-Datei konnte nicht gespeichert werden.',
+        ];
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($tmpZip) !== true) {
+        @unlink($tmpZip);
+        return [
+            'ok'      => false,
+            'message' => 'Das heruntergeladene ZIP-Archiv konnte nicht geöffnet werden.',
+        ];
+    }
+
+    // Bestehende Datenbank-Zugangsdaten aus config/database.php sichern
+    $existingDbFile = __DIR__ . '/config/database.php';
+    $existingDbContent = is_readable($existingDbFile) ? (string)@file_get_contents($existingDbFile) : '';
+    $preservedDefines = [];
+    foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $constName) {
+        if (preg_match("/define\(\s*'" . $constName . "'\s*,[^\r\n]+/", $existingDbContent, $mDef)) {
+            $preservedDefines[$constName] = $mDef[0];
+        }
+    }
+
+    $updatedFilesCount = 0;
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entryName = (string)$zip->getNameIndex($i);
+        if ($entryName === '' || str_ends_with($entryName, '/')) {
+            continue;
+        }
+
+        // Top-Level-Ordner im GitHub-ZIP (z.B. "MiniCloud-main/") entfernen
+        $slashPos = strpos($entryName, '/');
+        if ($slashPos === false) {
+            continue;
+        }
+        $relPath = substr($entryName, $slashPos + 1);
+        if ($relPath === '' || str_contains($relPath, '..')) {
+            continue;
+        }
+
+        // Benutzerdateien (uploads/) und Git-Metadaten niemals überschreiben
+        if (
+            str_starts_with($relPath, 'uploads/') ||
+            str_starts_with($relPath, '.git/') ||
+            str_starts_with($relPath, '.github/')
+        ) {
+            continue;
+        }
+
+        $fileContent = $zip->getFromIndex($i);
+        if ($fileContent === false) {
+            continue;
+        }
+
+        // In config/database.php die bestehenden Datenbank-Konstanten (insb. DB_PASS) erhalten
+        if ($relPath === 'config/database.php' && !empty($preservedDefines)) {
+            foreach ($preservedDefines as $constName => $defLine) {
+                $fileContent = (string)preg_replace(
+                    "/define\(\s*'" . $constName . "'\s*,[^\r\n]+/",
+                    addcslashes($defLine, '\\$'),
+                    $fileContent,
+                    1
+                );
+            }
+        }
+
+        $destPath = __DIR__ . '/' . $relPath;
+        $destDir = dirname($destPath);
+        if (!is_dir($destDir)) {
+            @mkdir($destDir, 0755, true);
+        }
+
+        if (@file_put_contents($destPath, $fileContent) !== false) {
+            $updatedFilesCount++;
+        }
+    }
+
+    $zip->close();
+    @unlink($tmpZip);
+
+    if ($updatedFilesCount === 0) {
+        return [
+            'ok'      => false,
+            'message' => 'Keine Dateien konnten im Zielverzeichnis aktualisiert werden (bitte Schreibrechte prüfen).',
+        ];
+    }
+
+    // Datenbank-Schema prüfen/migrieren und Commit-Stand vermerken
+    try {
+        ensureSchemaUpdated($pdo);
+        if ($latestSha !== '') {
+            saveAppSetting($pdo, 'installed_commit_sha', $latestSha);
+            saveAppSetting($pdo, 'installed_commit_date', $latestDate);
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    }
+
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
+    }
+
+    $shortSha = $latestSha !== '' ? substr($latestSha, 0, 7) : 'aktuell';
+    return [
+        'ok'      => true,
+        'message' => sprintf(
+            'System-Update erfolgreich abgeschlossen! %d Dateien wurden von GitHub (Commit #%s) aktualisiert. Ihre Datenbank-Zugangsdaten und Benutzerdateien blieben vollständig erhalten.',
+            $updatedFilesCount,
+            $shortSha
+        ),
+    ];
+}
+
 if (isset($_GET['ajax_server_stats']) && $_GET['ajax_server_stats'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(getServerDashboardMetrics($pdo), JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if (isset($_GET['ajax_check_update']) && $_GET['ajax_check_update'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    $settings = getAppSettings($pdo);
+    $repo = trim((string)($settings['github_repo'] ?? 'uwebenzelrath/MiniCloud')) ?: 'uwebenzelrath/MiniCloud';
+    echo json_encode(checkGitHubUpdates($pdo, $repo), JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -643,6 +942,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setFlash('error', sprintf('Fehler beim Senden der Test-E-Mail: %s', $mailErr ?: 'Unbekannter Versandfehler.'));
         }
         header('Location: admin.php#branding');
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // 0c. SYSTEM-UPDATE VON GITHUB DURCHFÜHREN
+    // -------------------------------------------------------------------------
+    if ($action === 'run_github_update') {
+        $settings = getAppSettings($pdo);
+        $repoInput = trim((string)($_POST['github_repo'] ?? ($settings['github_repo'] ?? 'uwebenzelrath/MiniCloud')));
+        if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repoInput)) {
+            $repoInput = 'uwebenzelrath/MiniCloud';
+        }
+        saveAppSetting($pdo, 'github_repo', $repoInput);
+
+        $result = performGitHubUpdate($pdo, $repoInput);
+        setFlash($result['ok'] ? 'success' : 'error', $result['message']);
+        header('Location: admin.php#system-update');
         exit;
     }
 }
@@ -1336,6 +1652,120 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </section>
 
+<!-- 3. SYSTEM-UPDATE ÜBER GITHUB (1-Klick-Updater) -->
+<?php
+$localCommitInfo = getLocalInstalledCommitInfo($pdo);
+$versionMeta     = getAppVersionInfo();
+$configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelrath/MiniCloud')) ?: 'uwebenzelrath/MiniCloud';
+?>
+<section id="system-update" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mt-10">
+    <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 text-lg">
+                🔄
+            </span>
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">System-Update (GitHub)</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Prüfen Sie direkt über GitHub auf neue Versionen und installieren Sie Updates per 1-Klick (Benutzerdateien &amp; Datenbank-Zugangsdaten bleiben geschützt).
+                </p>
+            </div>
+        </div>
+
+        <button
+            type="button"
+            id="btnCheckGithubUpdate"
+            onclick="checkGithubUpdateNow()"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+        >
+            <span>🔍</span>
+            <span>Auf Updates prüfen</span>
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <!-- Linke Info-Box: Installierter Stand & Update-Aktion -->
+        <div class="lg:col-span-5 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierte Version:</span>
+                <span class="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    <?= e($versionMeta['version']) ?>
+                </span>
+            </div>
+
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierter Commit:</span>
+                <span id="updInstalledCommit" class="text-xs font-mono text-slate-700 dark:text-slate-300">
+                    <?= $localCommitInfo['short'] !== '' ? '#' . e($localCommitInfo['short']) : 'Build #' . e($versionMeta['hash']) ?>
+                    <?= $localCommitInfo['date'] !== '' ? ' (' . e($localCommitInfo['date']) . ')' : '' ?>
+                </span>
+            </div>
+
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Update-Status:</span>
+                <span id="updStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                    Bereit zur Prüfung
+                </span>
+            </div>
+
+            <form
+                action="admin.php"
+                method="post"
+                class="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
+                onsubmit="return confirm('Möchten Sie das System jetzt direkt von GitHub aktualisieren? Ihre Benutzerdateien (uploads/) und Datenbank-Zugangsdaten bleiben vollständig erhalten.');"
+            >
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="run_github_update">
+
+                <div>
+                    <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        GitHub-Repository (Branch: <code class="font-mono">main</code>)
+                    </label>
+                    <input
+                        type="text"
+                        name="github_repo"
+                        value="<?= e($configuredRepo) ?>"
+                        placeholder="uwebenzelrath/MiniCloud"
+                        class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                    >
+                </div>
+
+                <button
+                    type="submit"
+                    id="btnRunGithubUpdate"
+                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                    <span>⬇️</span>
+                    <span>Jetzt von GitHub aktualisieren</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Rechte Box: Letzte Commits / Änderungen auf GitHub -->
+        <div class="lg:col-span-7 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
+            <div class="flex items-center justify-between gap-2 mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Letzte Änderungen auf GitHub (<code class="font-mono">main</code>)
+                </h3>
+                <a
+                    href="https://github.com/<?= e($configuredRepo) ?>/commits/main"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                    Auf GitHub öffnen &nearr;
+                </a>
+            </div>
+
+            <div id="githubCommitsList" class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                <p class="text-slate-400 italic py-4 text-center">
+                    Klicken Sie oben rechts auf „🔍 Auf Updates prüfen“, um die neuesten Commits von GitHub abzurufen.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- SERVER-STATUS & SYSTEM-DASHBOARD (Kompakt & Live-Aktualisierend) -->
 <section id="server-status" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mt-10">
     <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
@@ -1517,6 +1947,69 @@ async function refreshServerDashboard() {
 // Ersten Messpunkt nach 1,5s nachladen (für sofortige Live-CPU-% und Netzwerk-Durchsatzrate), danach alle 5s
 setTimeout(refreshServerDashboard, 1500);
 setInterval(refreshServerDashboard, 5000);
+
+async function checkGithubUpdateNow() {
+    const badge = document.getElementById('updStatusBadge');
+    const list = document.getElementById('githubCommitsList');
+    const btn = document.getElementById('btnCheckGithubUpdate');
+    if (!badge || !list) return;
+
+    badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200';
+    badge.textContent = 'Prüfe GitHub...';
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch('admin.php?ajax_check_update=1', {
+            headers: { 'Accept': 'application/json' }
+        });
+        const d = await res.json();
+        if (!d || !d.ok) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300';
+            badge.textContent = 'Prüfung fehlgeschlagen';
+            list.innerHTML = `<p class="text-red-600 dark:text-red-400 py-3">${d && d.error ? d.error : 'GitHub-API nicht erreichbar.'}</p>`;
+            return;
+        }
+
+        if (d.is_up_to_date) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300';
+            badge.textContent = '✅ Aktuell (#' + d.latest_short + ')';
+        } else {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300';
+            badge.textContent = '🆕 Update verfügbar (#' + d.latest_short + ')';
+        }
+
+        if (Array.isArray(d.commits) && d.commits.length > 0) {
+            const esc = (s) => {
+                const div = document.createElement('div');
+                div.textContent = s ?? '';
+                return div.innerHTML;
+            };
+            list.innerHTML = d.commits.map((c, idx) => {
+                const isInstalled = d.installed_sha && c.sha === d.installed_sha;
+                return `
+                    <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border ${idx === 0 ? 'border-brand-300 dark:border-brand-700' : 'border-slate-200/80 dark:border-slate-700/80'} flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <p class="font-semibold text-slate-900 dark:text-white truncate">${esc(c.message)}</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">${esc(c.date_fmt)} &bull; ${esc(c.author)}</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            ${isInstalled ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">Installiert</span>' : ''}
+                            <a href="${esc(c.html_url)}" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-[11px] font-mono text-brand-600 dark:text-brand-400 hover:underline">#${esc(c.short)}</a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    } catch {
+        badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300';
+        badge.textContent = 'Verbindungsfehler';
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+// Beim Öffnen der Admin-Seite einmal automatisch im Hintergrund den GitHub-Update-Status prüfen
+setTimeout(checkGithubUpdateNow, 800);
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
