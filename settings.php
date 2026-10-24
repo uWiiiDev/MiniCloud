@@ -55,6 +55,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
         header('Location: settings.php');
         exit;
     }
+
+    if ($action === 'update_own_2fa') {
+        $emailInput  = trim((string)($_POST['email'] ?? ''));
+        $enable2fa   = isset($_POST['two_factor_enabled']) && (string)$_POST['two_factor_enabled'] === '1';
+
+        if ($emailInput !== '' && filter_var($emailInput, FILTER_VALIDATE_EMAIL) === false) {
+            setFlash('error', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.');
+        } elseif ($enable2fa && $emailInput === '') {
+            setFlash('error', 'Für die Aktivierung der Zwei-Faktor-Authentifizierung (2FA) ist eine gültige E-Mail-Adresse erforderlich.');
+        } else {
+            $stmtUpd2fa = $pdo->prepare(
+                'UPDATE users SET email = :email, two_factor_enabled = :tfa WHERE id = :id'
+            );
+            $stmtUpd2fa->execute([
+                ':email' => $emailInput !== '' ? $emailInput : null,
+                ':tfa'   => $enable2fa ? 1 : 0,
+                ':id'    => (int)$userRow['id'],
+            ]);
+            setFlash(
+                'success',
+                $enable2fa
+                    ? 'Zwei-Faktor-Authentifizierung (2FA per E-Mail) wurde für Ihr Konto aktiviert.'
+                    : 'Ihre 2FA- und E-Mail-Einstellungen wurden gespeichert (2FA ist deaktiviert).'
+            );
+        }
+
+        header('Location: settings.php');
+        exit;
+    }
 }
 
 $pageTitle = 'Einstellungen';
@@ -193,14 +222,69 @@ $themeGroups = [
     </section>
 
     <?php if ($loggedIn && $userRow !== null): ?>
-        <!-- 3. PERSÖNLICHES KONTO & PASSWORT ÄNDERN -->
+        <!-- 3. ZWEI-FAKTOR-AUTHENTIFIZIERUNG (2FA PER E-MAIL) -->
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔒 Zwei-Faktor-Authentifizierung (2FA)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= (int)$userRow['two_factor_enabled'] === 1 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= (int)$userRow['two_factor_enabled'] === 1 ? '🔒 2FA Aktiv' : '2FA Inaktiv' ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Sie können selbst entscheiden, ob Sie bei der Anmeldung zusätzlich zu Ihrem Passwort einen 6-stelligen Sicherheitscode per E-Mail erhalten möchten.
+            </p>
+
+            <form action="settings.php" method="post" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_own_2fa">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    <div>
+                        <label for="user_2fa_email" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Ihre E-Mail-Adresse für den 2FA-Code
+                        </label>
+                        <input
+                            type="email"
+                            id="user_2fa_email"
+                            name="email"
+                            value="<?= e((string)($userRow['email'] ?? '')) ?>"
+                            placeholder="name@beispiel.de"
+                            class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+
+                    <div class="pt-1 sm:pt-5">
+                        <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                name="two_factor_enabled"
+                                value="1"
+                                <?= (int)$userRow['two_factor_enabled'] === 1 ? 'checked' : '' ?>
+                                class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-600 cursor-pointer"
+                            >
+                            <span class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                2FA per E-Mail beim Anmelden aktivieren
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button
+                        type="submit"
+                        class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                        2FA-Einstellung speichern
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 4. PERSÖNLICHES KONTO & PASSWORT ÄNDERN -->
         <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
             <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-1">Eigenes Passwort ändern</h2>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
                 Angemeldet als <strong><?= e((string)$userRow['username']) ?></strong>
-                <?php if (!empty($userRow['email'])): ?>
-                    (2FA-E-Mail: <?= e((string)$userRow['email']) ?> &ndash; <?= (int)$userRow['two_factor_enabled'] === 1 ? '🔒 2FA aktiv' : '2FA inaktiv' ?>)
-                <?php endif; ?>
             </p>
 
             <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-end">

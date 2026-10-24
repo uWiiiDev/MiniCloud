@@ -1825,6 +1825,104 @@ function getTranslationDictionary(): array
             'es' => 'La contraseña de bóveda introducida es incorrecta.',
             'nl' => 'Het ingevoerde kluiswachtwoord is onjuist.',
         ],
+
+        // --- Verschieben / Kopieren Modal & 2FA-Selbstverwaltung ---
+        'Verschieben oder Kopieren' => [
+            'en' => 'Move or Copy',
+            'fr' => 'Déplacer ou copier',
+            'es' => 'Mover o copiar',
+            'nl' => 'Verplaatsen of kopiëren',
+        ],
+        'Ordner verschieben oder kopieren' => [
+            'en' => 'Move or copy folder',
+            'fr' => 'Déplacer ou copier le dossier',
+            'es' => 'Mover o copiar carpeta',
+            'nl' => 'Map verplaatsen of kopiëren',
+        ],
+        'Datei verschieben oder kopieren' => [
+            'en' => 'Move or copy file',
+            'fr' => 'Déplacer ou copier le fichier',
+            'es' => 'Mover o copiar archivo',
+            'nl' => 'Bestand verplaatsen of kopiëren',
+        ],
+        'Aktion & Zielordner auswählen' => [
+            'en' => 'Select action & target folder',
+            'fr' => 'Sélectionner l’action et le dossier cible',
+            'es' => 'Seleccionar acción y carpeta de destino',
+            'nl' => 'Actie & doelmap selecteren',
+        ],
+        'Ausführen' => [
+            'en' => 'Execute',
+            'fr' => 'Exécuter',
+            'es' => 'Ejecutar',
+            'nl' => 'Uitvoeren',
+        ],
+        'Zwei-Faktor-Authentifizierung (2FA)' => [
+            'en' => 'Two-Factor Authentication (2FA)',
+            'fr' => 'Authentification à deux facteurs (2FA)',
+            'es' => 'Autenticación de dos factores (2FA)',
+            'nl' => 'Tweefactorauthenticatie (2FA)',
+        ],
+        'Entscheiden Sie selbst, ob beim Anmelden zusätzlich ein 6-stelliger Sicherheitscode per E-Mail abgefragt werden soll.' => [
+            'en' => 'Decide for yourself whether an additional 6-digit security code should be requested via email when signing in.',
+            'fr' => 'Choisissez librement si un code de sécurité à 6 chiffres doit être demandé par e-mail lors de la connexion.',
+            'es' => 'Decida usted mismo si desea solicitar un código de seguridad adicional de 6 dígitos por correo al iniciar sesión.',
+            'nl' => 'Bepaal zelf of er bij het inloggen een extra 6-cijferige beveiligingscode per e-mail moet worden gevraagd.',
+        ],
+        '✓ 2FA Aktiv' => [
+            'en' => '✓ 2FA Active',
+            'fr' => '✓ 2FA Active',
+            'es' => '✓ 2FA Activo',
+            'nl' => '✓ 2FA Actief',
+        ],
+        'Deaktiviert' => [
+            'en' => 'Disabled',
+            'fr' => 'Désactivé',
+            'es' => 'Desactivado',
+            'nl' => 'Uitgeschakeld',
+        ],
+        'Ihre E-Mail-Adresse für Sicherheitscodes' => [
+            'en' => 'Your email address for security codes',
+            'fr' => 'Votre adresse e-mail pour les codes de sécurité',
+            'es' => 'Su dirección de correo para códigos de seguridad',
+            'nl' => 'Uw e-mailadres voor beveiligingscodes',
+        ],
+        '2FA per E-Mail beim Login aktivieren' => [
+            'en' => 'Enable email 2FA on login',
+            'fr' => 'Activer la 2FA par e-mail à la connexion',
+            'es' => 'Activar 2FA por correo al iniciar sesión',
+            'nl' => '2FA per e-mail bij inloggen inschakelen',
+        ],
+        '2FA-Einstellung speichern' => [
+            'en' => 'Save 2FA setting',
+            'fr' => 'Enregistrer le paramètre 2FA',
+            'es' => 'Guardar ajuste 2FA',
+            'nl' => '2FA-instelling opslaan',
+        ],
+        'Bitte geben Sie eine gültige E-Mail-Adresse ein.' => [
+            'en' => 'Please enter a valid email address.',
+            'fr' => 'Veuillez saisir une adresse e-mail valide.',
+            'es' => 'Por favor, introduzca una dirección de correo válida.',
+            'nl' => 'Voer een geldig e-mailadres in.',
+        ],
+        'Für die Aktivierung der Zwei-Faktor-Authentifizierung (2FA) ist eine E-Mail-Adresse erforderlich.' => [
+            'en' => 'An email address is required to enable Two-Factor Authentication (2FA).',
+            'fr' => 'Une adresse e-mail est requise pour activer l’authentification à deux facteurs (2FA).',
+            'es' => 'Se requiere una dirección de correo electrónico para activar la autenticación de dos factores (2FA).',
+            'nl' => 'Voor het inschakelen van tweefactorauthenticatie (2FA) is een e-mailadres vereist.',
+        ],
+        'Zwei-Faktor-Authentifizierung (2FA per E-Mail) wurde aktiviert.' => [
+            'en' => 'Two-Factor Authentication (Email 2FA) has been enabled.',
+            'fr' => 'L’authentification à deux facteurs (2FA par e-mail) a été activée.',
+            'es' => 'La autenticación de dos factores (2FA por correo) ha sido activada.',
+            'nl' => 'Tweefactorauthenticatie (2FA per e-mail) is ingeschakeld.',
+        ],
+        'Zwei-Faktor-Authentifizierung (2FA) wurde deaktiviert.' => [
+            'en' => 'Two-Factor Authentication (2FA) has been disabled.',
+            'fr' => 'L’authentification à deux facteurs (2FA) a été désactivée.',
+            'es' => 'La autenticación de dos factores (2FA) ha sido desactivada.',
+            'nl' => 'Tweefactorauthenticatie (2FA) is uitgeschakeld.',
+        ],
     ];
 
     return $dict;

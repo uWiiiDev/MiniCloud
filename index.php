@@ -492,18 +492,6 @@ require_once __DIR__ . '/includes/header.php';
                     </datalist>
                 </div>
 
-                <div class="relative w-full sm:w-48">
-                    <input
-                        type="password"
-                        id="upload_vault_password"
-                        name="vault_password"
-                        autocomplete="new-password"
-                        placeholder="🔒 Tresor-Passwort (optional)"
-                        title="Optional: Dateien direkt beim Hochladen mit AES-256 verschlüsseln (mind. 4 Zeichen)"
-                        class="w-full px-2.5 py-1.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-800/70 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                </div>
-
                 <button
                     type="button"
                     id="btnSelectFiles"
@@ -608,22 +596,17 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 $activeGfIdOrNull = $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : null;
                 ?>
                 <div class="inline-flex flex-wrap items-center gap-1.5">
-                    <form action="folder_action.php" method="post" class="inline-flex items-center">
-                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                        <input type="hidden" name="action" value="move_folder">
-                        <?php if ($activeGroupFolder !== null): ?>
-                            <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
-                        <?php endif; ?>
-                        <input type="hidden" name="source_folder" value="<?= e($currentFolder) ?>">
-                        <select
-                            name="target_parent"
-                            onchange="if(this.value) this.form.submit();"
-                            title="Kompletten Ordner samt Inhalt verschieben oder kopieren (auch in/aus Gruppenordner)"
-                            class="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/70 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer max-w-[230px]"
-                        >
-                            <?= $renderFolderTransferOptions($currentFolder, $activeGfIdOrNull, $canUploadHere) ?>
-                        </select>
-                    </form>
+                    <button
+                        type="button"
+                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
+                        title="Ordner verschieben oder kopieren"
+                        aria-label="Ordner verschieben oder kopieren"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                    </button>
 
                     <?php if ($activeGroupFolder === null && $activeFolderMeta !== null && (int)$activeFolderMeta['file_count'] > 0): ?>
                         <a
@@ -838,7 +821,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'folder' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
                                 title="Nach Ordner sortieren"
                             >
-                                <span>Ordner / Verschieben</span>
+                                <span>Ordner</span>
                                 <span class="text-[11px] <?= $sortBy === 'folder' ? 'opacity-100' : 'opacity-40' ?>">
                                     <?= $sortBy === 'folder' ? ($sortDir === 'asc' ? '↑' : '↓') : '↕' ?>
                                 </span>
@@ -939,44 +922,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?>
                                             <span class="sm:hidden"> &bull; <?= e(formatBytes($subSize)) ?></span>
                                         </p>
-                                        <!-- Mobil-Auswahl zum Verschieben/Kopieren des Unterordners (< md) -->
-                                        <form action="folder_action.php" method="post" class="md:hidden mt-1.5">
-                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                            <input type="hidden" name="action" value="move_folder">
-                                            <?php if ($activeGroupFolder !== null): ?>
-                                                <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
-                                            <?php endif; ?>
-                                            <input type="hidden" name="source_folder" value="<?= e($subPath) ?>">
-                                            <select
-                                                name="target_parent"
-                                                onchange="if(this.value) this.form.submit();"
-                                                aria-label="Ordner verschieben oder kopieren"
-                                                class="px-2 py-1 rounded-lg bg-amber-50/80 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border border-amber-200/80 dark:border-amber-800/60 text-[11px] font-medium focus:outline-none max-w-[175px]"
-                                            >
-                                                <?= $renderFolderTransferOptions($subPath, $subGfIdOrNull, $canUploadHere) ?>
-                                            </select>
-                                        </form>
                                     </div>
                                 </div>
                             </td>
 
-                            <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell">
-                                <form action="folder_action.php" method="post" class="inline-flex items-center">
-                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                    <input type="hidden" name="action" value="move_folder">
-                                    <?php if ($activeGroupFolder !== null): ?>
-                                        <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="source_folder" value="<?= e($subPath) ?>">
-                                    <select
-                                        name="target_parent"
-                                        onchange="if(this.value) this.form.submit();"
-                                        title="Diesen Ordner samt Inhalt verschieben oder kopieren (auch in/aus Gruppenordner)"
-                                        class="px-2.5 py-1 rounded-lg bg-amber-50/80 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border border-amber-200/80 dark:border-amber-800/60 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer max-w-[195px]"
-                                    >
-                                        <?= $renderFolderTransferOptions($subPath, $subGfIdOrNull, $canUploadHere) ?>
-                                    </select>
-                                </form>
+                            <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-amber-700 dark:text-amber-400 font-medium">
+                                📁 <?= e($currentFolder !== '' ? $currentFolder : 'Hauptverzeichnis') ?>
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
@@ -989,6 +940,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
                             <td class="py-3 px-2.5 sm:px-6 whitespace-nowrap text-right align-top sm:align-middle">
                                 <div class="inline-flex items-center justify-end gap-1 sm:gap-2">
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon) -->
+                                    <button
+                                        type="button"
+                                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        title="Ordner verschieben oder kopieren"
+                                        aria-label="Ordner verschieben oder kopieren"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                        </svg>
+                                    </button>
+
                                     <?php if ($activeGroupFolder === null && $subFileCount > 0): ?>
                                         <a
                                             href="download.php?folder=<?= rawurlencode($subPath) ?>"
@@ -1137,40 +1101,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 <span>&bull; von <?= e((string)$file['uploader_name']) ?></span>
                                             <?php endif; ?>
                                         </p>
-                                        <!-- Mobil-Auswahl zum Verschieben/Kopieren der Datei (< md) -->
-                                        <form action="folder_action.php" method="post" class="md:hidden mt-1.5">
-                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                            <input type="hidden" name="action" value="move_file">
-                                            <input type="hidden" name="file_id" value="<?= $fId ?>">
-                                            <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
-                                            <select
-                                                name="target_folder"
-                                                onchange="if(this.value) this.form.submit();"
-                                                aria-label="Datei verschieben oder kopieren"
-                                                class="px-2 py-1 rounded-lg bg-amber-50/80 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border border-amber-200/80 dark:border-amber-800/60 text-[11px] font-medium focus:outline-none max-w-[175px]"
-                                            >
-                                                <?= $renderFileTransferOptions($folderPath, $fileGfIdOrNull, $canManageThisFile, $currentLocLabel) ?>
-                                            </select>
-                                        </form>
                                     </div>
                                 </div>
                             </td>
 
-                            <td class="py-3.5 px-4 whitespace-nowrap hidden md:table-cell">
-                                <form action="folder_action.php" method="post" class="inline-flex items-center gap-1.5">
-                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                    <input type="hidden" name="action" value="move_file">
-                                    <input type="hidden" name="file_id" value="<?= $fId ?>">
-                                    <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
-                                    <select
-                                        name="target_folder"
-                                        onchange="if(this.value) this.form.submit();"
-                                        title="Datei verschieben oder kopieren (auch in/aus Gruppenordner)"
-                                        class="px-2.5 py-1 rounded-lg bg-amber-50/80 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border border-amber-200/80 dark:border-amber-800/60 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer max-w-[195px]"
-                                    >
-                                        <?= $renderFileTransferOptions($folderPath, $fileGfIdOrNull, $canManageThisFile, $currentLocLabel) ?>
-                                    </select>
-                                </form>
+                            <td class="py-3.5 px-4 whitespace-nowrap hidden md:table-cell text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                <span class="truncate block max-w-[180px]" title="<?= e($currentLocLabel) ?>"><?= e($currentLocLabel) ?></span>
                             </td>
 
                             <td class="py-3.5 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
@@ -1194,6 +1130,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                        </svg>
+                                    </button>
+
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                    <button
+                                        type="button"
+                                        onclick="openTransferModal('file', <?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= e((string)json_encode($folderPath)) ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        title="Datei verschieben oder kopieren"
+                                        aria-label="Datei verschieben oder kopieren"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
                                         </svg>
                                     </button>
 
@@ -1836,6 +1785,129 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
+<!-- VERSCHIEBEN / KOPIEREN MODAL (Für Dateien und Ordner über das ⇄ Icon) -->
+<div
+    id="transferModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="transferModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold text-base shrink-0">
+                    ⇄
+                </span>
+                <div class="min-w-0">
+                    <h3 id="transferModalTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                        Verschieben oder Kopieren
+                    </h3>
+                    <p id="transferModalItemName" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeTransferModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <form id="transferModalForm" action="folder_action.php" method="post" class="p-5 space-y-4">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" id="transferModalAction" value="move_file">
+            <input type="hidden" name="file_id" id="transferModalFileId" value="">
+            <input type="hidden" name="source_folder" id="transferModalSourceFolder" value="">
+            <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+            <?php if ($activeGroupFolder !== null): ?>
+                <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+            <?php endif; ?>
+
+            <div>
+                <label for="transferTargetSelect" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Aktion &amp; Zielordner auswählen
+                </label>
+                <select
+                    id="transferTargetSelect"
+                    name="target_folder"
+                    required
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                >
+                    <option value="">⇄ Verschieben / 📋 Kopieren...</option>
+                    <optgroup id="optGroupMovePersonal" label="⇄ Verschieben – Meine Dateien">
+                        <option value="move|personal:__root__">⇄ 🏠 Mein Hauptverzeichnis</option>
+                        <?php foreach ($personalFoldersList as $pfRow): ?>
+                            <?php $pfPath = (string)$pfRow['folder_path']; ?>
+                            <option value="<?= e('move|personal:' . $pfPath) ?>">⇄ 📁 <?= e($pfPath) ?></option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                    <?php if (!empty($writableGroupFolders)): ?>
+                        <optgroup id="optGroupMoveGroup" label="⇄ Verschieben – Gruppenordner">
+                            <?php foreach ($writableGroupFolders as $wgf): ?>
+                                <?php
+                                $wgfId   = (int)$wgf['id'];
+                                $wgfName = (string)$wgf['name'];
+                                $wgfSubs = $groupFoldersSubfoldersMap[$wgfId] ?? [];
+                                ?>
+                                <option value="move|gf:<?= $wgfId ?>:__root__">⇄ 👥 <?= e($wgfName) ?> (Hauptverzeichnis)</option>
+                                <?php foreach ($wgfSubs as $gfSubRow): ?>
+                                    <?php $gfSubPath = (string)$gfSubRow['folder_path']; ?>
+                                    <option value="<?= e('move|gf:' . $wgfId . ':' . $gfSubPath) ?>">⇄ 👥 <?= e($wgfName) ?> / 📁 <?= e($gfSubPath) ?></option>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+
+                    <optgroup label="📋 Kopieren – Meine Dateien">
+                        <option value="copy|personal:__root__">📋 🏠 Mein Hauptverzeichnis</option>
+                        <?php foreach ($personalFoldersList as $pfRow): ?>
+                            <?php $pfPath = (string)$pfRow['folder_path']; ?>
+                            <option value="<?= e('copy|personal:' . $pfPath) ?>">📋 📁 <?= e($pfPath) ?></option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                    <?php if (!empty($writableGroupFolders)): ?>
+                        <optgroup label="📋 Kopieren – Gruppenordner">
+                            <?php foreach ($writableGroupFolders as $wgf): ?>
+                                <?php
+                                $wgfId   = (int)$wgf['id'];
+                                $wgfName = (string)$wgf['name'];
+                                $wgfSubs = $groupFoldersSubfoldersMap[$wgfId] ?? [];
+                                ?>
+                                <option value="copy|gf:<?= $wgfId ?>:__root__">📋 👥 <?= e($wgfName) ?> (Hauptverzeichnis)</option>
+                                <?php foreach ($wgfSubs as $gfSubRow): ?>
+                                    <?php $gfSubPath = (string)$gfSubRow['folder_path']; ?>
+                                    <option value="<?= e('copy|gf:' . $wgfId . ':' . $gfSubPath) ?>">📋 👥 <?= e($wgfName) ?> / 📁 <?= e($gfSubPath) ?></option>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+                </select>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeTransferModal()"
+                    class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                >
+                    Abbrechen
+                </button>
+                <button
+                    type="submit"
+                    class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                    Ausführen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- DATEI-VORSCHAU MODAL MIT DURCHBLÄTTER-FUNKTION -->
 <div id="previewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6">
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
@@ -2237,6 +2309,60 @@ function closeVaultModal() {
 vaultModal.addEventListener('click', (e) => {
     if (e.target === vaultModal) {
         closeVaultModal();
+    }
+});
+
+// --- VERSCHIEBEN / KOPIEREN MODAL LOGIK ---
+const transferModal = document.getElementById('transferModal');
+const transferModalTitle = document.getElementById('transferModalTitle');
+const transferModalItemName = document.getElementById('transferModalItemName');
+const transferModalAction = document.getElementById('transferModalAction');
+const transferModalFileId = document.getElementById('transferModalFileId');
+const transferModalSourceFolder = document.getElementById('transferModalSourceFolder');
+const transferTargetSelect = document.getElementById('transferTargetSelect');
+const optGroupMovePersonal = document.getElementById('optGroupMovePersonal');
+const optGroupMoveGroup = document.getElementById('optGroupMoveGroup');
+
+function openTransferModal(type, fileId, displayName, folderPath = '', canMove = true) {
+    if (type === 'folder') {
+        transferModalTitle.textContent = 'Ordner verschieben oder kopieren';
+        transferModalItemName.textContent = '📁 ' + displayName;
+        transferModalAction.value = 'move_folder';
+        transferModalFileId.value = '';
+        transferModalSourceFolder.value = folderPath;
+        transferTargetSelect.setAttribute('name', 'target_parent');
+    } else {
+        transferModalTitle.textContent = 'Datei verschieben oder kopieren';
+        transferModalItemName.textContent = displayName;
+        transferModalAction.value = 'move_file';
+        transferModalFileId.value = String(fileId || 0);
+        transferModalSourceFolder.value = '';
+        transferTargetSelect.setAttribute('name', 'target_folder');
+    }
+
+    transferTargetSelect.value = '';
+    if (optGroupMovePersonal) {
+        optGroupMovePersonal.disabled = !canMove;
+        optGroupMovePersonal.hidden = !canMove;
+    }
+    if (optGroupMoveGroup) {
+        optGroupMoveGroup.disabled = !canMove;
+        optGroupMoveGroup.hidden = !canMove;
+    }
+
+    transferModal.classList.remove('hidden');
+    transferModal.classList.add('flex');
+    setTimeout(() => transferTargetSelect.focus(), 50);
+}
+
+function closeTransferModal() {
+    transferModal.classList.add('hidden');
+    transferModal.classList.remove('flex');
+}
+
+transferModal.addEventListener('click', (e) => {
+    if (e.target === transferModal) {
+        closeTransferModal();
     }
 });
 
