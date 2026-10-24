@@ -104,8 +104,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Für App-Icons: Network-First mit Cache-Fallback
-    if (req.url.includes('app-icon.php')) {
+    // Für App-Icons & lokale Assets (Tailwind): Network-First mit Cache-Fallback
+    if (req.url.includes('app-icon.php') || req.url.includes('assets/tailwind.js')) {
         event.respondWith(
             fetch(req)
                 .then((res) => {

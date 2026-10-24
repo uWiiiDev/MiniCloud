@@ -48,8 +48,8 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
     <?php else: ?>
         <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%234338ca'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M18 40a8 8 0 008 8h18a10 10 0 10-.2-19.998 10.004 10.004 0 10-19.56 4.192A8.002 8.002 0 0018 40z' fill='none' stroke='%23ffffff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <?php endif; ?>
-    <!-- Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (Lokal eingebunden – 100 % DSGVO-konform ohne externe Serveraufrufe) -->
+    <script src="assets/tailwind.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',

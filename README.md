@@ -8,6 +8,8 @@ Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene
 
 ```text
 MiniCloud/
+├── assets/
+│   └── tailwind.js           # Lokal eingebundenes Tailwind CSS (100 % DSGVO-konform ohne externe CDN-Aufrufe)
 ├── config/
 │   └── database.php          # PDO-Datenbankverbindung, Auto-Migration, Speicher-Quota & Konstanten
 ├── includes/
@@ -64,3 +66,12 @@ MiniCloud/
    - Direkt installierbar als Vollbild-App auf **Android** und **Apple iPhone/iPad** inklusive automatischer App-Icon-Generierung aus dem eigenen Logo.
 7. **12 Farbthemes & Eigenes Branding (`theme.php`, `admin.php`)**:
    - 5 angenehm abgedunkelte helle Themes und 7 dunkle Themes sowie frei anpassbarer Anwendungstitel, Untertitel, eigenes Logo (inkl. Browser-Tab-Favicon) und Impressum.
+8. **100 % DSGVO-konform & ohne externe Abhängigkeiten (`assets/tailwind.js`)**:
+   - Keine externen Schriftarten (Google Fonts), keine externen CDNs und keine Tracking-Cookies – sämtliche Skripte und Styles werden direkt vom eigenen Server ausgeliefert.
+
+---
+
+## Lizenz
+
+Dieses Projekt steht unter der **[MIT-Lizenz](LICENSE)** (Copyright (c) 2026 Uwe Benzelrath).
+
