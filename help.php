@@ -161,7 +161,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>5 Thematic Admin Tabs:</strong> <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> is organized into 5 clear tabs: <em>👥 Users &amp; Registration</em>, <em>🧩 Modules &amp; Features</em>, <em>🎨 Branding &amp; Legal Notice</em>, <em>✉️ Email &amp; SMTP</em>, and <em>🖥️ System, Update &amp; Status</em>.</li>
-                <li><strong>1-Click GitHub System Updater &amp; Server Monitor:</strong> Check for new commits on GitHub and update all application files with one click while preserving <code>uploads/</code> and database credentials. Monitor CPU, RAM, and disk usage live.</li>
+                <li><strong>1-Click GitHub System Updater, Rollback &amp; Server Monitor:</strong> Check for new commits on GitHub and update all application files with one click while preserving <code>uploads/</code> and database credentials. Before every update, a local restore point (snapshot in <code>uploads/.system_backups/</code>) is created automatically so you can undo any update with one click or install any previous version from the GitHub commit history.</li>
                 <li><strong>Users, Groups, Quotas &amp; 2FA Reset:</strong> Create accounts, assign individual storage quotas (in MB), manage user groups, reset passwords, or switch/disable a user’s 2FA method (Email / TOTP).</li>
             </ul>
         </section>
@@ -397,7 +397,7 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Notes pour les administrateurs</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>5 onglets thématiques :</strong> Dans <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, gérez les utilisateurs, les modules, l’apparence/mentions légales, le serveur SMTP et les mises à jour GitHub en 1 clic.</li>
+                <li><strong>5 onglets thématiques, Mises à jour &amp; Rollback :</strong> Dans <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, gérez les utilisateurs, les modules, l’apparence/mentions légales, le serveur SMTP et les mises à jour GitHub en 1 clic (avec sauvegarde locale automatique avant chaque mise à jour, restauration en 1 clic et choix libre d’une version antérieure dans l’historique GitHub).</li>
                 <li><strong>Utilisateurs, Quotas &amp; 2FA :</strong> Créez des comptes, attribuez des quotas en Mo, gérez les groupes et modifiez ou désactivez la méthode 2FA des utilisateurs.</li>
             </ul>
         </section>
@@ -605,7 +605,7 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Notas para administradores</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>5 pestañas temáticas:</strong> En <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administración</a> puede gestionar usuarios, módulos, diseño/aviso legal, servidor SMTP y actualizaciones desde GitHub en 1 clic.</li>
+                <li><strong>5 pestañas temáticas, Actualizaciones y Rollback:</strong> En <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administración</a> puede gestionar usuarios, módulos, diseño/aviso legal, servidor SMTP y actualizaciones desde GitHub en 1 clic (incluyendo puntos de restauración locales automáticos antes de cada actualización y selección libre de versiones anteriores).</li>
                 <li><strong>Usuarios, Grupos, Cuotas y 2FA:</strong> Cree cuentas, asigne cuotas en MB, gestione grupos y cambie o desactive el método 2FA de los usuarios.</li>
             </ul>
         </section>
@@ -813,7 +813,7 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Tips voor beheerders</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>5 overzichtelijke tabbladen:</strong> Beheer onder <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Beheer</a> gebruikers, modules, weergave/colofon, SMTP en 1-klik GitHub-updates.</li>
+                <li><strong>5 overzichtelijke tabbladen, Updates &amp; Rollback:</strong> Beheer onder <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Beheer</a> gebruikers, modules, weergave/colofon, SMTP en 1-klik GitHub-updates (inclusief automatische lokale herstelpunten vóór elke update en vrije versie-selectie uit de GitHub-geschiedenis).</li>
                 <li><strong>Gebruikers, Groepen, Quota &amp; 2FA:</strong> Maak accounts aan, wijs opslagruimte (in MB) toe, beheer groepen en wijzig of reset de 2FA-methode van gebruikers.</li>
             </ul>
         </section>
@@ -1143,9 +1143,9 @@ require_once __DIR__ . '/includes/header.php';
             </div>
 
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">3. Dateispeicher-Isolierung &amp; Tresor-Verschlüsselung</h3>
+                <h3 class="font-bold text-slate-900 dark:text-white">3. Dateispeicher-Isolierung, Office Light &amp; Tresor-Verschlüsselung</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Hochgeladene Dateien werden niemals unter ihrem Originalnamen im Dateisystem abgelegt, sondern erhalten einen kryptografisch zufälligen Dateinamen mit der nicht ausführbaren Endung <code>.bin</code> (z. B. <code>mc_..._a1b2c3d4.bin</code>) und restriktiven Dateirechten (<code>0640</code>). Das Verzeichnis <code>uploads/</code> ist per <code>.htaccess</code> gegen direkten Web-Zugriff gesperrt. Zusätzlich können Dateien mit <strong>AES-256-GCM (Zero-Knowledge)</strong> verschlüsselt werden.
+                    Hochgeladene Dateien werden niemals unter ihrem Originalnamen im Dateisystem abgelegt, sondern erhalten einen kryptografisch zufälligen Dateinamen mit der nicht ausführbaren Endung <code>.bin</code> (z. B. <code>mc_..._a1b2c3d4.bin</code>) und restriktiven Dateirechten (<code>0640</code>). Das Verzeichnis <code>uploads/</code> ist per <code>.htaccess</code> gegen direkten Web-Zugriff gesperrt. Die Verarbeitung von Word-/Excel-Dokumenten in <strong>MiniCloud Office Light</strong> erfolgt zu 100 % lokal auf dem Server (mit <code>LIBXML_NONET</code> gegen XXE) ohne externe Cloud-Anbieter. Zusätzlich können Dateien mit <strong>AES-256-GCM (Zero-Knowledge)</strong> verschlüsselt werden.
                 </p>
             </div>
 
@@ -1164,8 +1164,8 @@ require_once __DIR__ . '/includes/header.php';
             </h3>
             <ul class="text-xs sm:text-sm text-emerald-900 dark:text-emerald-200/90 space-y-1.5 list-disc pl-5">
                 <li><strong>Script-Kontext- &amp; DOM-XSS-Härtung:</strong> JSON-Serialisierung in Inline-Skripten (Dateivorschau, Chat-Kanal, CSRF-Tokens) mit <code>JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT</code> sowie vollständige HTML-Maskierung (<code>escapeHtml</code>) im Teilen-Dialog, Chat-Polling und GitHub-Updater.</li>
-                <li><strong>Datenschutz-Sichtbarkeit &amp; 3-Stufen-Rechteprüfung:</strong> Strikte serverseitige Prüfung von <code>allow_user_sharing = 1</code> sowie granulare Berechtigungsprüfung (<code>can_write</code>, <code>can_delete</code>, <code>can_edit</code>) für Datei-, Ordner- und Kalender-Freigaben.</li>
-                <li><strong>Abgesicherter GitHub-Updater:</strong> Zertifikatsvalidierung (<code>CURLOPT_SSL_VERIFYPEER</code> / <code>CURLOPT_SSL_VERIFYHOST = 2</code>), Schutz vor Zip-Slip (<code>..</code>-Filter) sowie automatischer Erhalt von <code>uploads/</code> und <code>config/database.php</code>-Zugangsdaten.</li>
+                <li><strong>Datenschutz-Sichtbarkeit &amp; 3-Stufen-Rechteprüfung:</strong> Strikte serverseitige Prüfung von <code>allow_user_sharing = 1</code> sowie granulare Berechtigungsprüfung (<code>can_write</code>, <code>can_delete</code>, <code>can_edit</code>) für Datei-, Ordner-, Office-Light- und Kalender-Freigaben.</li>
+                <li><strong>Abgesicherter GitHub-Updater, Lokale Snapshots &amp; Rollback:</strong> Zertifikatsvalidierung (<code>CURLOPT_SSL_VERIFYPEER</code> / <code>CURLOPT_SSL_VERIFYHOST = 2</code>), Schutz vor Zip-Slip (<code>..</code>-Filter), automatische lokale Sicherungspunkte (<code>uploads/.system_backups/</code> mit <code>.htaccess</code>-Sperre) vor jedem Update sowie automatischer Erhalt von <code>uploads/</code> und <code>config/database.php</code>-Zugangsdaten.</li>
                 <li><strong>Host-Header-, Open-Redirect- &amp; Forced-Logout-Schutz:</strong> Strikte Regex-Validierung von <code>HTTP_HOST</code>, Whitelist-Prüfung lokaler Zielseiten und CSRF-geschützter <code>POST</code>-Logout.</li>
                 <li><strong>Brute-Force-Sperre &amp; SVG-Sanitisierung:</strong> Ratenbegrenzung für Login, Registrierung und Freigabelinks sowie Abwehr aktiver Skriptelemente in SVG-Logos.</li>
             </ul>
@@ -1250,8 +1250,14 @@ require_once __DIR__ . '/includes/header.php';
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">Dateisystem: uploads/</td>
                         <td class="py-3 px-4"><code>mc_&lt;uniqid&gt;_&lt;hex16&gt;.bin</code>, <code>.htaccess</code></td>
-                        <td class="py-3 px-4">Physische Binärdaten der hochgeladenen Dateien (pseudonymisierter Dateiname, optional AES-256-verschlüsselt)</td>
+                        <td class="py-3 px-4">Physische Binärdaten der hochgeladenen Dateien (inkl. Office-Light-Dokumente, pseudonymisierter Dateiname, optional AES-256-verschlüsselt)</td>
                         <td class="py-3 px-4">Physische Löschung (<code>unlink</code>) bei Leerung des Papierkorbs, nach 30 Tagen im Papierkorb oder bei Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">Dateisystem: uploads/.system_backups/</td>
+                        <td class="py-3 px-4"><code>snapshot_&lt;YYYYmmdd_His&gt;_&lt;sha&gt;.zip</code>, <code>.htaccess</code></td>
+                        <td class="py-3 px-4">Lokale Programm-Sicherungspunkte für den 1-Klick-Update-Rollback (reiner Anwendungscode ohne Nutzerdateien und ohne <code>config/database.php</code>)</td>
+                        <td class="py-3 px-4">Automatische Rotation (max. die 8 neuesten Sicherungspunkte werden aufbewahrt; jederzeit im Admin-Bereich löschbar)</td>
                     </tr>
                 </tbody>
             </table>

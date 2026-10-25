@@ -1,8 +1,8 @@
 # IT-Sicherheitskonzept – MiniCloud
 
-**Dokumentversion:** 1.6  
+**Dokumentversion:** 1.7  
 **Stand:** 25.10.2026  
-**System:** MiniCloud – Leichtgewichtiger, selbstgehosteter Cloud-Speicher mit Kalender & Messenger (PHP 8.2+ / MySQL & MariaDB)
+**System:** MiniCloud – Leichtgewichtiger, selbstgehosteter Cloud-Speicher mit Office Light, Kalender & Messenger (PHP 8.2+ / MySQL & MariaDB)
 
 ---
 
@@ -21,7 +21,7 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 2. **Integrität (Integrity):**
    - Schutz vor unbefugter Veränderung, Überschreibung oder Löschung durch 3-stufige Berechtigungsprüfungen (`Nur Lesen`, `Lesen & Schreiben/Bearbeiten`, `Lesen, Schreiben/Bearbeiten & Löschen`) sowie CSRF- und SQL-Injection-Schutz.
 3. **Verfügbarkeit (Availability):**
-   - Schutz vor unbeabsichtigtem Datenverlust durch 30-tägige Papierkorb-Aufbewahrung (Soft-Delete), Benutzer-Speicherkontingente (Quotas) sowie einen abgesicherten **1-Klick-GitHub-Updater**, der `uploads/` und Datenbank-Zugangsdaten niemals überschreibt.
+   - Schutz vor unbeabsichtigtem Datenverlust durch 30-tägige Papierkorb-Aufbewahrung (Soft-Delete), Benutzer-Speicherkontingente (Quotas) sowie einen abgesicherten **1-Klick-GitHub-Updater mit automatischen lokalen Sicherungspunkten (Snapshots) und 1-Klick-Rollback**, der `uploads/` und Datenbank-Zugangsdaten niemals überschreibt.
 4. **Authentizität & Nachvollziehbarkeit:**
    - Eindeutige Zuordnung jeder Datei (`user_id`), jeder Freigabe (`owner_id`), jedes Termins (`user_id`) und jeder Nachricht (`sender_id`) zu einem authentifizierten Benutzerkonto.
 
@@ -52,10 +52,11 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 - **Privacy-by-Default (`allow_user_sharing`):** Sowohl in `share_action.php`, `calendar.php` als auch in `messages.php` wird serverseitig geprüft, ob der Zielbenutzer direkte Freigaben/Nachrichten in seinen Datenschutzeinstellungen erlaubt hat (`allow_user_sharing = 1`).
 - **Kryptografische Tokens:** Öffentliche Freigabelinks nutzen 128-Bit-Zufallstokens (`random_bytes(16)`), persönliche `.ics`-Kalender-Feeds nutzen 192-Bit-Zufallstokens (`random_bytes(24)`), verglichen per `hash_equals()`.
 
-### 3.4 Dateisystem-, Upload- & Tresor-Sicherheit (`upload.php`, `vault_action.php`, `download.php`)
+### 3.4 Dateisystem-, Upload-, Office-Light- & Tresor-Sicherheit (`upload.php`, `office.php`, `vault_action.php`, `download.php`)
 - **Pseudonymisierte `.bin`-Speicherung & `.htaccess`-Sperre:** Dateien werden als `mc_<uniqid>_<hex16>.bin` mit Modus `0640` abgelegt; `uploads/.htaccess` blockiert jeden direkten Webzugriff.
+- **Lokale Dokumentenverarbeitung in MiniCloud Office Light (`office.php`, `includes/office_functions.php`):** Das Erstellen und Bearbeiten von Word- (`.docx`), Excel- (`.xlsx`), CSV- und Textdateien erfolgt **100 % lokal auf dem eigenen Server** ohne externe Cloud-Dienste (kein Microsoft 365 / Google Docs). Beim Parsen der OpenXML-Strukturen (`DOMDocument::loadXML`) ist `LIBXML_NONET` aktiv, um XML-External-Entity-Angriffe (XXE) auszuschließen. Vor dem Speichern prüft `resolveOfficeFileAccess()` serverseitig Eigentümerschaft bzw. 3-stufige Schreibberechtigungen (`can_write = 1`) sowie das Speicherkontingent.
 - **AES-256-GCM Zero-Knowledge-Tresor (`vault_action.php`):** Schlüsselableitung mittels `hash_pbkdf2('sha256', $password, $salt, 100000, 32, true)`, authentifizierte Verschlüsselung via `openssl_encrypt(..., 'aes-256-gcm', ...)` mit 96-Bit-IV und 128-Bit-Authentication-Tag. Das Passwort wird niemals gespeichert.
-- **Abgesicherter 1-Klick-GitHub-Updater (`admin.php`):** Lädt Updates ausschließlich über HTTPS mit aktivierter TLS-Zertifikatsprüfung (`CURLOPT_SSL_VERIFYPEER = true`, `CURLOPT_SSL_VERIFYHOST = 2`), verhindert Pfad-Ausbrüche (`..`-Prüfung gegen Zip-Slip) und schützt `uploads/` sowie die Datenbank-Konstanten in `config/database.php`.
+- **Abgesicherter 1-Klick-GitHub-Updater, Lokale Sicherungspunkte & Rollback (`admin.php`):** Lädt Updates und gezielt ausgewählte historische Commits ausschließlich über HTTPS mit aktivierter TLS-Zertifikatsprüfung (`CURLOPT_SSL_VERIFYPEER = true`, `CURLOPT_SSL_VERIFYHOST = 2`), prüft Commit-Hashes strikt per Regex (`/^[0-9a-f]{7,40}$/`), verhindert Pfad-Ausbrüche (`..`-Prüfung gegen Zip-Slip) und schützt `uploads/` sowie die Datenbank-Konstanten in `config/database.php`. Vor jedem Update legt `createLocalAppSnapshot()` automatisch ein durch `.htaccess` und Modus `0640` geschütztes lokales Backup (`uploads/.system_backups/snapshot_*.zip`) an, sodass jedes Update jederzeit mit einem Klick rückgängig gemacht werden kann.
 
 ### 3.5 Schutz gegen Web-Schwachstellen (SQLi, XSS, CSRF, HTTP-Header)
 - **SQL-Injection-Schutz:** Ausschließliche Verwendung echter **PDO Prepared Statements** (`PDO::ATTR_EMULATE_PREPARES => false`).

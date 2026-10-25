@@ -1,6 +1,6 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 1.6  
+**Dokumentversion:** 1.7  
 **Stand:** 25.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
@@ -155,7 +155,8 @@ Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Speicherort / Name | Art der Daten | Schutzmaßnahme | Aufbewahrungsdauer |
 | :--- | :--- | :--- | :--- |
-| `uploads/mc_<uniqid>_<hex16>.bin` | Physische Binärdateien hochgeladener Nutzerdateien | Pseudonymisierter Dateiname, Dateimodus `0640`, `.htaccess`-Zugriffssperre, optional AES-256-GCM verschlüsselt | Bis zur endgültigen Löschung aus dem Papierkorb (max. 30 Tage nach Soft-Delete) oder Kontolöschung |
-| `/tmp/mc_zip_*` / `/tmp/mc_upd_*` | Temporäre ZIP-Archive (Ordner-Download / GitHub-Update) | Zufälliger Dateiname über `tempnam()`, Auslieferung nur an autorisierte Nutzer | Sofortige Löschung (`unlink`) unmittelbar nach Abschluss der Operation |
+| `uploads/mc_<uniqid>_<hex16>.bin` | Physische Binärdateien hochgeladener Nutzerdateien (inkl. Office-Light-Dokumente `.docx`/`.xlsx`) | Pseudonymisierter Dateiname, Dateimodus `0640`, `.htaccess`-Zugriffssperre, optional AES-256-GCM verschlüsselt | Bis zur endgültigen Löschung aus dem Papierkorb (max. 30 Tage nach Soft-Delete) oder Kontolöschung |
+| `uploads/.system_backups/snapshot_*.zip` | Lokale Programm-Sicherungspunkte (Snapshots vor Updates für 1-Klick-Rollback, ohne Nutzerdateien und ohne `config/database.php`) | Eigene `.htaccess`-Zugriffssperre (`Require all denied`), Dateimodus `0640`, Zugriff nur für Administratoren über `admin.php` | Automatische Rotation: Es werden maximal die 8 neuesten Sicherungspunkte aufbewahrt (jederzeit manuell löschbar) |
+| `/tmp/mc_zip_*` / `/tmp/mc_upd_*` / `/tmp/mc_office_*` | Temporäre ZIP-/OpenXML-Arbeitsdateien (Ordner-Download, GitHub-Update, Office Light) | Zufälliger Dateiname über `tempnam()`, Auslieferung nur an autorisierte Nutzer | Sofortige Löschung (`unlink`) unmittelbar nach Abschluss der Operation |
 | PHP-Session (`PHPSESSID`) | `user_id`, `username`, `is_admin`, `theme`, `session_timeout`, `flash_duration`, `chat_notify_mode`, `csrf_token` | Serverseitige Ablage, Cookie mit `HttpOnly`, `SameSite=Lax`, `Secure` (bei HTTPS) | Bis zum Logout (`logout.php`), Ablauf des Inaktivitäts-Timeouts oder Schließen des Browsers |
 | Cookies `mc_theme`, `mc_lang` | Gewähltes Farbschema (`light`..`obsidian`) & Sprache (`de`..`nl`) | Reine UI-Präferenz ohne Personenbezug, `SameSite=Lax` | 365 Tage |
