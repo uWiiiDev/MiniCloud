@@ -25,9 +25,9 @@
    - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
 5. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
    - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
-6. **Passwort-Wiederherstellung, 2FA, Einstellungen & Optionale Registrierung (`forgot_password.php`, `login.php`, `settings.php`, `register.php`)**
+6. **Passwort-Wiederherstellung, 2FA (E-Mail & Google Authenticator), Einstellungen & Optionale Registrierung (`forgot_password.php`, `login.php`, `settings.php`, `register.php`)**
    - **Passwort vergessen / Selbst-Reset (`forgot_password.php`):** Benutzer mit hinterlegter E-Mail-Adresse können auf der Login-Seite einen 30 Minuten gültigen, kryptografisch gesicherten Einmal-Link zum Zurücksetzen ihres Passworts anfordern.
-   - Pro Benutzer optional aktivierbarer 2FA-Schutz mit 6-stelligem Einmalcode per E-Mail (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button).
+   - **Zwei-Faktor-Authentifizierung (2FA) nach Wahl:** Pro Benutzer optional aktivierbarer 2FA-Schutz – wahlweise **per 6-stelligem E-Mail-Code** (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button) oder **per Authenticator-App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden nach RFC 6238 TOTP)** mit 100 % lokal auf dem eigenen Server erzeugtem SVG-QR-Code.
    - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
    - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
 7. **1-Klick-GitHub-Updater & Live-Server-Monitoring (`admin.php`)**

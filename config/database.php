@@ -81,6 +81,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `email` VARCHAR(190) DEFAULT NULL,
             `password_hash` VARCHAR(255) NOT NULL,
             `two_factor_enabled` TINYINT(1) NOT NULL DEFAULT 0,
+            `totp_secret` VARCHAR(64) DEFAULT NULL,
             `two_factor_code_hash` VARCHAR(255) DEFAULT NULL,
             `two_factor_expires_at` DATETIME DEFAULT NULL,
             `two_factor_attempts` TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -107,6 +108,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('two_factor_enabled', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `two_factor_enabled` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`");
+    }
+    if (!in_array('totp_secret', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `totp_secret` VARCHAR(64) DEFAULT NULL AFTER `two_factor_enabled`");
     }
     if (!in_array('two_factor_code_hash', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `two_factor_code_hash` VARCHAR(255) DEFAULT NULL AFTER `two_factor_enabled`");

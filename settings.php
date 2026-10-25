@@ -11,7 +11,7 @@ $loggedIn = isLoggedIn();
 $userRow = null;
 
 if ($loggedIn) {
-    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
+    $stmtU = $pdo->prepare('SELECT id, username, email, two_factor_enabled, totp_secret, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, storage_quota FROM users WHERE id = :id LIMIT 1');
     $stmtU->execute([':id' => (int)$_SESSION['user_id']]);
     $userRow = $stmtU->fetch() ?: null;
 }
@@ -57,31 +57,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
     }
 
     if ($action === 'update_own_2fa') {
-        $emailInput  = trim((string)($_POST['email'] ?? ''));
-        $enable2fa   = isset($_POST['two_factor_enabled']) && (string)$_POST['two_factor_enabled'] === '1';
+        $emailInput = trim((string)($_POST['email'] ?? ''));
+        $tfaMode    = isset($_POST['two_factor_mode'])
+            ? max(0, min(2, (int)$_POST['two_factor_mode']))
+            : (isset($_POST['two_factor_enabled']) && (string)$_POST['two_factor_enabled'] === '1' ? 1 : 0);
+        $hasTotp    = trim((string)($userRow['totp_secret'] ?? '')) !== '';
 
         if ($emailInput !== '' && filter_var($emailInput, FILTER_VALIDATE_EMAIL) === false) {
             setFlash('error', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.');
-        } elseif ($enable2fa && $emailInput === '') {
-            setFlash('error', 'Für die Aktivierung der Zwei-Faktor-Authentifizierung (2FA) ist eine gültige E-Mail-Adresse erforderlich.');
+        } elseif ($tfaMode === 1 && $emailInput === '') {
+            setFlash('error', 'Für die 2FA per E-Mail ist eine gültige E-Mail-Adresse erforderlich.');
+        } elseif ($tfaMode === 2 && !$hasTotp) {
+            setFlash('error', 'Bitte richten Sie zuerst unten Ihre Authenticator-App (Google Authenticator) per QR-Code ein.');
         } else {
             $stmtUpd2fa = $pdo->prepare(
                 'UPDATE users SET email = :email, two_factor_enabled = :tfa WHERE id = :id'
             );
             $stmtUpd2fa->execute([
                 ':email' => $emailInput !== '' ? $emailInput : null,
-                ':tfa'   => $enable2fa ? 1 : 0,
+                ':tfa'   => $tfaMode,
                 ':id'    => (int)$userRow['id'],
             ]);
-            setFlash(
-                'success',
-                $enable2fa
-                    ? 'Zwei-Faktor-Authentifizierung (2FA per E-Mail) wurde für Ihr Konto aktiviert.'
-                    : 'Ihre 2FA- und E-Mail-Einstellungen wurden gespeichert (2FA ist deaktiviert).'
-            );
+            if ($tfaMode === 2) {
+                setFlash('success', 'Zwei-Faktor-Authentifizierung per Authenticator-App (Google Authenticator / TOTP) ist nun aktiv.');
+            } elseif ($tfaMode === 1) {
+                setFlash('success', 'Zwei-Faktor-Authentifizierung per E-Mail-Code wurde für Ihr Konto aktiviert.');
+            } else {
+                setFlash('success', 'Ihre E-Mail-Adresse wurde gespeichert (2FA beim Anmelden ist deaktiviert).');
+            }
         }
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-2fa');
+        exit;
+    }
+
+    if ($action === 'setup_totp_2fa') {
+        $pendingSecret = trim((string)($_SESSION['pending_totp_secret'] ?? ''));
+        $verifyCode    = (string)($_POST['totp_verify_code'] ?? '');
+
+        if ($pendingSecret === '') {
+            setFlash('error', 'Die Einrichtungssitzung ist abgelaufen. Bitte versuchen Sie es erneut.');
+        } elseif (!verifyTotpCode($pendingSecret, $verifyCode)) {
+            setFlash('error', 'Der eingegebene 6-stellige Authenticator-Code ist ungültig. Bitte prüfen Sie die Uhrzeit Ihres Smartphones und versuchen Sie es erneut.');
+        } else {
+            $stmtSaveTotp = $pdo->prepare(
+                'UPDATE users SET totp_secret = :sec, two_factor_enabled = 2 WHERE id = :id'
+            );
+            $stmtSaveTotp->execute([
+                ':sec' => $pendingSecret,
+                ':id'  => (int)$userRow['id'],
+            ]);
+            unset($_SESSION['pending_totp_secret']);
+            setFlash('success', 'Google Authenticator / TOTP wurde erfolgreich eingerichtet und als 2FA-Methode aktiviert!');
+        }
+
+        header('Location: settings.php#sec-2fa');
+        exit;
+    }
+
+    if ($action === 'reset_totp_secret') {
+        $newFallbackMode = ((int)$userRow['two_factor_enabled'] === 2) ? 0 : (int)$userRow['two_factor_enabled'];
+        $stmtResetTotp = $pdo->prepare(
+            'UPDATE users SET totp_secret = NULL, two_factor_enabled = :tfa WHERE id = :id'
+        );
+        $stmtResetTotp->execute([
+            ':tfa' => $newFallbackMode,
+            ':id'  => (int)$userRow['id'],
+        ]);
+        $_SESSION['pending_totp_secret'] = generateTotpSecret(32);
+        setFlash('success', 'Die bisherige Authenticator-Verknüpfung wurde entfernt. Sie können unten jederzeit einen neuen QR-Code scannen.');
+        header('Location: settings.php#sec-2fa');
         exit;
     }
 
@@ -316,25 +361,51 @@ $themeGroups = [
 
     <?php if ($loggedIn && $userRow !== null): ?>
         <!-- 3. E-MAIL-ADRESSE (PASSWORT-WIEDERHERSTELLUNG) & ZWEI-FAKTOR-AUTHENTIFIZIERUNG (2FA) -->
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✉️ E-Mail-Adresse (Passwort-Reset) &amp; 2FA</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= (int)$userRow['two_factor_enabled'] === 1 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
-                    <?= (int)$userRow['two_factor_enabled'] === 1 ? '🔒 2FA Aktiv' : '2FA Inaktiv' ?>
-                </span>
+        <?php
+        $userTfaMode = (int)($userRow['two_factor_enabled'] ?? 0);
+        $userTotpSecret = trim((string)($userRow['totp_secret'] ?? ''));
+        $hasTotpConfigured = ($userTotpSecret !== '');
+
+        if (!$hasTotpConfigured) {
+            if (empty($_SESSION['pending_totp_secret'])) {
+                $_SESSION['pending_totp_secret'] = generateTotpSecret(32);
+            }
+            $setupTotpSecret = (string)$_SESSION['pending_totp_secret'];
+            $otpAuthUri = buildTotpOtpAuthUri($appTitle ?? APP_NAME, (string)$userRow['username'], $setupTotpSecret);
+            $qrCodeSvg = renderQrCodeSvg($otpAuthUri, 168);
+        } else {
+            $setupTotpSecret = '';
+            $otpAuthUri = '';
+            $qrCodeSvg = '';
+        }
+
+        $tfaBadgeText = match ($userTfaMode) {
+            2       => '📱 2FA Aktiv (Google Authenticator / TOTP)',
+            1       => '✉️ 2FA Aktiv (E-Mail-Code)',
+            default => '2FA Inaktiv',
+        };
+        ?>
+        <section id="sec-2fa" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+            <div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔐 Zwei-Faktor-Authentifizierung (2FA) &amp; E-Mail-Adresse</h2>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userTfaMode > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                        <?= e($tfaBadgeText) ?>
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Hinterlegen Sie Ihre E-Mail-Adresse für die Passwort-Wiederherstellung und wählen Sie Ihre bevorzugte 2FA-Methode beim Anmelden: <strong>Per E-Mail-Code</strong> oder <strong>Per Authenticator-App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden)</strong>.
+                </p>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Hinterlegen Sie hier Ihre E-Mail-Adresse, um bei vergessenem Passwort jederzeit einen Wiederherstellungs-Link anfordern zu können, und aktivieren Sie optional die Zwei-Faktor-Authentifizierung (2FA per E-Mail).
-            </p>
 
             <form action="settings.php" method="post" class="space-y-4">
                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                 <input type="hidden" name="action" value="update_own_2fa">
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label for="user_2fa_email" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Ihre E-Mail-Adresse (für Passwort-Reset &amp; 2FA)
+                            Ihre E-Mail-Adresse (für Passwort-Reset &amp; E-Mail-2FA)
                         </label>
                         <input
                             type="email"
@@ -346,19 +417,25 @@ $themeGroups = [
                         >
                     </div>
 
-                    <div class="pt-1 sm:pt-5">
-                        <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                name="two_factor_enabled"
-                                value="1"
-                                <?= (int)$userRow['two_factor_enabled'] === 1 ? 'checked' : '' ?>
-                                class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-600 cursor-pointer"
-                            >
-                            <span class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                2FA per E-Mail beim Anmelden aktivieren
-                            </span>
+                    <div>
+                        <label for="two_factor_mode" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Zwei-Faktor-Authentifizierung (2FA) beim Login
                         </label>
+                        <select
+                            id="two_factor_mode"
+                            name="two_factor_mode"
+                            class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                            <option value="0" <?= $userTfaMode === 0 ? 'selected' : '' ?>>
+                                🔓 Deaktiviert (Nur Benutzername &amp; Passwort)
+                            </option>
+                            <option value="1" <?= $userTfaMode === 1 ? 'selected' : '' ?>>
+                                ✉️ Per E-Mail-Code (6-stelliger Code per E-Mail)
+                            </option>
+                            <option value="2" <?= $userTfaMode === 2 ? 'selected' : '' ?> <?= !$hasTotpConfigured ? 'disabled' : '' ?>>
+                                📱 Per Authenticator-App (Google Authenticator / TOTP)<?= !$hasTotpConfigured ? ' – bitte unten zuerst einrichten' : '' ?>
+                            </option>
+                        </select>
                     </div>
                 </div>
 
@@ -367,10 +444,122 @@ $themeGroups = [
                         type="submit"
                         class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
                     >
-                        2FA-Einstellung speichern
+                        E-Mail &amp; 2FA-Methode speichern
                     </button>
                 </div>
             </form>
+
+            <!-- Bereich für Google Authenticator / TOTP Einrichtung & Status -->
+            <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
+                <?php if ($hasTotpConfigured): ?>
+                    <div class="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-lg shrink-0">
+                                📱
+                            </span>
+                            <div>
+                                <p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                                    Authenticator-App (Google Authenticator / TOTP) ist eingerichtet
+                                </p>
+                                <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                                    <?= $userTfaMode === 2
+                                        ? 'Beim Anmelden wird der 6-stellige Zeitcode aus Ihrer Authenticator-App abgefragt. Falls Sie eine E-Mail-Adresse hinterlegt haben, können Sie beim Login im Notfall auch jederzeit einen E-Mail-Code anfordern.'
+                                        : 'Ihre Authenticator-App ist verknüpft. Sie können oben im Auswahlfeld jederzeit auf „Per Authenticator-App“ umschalten.' ?>
+                                </p>
+                            </div>
+                        </div>
+
+                        <form
+                            action="settings.php"
+                            method="post"
+                            onsubmit="return confirm('Möchten Sie die aktuelle Authenticator-App-Verknüpfung wirklich zurücksetzen, um z.B. ein neues Smartphone einzurichten?');"
+                            class="shrink-0"
+                        >
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="reset_totp_secret">
+                            <button
+                                type="submit"
+                                class="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                                🔄 Neu einrichten / Entfernen
+                            </button>
+                        </form>
+                    </div>
+                <?php else: ?>
+                    <details class="group rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 p-4">
+                        <summary class="flex items-center justify-between gap-3 cursor-pointer list-none select-none">
+                            <div class="flex items-center gap-2.5">
+                                <span class="text-lg">📱</span>
+                                <div>
+                                    <p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                                        Google Authenticator / TOTP-App jetzt einrichten (Alternative zu E-Mail-2FA)
+                                    </p>
+                                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                                        Kompatibel mit Google Authenticator, Microsoft Authenticator, Authy, Bitwarden &amp; Apple Passwörter
+                                    </p>
+                                </div>
+                            </div>
+                            <span class="px-3 py-1 rounded-lg bg-brand-600 text-white text-xs font-semibold group-open:bg-slate-200 dark:group-open:bg-slate-700 group-open:text-slate-700 dark:group-open:text-slate-200 transition-colors">
+                                QR-Code anzeigen
+                            </span>
+                        </summary>
+
+                        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                            <!-- Links: Lokaler SVG QR-Code -->
+                            <div class="md:col-span-4 flex flex-col items-center text-center">
+                                <?= $qrCodeSvg ?>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                                    100 % lokal auf Ihrem Server erzeugt (keine Datenweitergabe an Dritte)
+                                </p>
+                            </div>
+
+                            <!-- Rechts: Manuelles Secret & Bestätigungs-Formular -->
+                            <div class="md:col-span-8 space-y-3.5">
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                        1. QR-Code scannen oder Schlüssel manuell eingeben:
+                                    </p>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        Öffnen Sie die App <strong>Google Authenticator</strong> auf Ihrem Smartphone, tippen Sie auf <strong>„+“ &rarr; „QR-Code scannen“</strong> oder geben Sie diesen Base32-Schlüssel manuell ein:
+                                    </p>
+                                    <div class="mt-2 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs font-bold tracking-wider text-brand-700 dark:text-brand-300 select-all break-all">
+                                        <?= e(trim(chunk_split($setupTotpSecret, 4, ' '))) ?>
+                                    </div>
+                                </div>
+
+                                <form action="settings.php" method="post" class="space-y-2.5">
+                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                    <input type="hidden" name="action" value="setup_totp_2fa">
+
+                                    <label for="totp_verify_code" class="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                        2. 6-stelligen Code aus der App zur Bestätigung eingeben:
+                                    </label>
+                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                                        <input
+                                            type="text"
+                                            id="totp_verify_code"
+                                            name="totp_verify_code"
+                                            inputmode="numeric"
+                                            pattern="[0-9]{6}"
+                                            maxlength="6"
+                                            required
+                                            autocomplete="one-time-code"
+                                            placeholder="000000"
+                                            class="w-full sm:w-44 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-center font-mono text-base tracking-[0.3em] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                        >
+                                        <button
+                                            type="submit"
+                                            class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
+                                        >
+                                            ✅ Code prüfen &amp; Google Authenticator aktivieren
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </details>
+                <?php endif; ?>
+            </div>
         </section>
 
         <!-- 3b. AUTOMATISCHE ABMELDUNG (SITZUNGS-TIMEOUT) -->

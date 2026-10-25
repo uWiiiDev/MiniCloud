@@ -521,7 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password         = (string)($_POST['password'] ?? '');
         $quotaMb          = max(1, (int)($_POST['quota_mb'] ?? 100));
         $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
-        $twoFactor        = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $twoFactor        = isset($_POST['two_factor_enabled']) ? max(0, min(2, (int)$_POST['two_factor_enabled'])) : 0;
         $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
 
         if (!preg_match('/^[a-zA-Z0-9_.-]{3,32}$/', $username)) {
@@ -589,7 +589,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $quotaMb          = max(1, (int)($_POST['quota_mb'] ?? 100));
         $newPassword      = (string)($_POST['new_password'] ?? '');
         $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
-        $twoFactor        = isset($_POST['two_factor_enabled']) && $_POST['two_factor_enabled'] === '1' ? 1 : 0;
+        $twoFactor        = isset($_POST['two_factor_enabled']) ? max(0, min(2, (int)$_POST['two_factor_enabled'])) : 0;
         $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
 
         if ($targetUserId === $currentAdminId) {
@@ -1076,7 +1076,7 @@ $currentSettings = getAppSettings($pdo);
 
 // Daten für die Admin-Übersicht laden
 $allUsers = $pdo->query(
-    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.allow_user_sharing, u.is_admin, u.theme, u.storage_quota, u.created_at,
+    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.totp_secret, u.allow_user_sharing, u.is_admin, u.theme, u.storage_quota, u.created_at,
             COALESCE(SUM(f.file_size), 0) AS used_bytes, COUNT(f.id) AS file_count
      FROM users u
      LEFT JOIN files f ON f.user_id = u.id
@@ -1403,7 +1403,8 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelra
                             $uId = (int)$u['id'];
                             $uQuotaMb = (int)round(((int)$u['storage_quota']) / (1024 * 1024));
                             $uEmail = trim((string)($u['email'] ?? ''));
-                            $u2fa = (int)($u['two_factor_enabled'] ?? 0) === 1;
+                            $u2faMode = (int)($u['two_factor_enabled'] ?? 0);
+                            $uHasTotp = trim((string)($u['totp_secret'] ?? '')) !== '';
                             $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
                             ?>
                             <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
@@ -1413,7 +1414,9 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelra
                                         <?php if ((int)$u['is_admin'] === 1): ?>
                                             <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white">Admin</span>
                                         <?php endif; ?>
-                                        <?php if ($u2fa && $uEmail !== ''): ?>
+                                        <?php if ($u2faMode === 2 && $uHasTotp): ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per Authenticator-App (Google Authenticator / TOTP) aktiviert">📱 TOTP</span>
+                                        <?php elseif ($u2faMode === 1 && $uEmail !== ''): ?>
                                             <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per E-Mail aktiviert">🔒 2FA</span>
                                         <?php endif; ?>
                                         <?php if ($uShareVis): ?>
@@ -1456,10 +1459,17 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelra
                                             placeholder="Neues Passwort (optional)"
                                             class="w-full sm:w-40 px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
                                         >
-                                        <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Optionale 2FA per E-Mail aktivieren">
-                                            <input type="checkbox" name="two_factor_enabled" value="1" <?= $u2fa ? 'checked' : '' ?>>
-                                            <span>2FA</span>
-                                        </label>
+                                        <select
+                                            name="two_factor_enabled"
+                                            title="2FA-Methode des Benutzers"
+                                            class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                                        >
+                                            <option value="0" <?= $u2faMode === 0 ? 'selected' : '' ?>>2FA: Aus</option>
+                                            <option value="1" <?= $u2faMode === 1 ? 'selected' : '' ?>>2FA: E-Mail</option>
+                                            <?php if ($uHasTotp || $u2faMode === 2): ?>
+                                                <option value="2" <?= $u2faMode === 2 ? 'selected' : '' ?>>2FA: App (TOTP)</option>
+                                            <?php endif; ?>
+                                        </select>
                                         <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="In Teilen-Auswahl für andere Benutzer sichtbar">
                                             <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?>>
                                             <span>Teilen</span>

@@ -182,9 +182,9 @@ require_once __DIR__ . '/includes/header.php';
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentication, 2FA &amp; Brute-Force Protection</h3>
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentication, 2FA (Email &amp; TOTP) &amp; Brute-Force Protection</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Closed user system without public self-registration. Passwords are hashed exclusively with <strong>BCRYPT (cost factor 12)</strong>. Users can optionally enable Email 2FA. After <strong>5 failed attempts within 5 minutes</strong>, an automatic temporary lockout is enforced for both login and password-protected share links.
+                    Closed user system without public self-registration. Passwords are hashed exclusively with <strong>BCRYPT (cost factor 12)</strong>. Users can optionally enable Two-Factor Authentication via <strong>Email code</strong> or <strong>Authenticator App (Google Authenticator / RFC 6238 TOTP with local offline QR code generation)</strong>. After <strong>5 failed attempts within 5 minutes</strong>, an automatic temporary lockout is enforced.
                 </p>
             </div>
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
@@ -1073,7 +1073,7 @@ require_once __DIR__ . '/includes/header.php';
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 Tage Papierkorb-Aufbewahrung:</strong> Gelöschte Dateien wandern zunächst in den <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Papierkorb</a>. Dort können sie 30 Tage lang mit einem Klick wiederhergestellt oder sofort endgültig gelöscht werden.</li>
                 <li><strong>13 Farbdesigns &amp; 5 Sprachen:</strong> In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> (⚙️ Zahnrad-Symbol) wählen Sie zwischen 5 Sprachen sowie 13 augenfreundlichen Farbschemata (5 helle und 8 dunkle Designs inkl. <em>🌌 Mitternacht</em>).</li>
-                <li><strong>Individuelle Komfort- &amp; Sicherheitsoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie Ihre <strong>E-Mail-Adresse (für Passwort-Wiederherstellung &amp; optionale 2FA per E-Mail)</strong> fest.</li>
+                <li><strong>Individuelle Komfort- &amp; Sicherheitsoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie Ihre <strong>E-Mail-Adresse (für Passwort-Wiederherstellung)</strong> und Ihre bevorzugte <strong>2FA-Methode (per E-Mail-Code oder per Google Authenticator / TOTP-App inkl. lokalem QR-Code)</strong> fest.</li>
                 <li><strong>Vergessenes Passwort zurücksetzen:</strong> Haben Sie eine E-Mail-Adresse hinterlegt, können Sie auf der Anmeldeseite jederzeit über <em>„Passwort vergessen?“</em> (<a href="forgot_password.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Passwort zurücksetzen</a>) einen 30 Minuten gültigen Einmal-Link anfordern.</li>
             </ul>
         </section>
@@ -1110,9 +1110,9 @@ require_once __DIR__ . '/includes/header.php';
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentifizierung, 2FA &amp; Brute-Force-Schutz</h3>
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentifizierung, 2FA (E-Mail &amp; TOTP) &amp; Brute-Force-Schutz</h3>
                 <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Geschlossenes Benutzersystem (Selbstregistrierung standardmäßig deaktiviert und optional nur per Einladungs-Code). Passwörter werden ausschließlich mittels <strong>BCRYPT (Cost-Faktor 12)</strong> gehasht. Benutzer können optional eine E-Mail-2FA aktivieren. Nach <strong>5 Fehlversuchen innerhalb von 5 Minuten</strong> greift eine automatische temporäre Sperre (Login, Registrierung und passwortgeschützte Freigabelinks).
+                    Geschlossenes Benutzersystem (Selbstregistrierung standardmäßig deaktiviert und optional nur per Einladungs-Code). Passwörter werden ausschließlich mittels <strong>BCRYPT (Cost-Faktor 12)</strong> gehasht. Benutzer können wahlweise eine <strong>2FA per E-Mail-Code</strong> oder per <strong>Authenticator-App (Google Authenticator / TOTP nach RFC 6238 mit 100 % lokaler QR-Code-Erzeugung)</strong> aktivieren. Nach <strong>5 Fehlversuchen innerhalb von 5 Minuten</strong> greift eine automatische temporäre Sperre.
                 </p>
             </div>
 

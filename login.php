@@ -24,6 +24,7 @@ if (isset($_GET['cancel_2fa'])) {
     unset(
         $_SESSION['pending_2fa_user_id'],
         $_SESSION['pending_2fa_username'],
+        $_SESSION['pending_2fa_mode'],
         $_SESSION['pending_2fa_email_masked'],
         $_SESSION['pending_2fa_last_sent']
     );
@@ -39,17 +40,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Ungültiges Sicherheits-Token (CSRF). Bitte laden Sie die Seite neu.';
     }
 
-    // --- SCHRITT 2a: 2FA-Code überprüfen ---
+    // --- SCHRITT 2a: 2FA-Code überprüfen (Google Authenticator / TOTP oder E-Mail-Code) ---
     if (empty($errors) && $postAction === 'verify_2fa' && !empty($_SESSION['pending_2fa_user_id'])) {
         $pendingUserId = (int)$_SESSION['pending_2fa_user_id'];
-        $codeInput = preg_replace('/\s+/', '', trim((string)($_POST['two_factor_code'] ?? ''))) ?? '';
+        $pendingMode   = (string)($_SESSION['pending_2fa_mode'] ?? 'email');
+        $codeInput     = preg_replace('/\s+/', '', trim((string)($_POST['two_factor_code'] ?? ''))) ?? '';
 
         if (!preg_match('/^\d{6}$/', $codeInput)) {
-            $errors[] = 'Bitte geben Sie den 6-stelligen Zahlencode aus Ihrer E-Mail ein.';
+            $errors[] = 'Bitte geben Sie den 6-stelligen Zahlencode ein.';
         } else {
             $pdo = getDB();
             $stmt = $pdo->prepare(
-                'SELECT id, username, email, is_admin, theme, two_factor_enabled,
+                'SELECT id, username, email, is_admin, theme, two_factor_enabled, totp_secret,
                         two_factor_code_hash, two_factor_attempts,
                         (two_factor_expires_at IS NOT NULL AND two_factor_expires_at >= NOW()) AS code_not_expired
                  FROM users
@@ -59,62 +61,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $pendingUserId]);
             $user = $stmt->fetch();
 
-            if (!$user || empty($user['two_factor_code_hash'])) {
+            if (!$user) {
                 unset(
                     $_SESSION['pending_2fa_user_id'],
                     $_SESSION['pending_2fa_username'],
+                    $_SESSION['pending_2fa_mode'],
                     $_SESSION['pending_2fa_email_masked'],
                     $_SESSION['pending_2fa_last_sent']
                 );
                 $errors[] = 'Die 2FA-Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.';
-            } elseif ((int)$user['code_not_expired'] !== 1) {
-                $errors[] = 'Der Sicherheitscode ist abgelaufen (10 Minuten Gültigkeit). Bitte fordern Sie unten einen neuen Code an.';
             } elseif ((int)$user['two_factor_attempts'] >= 5) {
-                $errors[] = 'Zu viele ungültige Code-Eingaben. Bitte fordern Sie unten einen neuen Sicherheitscode an.';
-            } elseif (password_verify($codeInput, (string)$user['two_factor_code_hash'])) {
-                // Code korrekt -> 2FA-Felder zurücksetzen & Login abschließen
-                $stmtClear = $pdo->prepare(
-                    'UPDATE users
-                     SET two_factor_code_hash = NULL,
-                         two_factor_expires_at = NULL,
-                         two_factor_attempts = 0
-                     WHERE id = :id'
-                );
-                $stmtClear->execute([':id' => (int)$user['id']]);
-
-                session_regenerate_id(true);
-                unset(
-                    $_SESSION['login_attempts'],
-                    $_SESSION['pending_2fa_user_id'],
-                    $_SESSION['pending_2fa_username'],
-                    $_SESSION['pending_2fa_email_masked'],
-                    $_SESSION['pending_2fa_last_sent']
-                );
-                $_SESSION['user_id']       = (int)$user['id'];
-                $_SESSION['username']      = (string)$user['username'];
-                $_SESSION['is_admin']      = ((int)$user['is_admin'] === 1);
-                $_SESSION['theme']         = (string)($user['theme'] ?: 'light');
-                $_SESSION['last_activity'] = time();
-                $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
-
-                setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
-                header('Location: index.php');
-                exit;
+                $errors[] = $pendingMode === 'totp'
+                    ? 'Zu viele ungültige Code-Eingaben. Bitte melden Sie sich erneut an oder fordern Sie unten einen E-Mail-Code an.'
+                    : 'Zu viele ungültige Code-Eingaben. Bitte fordern Sie unten einen neuen Sicherheitscode an.';
             } else {
-                $newAttempts = (int)$user['two_factor_attempts'] + 1;
-                $stmtFail = $pdo->prepare('UPDATE users SET two_factor_attempts = :att WHERE id = :id');
-                $stmtFail->execute([':att' => $newAttempts, ':id' => (int)$user['id']]);
-                $remaining = max(0, 5 - $newAttempts);
-                if ($remaining > 0) {
-                    $errors[] = sprintf('Ungültiger Sicherheitscode. Noch %d %s übrig.', $remaining, $remaining === 1 ? 'Versuch' : 'Versuche');
+                $totpSecret = trim((string)($user['totp_secret'] ?? ''));
+                $totpMatched = ($totpSecret !== '' && verifyTotpCode($totpSecret, $codeInput));
+                $emailMatched = (!empty($user['two_factor_code_hash']) && (int)$user['code_not_expired'] === 1 && password_verify($codeInput, (string)$user['two_factor_code_hash']));
+
+                if ($totpMatched || $emailMatched) {
+                    // Code korrekt -> 2FA-Felder zurücksetzen & Login abschließen
+                    $stmtClear = $pdo->prepare(
+                        'UPDATE users
+                         SET two_factor_code_hash = NULL,
+                             two_factor_expires_at = NULL,
+                             two_factor_attempts = 0
+                         WHERE id = :id'
+                    );
+                    $stmtClear->execute([':id' => (int)$user['id']]);
+
+                    session_regenerate_id(true);
+                    unset(
+                        $_SESSION['login_attempts'],
+                        $_SESSION['pending_2fa_user_id'],
+                        $_SESSION['pending_2fa_username'],
+                        $_SESSION['pending_2fa_mode'],
+                        $_SESSION['pending_2fa_email_masked'],
+                        $_SESSION['pending_2fa_last_sent']
+                    );
+                    $_SESSION['user_id']       = (int)$user['id'];
+                    $_SESSION['username']      = (string)$user['username'];
+                    $_SESSION['is_admin']      = ((int)$user['is_admin'] === 1);
+                    $_SESSION['theme']         = (string)($user['theme'] ?: 'light');
+                    $_SESSION['last_activity'] = time();
+                    $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
+
+                    setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
+                    header('Location: index.php');
+                    exit;
+                } elseif ($pendingMode === 'email' && !empty($user['two_factor_code_hash']) && (int)$user['code_not_expired'] !== 1) {
+                    $errors[] = 'Der Sicherheitscode ist abgelaufen (10 Minuten Gültigkeit). Bitte fordern Sie unten einen neuen Code an.';
                 } else {
-                    $errors[] = 'Sicherheitscode nach 5 Fehlversuchen gesperrt. Bitte fordern Sie einen neuen Code an.';
+                    $newAttempts = (int)$user['two_factor_attempts'] + 1;
+                    $stmtFail = $pdo->prepare('UPDATE users SET two_factor_attempts = :att WHERE id = :id');
+                    $stmtFail->execute([':att' => $newAttempts, ':id' => (int)$user['id']]);
+                    $remaining = max(0, 5 - $newAttempts);
+                    if ($remaining > 0) {
+                        $errors[] = sprintf('Ungültiger Sicherheitscode. Noch %d %s übrig.', $remaining, $remaining === 1 ? 'Versuch' : 'Versuche');
+                    } else {
+                        $errors[] = '2FA-Prüfung nach 5 Fehlversuchen gesperrt. Bitte melden Sie sich erneut an.';
+                    }
                 }
             }
         }
     }
 
-    // --- SCHRITT 2b: Neuen 2FA-Code per E-Mail anfordern ---
+    // --- SCHRITT 2b: Neuen 2FA-Code per E-Mail anfordern (auch als Fallback bei TOTP) ---
     elseif (empty($errors) && $postAction === 'resend_2fa' && !empty($_SESSION['pending_2fa_user_id'])) {
         $pendingUserId = (int)$_SESSION['pending_2fa_user_id'];
         $lastSent = (int)($_SESSION['pending_2fa_last_sent'] ?? 0);
@@ -142,8 +154,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtUpd->execute([':h' => $codeHash, ':id' => (int)$user['id']]);
 
                 if (sendTwoFactorEmail($pdo, (string)$user['email'], (string)$user['username'], $newCode)) {
+                    $_SESSION['pending_2fa_mode'] = 'email';
+                    $_SESSION['pending_2fa_email_masked'] = maskEmailAddress((string)$user['email']);
                     $_SESSION['pending_2fa_last_sent'] = time();
-                    $infoMessage = 'Ein neuer 6-stelliger Sicherheitscode wurde an ' . ($_SESSION['pending_2fa_email_masked'] ?? 'Ihre E-Mail-Adresse') . ' gesendet.';
+                    $infoMessage = 'Ein 6-stelliger Sicherheitscode wurde an ' . $_SESSION['pending_2fa_email_masked'] . ' gesendet.';
                 } else {
                     $errors[] = 'E-Mail konnte vom Server nicht versendet werden. Bitte prüfen Sie die Server-Mailkonfiguration.';
                 }
@@ -178,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             $pdo = getDB();
             $stmt = $pdo->prepare(
-                'SELECT id, username, email, password_hash, two_factor_enabled, is_admin, theme
+                'SELECT id, username, email, password_hash, two_factor_enabled, totp_secret, is_admin, theme
                  FROM users
                  WHERE username = :username
                  LIMIT 1'
@@ -192,10 +206,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($user && password_verify($password, $hashToVerify)) {
                 unset($_SESSION['login_attempts']);
-                $userEmail = trim((string)($user['email'] ?? ''));
-                $has2fa = ((int)($user['two_factor_enabled'] ?? 0) === 1) && (filter_var($userEmail, FILTER_VALIDATE_EMAIL) !== false);
+                $userEmail  = trim((string)($user['email'] ?? ''));
+                $totpSecret = trim((string)($user['totp_secret'] ?? ''));
+                $tfaMode    = (int)($user['two_factor_enabled'] ?? 0);
+                $hasValidEmail = (filter_var($userEmail, FILTER_VALIDATE_EMAIL) !== false);
 
-                if ($has2fa) {
+                if ($tfaMode === 2 && $totpSecret !== '') {
+                    // 2FA per Authenticator-App (Google Authenticator / TOTP)
+                    $pdo->prepare('UPDATE users SET two_factor_attempts = 0 WHERE id = :id')
+                        ->execute([':id' => (int)$user['id']]);
+
+                    $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
+                    $_SESSION['pending_2fa_username']     = (string)$user['username'];
+                    $_SESSION['pending_2fa_mode']         = 'totp';
+                    $_SESSION['pending_2fa_email_masked'] = $hasValidEmail ? maskEmailAddress($userEmail) : '';
+                    $_SESSION['pending_2fa_last_sent']    = 0;
+                } elseif ($tfaMode === 1 && $hasValidEmail) {
                     // 6-stelligen E-Mail-Code erzeugen und versenden
                     $otpCode  = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
                     $codeHash = password_hash($otpCode, PASSWORD_BCRYPT, ['cost' => 10]);
@@ -215,6 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (sendTwoFactorEmail($pdo, $userEmail, (string)$user['username'], $otpCode)) {
                         $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
                         $_SESSION['pending_2fa_username']     = (string)$user['username'];
+                        $_SESSION['pending_2fa_mode']         = 'email';
                         $_SESSION['pending_2fa_email_masked'] = maskEmailAddress($userEmail);
                         $_SESSION['pending_2fa_last_sent']    = time();
                         $infoMessage = 'Ein 6-stelliger Bestätigungscode wurde an ' . $_SESSION['pending_2fa_email_masked'] . ' gesendet.';
@@ -243,6 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $isTwoFactorStep = !empty($_SESSION['pending_2fa_user_id']);
+$pending2faMode  = (string)($_SESSION['pending_2fa_mode'] ?? 'email');
 $pageTitle = $isTwoFactorStep ? '2FA-Bestätigung' : 'Anmelden';
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -259,12 +287,19 @@ require_once __DIR__ . '/includes/header.php';
             <?php endif; ?>
             <?php if ($isTwoFactorStep): ?>
                 <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-950/70 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 text-xs font-semibold mb-2">
-                    <span>🔒 Zwei-Faktor-Authentifizierung</span>
+                    <span><?= $pending2faMode === 'totp' ? '📱 Google Authenticator / TOTP' : '🔒 Zwei-Faktor-Authentifizierung' ?></span>
                 </div>
-                <h1 class="text-2xl font-bold text-slate-900 dark:text-white">E-Mail-Code eingeben</h1>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Wir haben einen 6-stelligen Code an <strong class="text-slate-800 dark:text-slate-200"><?= e((string)($_SESSION['pending_2fa_email_masked'] ?? '')) ?></strong> gesendet.
-                </p>
+                <?php if ($pending2faMode === 'totp'): ?>
+                    <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Authenticator-Code eingeben</h1>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Bitte geben Sie den aktuellen 6-stelligen Code aus Ihrer <strong>Authenticator-App</strong> ein.
+                    </p>
+                <?php else: ?>
+                    <h1 class="text-2xl font-bold text-slate-900 dark:text-white">E-Mail-Code eingeben</h1>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Wir haben einen 6-stelligen Code an <strong class="text-slate-800 dark:text-slate-200"><?= e((string)($_SESSION['pending_2fa_email_masked'] ?? '')) ?></strong> gesendet.
+                    </p>
+                <?php endif; ?>
             <?php else: ?>
                 <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Anmelden bei <?= e($appTitle ?? APP_NAME) ?></h1>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Greifen Sie sicher auf Ihre persönlichen Cloud-Dateien und Gruppenordner zu.</p>
@@ -311,7 +346,7 @@ require_once __DIR__ . '/includes/header.php';
                         class="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-center text-xl font-mono tracking-[0.35em] focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                     >
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 text-center">
-                        Gültig für 10 Minuten &bull; Konto: <strong><?= e((string)($_SESSION['pending_2fa_username'] ?? '')) ?></strong>
+                        <?= $pending2faMode === 'totp' ? '30-Sekunden-Zeitcode (TOTP)' : 'Gültig für 10 Minuten' ?> &bull; Konto: <strong><?= e((string)($_SESSION['pending_2fa_username'] ?? '')) ?></strong>
                     </p>
                 </div>
 
@@ -324,13 +359,17 @@ require_once __DIR__ . '/includes/header.php';
             </form>
 
             <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 text-xs">
-                <form action="login.php" method="post" class="inline">
-                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                    <input type="hidden" name="action" value="resend_2fa">
-                    <button type="submit" class="text-brand-600 dark:text-brand-400 hover:underline font-medium cursor-pointer">
-                        Neuen Code per E-Mail senden
-                    </button>
-                </form>
+                <?php if (!empty($_SESSION['pending_2fa_email_masked'])): ?>
+                    <form action="login.php" method="post" class="inline">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="resend_2fa">
+                        <button type="submit" class="text-brand-600 dark:text-brand-400 hover:underline font-medium cursor-pointer">
+                            <?= $pending2faMode === 'totp' ? '✉️ Stattdessen Code per E-Mail senden' : 'Neuen Code per E-Mail senden' ?>
+                        </button>
+                    </form>
+                <?php else: ?>
+                    <span></span>
+                <?php endif; ?>
 
                 <a href="login.php?cancel_2fa=1" class="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
                     &larr; Andere Anmeldung
