@@ -200,7 +200,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
         $tmpZip = tempnam(sys_get_temp_dir(), 'mc_share_zip_');
         if ($tmpZip !== false) {
             $zip = new ZipArchive();
-            if ($zip->open($tmpZip, ZipArchive::OVERWRITE) === true) {
+            if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
                 $addedFiles = 0;
                 $skippedVaultFiles = [];
                 foreach ($sharedFolderFiles as $f) {

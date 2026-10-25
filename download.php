@@ -38,7 +38,7 @@ function streamZipArchive(array $folderFiles, string $archiveBaseName): never
     }
 
     $zip = new ZipArchive();
-    if ($zip->open($tmpZip, ZipArchive::OVERWRITE) !== true) {
+    if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         @unlink($tmpZip);
         setFlash('error', 'ZIP-Archiv konnte nicht initialisiert werden.');
         header('Location: index.php');

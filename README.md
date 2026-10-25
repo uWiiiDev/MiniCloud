@@ -7,8 +7,9 @@
 
 ## ✨ Kernfunktionen im Überblick
 
-1. **Dateiverwaltung, Tresor-Modus & Direkt-Vorschau (`index.php`, `vault_action.php`)**
+1. **Dateiverwaltung, MiniCloud Office Light, Tresor-Modus & Direkt-Vorschau (`index.php`, `office.php`, `vault_action.php`)**
    - Drag-&-Drop-Upload für einzelne Dateien, Mehrfachauswahl und komplette Ordnerstrukturen.
+   - **📄 MiniCloud Office Light (Word `.docx`, Excel `.xlsx`, `.csv`, `.txt`, `.md`):** Direkt im Browser ohne externe Server neue Word-Dokumente, Excel-Tabellen oder Notizen anlegen sowie bestehende `.docx`- und `.xlsx`-Dateien online öffnen, bearbeiten (inkl. Rich-Text-Formatierung, Tabellen, mehreren Excel-Tabellenblättern und Live-Formeln wie `=SUMME(A1:A10)` / `=MITTELWERT(...)`) und per `Strg+S` speichern.
    - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio und Text-/Codedateien (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
    - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
@@ -185,6 +186,7 @@ MiniCloud/
 ├── includes/
 │   ├── auth.php              # Session-Management, Timeout, Admin-/Login-Guards, 13 Themes & CSRF-Schutz
 │   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, TOTP/QR-Code, 2FA-Mail/SMTP)
+│   ├── office_functions.php  # OpenXML-Parser & -Generator für Word (.docx), Excel (.xlsx) und CSV ohne Zusatz-Server
 │   ├── i18n.php              # Mehrsprachigkeits-Modul für 5 Sprachen (DE, EN, FR, ES, NL)
 │   ├── header.php            # Responsives Layout, 13 Farbthemes, Sprachwahl, Statusmeldungen & PWA-Header
 │   └── footer.php            # Footer mit Versionsanzeige, PWA-Dialog, Theme-Umschalter & Chat-System-Benachrichtigungen
@@ -193,7 +195,8 @@ MiniCloud/
 ├── uploads/
 │   ├── .htaccess             # Verhindert direkten Web-Zugriff & Skriptausführung auf Apache
 │   └── index.php             # 403-Fallback-Schutz
-├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Vorschau-Modal, Tresor, 3-Stufen-Freigaben)
+├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Office-Light-Start, Vorschau-Modal, Tresor, Freigaben)
+├── office.php                # MiniCloud Office Light (Online-Editor für Word .docx, Excel .xlsx, .csv, .txt & .md)
 ├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
 ├── messages.php              # Integrierter Messenger (1:1-Chat, Admin-Rundnachrichten, Verlauf leeren, Mobil-Ansicht)
 ├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, 2FA per E-Mail & Google Auth)

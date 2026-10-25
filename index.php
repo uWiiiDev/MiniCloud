@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/office_functions.php';
 
 // Strikter Session-Schutz: Nicht eingeloggte Nutzer werden sofort auf login.php umgeleitet
 requireLogin();
@@ -520,6 +521,16 @@ require_once __DIR__ . '/includes/header.php';
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                     </svg>
                     <span>Ordner</span>
+                </button>
+
+                <button
+                    type="button"
+                    onclick="openCreateOfficeModal()"
+                    title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
+                    class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                >
+                    <span>📄+</span>
+                    <span>Office Light</span>
                 </button>
             </div>
         </div>
@@ -1039,6 +1050,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             ? $canDeleteSharedFolder
                             : $canManageThisFile;
 
+                        $officeEditorType = getOfficeEditorType($origName);
+                        $officeEditParams = ['id' => $fId];
+                        if ($activeSharedFolder !== null) {
+                            $officeEditParams['return_sf'] = (int)$activeSharedFolder['id'];
+                        } elseif ($activeGroupFolder !== null) {
+                            $officeEditParams['return_gf'] = (int)$activeGroupFolder['id'];
+                        }
+                        if ($currentFolder !== '') {
+                            $officeEditParams['return_folder'] = $currentFolder;
+                        }
+                        $officeEditUrl = ($officeEditorType !== null && !$isEncrypted)
+                            ? ('office.php?' . http_build_query($officeEditParams))
+                            : '';
+
                         $previewItemsList[] = [
                             'id'          => $fId,
                             'name'        => $origName,
@@ -1052,6 +1077,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             'badgeText'   => $badge['text'],
                             'isEncrypted' => $isEncrypted,
                             'canManage'   => $canManageThisFile,
+                            'officeUrl'   => $officeEditUrl,
                             'downloadUrl' => 'download.php?id=' . $fId,
                             'inlineUrl'   => 'download.php?id=' . $fId . '&inline=1',
                             'textUrl'     => 'download.php?id=' . $fId . '&inline=1&as_text=1',
@@ -1145,6 +1171,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                         </svg>
                                     </button>
+
+                                    <?php if ($officeEditUrl !== ''): ?>
+                                        <!-- OFFICE LIGHT BEARBEITEN / ÖFFNEN BUTTON -->
+                                        <a
+                                            href="<?= e($officeEditUrl) ?>"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
+                                            title="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Schreibgeschützt)' ?>"
+                                            aria-label="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </a>
+                                    <?php endif; ?>
 
                                     <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <?php if ($isEncrypted): ?>
@@ -1412,6 +1452,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-4 sm:px-6 text-right">
                                 <div class="inline-flex items-center justify-end gap-1.5">
+                                    <?php
+                                    $sfOfficeType = getOfficeEditorType((string)$sf['original_name']);
+                                    $sfIsEnc = ((int)($sf['is_encrypted'] ?? 0) === 1);
+                                    ?>
+                                    <?php if ($sfOfficeType !== null && !$sfIsEnc): ?>
+                                        <a
+                                            href="office.php?id=<?= (int)$sf['id'] ?>"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
+                                            title="<?= $sfFileCanWrite ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Nur Lesen)' ?>"
+                                            aria-label="<?= $sfFileCanWrite ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </a>
+                                    <?php endif; ?>
                                     <a
                                         href="download.php?id=<?= (int)$sf['id'] ?>"
                                         class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
@@ -1890,6 +1946,106 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
+<!-- OFFICE LIGHT: NEUES DOKUMENT / NEUE TABELLE ANLEGEN MODAL -->
+<div
+    id="createOfficeModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="createOfficeModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-base shrink-0">
+                    📄
+                </span>
+                <div>
+                    <h3 id="createOfficeModalTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        MiniCloud Office Light
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Neues Dokument oder neue Tabelle direkt in der Cloud erstellen
+                    </p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeCreateOfficeModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <form action="office.php" method="post" class="p-5 space-y-4">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="create_document">
+            <input type="hidden" name="target_folder" id="officeCreateTargetFolder" value="<?= e($currentFolder) ?>">
+            <?php if ($activeSharedFolder !== null): ?>
+                <input type="hidden" name="shared_folder_id" value="<?= (int)$activeSharedFolder['id'] ?>">
+            <?php elseif ($activeGroupFolder !== null): ?>
+                <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+            <?php endif; ?>
+
+            <div>
+                <label for="officeCreateType" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Dokumenttyp wählen
+                </label>
+                <select
+                    id="officeCreateType"
+                    name="doc_type"
+                    onchange="updateOfficeDefaultFilename(this.value)"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                >
+                    <option value="docx">📄 Word-Dokument (.docx)</option>
+                    <option value="xlsx">📊 Excel-Tabelle (.xlsx)</option>
+                    <option value="csv">📋 CSV-Tabelle (.csv)</option>
+                    <option value="txt">📝 Textnotiz (.txt)</option>
+                    <option value="md">📑 Markdown-Protokoll (.md)</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="officeCreateName" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Dateiname
+                </label>
+                <input
+                    type="text"
+                    id="officeCreateName"
+                    name="doc_name"
+                    required
+                    value="Neues_Dokument_<?= date('Y-m-d') ?>"
+                    placeholder="z.B. Projektplan_2026"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                <p class="text-[11px] text-slate-400 mt-1">
+                    Die passende Dateiendung (<code>.docx</code>, <code>.xlsx</code> usw.) wird automatisch ergänzt.
+                </p>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeCreateOfficeModal()"
+                    class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                >
+                    Abbrechen
+                </button>
+                <button
+                    type="submit"
+                    class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                    Erstellen &amp; Öffnen &rarr;
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- DATEI-VORSCHAU MODAL MIT DURCHBLÄTTER-FUNKTION -->
 <div id="previewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6">
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
@@ -1934,6 +2090,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         </svg>
                     </button>
                 </div>
+
+                <a
+                    id="previewOfficeBtn"
+                    href="#"
+                    title="In Office Light öffnen / bearbeiten"
+                    aria-label="In Office Light öffnen / bearbeiten"
+                    class="hidden items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Office Light</span>
+                </a>
 
                 <a
                     id="previewDownloadBtn"
@@ -2083,6 +2252,18 @@ async function renderPreviewItem(index) {
     previewBadge.className = `inline-flex items-center justify-center w-10 h-8 rounded-lg text-[10px] font-bold tracking-tight shrink-0 ${item.badgeBg} ${item.badgeText}`;
     previewDownloadBtn.href = item.downloadUrl;
 
+    const previewOfficeBtn = document.getElementById('previewOfficeBtn');
+    if (previewOfficeBtn) {
+        if (item.officeUrl && item.officeUrl !== '') {
+            previewOfficeBtn.href = item.officeUrl;
+            previewOfficeBtn.classList.remove('hidden');
+            previewOfficeBtn.classList.add('inline-flex');
+        } else {
+            previewOfficeBtn.classList.add('hidden');
+            previewOfficeBtn.classList.remove('inline-flex');
+        }
+    }
+
     const hasMultiple = total > 1;
     previewNavTop.classList.toggle('sm:inline-flex', hasMultiple);
     previewPrevFloating.classList.toggle('hidden', !hasMultiple);
@@ -2172,14 +2353,24 @@ async function renderPreviewItem(index) {
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(item.size)} &bull; ${escapeHtml(item.mime)}</p>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400">
-                    Für diesen Dateityp ist keine direkte Browser-Vorschau verfügbar.
+                    ${item.officeUrl ? 'Dieses Office-Dokument kann direkt online in <strong>MiniCloud Office Light</strong> geöffnet und bearbeitet werden.' : 'Für diesen Dateityp ist keine direkte Browser-Vorschau verfügbar.'}
                 </p>
-                <a
-                    href="${item.downloadUrl}"
-                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-xs transition-colors"
-                >
-                    <span>Datei herunterladen</span>
-                </a>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    ${item.officeUrl ? `
+                        <a
+                            href="${item.officeUrl}"
+                            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                        >
+                            <span>✏️ In Office Light öffnen</span>
+                        </a>
+                    ` : ''}
+                    <a
+                        href="${item.downloadUrl}"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                    >
+                        <span>Datei herunterladen</span>
+                    </a>
+                </div>
             </div>
         `;
     }
@@ -2347,6 +2538,57 @@ transferModal.addEventListener('click', (e) => {
         closeTransferModal();
     }
 });
+
+// --- OFFICE LIGHT MODAL (Neues Dokument / Neue Tabelle anlegen) ---
+const createOfficeModal = document.getElementById('createOfficeModal');
+const officeCreateNameInput = document.getElementById('officeCreateName');
+const officeCreateTargetFolder = document.getElementById('officeCreateTargetFolder');
+
+function openCreateOfficeModal() {
+    if (!createOfficeModal) return;
+    const uploadFolderInput = document.getElementById('target_folder');
+    if (uploadFolderInput && officeCreateTargetFolder) {
+        officeCreateTargetFolder.value = uploadFolderInput.value;
+    }
+    createOfficeModal.classList.remove('hidden');
+    createOfficeModal.classList.add('flex');
+    if (officeCreateNameInput) {
+        setTimeout(() => {
+            officeCreateNameInput.focus();
+            officeCreateNameInput.select();
+        }, 50);
+    }
+}
+
+function closeCreateOfficeModal() {
+    if (!createOfficeModal) return;
+    createOfficeModal.classList.add('hidden');
+    createOfficeModal.classList.remove('flex');
+}
+
+function updateOfficeDefaultFilename(type) {
+    if (!officeCreateNameInput) return;
+    const today = <?= json_encode(date('Y-m-d')) ?>;
+    const defaults = {
+        docx: 'Neues_Dokument_' + today,
+        xlsx: 'Neue_Tabelle_' + today,
+        csv:  'Neue_Liste_' + today,
+        txt:  'Neue_Notiz_' + today,
+        md:   'Neues_Protokoll_' + today
+    };
+    const cur = officeCreateNameInput.value.trim();
+    if (cur === '' || cur.startsWith('Neues_') || cur.startsWith('Neue_')) {
+        officeCreateNameInput.value = defaults[type] || ('Neues_Dokument_' + today);
+    }
+}
+
+if (createOfficeModal) {
+    createOfficeModal.addEventListener('click', (e) => {
+        if (e.target === createOfficeModal) {
+            closeCreateOfficeModal();
+        }
+    });
+}
 
 // --- SHARE MODAL LOGIK (für Dateien UND Ordner) ---
 const shareModal = document.getElementById('shareModal');

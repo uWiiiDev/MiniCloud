@@ -971,16 +971,21 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
         </section>
 
-        <!-- 2. Dateivorschau, Durchblättern & Sortierung -->
+        <!-- 2. Dateivorschau, Office Light & Sortierung -->
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">👁️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vorschau, Durchblättern &amp; Sortierung</h2>
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vorschau, Office Light (Word &amp; Excel) &amp; Sortierung</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Direktvorschau:</strong> Ein Klick auf das Augen-Symbol (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vorschau</span>), das Dateityp-Badge oder den Dateinamen öffnet das Vorschau-Fenster für Bilder, PDF-Dokumente, Videos, Audiodateien sowie Text- und Quellcodedateien.</li>
-                <li><strong>Durchblättern im Ordner:</strong> Befinden sich mehrere Dateien im aktuellen Ordner, können Sie über die Vor-/Zurück-Buttons oder mit den Pfeiltasten <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> und <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> nahtlos durch alle Dateien blättern (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> schließt die Vorschau).</li>
-                <li><strong>Tabellensortierung:</strong> Klicken Sie auf die Spaltenüberschriften <em>Name</em>, <em>Ordner</em>, <em>Größe</em> oder <em>Typ / Datum</em>, um auf- oder absteigend (<code>↑</code> / <code>↓</code>) zu sortieren.</li>
+                <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Notizen online bearbeiten):</strong>
+                    <ul class="list-disc pl-5 mt-1 space-y-1">
+                        <li><strong>Neu erstellen:</strong> Über den Button <strong>„📄+ Office Light“</strong> in der Upload-Leiste legen Sie direkt im aktuellen Ordner neue <strong>Word-Dokumente (<code>.docx</code>)</strong>, <strong>Excel-Tabellen (<code>.xlsx</code>)</strong>, <strong>CSV-Listen (<code>.csv</code>)</strong> oder <strong>Text-/Markdown-Notizen (<code>.txt</code> / <code>.md</code>)</strong> an.</li>
+                        <li><strong>Online bearbeiten:</strong> Klicken Sie in der Dateiliste auf das <strong>✏️ Stift-Symbol</strong> (oder im Vorschau-Fenster auf <em>„Office Light“</em>), um Word-Dokumente mit Formatierungsleiste (Überschriften, Fett/Kursiv, Listen, Tabellen, Druck/PDF) oder Excel-Tabellen mit mehreren Tabellenblättern und Rechenformeln (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direkt im Browser zu bearbeiten und per <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Strg+S</kbd> zu speichern.</li>
+                    </ul>
+                </li>
+                <li><strong>Direktvorschau &amp; Durchblättern:</strong> Ein Klick auf das Augen-Symbol (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vorschau</span>) oder den Dateinamen öffnet Bilder, PDFs, Videos, Audio sowie Text-/Codedateien; mit <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> / <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> blättern Sie durch den Ordner.</li>
+                <li><strong>Tabellensortierung:</strong> Klicken Sie auf <em>Name</em>, <em>Ordner</em>, <em>Größe</em> oder <em>Typ / Datum</em>, um auf- oder absteigend zu sortieren.</li>
             </ul>
         </section>
 
