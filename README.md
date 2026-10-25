@@ -31,8 +31,9 @@
    - **Zwei-Faktor-Authentifizierung (2FA) nach Wahl:** Pro Benutzer optional aktivierbarer 2FA-Schutz – wahlweise **per 6-stelligem E-Mail-Code** (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button) oder **per Authenticator-App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden nach RFC 6238 TOTP)** mit 100 % lokal auf dem eigenen Server erzeugtem SVG-QR-Code.
    - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
    - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
-7. **1-Klick-GitHub-Updater & Live-Server-Monitoring (`admin.php`)**
+7. **1-Klick-GitHub-Updater, Rollback / Zeitreise & Live-Server-Monitoring (`admin.php`)**
    - Direkt in der Administration prüft MiniCloud auf neue Commits im GitHub-Repository und aktualisiert alle Programmdateien per 1-Klick-Update, während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` vollständig erhalten bleiben.
+   - **🛡️ Automatischer Rollback & freie Versionsauswahl:** Vor jedem Update legt MiniCloud automatisch einen lokalen Sicherungspunkt (`uploads/.system_backups/`) an, sodass ein Update jederzeit per 1-Klick rückgängig gemacht werden kann. Zusätzlich lässt sich in der GitHub-Versionshistorie jeder beliebige frühere Stand gezielt auswählen und installieren (*„⏮️ Diesen Stand installieren“*).
    - Echtzeit-Monitoring für CPU-Auslastung, Arbeitsspeicher (RAM), Festplattenspeicher und Cloud-Belegung.
 8. **Smartphone-App (PWA), 5 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
    - Als Vollbild-App (PWA) auf Android, iPhone/iPad und Desktop installierbar.

@@ -271,7 +271,7 @@ function getLocalInstalledCommitInfo(PDO $pdo): array
 }
 
 /**
- * Prüft über die GitHub-API die neuesten Commits des main-Branches.
+ * Prüft über die GitHub-API die neuesten Commits des main-Branches (inkl. Historie für Rollback/Versionswechsel).
  *
  * @return array<string, mixed>
  */
@@ -282,7 +282,7 @@ function checkGitHubUpdates(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud'):
     }
 
     $err = null;
-    $apiUrl = sprintf('https://api.github.com/repos/%s/commits?sha=main&per_page=5', $repo);
+    $apiUrl = sprintf('https://api.github.com/repos/%s/commits?sha=main&per_page=15', $repo);
     $rawJson = fetchUrlBytes($apiUrl, $err);
     if ($rawJson === null) {
         return [
@@ -341,13 +341,282 @@ function checkGitHubUpdates(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud'):
 }
 
 /**
- * Lädt das neueste Release-/Branch-Archiv von GitHub herunter und aktualisiert alle Programmdateien,
+ * Liefert das geschützte Verzeichnis für lokale Programm-Sicherungspunkte (Snapshots) und legt es bei Bedarf an.
+ */
+function getSnapshotBackupDir(): string
+{
+    $dir = rtrim(UPLOAD_DIR, '/\\') . '/.system_backups';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0750, true);
+    }
+    $htFile = $dir . '/.htaccess';
+    if (!is_file($htFile)) {
+        @file_put_contents($htFile, "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order deny,allow\n    Deny from all\n</IfModule>\n");
+    }
+    return $dir;
+}
+
+/**
+ * Erstellt einen lokalen ZIP-Sicherungspunkt aller aktuellen Programmdateien (ohne uploads/ und ohne .git/),
+ * damit ein Update jederzeit mit einem Klick lokal rückgängig gemacht werden kann.
+ *
+ * @return array{ok: bool, filename?: string, message: string}
+ */
+function createLocalAppSnapshot(PDO $pdo, string $reason = 'Vor System-Update'): array
+{
+    if (!class_exists('ZipArchive')) {
+        return ['ok' => false, 'message' => 'Die PHP-Erweiterung ZipArchive ist nicht aktiviert.'];
+    }
+
+    $backupDir = getSnapshotBackupDir();
+    if (!is_dir($backupDir) || !is_writable($backupDir)) {
+        return ['ok' => false, 'message' => 'Das Sicherungsverzeichnis uploads/.system_backups ist nicht beschreibbar.'];
+    }
+
+    $localInfo = getLocalInstalledCommitInfo($pdo);
+    $verInfo   = getAppVersionInfo();
+    $shortSha  = $localInfo['short'] !== '' ? $localInfo['short'] : ($verInfo['hash'] ?? 'local');
+    $cleanShort = preg_replace('/[^a-z0-9]/i', '', $shortSha) ?: 'local';
+
+    $filename = sprintf('snapshot_%s_%s.zip', date('Ymd_His'), strtolower(substr($cleanShort, 0, 8)));
+    $zipPath  = $backupDir . '/' . $filename;
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        return ['ok' => false, 'message' => 'Lokales Sicherungsarchiv konnte nicht angelegt werden.'];
+    }
+
+    $rootDir = realpath(__DIR__) ?: __DIR__;
+    $filesAdded = 0;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($rootDir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $fileInfo) {
+        /** @var SplFileInfo $fileInfo */
+        if (!$fileInfo->isFile()) {
+            continue;
+        }
+        $fullPath = $fileInfo->getPathname();
+        $relPath  = ltrim(str_replace('\\', '/', substr($fullPath, strlen($rootDir))), '/');
+
+        if (
+            $relPath === '' ||
+            str_starts_with($relPath, 'uploads/') ||
+            str_starts_with($relPath, '.git/') ||
+            str_starts_with($relPath, '.github/') ||
+            str_starts_with($relPath, '.idea/') ||
+            str_starts_with($relPath, '.vscode/') ||
+            $relPath === 'config/database.php'
+        ) {
+            continue;
+        }
+
+        if ($zip->addFile($fullPath, $relPath)) {
+            $filesAdded++;
+        }
+    }
+
+    $meta = [
+        'filename'    => $filename,
+        'sha'         => $localInfo['sha'],
+        'short'       => $shortSha,
+        'commit_date' => $localInfo['date'],
+        'version'     => $verInfo['version'] ?? 'v1.x',
+        'reason'      => $reason,
+        'created_at'  => date('d.m.Y H:i:s') . ' Uhr',
+        'timestamp'   => time(),
+        'files_count' => $filesAdded,
+    ];
+    $zip->addFromString('_snapshot_meta.json', (string)json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    $zip->close();
+    @chmod($zipPath, 0640);
+
+    // Automatisch maximal die 8 neuesten lokalen Sicherungspunkte behalten
+    $allZips = glob($backupDir . '/snapshot_*.zip') ?: [];
+    if (count($allZips) > 8) {
+        usort($allZips, static fn(string $a, string $b): int => ((int)@filemtime($b)) <=> ((int)@filemtime($a)));
+        foreach (array_slice($allZips, 8) as $oldZip) {
+            @unlink($oldZip);
+        }
+    }
+
+    return [
+        'ok'       => true,
+        'filename' => $filename,
+        'message'  => sprintf('Lokaler Sicherungspunkt (#%s, %d Dateien) wurde erfolgreich erstellt.', $shortSha, $filesAdded),
+    ];
+}
+
+/**
+ * Liest alle vorhandenen lokalen Programm-Sicherungspunkte aus `uploads/.system_backups/` aus.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function getLocalAppSnapshots(): array
+{
+    $backupDir = getSnapshotBackupDir();
+    $files = glob($backupDir . '/snapshot_*.zip') ?: [];
+    usort($files, static fn(string $a, string $b): int => ((int)@filemtime($b)) <=> ((int)@filemtime($a)));
+
+    $snapshots = [];
+    foreach ($files as $filePath) {
+        $fname = basename($filePath);
+        $size  = (int)@filesize($filePath);
+        $mtime = (int)@filemtime($filePath);
+
+        $meta = [
+            'filename'    => $fname,
+            'sha'         => '',
+            'short'       => 'lokal',
+            'commit_date' => '',
+            'version'     => '',
+            'reason'      => 'Sicherungspunkt',
+            'created_at'  => date('d.m.Y H:i:s', $mtime ?: time()) . ' Uhr',
+            'size_fmt'    => formatBytes($size),
+            'files_count' => 0,
+        ];
+
+        if (class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($filePath) === true) {
+                $rawMeta = $zip->getFromName('_snapshot_meta.json');
+                if (is_string($rawMeta)) {
+                    $decoded = json_decode($rawMeta, true);
+                    if (is_array($decoded)) {
+                        $meta = array_merge($meta, $decoded);
+                        $meta['filename'] = $fname;
+                        $meta['size_fmt'] = formatBytes($size);
+                    }
+                }
+                $zip->close();
+            }
+        }
+
+        $snapshots[] = $meta;
+    }
+
+    return $snapshots;
+}
+
+/**
+ * Stellt einen lokalen Sicherungspunkt (Snapshot) wieder her.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function restoreLocalAppSnapshot(PDO $pdo, string $snapshotFilename): array
+{
+    if (!class_exists('ZipArchive')) {
+        return ['ok' => false, 'message' => 'Die PHP-Erweiterung ZipArchive ist nicht aktiviert.'];
+    }
+
+    $cleanName = basename($snapshotFilename);
+    if (!preg_match('/^snapshot_[0-9]{8}_[0-9]{6}_[a-z0-9]+\.zip$/i', $cleanName)) {
+        return ['ok' => false, 'message' => 'Ungültiger Dateiname des Sicherungspunkts.'];
+    }
+
+    $zipPath = getSnapshotBackupDir() . '/' . $cleanName;
+    if (!is_file($zipPath) || !is_readable($zipPath)) {
+        return ['ok' => false, 'message' => 'Der gewählte Sicherungspunkt wurde nicht gefunden.'];
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        return ['ok' => false, 'message' => 'Das Sicherungsarchiv konnte nicht geöffnet werden.'];
+    }
+
+    $meta = [];
+    $rawMeta = $zip->getFromName('_snapshot_meta.json');
+    if (is_string($rawMeta)) {
+        $decoded = json_decode($rawMeta, true);
+        if (is_array($decoded)) {
+            $meta = $decoded;
+        }
+    }
+
+    $restoredCount = 0;
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $relPath = (string)$zip->getNameIndex($i);
+        if (
+            $relPath === '' ||
+            $relPath === '_snapshot_meta.json' ||
+            str_ends_with($relPath, '/') ||
+            str_contains($relPath, '..') ||
+            str_starts_with($relPath, 'uploads/') ||
+            str_starts_with($relPath, '.git/') ||
+            str_starts_with($relPath, '.github/') ||
+            $relPath === 'config/database.php'
+        ) {
+            continue;
+        }
+
+        $content = $zip->getFromIndex($i);
+        if ($content === false) {
+            continue;
+        }
+
+        $destPath = __DIR__ . '/' . $relPath;
+        $destDir  = dirname($destPath);
+        if (!is_dir($destDir)) {
+            @mkdir($destDir, 0755, true);
+        }
+
+        if (@file_put_contents($destPath, $content) !== false) {
+            $restoredCount++;
+        }
+    }
+    $zip->close();
+
+    if ($restoredCount === 0) {
+        return ['ok' => false, 'message' => 'Keine Dateien konnten aus dem Sicherungspunkt wiederhergestellt werden.'];
+    }
+
+    try {
+        ensureSchemaUpdated($pdo);
+        $snapSha  = trim((string)($meta['sha'] ?? ''));
+        $snapDate = trim((string)($meta['commit_date'] ?? ($meta['created_at'] ?? '')));
+        if ($snapSha !== '') {
+            saveAppSetting($pdo, 'installed_commit_sha', $snapSha);
+        }
+        if ($snapDate !== '') {
+            saveAppSetting($pdo, 'installed_commit_date', $snapDate);
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    }
+
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
+    }
+
+    $shortLabel = (string)($meta['short'] ?? 'lokal');
+    return [
+        'ok'      => true,
+        'message' => sprintf(
+            'Wiederherstellung erfolgreich! %d Programmdateien wurden auf den Sicherungspunkt #%s (%s) zurückgesetzt.',
+            $restoredCount,
+            $shortLabel,
+            (string)($meta['created_at'] ?? '')
+        ),
+    ];
+}
+
+/**
+ * Lädt das neueste Release-/Branch-Archiv oder einen gezielt ausgewählten Commit (Rollback / Zeitreise)
+ * von GitHub herunter, legt zuvor automatisch einen lokalen Sicherungspunkt an und aktualisiert alle Programmdateien,
  * während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` geschützt bleiben.
  *
  * @return array{ok: bool, message: string}
  */
-function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud'): array
-{
+function performGitHubUpdate(
+    PDO $pdo,
+    string $repo = 'uwebenzelrath/MiniCloud',
+    string $targetSha = '',
+    string $targetDate = '',
+    string $targetMessage = ''
+): array {
     if (!class_exists('ZipArchive')) {
         return [
             'ok'      => false,
@@ -359,17 +628,38 @@ function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud')
         $repo = 'uwebenzelrath/MiniCloud';
     }
 
-    $check = checkGitHubUpdates($pdo, $repo);
-    $latestSha  = (string)($check['latest_sha'] ?? '');
-    $latestDate = (string)($check['latest_date'] ?? date('d.m.Y H:i') . ' Uhr');
+    $cleanTargetSha = strtolower(trim($targetSha));
+    if ($cleanTargetSha !== '' && !preg_match('/^[0-9a-f]{7,40}$/', $cleanTargetSha)) {
+        return [
+            'ok'      => false,
+            'message' => 'Ungültige Commit-ID (SHA) für die Versionsauswahl.',
+        ];
+    }
 
-    $zipUrl = sprintf('https://github.com/%s/archive/refs/heads/main.zip', $repo);
+    $check = checkGitHubUpdates($pdo, $repo);
+    $installSha  = $cleanTargetSha !== '' ? $cleanTargetSha : (string)($check['latest_sha'] ?? '');
+    $installDate = trim($targetDate) !== '' ? trim($targetDate) : (string)($check['latest_date'] ?? date('d.m.Y H:i') . ' Uhr');
+
+    if ($cleanTargetSha !== '' && !empty($check['commits']) && is_array($check['commits'])) {
+        foreach ($check['commits'] as $cItem) {
+            if (isset($cItem['sha']) && str_starts_with((string)$cItem['sha'], $cleanTargetSha)) {
+                $installSha  = (string)$cItem['sha'];
+                $installDate = (string)($cItem['date_fmt'] ?? $installDate);
+                break;
+            }
+        }
+    }
+
+    $zipUrl = $cleanTargetSha !== ''
+        ? sprintf('https://github.com/%s/archive/%s.zip', $repo, $installSha)
+        : sprintf('https://github.com/%s/archive/refs/heads/main.zip', $repo);
+
     $dlErr = null;
     $zipBytes = fetchUrlBytes($zipUrl, $dlErr);
     if ($zipBytes === null || strlen($zipBytes) < 1000) {
         return [
             'ok'      => false,
-            'message' => 'Download des Update-Pakets von GitHub fehlgeschlagen: ' . ($dlErr ?? 'Leeres Archiv.'),
+            'message' => 'Download des Versions-Pakets von GitHub fehlgeschlagen: ' . ($dlErr ?? 'Leeres Archiv.'),
         ];
     }
 
@@ -390,6 +680,13 @@ function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud')
         ];
     }
 
+    // Automatisch vor dem Überschreiben einen lokalen Sicherungspunkt des aktuellen Stands erstellen
+    $shortTarget = $installSha !== '' ? substr($installSha, 0, 7) : 'main';
+    $snapReason  = $cleanTargetSha !== ''
+        ? sprintf('Automatisch vor Wechsel auf #%s', $shortTarget)
+        : sprintf('Automatisch vor Update auf #%s', $shortTarget);
+    createLocalAppSnapshot($pdo, $snapReason);
+
     // Bestehende Datenbank-Zugangsdaten aus config/database.php sichern
     $existingDbFile = __DIR__ . '/config/database.php';
     $existingDbContent = is_readable($existingDbFile) ? (string)@file_get_contents($existingDbFile) : '';
@@ -407,7 +704,7 @@ function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud')
             continue;
         }
 
-        // Top-Level-Ordner im GitHub-ZIP (z.B. "MiniCloud-main/") entfernen
+        // Top-Level-Ordner im GitHub-ZIP (z.B. "MiniCloud-main/" oder "MiniCloud-<sha>/") entfernen
         $slashPos = strpos($entryName, '/');
         if ($slashPos === false) {
             continue;
@@ -467,9 +764,9 @@ function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud')
     // Datenbank-Schema prüfen/migrieren und Commit-Stand vermerken
     try {
         ensureSchemaUpdated($pdo);
-        if ($latestSha !== '') {
-            saveAppSetting($pdo, 'installed_commit_sha', $latestSha);
-            saveAppSetting($pdo, 'installed_commit_date', $latestDate);
+        if ($installSha !== '') {
+            saveAppSetting($pdo, 'installed_commit_sha', $installSha);
+            saveAppSetting($pdo, 'installed_commit_date', $installDate);
         }
     } catch (Throwable) {
         // Ignorieren
@@ -479,13 +776,16 @@ function performGitHubUpdate(PDO $pdo, string $repo = 'uwebenzelrath/MiniCloud')
         @opcache_reset();
     }
 
-    $shortSha = $latestSha !== '' ? substr($latestSha, 0, 7) : 'aktuell';
+    $shortSha = $installSha !== '' ? substr($installSha, 0, 7) : 'aktuell';
+    $actionLabel = $cleanTargetSha !== '' ? 'Versionswechsel / Rollback' : 'System-Update';
     return [
         'ok'      => true,
         'message' => sprintf(
-            'System-Update erfolgreich abgeschlossen! %d Dateien wurden von GitHub (Commit #%s) aktualisiert. Ihre Datenbank-Zugangsdaten und Benutzerdateien blieben vollständig erhalten.',
+            '%s erfolgreich abgeschlossen! %d Dateien wurden auf Stand #%s (%s) gebracht. Ein lokaler Sicherungspunkt des vorherigen Stands wurde automatisch angelegt.',
+            $actionLabel,
             $updatedFilesCount,
-            $shortSha
+            $shortSha,
+            $targetMessage !== '' ? mb_substr($targetMessage, 0, 60) : $installDate
         ),
     ];
 }
@@ -1055,7 +1355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // -------------------------------------------------------------------------
-    // 0c. SYSTEM-UPDATE VON GITHUB DURCHFÜHREN
+    // 0c. SYSTEM-UPDATE ODER GEZIELTEN VERSIONSWECHSEL VON GITHUB DURCHFÜHREN
     // -------------------------------------------------------------------------
     if ($action === 'run_github_update') {
         $settings = getAppSettings($pdo);
@@ -1065,8 +1365,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         saveAppSetting($pdo, 'github_repo', $repoInput);
 
-        $result = performGitHubUpdate($pdo, $repoInput);
+        $targetSha = trim((string)($_POST['target_sha'] ?? ''));
+        $targetDate = trim((string)($_POST['target_date'] ?? ''));
+        $targetMessage = trim((string)($_POST['target_message'] ?? ''));
+
+        $result = performGitHubUpdate($pdo, $repoInput, $targetSha, $targetDate, $targetMessage);
         setFlash($result['ok'] ? 'success' : 'error', $result['message']);
+        header('Location: admin.php#tab-system');
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // 0d. MANUELLEN LOKALEN SICHERUNGSPUNKT (SNAPSHOT) ERSTELLEN
+    // -------------------------------------------------------------------------
+    if ($action === 'create_local_snapshot') {
+        $snapRes = createLocalAppSnapshot($pdo, 'Manueller Sicherungspunkt');
+        setFlash($snapRes['ok'] ? 'success' : 'error', $snapRes['message']);
+        header('Location: admin.php#tab-system');
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // 0e. LOKALEN SICHERUNGSPUNKT (SNAPSHOT) WIEDERHERSTELLEN (ROLLBACK)
+    // -------------------------------------------------------------------------
+    if ($action === 'restore_local_snapshot') {
+        $snapFile = trim((string)($_POST['snapshot_filename'] ?? ''));
+        $res = restoreLocalAppSnapshot($pdo, $snapFile);
+        setFlash($res['ok'] ? 'success' : 'error', $res['message']);
+        header('Location: admin.php#tab-system');
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // 0f. LOKALEN SICHERUNGSPUNKT LÖSCHEN
+    // -------------------------------------------------------------------------
+    if ($action === 'delete_local_snapshot') {
+        $snapFile = basename(trim((string)($_POST['snapshot_filename'] ?? '')));
+        if (preg_match('/^snapshot_[0-9]{8}_[0-9]{6}_[a-z0-9]+\.zip$/i', $snapFile)) {
+            $path = getSnapshotBackupDir() . '/' . $snapFile;
+            if (is_file($path) && @unlink($path)) {
+                setFlash('success', 'Der lokale Sicherungspunkt wurde gelöscht.');
+            } else {
+                setFlash('error', 'Der Sicherungspunkt konnte nicht gelöscht werden.');
+            }
+        } else {
+            setFlash('error', 'Ungültiger Sicherungspunkt.');
+        }
         header('Location: admin.php#tab-system');
         exit;
     }
@@ -1127,6 +1471,7 @@ require_once __DIR__ . '/includes/header.php';
 $localCommitInfo = getLocalInstalledCommitInfo($pdo);
 $versionMeta     = getAppVersionInfo();
 $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelrath/MiniCloud')) ?: 'uwebenzelrath/MiniCloud';
+$localSnapshots  = getLocalAppSnapshots();
 ?>
 
 <div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1952,7 +2297,7 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelra
 <!-- TAB 5: SYSTEM, UPDATE & SERVER-STATUS                                   -->
 <!-- ======================================================================= -->
 <div id="tab-system" data-admin-tab-panel="tab-system" class="hidden space-y-6 mb-10">
-    <!-- 5a. SYSTEM-UPDATE ÜBER GITHUB (1-Klick-Updater) -->
+    <!-- 5a. SYSTEM-UPDATE, VERSIONSWAHL & ROLLBACK ÜBER GITHUB / LOKALE SNAPSHOTS -->
     <section id="system-update" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
@@ -1960,101 +2305,233 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uwebenzelra
                     🔄
                 </span>
                 <div>
-                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">System-Update (GitHub)</h2>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">System-Update, Versionsauswahl &amp; Rollback</h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Prüfen Sie direkt über GitHub auf neue Versionen und installieren Sie Updates per 1-Klick (Benutzerdateien &amp; Datenbank-Zugangsdaten bleiben geschützt).
+                        Installieren Sie neue Updates per 1-Klick, wechseln Sie zu jedem beliebigen früheren GitHub-Stand oder stellen Sie lokale Sicherungspunkte wieder her.
                     </p>
                 </div>
             </div>
 
-            <button
-                type="button"
-                id="btnCheckGithubUpdate"
-                onclick="checkGithubUpdateNow()"
-                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
-            >
-                <span>🔍</span>
-                <span>Auf Updates prüfen</span>
-            </button>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            <!-- Linke Info-Box: Installierter Stand & Update-Aktion -->
-            <div class="lg:col-span-5 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierte Version:</span>
-                    <span class="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                        <?= e($versionMeta['version']) ?>
-                    </span>
-                </div>
-
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierter Commit:</span>
-                    <span id="updInstalledCommit" class="text-xs font-mono text-slate-700 dark:text-slate-300">
-                        <?= $localCommitInfo['short'] !== '' ? '#' . e($localCommitInfo['short']) : 'Build #' . e($versionMeta['hash']) ?>
-                        <?= $localCommitInfo['date'] !== '' ? ' (' . e($localCommitInfo['date']) . ')' : '' ?>
-                    </span>
-                </div>
-
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Update-Status:</span>
-                    <span id="updStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                        Bereit zur Prüfung
-                    </span>
-                </div>
-
-                <form
-                    action="admin.php"
-                    method="post"
-                    class="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
-                    onsubmit="return confirm('Möchten Sie das System jetzt direkt von GitHub aktualisieren? Ihre Benutzerdateien (uploads/) und Datenbank-Zugangsdaten bleiben vollständig erhalten.');"
-                >
+            <div class="flex flex-wrap items-center gap-2">
+                <form action="admin.php" method="post" class="inline">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                    <input type="hidden" name="action" value="run_github_update">
-
-                    <div>
-                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            GitHub-Repository (Branch: <code class="font-mono">main</code>)
-                        </label>
-                        <input
-                            type="text"
-                            name="github_repo"
-                            value="<?= e($configuredRepo) ?>"
-                            placeholder="uwebenzelrath/MiniCloud"
-                            class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
-                        >
-                    </div>
-
+                    <input type="hidden" name="action" value="create_local_snapshot">
                     <button
                         type="submit"
-                        id="btnRunGithubUpdate"
-                        class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/70 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Aktuellen Programmstand jetzt lokal als Sicherungspunkt speichern"
                     >
-                        <span>⬇️</span>
-                        <span>Jetzt von GitHub aktualisieren</span>
+                        <span>📸</span>
+                        <span>Sicherungspunkt anlegen</span>
                     </button>
                 </form>
+
+                <button
+                    type="button"
+                    id="btnCheckGithubUpdate"
+                    onclick="checkGithubUpdateNow()"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                    <span>🔍</span>
+                    <span>Auf Updates prüfen</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Verstecktes Formular für die gezielte Installation eines beliebigen GitHub-Commits (Rollback / Zeitreise) -->
+        <form id="installSpecificCommitForm" action="admin.php" method="post" class="hidden">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="run_github_update">
+            <input type="hidden" name="github_repo" id="specificCommitRepo" value="<?= e($configuredRepo) ?>">
+            <input type="hidden" name="target_sha" id="specificCommitSha" value="">
+            <input type="hidden" name="target_date" id="specificCommitDate" value="">
+            <input type="hidden" name="target_message" id="specificCommitMsg" value="">
+        </form>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <!-- Linke Spalte: Installierter Stand, Update-Aktion & Lokale Sicherungspunkte -->
+            <div class="lg:col-span-5 space-y-4">
+                <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierte Version:</span>
+                        <span class="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                            <?= e($versionMeta['version']) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Installierter Commit:</span>
+                        <span id="updInstalledCommit" class="text-xs font-mono text-slate-700 dark:text-slate-300">
+                            <?= $localCommitInfo['short'] !== '' ? '#' . e($localCommitInfo['short']) : 'Build #' . e($versionMeta['hash']) ?>
+                            <?= $localCommitInfo['date'] !== '' ? ' (' . e($localCommitInfo['date']) . ')' : '' ?>
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Update-Status:</span>
+                        <span id="updStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                            Bereit zur Prüfung
+                        </span>
+                    </div>
+
+                    <form
+                        action="admin.php"
+                        method="post"
+                        class="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-3"
+                        onsubmit="return confirm('Möchten Sie das System jetzt auf den neuesten GitHub-Stand aktualisieren? Vor dem Update wird automatisch ein lokaler Sicherungspunkt angelegt, sodass Sie jederzeit zurückwechseln können.');"
+                    >
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="run_github_update">
+
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                                GitHub-Repository (Branch: <code class="font-mono">main</code>)
+                            </label>
+                            <input
+                                type="text"
+                                name="github_repo"
+                                id="mainGithubRepoInput"
+                                value="<?= e($configuredRepo) ?>"
+                                placeholder="uwebenzelrath/MiniCloud"
+                                class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                            >
+                        </div>
+
+                        <button
+                            type="submit"
+                            id="btnRunGithubUpdate"
+                            class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            <span>⬇️</span>
+                            <span>Neuestes Update von GitHub installieren</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Lokale Sicherungspunkte (1-Klick-Rollback ohne GitHub) -->
+                <div class="p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                                <span>🛡️</span>
+                                <span>Lokale Sicherungspunkte (Rollback)</span>
+                            </h3>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                Vor jedem Update wird der bisherige Programmstand automatisch hier gesichert.
+                            </p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200 shrink-0">
+                            <?= count($localSnapshots) ?> / 8
+                        </span>
+                    </div>
+
+                    <?php if (empty($localSnapshots)): ?>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 italic py-2">
+                            Noch kein lokaler Sicherungspunkt vorhanden. Beim nächsten Update (oder per Klick auf „📸 Sicherungspunkt anlegen“) wird automatisch ein Backup erstellt.
+                        </p>
+                    <?php else: ?>
+                        <?php $latestSnap = $localSnapshots[0]; ?>
+                        <!-- Prominenter 1-Klick-Button für das jüngste Backup -->
+                        <form
+                            action="admin.php"
+                            method="post"
+                            onsubmit="return confirm('Möchten Sie das letzte Update rückgängig machen und den lokalen Sicherungspunkt #<?= e((string)$latestSnap['short']) ?> vom <?= e((string)$latestSnap['created_at']) ?> wiederherstellen?');"
+                        >
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="restore_local_snapshot">
+                            <input type="hidden" name="snapshot_filename" value="<?= e((string)$latestSnap['filename']) ?>">
+                            <button
+                                type="submit"
+                                class="w-full py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                <span>⏪</span>
+                                <span>Letztes Update rückgängig machen (Stand #<?= e((string)$latestSnap['short']) ?>)</span>
+                            </button>
+                        </form>
+
+                        <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1 pt-1">
+                            <?php foreach ($localSnapshots as $snap): ?>
+                                <div class="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 text-xs">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 font-mono font-bold text-[10px] text-slate-700 dark:text-slate-200">
+                                                #<?= e((string)$snap['short']) ?>
+                                            </span>
+                                            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                                <?= e((string)$snap['reason']) ?>
+                                            </span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-400 mt-0.5">
+                                            <?= e((string)$snap['created_at']) ?> &bull; <?= e((string)$snap['size_fmt']) ?>
+                                        </p>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <form
+                                            action="admin.php"
+                                            method="post"
+                                            class="inline"
+                                            onsubmit="return confirm('Diesen Sicherungspunkt (#<?= e((string)$snap['short']) ?> vom <?= e((string)$snap['created_at']) ?>) jetzt wiederherstellen?');"
+                                        >
+                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                            <input type="hidden" name="action" value="restore_local_snapshot">
+                                            <input type="hidden" name="snapshot_filename" value="<?= e((string)$snap['filename']) ?>">
+                                            <button
+                                                type="submit"
+                                                class="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/70 hover:bg-amber-600 hover:text-white text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-semibold transition-colors cursor-pointer"
+                                                title="Auf diesen Sicherungspunkt zurücksetzen"
+                                            >
+                                                ⏪ Wiederherstellen
+                                            </button>
+                                        </form>
+                                        <form
+                                            action="admin.php"
+                                            method="post"
+                                            class="inline"
+                                            onsubmit="return confirm('Diesen lokalen Sicherungspunkt löschen?');"
+                                        >
+                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                            <input type="hidden" name="action" value="delete_local_snapshot">
+                                            <input type="hidden" name="snapshot_filename" value="<?= e((string)$snap['filename']) ?>">
+                                            <button
+                                                type="submit"
+                                                class="p-1 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                                title="Sicherungspunkt löschen"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
 
-            <!-- Rechte Box: Letzte Commits / Änderungen auf GitHub -->
+            <!-- Rechte Box: Versionsverlauf auf GitHub (mit direkter 1-Klick-Installation jedes beliebigen Stands) -->
             <div class="lg:col-span-7 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
-                <div class="flex items-center justify-between gap-2 mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Letzte Änderungen auf GitHub (<code class="font-mono">main</code>)
-                    </h3>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Versionsverlauf auf GitHub (<code class="font-mono">main</code>) &ndash; Zeitreise &amp; Rollback
+                        </h3>
+                        <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                            Sie können zu jedem beliebigen früheren oder neueren Stand aus der Liste wechseln.
+                        </p>
+                    </div>
                     <a
                         href="https://github.com/<?= e($configuredRepo) ?>/commits/main"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                        class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline shrink-0"
                     >
                         Auf GitHub öffnen &nearr;
                     </a>
                 </div>
 
-                <div id="githubCommitsList" class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                <div id="githubCommitsList" class="space-y-2 text-xs text-slate-600 dark:text-slate-300 max-h-[460px] overflow-y-auto pr-1">
                     <p class="text-slate-400 italic py-4 text-center">
-                        Klicken Sie oben rechts auf „🔍 Auf Updates prüfen“, um die neuesten Commits von GitHub abzurufen.
+                        Klicken Sie oben rechts auf „🔍 Auf Updates prüfen“, um die Versionshistorie von GitHub abzurufen.
                     </p>
                 </div>
             </div>
@@ -2313,6 +2790,27 @@ async function refreshServerDashboard() {
 setTimeout(refreshServerDashboard, 1500);
 setInterval(refreshServerDashboard, 5000);
 
+function installGitHubCommit(sha, shortSha, dateFmt, message) {
+    const form = document.getElementById('installSpecificCommitForm');
+    if (!form) return;
+    const repoInput = document.getElementById('mainGithubRepoInput');
+    const repoField = document.getElementById('specificCommitRepo');
+    const shaField = document.getElementById('specificCommitSha');
+    const dateField = document.getElementById('specificCommitDate');
+    const msgField = document.getElementById('specificCommitMsg');
+
+    const promptText = `Möchten Sie Ihr System jetzt auf den GitHub-Stand #${shortSha} (${dateFmt})\n„${message}“\nbringen?\n\nVorab wird automatisch ein lokaler Sicherungspunkt Ihres aktuellen Stands angelegt. Benutzerdateien (uploads/) und Datenbank-Zugangsdaten bleiben unangetastet.`;
+    if (!confirm(promptText)) return;
+
+    if (repoField && repoInput && repoInput.value.trim() !== '') {
+        repoField.value = repoInput.value.trim();
+    }
+    if (shaField) shaField.value = sha;
+    if (dateField) dateField.value = dateFmt;
+    if (msgField) msgField.value = message;
+    form.submit();
+}
+
 async function checkGithubUpdateNow() {
     const badge = document.getElementById('updStatusBadge');
     const list = document.getElementById('githubCommitsList');
@@ -2333,6 +2831,8 @@ async function checkGithubUpdateNow() {
             div.textContent = s ?? '';
             return div.innerHTML;
         };
+        const escJsAttr = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\r?\n/g, ' ');
+
         if (!d || !d.ok) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300';
             badge.textContent = 'Prüfung fehlgeschlagen';
@@ -2345,21 +2845,25 @@ async function checkGithubUpdateNow() {
             badge.textContent = '✅ Aktuell (#' + d.latest_short + ')';
         } else {
             badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300';
-            badge.textContent = '🆕 Update verfügbar (#' + d.latest_short + ')';
+            badge.textContent = '🆕 Abweichender Stand / Update (#' + d.latest_short + ')';
         }
 
         if (Array.isArray(d.commits) && d.commits.length > 0) {
             list.innerHTML = d.commits.map((c, idx) => {
                 const isInstalled = d.installed_sha && c.sha === d.installed_sha;
+                const actionBtn = isInstalled
+                    ? '<span class="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">✓ Installiert</span>'
+                    : `<button type="button" onclick="installGitHubCommit('${escJsAttr(c.sha)}', '${escJsAttr(c.short)}', '${escJsAttr(c.date_fmt)}', '${escJsAttr(c.message)}')" class="px-2.5 py-1 rounded-lg ${idx === 0 ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-slate-100 dark:bg-slate-700 hover:bg-amber-600 hover:text-white text-slate-700 dark:text-slate-200'} text-[11px] font-semibold transition-colors cursor-pointer" title="Genau diesen Programmstand von GitHub installieren">${idx === 0 ? '⬆️ Aktualisieren' : '⏮️ Diesen Stand installieren'}</button>`;
+
                 return `
-                    <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border ${idx === 0 ? 'border-brand-300 dark:border-brand-700' : 'border-slate-200/80 dark:border-slate-700/80'} flex items-start justify-between gap-3">
+                    <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border ${isInstalled ? 'border-emerald-400 dark:border-emerald-700 ring-1 ring-emerald-400/30' : (idx === 0 ? 'border-brand-300 dark:border-brand-700' : 'border-slate-200/80 dark:border-slate-700/80')} flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div class="min-w-0 flex-1">
-                            <p class="font-semibold text-slate-900 dark:text-white truncate">${esc(c.message)}</p>
+                            <p class="font-semibold text-slate-900 dark:text-white truncate" title="${esc(c.message)}">${esc(c.message)}</p>
                             <p class="text-[11px] text-slate-400 mt-0.5">${esc(c.date_fmt)} &bull; ${esc(c.author)}</p>
                         </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            ${isInstalled ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">Installiert</span>' : ''}
-                            <a href="${esc(c.html_url)}" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-[11px] font-mono text-brand-600 dark:text-brand-400 hover:underline">#${esc(c.short)}</a>
+                        <div class="flex items-center justify-end gap-1.5 shrink-0">
+                            <a href="${esc(c.html_url)}" target="_blank" rel="noopener noreferrer" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-700/70 text-[11px] font-mono text-brand-600 dark:text-brand-400 hover:underline" title="Änderungen auf GitHub ansehen">#${esc(c.short)}</a>
+                            ${actionBtn}
                         </div>
                     </div>
                 `;
