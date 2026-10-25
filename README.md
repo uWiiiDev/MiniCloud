@@ -1,7 +1,7 @@
 # ☁️ MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher (PHP 8.2+ & MySQL)
 
 **🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces (z. B. STRATO, IONOS, All-Inkl, Netcup) auf Basis von **PHP 8.2+** und **MySQL / MariaDB** – **100 % DSGVO-konform**, inklusive Datei- & Ordnerverwaltung, Tresor-Verschlüsselung (AES-256), Kalender mit `.ics`-Abo, integriertem Messenger mit System-Benachrichtigungen und **1-Klick-GitHub-Updater**.  
-**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, Email 2FA (Postfix or SMTP), 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
+**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, 2FA via Email or Google Authenticator (RFC 6238 TOTP with local offline QR code), password reset, 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
 
 ---
 
@@ -146,9 +146,10 @@ location ^~ /cloud/uploads/ {
    - Klicke oben rechts auf **Admin**.
    - Scrolle zum Abschnitt **„Bestehende Benutzer verwalten“**.
    - Gib in der Zeile von `admin` im Feld *„Neues Passwort (optional)“* dein eigenes, sicheres Passwort ein und klicke auf **Speichern**.
-3. **Eigenen Namen, Logo & E-Mail-Versand (2FA) einrichten:**
-   - Ganz oben im **Admin-Bereich** kannst du deiner Cloud einen eigenen Namen und ein eigenes Logo geben.
-   - Wenn du die **Zwei-Faktor-Authentifizierung (2FA) per E-Mail** nutzen möchtest, wähle unter *„✉️ E-Mail-Versand für 2FA-Codes“* entweder den lokalen Server oder **Externer SMTP-Server** (und trage z. B. dein Postfach bei STRATO, IONOS oder Gmail ein).
+3. **Eigenen Namen, Logo & 2FA (Google Authenticator oder E-Mail) einrichten:**
+   - Im übersichtlichen **5-Reiter-Admin-Bereich** kannst du unter **„🎨 Darstellung & Impressum“** deiner Cloud einen eigenen Namen und ein eigenes Logo geben.
+   - Jeder Benutzer kann in seinen **Einstellungen (⚙️)** die **Zwei-Faktor-Authentifizierung (2FA) per Google Authenticator / TOTP-App** direkt über einen **lokal erzeugten QR-Code** aktivieren – ganz ohne E-Mail-Server!
+   - Wenn du zusätzlich die **2FA per E-Mail** oder die **Passwort-vergessen-Funktion** nutzen möchtest, wähle im Admin-Reiter **„✉️ E-Mail & SMTP“** entweder den lokalen Server oder **Externer SMTP-Server** (und trage z. B. dein Postfach bei STRATO, IONOS oder Gmail ein).
    - Mit dem Button **„✉️ Test-E-Mail senden“** kannst du sofort prüfen, ob die E-Mail-Zustellung klappt!
 4. **Große Dateien hochladen (Upload-Limit erhöhen):**
    - Im Projekt liegt bereits eine fertige Datei **`.user.ini`** (`upload_max_filesize = 512M`, `post_max_size = 512M`), die von den meisten Webhostern automatisch erkannt wird.
@@ -183,7 +184,7 @@ MiniCloud/
 │   └── database.php          # PDO-Datenbankverbindung, Auto-Migration aller 14 Tabellen & Konstanten
 ├── includes/
 │   ├── auth.php              # Session-Management, Timeout, Admin-/Login-Guards, 13 Themes & CSRF-Schutz
-│   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, 2FA-Mail/SMTP, Versionierung)
+│   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, TOTP/QR-Code, 2FA-Mail/SMTP)
 │   ├── i18n.php              # Mehrsprachigkeits-Modul für 5 Sprachen (DE, EN, FR, ES, NL)
 │   ├── header.php            # Responsives Layout, 13 Farbthemes, Sprachwahl, Statusmeldungen & PWA-Header
 │   └── footer.php            # Footer mit Versionsanzeige, PWA-Dialog, Theme-Umschalter & Chat-System-Benachrichtigungen
@@ -195,14 +196,14 @@ MiniCloud/
 ├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Vorschau-Modal, Tresor, 3-Stufen-Freigaben)
 ├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
 ├── messages.php              # Integrierter Messenger (1:1-Chat, Admin-Rundnachrichten, Verlauf leeren, Mobil-Ansicht)
-├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, Chat-Meldungen, 2FA)
+├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, 2FA per E-Mail & Google Auth)
 ├── trash.php                 # Papierkorb mit 30 Tagen Aufbewahrungsfrist
 ├── folder_action.php         # Ordner erstellen, verschieben, kopieren und umbenennen
 ├── vault_action.php          # Einzeldatei-Verschlüsselung & Entschlüsselung mit AES-256-GCM (Zero-Knowledge)
 ├── share.php                 # Öffentliche Freigabe-Seite (optionaler BCRYPT-Passwortschutz & Ablaufdatum)
 ├── share_action.php          # API-Endpunkt für öffentliche Freigabelinks & 3-stufige Benutzer-Direktfreigaben
-├── admin.php                 # Administration (Branding, Module, 1-Klick-GitHub-Updater, Server-Monitor, Benutzer, Gruppen)
-├── login.php                 # Login mit Brute-Force-Schutz, Passwort-vergessen-Link & optionaler 2FA per E-Mail
+├── admin.php                 # 5-Reiter-Administration (Benutzer, Module, Branding, SMTP, 1-Klick-GitHub-Updater & Monitor)
+├── login.php                 # Login mit Brute-Force-Schutz, Passwort-vergessen-Link & 2FA (E-Mail oder Google Authenticator)
 ├── forgot_password.php       # Passwort-Wiederherstellung per 30-Minuten-Einmal-Link (SHA-256-Token)
 ├── logout.php                # Sicheres Beenden der PHP-Session (CSRF-geschützt)
 ├── register.php              # Optionale Selbstregistrierung (standardmäßig aus, optional mit Einladungs-Code)

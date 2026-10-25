@@ -147,7 +147,8 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30-Day Trash Retention:</strong> Deleted files go to the <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Trash</a> first, where they can be restored with one click for 30 days or permanently deleted.</li>
-                <li><strong>Settings (⚙️ Gear Icon):</strong> In <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Settings</a>, choose between 5 languages, 13 eye-friendly color themes (5 light, 8 dark incl. <em>🌌 Midnight</em>), configure status message display duration (1–300s or manual), session timeout, chat system notifications, privacy visibility, password, and optional <strong>Email 2FA</strong>.</li>
+                <li><strong>Settings (⚙️ Gear Icon):</strong> In <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Settings</a>, choose between 5 languages, 13 eye-friendly color themes (5 light, 8 dark incl. <em>🌌 Midnight</em>), configure status message display duration (1–300s or manual), session timeout, chat system notifications, privacy visibility, and password.</li>
+                <li><strong>2FA via Email or Google Authenticator (TOTP):</strong> Under <em>Security &amp; 2FA</em> in <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Settings</a>, you can choose between <strong>✉️ Email code</strong> (6-digit code via email) or <strong>📱 Authenticator App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden, Apple Passwords)</strong>. Simply scan the 100% locally generated QR code (or enter the Base32 key) and confirm with the 6-digit app code. If your phone is unavailable at login, you can optionally request an emergency code via email.</li>
             </ul>
         </section>
 
@@ -158,9 +159,9 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Administrator Notes</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Branding, Modules, SMTP &amp; Legal Notice:</strong> In <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, customize title, logo, SMTP mail settings, legal notice, and globally enable/disable the Calendar and Chat modules or optional user registration with an invite code.</li>
+                <li><strong>5 Thematic Admin Tabs:</strong> <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> is organized into 5 clear tabs: <em>👥 Users &amp; Registration</em>, <em>🧩 Modules &amp; Features</em>, <em>🎨 Branding &amp; Legal Notice</em>, <em>✉️ Email &amp; SMTP</em>, and <em>🖥️ System, Update &amp; Status</em>.</li>
                 <li><strong>1-Click GitHub System Updater &amp; Server Monitor:</strong> Check for new commits on GitHub and update all application files with one click while preserving <code>uploads/</code> and database credentials. Monitor CPU, RAM, and disk usage live.</li>
-                <li><strong>Users, Groups &amp; Quotas:</strong> Create accounts, assign individual storage quotas (in MB), manage user groups, and reset passwords.</li>
+                <li><strong>Users, Groups, Quotas &amp; 2FA Reset:</strong> Create accounts, assign individual storage quotas (in MB), manage user groups, reset passwords, or switch/disable a user’s 2FA method (Email / TOTP).</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -230,8 +231,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota</code></td>
-                        <td class="py-3 px-4">User authentication, optional Email 2FA, role control, quota, UI preferences &amp; privacy settings</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota</code></td>
+                        <td class="py-3 px-4">User authentication, optional 2FA (Email or Google Authenticator / TOTP), password reset, role control, quota, UI preferences &amp; privacy settings</td>
                         <td class="py-3 px-4">Until user account deletion by administrator (cascade delete)</td>
                     </tr>
                     <tr>
@@ -383,7 +384,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Conservation 30 jours dans la corbeille :</strong> Les fichiers supprimés sont conservés 30 jours dans la <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Corbeille</a> avant suppression définitive.</li>
-                <li><strong>Paramètres (icône engrenage ⚙️) :</strong> Cliquez sur l’engrenage en haut à droite (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Paramètres</a>) pour choisir la langue, le thème visuel, modifier votre mot de passe ou activer/désactiver librement l’<strong>authentification à deux facteurs (2FA par e-mail)</strong>.</li>
+                <li><strong>Paramètres &amp; 2FA (E-mail ou Google Authenticator) :</strong> Cliquez sur l’engrenage en haut à droite (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Paramètres</a>) pour choisir la langue, le thème visuel, modifier votre mot de passe ou activer l’<strong>authentification à deux facteurs (2FA par code e-mail ou par application Google Authenticator / TOTP avec QR code généré localement)</strong>.</li>
             </ul>
         </section>
 
@@ -394,8 +395,8 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Notes pour les administrateurs</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Personnalisation &amp; Mentions légales :</strong> Dans <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, configurez le titre, le logo, le serveur SMTP et les mentions légales.</li>
-                <li><strong>Utilisateurs &amp; Quotas :</strong> Créez des comptes, attribuez des quotas en Mo et gérez les groupes et dossiers de groupe.</li>
+                <li><strong>5 onglets thématiques :</strong> Dans <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a>, gérez les utilisateurs, les modules, l’apparence/mentions légales, le serveur SMTP et les mises à jour GitHub en 1 clic.</li>
+                <li><strong>Utilisateurs, Quotas &amp; 2FA :</strong> Créez des comptes, attribuez des quotas en Mo, gérez les groupes et modifiez ou désactivez la méthode 2FA des utilisateurs.</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -416,8 +417,8 @@ require_once __DIR__ . '/includes/header.php';
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentification, 2FA &amp; Anti-Brute-Force</h3>
-                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Système fermé sans inscription publique. Mots de passe hachés avec <strong>BCRYPT (coût 12)</strong>, 2FA par e-mail optionnelle et blocage temporaire après 5 échecs en 5 minutes.</p>
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Authentification, 2FA (E-mail &amp; TOTP) &amp; Anti-Brute-Force</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Système fermé sans inscription publique. Mots de passe hachés avec <strong>BCRYPT (coût 12)</strong>, 2FA optionnelle par e-mail ou application d’authentification (Google Authenticator / RFC 6238 TOTP avec QR code local) et blocage temporaire après 5 échecs en 5 minutes.</p>
             </div>
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
                 <h3 class="font-bold text-slate-900 dark:text-white">2. Protection des sessions &amp; RBAC</h3>
@@ -455,8 +456,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, storage_quota</code></td>
-                        <td class="py-3 px-4">Authentification, 2FA par e-mail optionnelle, rôle, quota &amp; thème</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, is_admin, theme, storage_quota</code></td>
+                        <td class="py-3 px-4">Authentification, 2FA optionnelle (e-mail ou Google Authenticator / TOTP), réinitialisation du mot de passe, rôle, quota &amp; thème</td>
                         <td class="py-3 px-4">Jusqu’à la suppression du compte par l’administrateur</td>
                     </tr>
                     <tr>
@@ -590,7 +591,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 días en la papelera:</strong> Los archivos eliminados pasan primero a la <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Papelera</a> durante 30 días antes de su borrado definitivo.</li>
-                <li><strong>Ajustes (icono de engranaje ⚙️):</strong> Haga clic en el engranaje superior (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Ajustes</a>) para cambiar el idioma, el tema de color, su contraseña o activar/desactivar libremente la <strong>autenticación de dos factores (2FA por correo)</strong>.</li>
+                <li><strong>Ajustes y 2FA (Correo o Google Authenticator):</strong> Haga clic en el engranaje superior (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Ajustes</a>) para cambiar el idioma, el tema de color, su contraseña o activar la <strong>autenticación de dos factores (2FA por correo o mediante Google Authenticator / app TOTP con código QR generado localmente)</strong>.</li>
             </ul>
         </section>
 
@@ -601,8 +602,8 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Notas para administradores</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Marca y Aviso legal:</strong> En <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administración</a> puede personalizar el título, logotipo, servidor SMTP y aviso legal.</li>
-                <li><strong>Usuarios, Grupos y Cuotas:</strong> Cree cuentas, asigne cuotas en MB y gestione grupos y carpetas compartidas.</li>
+                <li><strong>5 pestañas temáticas:</strong> En <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administración</a> puede gestionar usuarios, módulos, diseño/aviso legal, servidor SMTP y actualizaciones desde GitHub en 1 clic.</li>
+                <li><strong>Usuarios, Grupos, Cuotas y 2FA:</strong> Cree cuentas, asigne cuotas en MB, gestione grupos y cambie o desactive el método 2FA de los usuarios.</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -623,8 +624,8 @@ require_once __DIR__ . '/includes/header.php';
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">1. Autenticación, 2FA y Protección contra fuerza bruta</h3>
-                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Sistema cerrado sin autorregistro público. Contraseñas cifradas con <strong>BCRYPT (coste 12)</strong>, 2FA opcional por correo y bloqueo tras 5 intentos fallidos en 5 minutos.</p>
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Autenticación, 2FA (Correo y TOTP) y Protección contra fuerza bruta</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Sistema cerrado sin autorregistro público. Contraseñas cifradas con <strong>BCRYPT (coste 12)</strong>, 2FA opcional por correo o app autenticadora (Google Authenticator / RFC 6238 TOTP con QR local) y bloqueo tras 5 intentos fallidos en 5 minutos.</p>
             </div>
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
                 <h3 class="font-bold text-slate-900 dark:text-white">2. Sesiones y Control de acceso (RBAC)</h3>
@@ -662,8 +663,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, storage_quota</code></td>
-                        <td class="py-3 px-4">Autenticación, 2FA opcional por correo, rol, cuota y tema visual</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, is_admin, theme, storage_quota</code></td>
+                        <td class="py-3 px-4">Autenticación, 2FA opcional (correo o Google Authenticator / TOTP), restablecimiento de contraseña, rol, cuota y tema visual</td>
                         <td class="py-3 px-4">Hasta la eliminación de la cuenta por el administrador</td>
                     </tr>
                     <tr>
@@ -797,7 +798,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 dagen bewaartijd in prullenbak:</strong> Verwijderde bestanden blijven 30 dagen herstelbaar in de <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Prullenbak</a>.</li>
-                <li><strong>Instellingen (⚙️ tandwiel-icoon):</strong> Klik rechtsboven op het tandwiel (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Instellingen</a>) om uw taal, kleurthema of wachtwoord te wijzigen, of om optionele <strong>tweefactorauthenticatie (2FA per e-mail)</strong> zelf in of uit te schakelen.</li>
+                <li><strong>Instellingen &amp; 2FA (E-mail of Google Authenticator):</strong> Klik rechtsboven op het tandwiel (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Instellingen</a>) om uw taal, kleurthema of wachtwoord te wijzigen, of om optionele <strong>tweefactorauthenticatie (2FA per e-mail of via Google Authenticator / TOTP-app met lokaal gegenereerde QR-code)</strong> in te schakelen.</li>
             </ul>
         </section>
 
@@ -808,8 +809,8 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Tips voor beheerders</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Huisstijl &amp; Colofon:</strong> Pas onder <a href="admin.php#branding" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Beheer</a> de applicatietitel, het logo, de SMTP-server en het colofon aan.</li>
-                <li><strong>Gebruikers, Groepen &amp; Quota:</strong> Maak accounts aan, wijs opslagruimte (in MB) toe en beheer groepsmappen.</li>
+                <li><strong>5 overzichtelijke tabbladen:</strong> Beheer onder <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Beheer</a> gebruikers, modules, weergave/colofon, SMTP en 1-klik GitHub-updates.</li>
+                <li><strong>Gebruikers, Groepen, Quota &amp; 2FA:</strong> Maak accounts aan, wijs opslagruimte (in MB) toe, beheer groepen en wijzig of reset de 2FA-methode van gebruikers.</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -830,8 +831,8 @@ require_once __DIR__ . '/includes/header.php';
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <h3 class="font-bold text-slate-900 dark:text-white">1. Authenticatie, 2FA &amp; Brute-Force-bescherming</h3>
-                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Gesloten systeem zonder openbare zelfregistratie. Wachtwoorden gehasht met <strong>BCRYPT (cost 12)</strong>, optionele e-mail-2FA en tijdelijke blokkering na 5 foutieve pogingen binnen 5 minuten.</p>
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Authenticatie, 2FA (E-mail &amp; TOTP) &amp; Brute-Force-bescherming</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Gesloten systeem zonder openbare zelfregistratie. Wachtwoorden gehasht met <strong>BCRYPT (cost 12)</strong>, optionele 2FA per e-mail of Authenticator-app (Google Authenticator / RFC 6238 TOTP met lokale QR-code) en tijdelijke blokkering na 5 foutieve pogingen binnen 5 minuten.</p>
             </div>
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
                 <h3 class="font-bold text-slate-900 dark:text-white">2. Sessie- &amp; Toegangsbeveiliging (RBAC)</h3>
@@ -869,8 +870,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, storage_quota</code></td>
-                        <td class="py-3 px-4">Authenticatie, optionele e-mail-2FA, rol, quota &amp; thema</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, is_admin, theme, storage_quota</code></td>
+                        <td class="py-3 px-4">Authenticatie, optionele 2FA (e-mail of Google Authenticator / TOTP), wachtwoordherstel, rol, quota &amp; thema</td>
                         <td class="py-3 px-4">Tot verwijdering van het account door de beheerder</td>
                     </tr>
                     <tr>
@@ -1068,12 +1069,19 @@ require_once __DIR__ . '/includes/header.php';
         <section id="papierkorb-themes" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">🗑️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Papierkorb, Farbdesigns, Meldungsdauer &amp; 2FA</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Papierkorb, Farbdesigns, Einstellungen &amp; 2FA (E-Mail / Google Auth)</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 Tage Papierkorb-Aufbewahrung:</strong> Gelöschte Dateien wandern zunächst in den <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Papierkorb</a>. Dort können sie 30 Tage lang mit einem Klick wiederhergestellt oder sofort endgültig gelöscht werden.</li>
                 <li><strong>13 Farbdesigns &amp; 5 Sprachen:</strong> In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> (⚙️ Zahnrad-Symbol) wählen Sie zwischen 5 Sprachen sowie 13 augenfreundlichen Farbschemata (5 helle und 8 dunkle Designs inkl. <em>🌌 Mitternacht</em>).</li>
-                <li><strong>Individuelle Komfort- &amp; Sicherheitsoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie Ihre <strong>E-Mail-Adresse (für Passwort-Wiederherstellung)</strong> und Ihre bevorzugte <strong>2FA-Methode (per E-Mail-Code oder per Google Authenticator / TOTP-App inkl. lokalem QR-Code)</strong> fest.</li>
+                <li><strong>Individuelle Komfort- &amp; Datenschutzoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie Ihre <strong>E-Mail-Adresse</strong> fest.</li>
+                <li><strong>Zwei-Faktor-Authentifizierung (2FA) – E-Mail oder Google Authenticator:</strong> Unter <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen &rarr; Sicherheit &amp; 2FA</a> stehen Ihnen zwei vollwertige Methoden zur Auswahl:
+                    <ul class="list-disc pl-5 mt-1 space-y-1">
+                        <li><strong>✉️ Per E-Mail-Code:</strong> Bei jeder Anmeldung wird ein 6-stelliger Einmalcode (10 Min. gültig) an Ihre hinterlegte E-Mail-Adresse gesendet.</li>
+                        <li><strong>📱 Per Authenticator-App (Google Authenticator / TOTP):</strong> Wählen Sie <em>„Per Authenticator-App“</em>, scannen Sie den <strong>100 % lokal auf dem Server erzeugten QR-Code</strong> (oder kopieren Sie den Base32-Schlüssel) mit <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong>, <strong>Authy</strong>, <strong>Aegis</strong>, <strong>Bitwarden</strong> oder <strong>Apple Passwörter</strong> und geben Sie zur Aktivierung einmalig den 6-stelligen App-Code ein. Die Codes werden alle 30 Sekunden offline auf Ihrem Smartphone berechnet.</li>
+                        <li><strong>Notfall-Fallback beim Login:</strong> Sollte Ihr Smartphone beim Login einmal nicht griffbereit sein und Sie haben eine E-Mail-Adresse hinterlegt, können Sie auf der 2FA-Abfrageseite per Klick auf <em>„✉️ Stattdessen Code per E-Mail senden“</em> einen Einmalcode per E-Mail anfordern.</li>
+                    </ul>
+                </li>
                 <li><strong>Vergessenes Passwort zurücksetzen:</strong> Haben Sie eine E-Mail-Adresse hinterlegt, können Sie auf der Anmeldeseite jederzeit über <em>„Passwort vergessen?“</em> (<a href="forgot_password.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Passwort zurücksetzen</a>) einen 30 Minuten gültigen Einmal-Link anfordern.</li>
             </ul>
         </section>
@@ -1085,9 +1093,10 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Hinweise für Administratoren</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>1-Klick-System-Update über GitHub:</strong> Unter <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> prüft MiniCloud per Klick den aktuellen Commit-Stand auf GitHub und aktualisiert alle Programmdateien vollautomatisch, während <code>uploads/</code> und die Datenbank-Zugangsdaten in <code>config/database.php</code> geschützt bleiben.</li>
+                <li><strong>Thematisch geordnete 5-Reiter-Administration:</strong> Die <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> ist übersichtlich in 5 Themenbereiche gegliedert: <strong>👥 Benutzer &amp; Registrierung</strong>, <strong>🧩 Module &amp; Funktionen</strong>, <strong>🎨 Darstellung &amp; Impressum</strong>, <strong>✉️ E-Mail &amp; SMTP</strong> sowie <strong>🖥️ System, Update &amp; Status</strong> (plus Gesamtansicht <em>📋 Alle Bereiche</em>).</li>
+                <li><strong>1-Klick-System-Update über GitHub:</strong> Im Reiter <em>🖥️ System, Update &amp; Status</em> prüft MiniCloud per Klick den aktuellen Commit-Stand auf GitHub und aktualisiert alle Programmdateien vollautomatisch, während <code>uploads/</code> und die Datenbank-Zugangsdaten in <code>config/database.php</code> geschützt bleiben.</li>
                 <li><strong>Module, Selbstregistrierung &amp; Branding:</strong> Schalten Sie das Kalender- oder Chat-Modul global ein/aus, aktivieren Sie bei Bedarf die Selbstregistrierung (optional mit Einladungs-Code &amp; Start-Kontingent) und passen Sie Titel, Logo, SMTP-Server und Impressum an.</li>
-                <li><strong>Live-Server-Monitoring, Benutzer &amp; Gruppen:</strong> Überwachen Sie CPU-Last, RAM und Festplattenplatz in Echtzeit, verwalten Sie Benutzerkonten, Speicher-Quotas (in MB) und Benutzergruppen (z. B. für gemeinsame Kalender-Freigaben).</li>
+                <li><strong>Benutzer, Quotas &amp; 2FA-Verwaltung:</strong> Verwalten Sie Benutzerkonten, Speicher-Quotas (in MB) und Benutzergruppen. In der Benutzertabelle sehen Sie am Badge (<code>🔒 2FA</code> bzw. <code>📱 TOTP</code>) die aktive 2FA-Methode und können die 2FA eines Benutzers bei Geräteverlust jederzeit umstellen oder deaktivieren.</li>
             </ul>
         </section>
         <?php endif; ?>
@@ -1176,8 +1185,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota, created_at</code></td>
-                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale E-Mail-2FA, Rollensteuerung, Kontingent, UI-Präferenzen &amp; Datenschutz-Sichtbarkeit (personenbezogen)</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, reset_expires_at, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota, created_at</code></td>
+                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale 2FA (E-Mail-Code oder Google Authenticator / TOTP), Passwort-Wiederherstellung, Rollensteuerung, Kontingent, UI-Präferenzen &amp; Datenschutz-Sichtbarkeit (personenbezogen)</td>
                         <td class="py-3 px-4">Bis zur Löschung des Benutzerkontos durch den Administrator (Kaskadenlöschung)</td>
                     </tr>
                     <tr>

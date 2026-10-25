@@ -1,7 +1,7 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 1.5  
-**Stand:** 24.10.2026  
+**Dokumentversion:** 1.6  
+**Stand:** 25.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
 ---
@@ -21,11 +21,12 @@ Speichert alle registrierten Benutzerkonten, deren Rollen, Darstellungspräferen
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `id` | `INT UNSIGNED` | Nein | `AUTO_INCREMENT` | `PRIMARY KEY` | Eindeutige Benutzer-ID |
 | `username` | `VARCHAR(64)` | Nein | – | `UNIQUE` (`idx_users_username`) | Anmeldename des Benutzers (personenbezogen) |
-| `email` | `VARCHAR(190)` | Ja | `NULL` | – | Optionale E-Mail-Adresse des Benutzers für die Zwei-Faktor-Authentifizierung per E-Mail |
+| `email` | `VARCHAR(190)` | Ja | `NULL` | – | Optionale E-Mail-Adresse des Benutzers für E-Mail-2FA, Notfall-Fallback bei TOTP-2FA sowie Passwort-Wiederherstellung |
 | `password_hash` | `VARCHAR(255)` | Nein | – | – | BCRYPT-Hash (Cost 12) des Benutzerpassworts |
-| `two_factor_enabled` | `TINYINT(1)` | Nein | `0` | – | Status der optionalen E-Mail-2FA (`1` = aktiv, `0` = inaktiv) |
-| `two_factor_code_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Temporärer BCRYPT-Hash des 6-stelligen 2FA-Einmalcodes |
-| `two_factor_expires_at` | `DATETIME` | Ja | `NULL` | – | Ablaufzeitpunkt des aktuellen 2FA-Codes (10 Minuten Gültigkeit) |
+| `two_factor_enabled` | `TINYINT(1)` | Nein | `0` | – | Gewählte 2FA-Methode (`0` = deaktiviert, `1` = per E-Mail-Code, `2` = per Google Authenticator / TOTP-App nach RFC 6238) |
+| `totp_secret` | `VARCHAR(64)` | Ja | `NULL` | – | 160-Bit Base32-Geheimschlüssel (32 Zeichen) für die TOTP-Authenticator-App (RFC 6238) |
+| `two_factor_code_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Temporärer BCRYPT-Hash des 6-stelligen 2FA-E-Mail-Einmalcodes |
+| `two_factor_expires_at` | `DATETIME` | Ja | `NULL` | – | Ablaufzeitpunkt des aktuellen 2FA-E-Mail-Codes (10 Minuten Gültigkeit) |
 | `two_factor_attempts` | `TINYINT UNSIGNED` | Nein | `0` | – | Zähler für Fehlversuche beim aktuellen 2FA-Code (max. 5 Versuche) |
 | `reset_token_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Temporärer SHA-256-Hash des 256-Bit-Einmaltokens zum Zurücksetzen eines vergessenen Passworts |
 | `reset_expires_at` | `DATETIME` | Ja | `NULL` | – | Ablaufzeitpunkt des aktuellen Passwort-Reset-Links (30 Minuten Gültigkeit) |

@@ -1,7 +1,7 @@
 # IT-Sicherheitskonzept – MiniCloud
 
-**Dokumentversion:** 1.5  
-**Stand:** 24.10.2026  
+**Dokumentversion:** 1.6  
+**Stand:** 25.10.2026  
 **System:** MiniCloud – Leichtgewichtiger, selbstgehosteter Cloud-Speicher mit Kalender & Messenger (PHP 8.2+ / MySQL & MariaDB)
 
 ---
@@ -34,7 +34,9 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 - **Passwort-Hashing:** Passwörter von Benutzern sowie optionale Passwörter für öffentliche Freigabelinks werden ausschließlich mit **BCRYPT (`PASSWORD_BCRYPT`, Cost-Faktor 12)** gehasht gespeichert.
 - **Schutz gegen Timing-Angriffe:** Bei Anmeldeversuchen mit einem nicht existierenden Benutzernamen führt `login.php` dennoch eine `password_verify()`-Operation gegen einen konstanten Dummy-BCRYPT-Hash aus.
 - **Brute-Force-Schutz (Rate Limiting):** Sowohl beim Benutzer-Login (`login.php`) als auch bei passwortgeschützten Freigabelinks (`share.php`) werden fehlgeschlagene Passworteingaben nach **5 Fehlversuchen innerhalb von 5 Minuten** temporär gesperrt.
-- **Optionale Zwei-Faktor-Authentifizierung per E-Mail (2FA):** Kryptografisch zufälliger 6-stelliger Einmalcode (`random_int`), als BCRYPT-Hash mit 10 Minuten Gültigkeit gespeichert und nach 5 Fehlversuchen gesperrt.
+- **Optionale Zwei-Faktor-Authentifizierung (2FA) per E-Mail oder Google Authenticator (TOTP):**
+  - **Modus 1 – Per E-Mail-Code (`two_factor_enabled = 1`):** Kryptografisch zufälliger 6-stelliger Einmalcode (`random_int`), als BCRYPT-Hash mit 10 Minuten Gültigkeit gespeichert und nach 5 Fehlversuchen gesperrt.
+  - **Modus 2 – Per Authenticator-App / Google Authenticator (`two_factor_enabled = 2`, RFC 6238 TOTP):** Kryptografisch zufälliger 160-Bit-Base32-Schlüssel (`random_bytes(20)`), zeitbasierter 6-stelliger HMAC-SHA1-Code (30-Sekunden-Intervall, `±1` Zeitfenster Toleranz, zeitkonstanter Vergleich via `hash_equals()`). Der `otpauth://`-QR-Code wird **100 % lokal auf dem Server** als SVG nach ISO/IEC 18004 berechnet – es erfolgt keinerlei Übertragung des Geheimschlüssels an externe QR-APIs. Falls das Smartphone beim Login nicht verfügbar ist und eine E-Mail-Adresse hinterlegt wurde, steht ein gesicherter E-Mail-Notfallcode-Fallback bereit.
 - **Sichere Passwort-Wiederherstellung (`forgot_password.php`):** Benutzer mit hinterlegter E-Mail-Adresse können einen Einmal-Reset-Link anfordern. Das 256-Bit-Zufallstoken (`bin2hex(random_bytes(32))`) wird in der Datenbank ausschließlich als `SHA-256`-Hash (`reset_token_hash`) mit 30 Minuten Gültigkeit (`reset_expires_at`) gespeichert, zeitkonstant per `hash_equals()` geprüft und nach einmaliger Verwendung sofort gelöscht. Eine einheitliche Bestätigungsmeldung verhindert Benutzer-/E-Mail-Enumeration.
 
 ### 3.2 Session-Management, Inaktivitäts-Timeout & Echtzeit-Rechteabgleich (`includes/auth.php`, `logout.php`)
