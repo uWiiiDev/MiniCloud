@@ -501,37 +501,40 @@ require_once __DIR__ . '/includes/header.php';
                     </datalist>
                 </div>
 
-                <button
-                    type="button"
-                    id="btnSelectFiles"
-                    class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    <span>Dateien</span>
-                </button>
+                <div class="flex items-center gap-1.5 w-full sm:w-auto">
+                    <button
+                        type="button"
+                        id="btnSelectFiles"
+                        class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        <span>Dateien</span>
+                    </button>
 
-                <button
-                    type="button"
-                    id="btnSelectFolder"
-                    class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                >
-                    <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                    </svg>
-                    <span>Ordner</span>
-                </button>
+                    <button
+                        type="button"
+                        id="btnSelectFolder"
+                        class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                        </svg>
+                        <span>Ordner</span>
+                    </button>
 
-                <button
-                    type="button"
-                    onclick="openCreateOfficeModal()"
-                    title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
-                    class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                >
-                    <span>📄+</span>
-                    <span>Office Light</span>
-                </button>
+                    <button
+                        type="button"
+                        onclick="openCreateOfficeModal()"
+                        title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
+                        aria-label="Office Light – Neues Dokument erstellen"
+                        class="shrink-0 inline-flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <span>📄+</span>
+                        <span class="hidden sm:inline">Office Light</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -957,8 +960,24 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 📁 Unterordner
                             </td>
 
-                            <td class="py-3 px-2.5 sm:px-6 whitespace-nowrap text-right align-top sm:align-middle">
-                                <div class="inline-flex items-center justify-end gap-1 sm:gap-2">
+                            <td class="py-3 px-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
+                                <!-- Mobil: Ein einzelner kompakter ⋯ Aktionen-Button -->
+                                <div class="sm:hidden inline-flex items-center justify-end">
+                                    <button
+                                        type="button"
+                                        onclick="openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                                        title="Ordner-Aktionen"
+                                        aria-label="Ordner-Aktionen"
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- Desktop (ab sm): Alle Aktions-Icons direkt nebeneinander -->
+                                <div class="hidden sm:inline-flex items-center justify-end gap-1.5">
                                     <?php if ($activeGroupFolder === null && $subFileCount > 0): ?>
                                         <a
                                             href="download.php?folder=<?= rawurlencode($subPath) ?>"
@@ -1072,6 +1091,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             'size'        => $formattedSize,
                             'date'        => $formattedDate . ' Uhr',
                             'folder'      => $folderPath !== '' ? $folderPath : 'Hauptverzeichnis',
+                            'rawFolder'   => $folderPath,
                             'badgeLabel'  => $badge['label'],
                             'badgeBg'     => $badge['bg'],
                             'badgeText'   => $badge['text'],
@@ -1107,7 +1127,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <button
                                                 type="button"
                                                 onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
-                                                class="font-medium text-left text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[140px] sm:max-w-xs md:max-w-md cursor-pointer transition-colors"
+                                                class="font-medium text-left text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[200px] sm:max-w-xs md:max-w-md cursor-pointer transition-colors"
                                                 title="<?= e($origName) ?> (Klicken für Vorschau)"
                                             >
                                                 <?= e($origName) ?>
@@ -1156,14 +1176,30 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <?= e($formattedDate) ?> Uhr
                             </td>
 
-                            <td class="py-3.5 px-2.5 sm:px-6 whitespace-nowrap text-right align-top sm:align-middle">
-                                <div class="inline-flex items-center justify-end gap-1 sm:gap-2">
+                            <td class="py-3.5 px-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
+                                <!-- Mobil (< sm): Ein einzelner kompakter ⋯ Aktionen-Button -->
+                                <div class="sm:hidden inline-flex items-center justify-end">
+                                    <button
+                                        type="button"
+                                        onclick="openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                                        title="Datei-Aktionen"
+                                        aria-label="Datei-Aktionen"
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- Desktop (ab sm): Alle Aktions-Icons direkt nebeneinander -->
+                                <div class="hidden sm:inline-flex items-center justify-end gap-1.5">
                                     <!-- VORSCHAU-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <button
                                         type="button"
                                         onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
                                         class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/70 text-violet-700 dark:text-violet-300 transition-colors cursor-pointer"
-                                        title="<?= $officeEditUrl !== '' ? 'Vorschau / In Office Light bearbeiten' : 'Vorschau' ?>"
+                                        title="Vorschau"
                                         aria-label="Vorschau"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1171,6 +1207,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                         </svg>
                                     </button>
+
+                                    <?php if ($officeEditUrl !== ''): ?>
+                                        <!-- OFFICE LIGHT BEARBEITEN BUTTON (auf Desktop direkt sichtbar) -->
+                                        <a
+                                            href="<?= e($officeEditUrl) ?>"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
+                                            title="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Schreibgeschützt)' ?>"
+                                            aria-label="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </a>
+                                    <?php endif; ?>
 
                                     <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <?php if ($isEncrypted): ?>
@@ -2030,6 +2080,51 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
+<!-- MOBILES AKTIONSMENÜ (Auf Smartphones über den kompakten ⋯ Button pro Zeile) -->
+<div
+    id="mobileActionModal"
+    class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="mobileActionTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col">
+        <div class="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+                <h3 id="mobileActionTitle" class="text-sm font-bold text-slate-900 dark:text-white truncate"></h3>
+                <p id="mobileActionSubtitle" class="text-[11px] text-slate-500 dark:text-slate-400 truncate"></p>
+            </div>
+            <button
+                type="button"
+                onclick="closeMobileActionModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div id="mobileActionList" class="p-3 space-y-1.5"></div>
+
+        <!-- Verstecktes Lösch-Formular für das mobile Aktionsmenü -->
+        <form id="mobileDeleteForm" action="delete.php" method="post" class="hidden">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="file_id" id="mobileDeleteFileId" value="">
+            <input type="hidden" name="delete_folder" id="mobileDeleteFolder" value="">
+            <?php if ($currentFolder !== ''): ?>
+                <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+            <?php endif; ?>
+            <?php if ($activeSharedFolder !== null): ?>
+                <input type="hidden" name="return_shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
+            <?php elseif ($activeGroupFolder !== null): ?>
+                <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+
 <!-- DATEI-VORSCHAU MODAL MIT DURCHBLÄTTER-FUNKTION -->
 <div id="previewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6">
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
@@ -2572,6 +2667,155 @@ if (createOfficeModal) {
             closeCreateOfficeModal();
         }
     });
+}
+
+// --- MOBILES AKTIONSMENÜ (⋯ Button pro Datei- oder Ordnerzeile auf Smartphones) ---
+const mobileActionModal = document.getElementById('mobileActionModal');
+const mobileActionTitle = document.getElementById('mobileActionTitle');
+const mobileActionSubtitle = document.getElementById('mobileActionSubtitle');
+const mobileActionList = document.getElementById('mobileActionList');
+const mobileDeleteForm = document.getElementById('mobileDeleteForm');
+const mobileDeleteFileId = document.getElementById('mobileDeleteFileId');
+const mobileDeleteFolder = document.getElementById('mobileDeleteFolder');
+
+function closeMobileActionModal() {
+    if (!mobileActionModal) return;
+    mobileActionModal.classList.add('hidden');
+    mobileActionModal.classList.remove('flex');
+}
+
+if (mobileActionModal) {
+    mobileActionModal.addEventListener('click', (e) => {
+        if (e.target === mobileActionModal) {
+            closeMobileActionModal();
+        }
+    });
+}
+
+function openMobileFileMenu(fileIdx, canDelete) {
+    if (!previewItems || !previewItems[fileIdx] || !mobileActionModal) return;
+    const item = previewItems[fileIdx];
+    mobileActionTitle.textContent = item.name;
+    mobileActionSubtitle.textContent = `${item.size} • ${item.date}`;
+    mobileActionList.innerHTML = '';
+
+    const addBtn = (label, cls, onClickFn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
+        b.textContent = label;
+        b.addEventListener('click', () => {
+            closeMobileActionModal();
+            onClickFn();
+        });
+        mobileActionList.appendChild(b);
+    };
+
+    // 1. Vorschau
+    addBtn('👁️ Vorschau öffnen', 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 hover:bg-violet-100', () => {
+        openPreviewModal(fileIdx);
+    });
+
+    // 2. Office Light (falls unterstützt & unverschlüsselt)
+    if (item.officeUrl && item.officeUrl !== '') {
+        addBtn(item.canManage ? '✏️ In Office Light bearbeiten' : '📄 In Office Light öffnen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
+            window.location.href = item.officeUrl;
+        });
+    }
+
+    // 3. Herunterladen
+    addBtn(item.isEncrypted ? '🔓 Entschlüsseln & Herunterladen' : '⬇️ Datei herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+        if (item.isEncrypted) {
+            openVaultModal(item.id, item.name, true, item.canManage);
+        } else {
+            window.location.href = item.downloadUrl;
+        }
+    });
+
+    // 4. Tresor
+    if (item.canManage || item.isEncrypted) {
+        addBtn(item.isEncrypted ? '🔒 Tresor-Schutz verwalten' : '🔒 Im Tresor verschlüsseln (AES-256)', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+            openVaultModal(item.id, item.name, item.isEncrypted, item.canManage);
+        });
+    }
+
+    // 5. Verschieben / Kopieren
+    addBtn('⇄ Verschieben oder kopieren', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
+        openTransferModal('file', item.id, item.name, item.rawFolder || '', item.canManage);
+    });
+
+    // 6. Teilen
+    if (item.canManage) {
+        addBtn('🔗 Teilen (Link / Benutzer)', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
+            openShareModal(item.id, item.name, '');
+        });
+    }
+
+    // 7. Löschen
+    if (canDelete) {
+        addBtn('🗑️ In den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
+            if (confirm(`Möchten Sie die Datei "${item.name}" in den Papierkorb verschieben?`)) {
+                mobileDeleteFolder.value = '';
+                mobileDeleteFolder.disabled = true;
+                mobileDeleteFileId.disabled = false;
+                mobileDeleteFileId.value = String(item.id);
+                mobileDeleteForm.submit();
+            }
+        });
+    }
+
+    mobileActionModal.classList.remove('hidden');
+    mobileActionModal.classList.add('flex');
+}
+
+function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare, canDelete) {
+    if (!mobileActionModal) return;
+    mobileActionTitle.textContent = '📁 ' + displayName;
+    mobileActionSubtitle.textContent = `${fileCount} ${fileCount === 1 ? 'Datei' : 'Dateien'}`;
+    mobileActionList.innerHTML = '';
+
+    const addBtn = (label, cls, onClickFn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
+        b.textContent = label;
+        b.addEventListener('click', () => {
+            closeMobileActionModal();
+            onClickFn();
+        });
+        mobileActionList.appendChild(b);
+    };
+
+    if (canZip) {
+        addBtn('⬇️ Ordner als ZIP herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+            window.location.href = 'download.php?folder=' + encodeURIComponent(subPath);
+        });
+    }
+
+    addBtn('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        openTransferModal('folder', 0, displayName, subPath, canDelete);
+    });
+
+    if (canShare) {
+        addBtn('🔗 Ordner teilen', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
+            openShareModal(0, subPath, subPath);
+        });
+    }
+
+    if (canDelete) {
+        addBtn('🗑️ Ordner in den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
+            if (confirm(`Möchten Sie den Ordner "${subPath}" in den Papierkorb verschieben?`)) {
+                mobileDeleteFileId.value = '';
+                mobileDeleteFileId.disabled = true;
+                mobileDeleteFolder.disabled = false;
+                mobileDeleteFolder.value = subPath;
+                mobileDeleteForm.submit();
+            }
+        });
+    }
+
+    mobileActionModal.classList.remove('hidden');
+    mobileActionModal.classList.add('flex');
 }
 
 // --- SHARE MODAL LOGIK (für Dateien UND Ordner) ---
