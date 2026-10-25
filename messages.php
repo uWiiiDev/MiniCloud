@@ -534,11 +534,12 @@ foreach ($chatMessages as $cm) {
 }
 
 $pageTitle = 'Chat & Nachrichten';
+$hideFooterOnMobile = true;
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!-- Kopfbereich -->
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+<!-- Kopfbereich (auf Mobilgeräten bei geöffnetem Chat ausgeblendet für maximale Schreibfläche) -->
+<div id="chatPageTopHeader" class="<?= !$mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
     <div>
         <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
             <span class="w-9 h-9 rounded-xl bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -563,7 +564,7 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <!-- Messenger Hauptcontainer (Mobil: 1-Spalten-Navigation Kontakte <-> Chat | Desktop: 2-Spalten-Ansicht) -->
-<div id="messengerMainCard" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[540px] lg:h-[680px]">
+<div id="messengerMainCard" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[420px] lg:h-[680px]">
 
     <!-- LINKE SPALTE: Konversationen & Neuer Chat (4 Spalten) -->
     <div id="chatSidebarPane" class="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 <?= $mobileShowList ? 'flex' : 'hidden lg:flex' ?> flex-col h-[560px] lg:h-full bg-slate-50/50 dark:bg-slate-900/60">
@@ -700,7 +701,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- RECHTE SPALTE: Aktiver Chat-Verlauf & Eingabeleiste (8 Spalten) -->
-    <div id="chatConversationPane" class="lg:col-span-8 <?= $mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col h-[560px] lg:h-full bg-white dark:bg-slate-900">
+    <div id="chatConversationPane" class="lg:col-span-8 <?= $mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col h-[calc(100dvh-6.2rem)] lg:h-full bg-white dark:bg-slate-900">
         <?php if ($activeChannelType === 'none'): ?>
             <div class="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <div class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl mb-3">
@@ -911,6 +912,9 @@ require_once __DIR__ . '/includes/header.php';
 <script>
 (() => {
     const container = document.getElementById('chatMessagesContainer');
+    const convPane = document.getElementById('chatConversationPane');
+    const mainCard = document.getElementById('messengerMainCard');
+    const appFooter = document.getElementById('appFooter');
     const input = document.getElementById('chatMessageInput');
     const form = document.getElementById('chatSendForm');
     const btnQuickPush = document.getElementById('btnQuickEnablePush');
@@ -933,6 +937,38 @@ require_once __DIR__ . '/includes/header.php';
     }
     scrollToBottom();
 
+    // Auf Mobilgeräten Footer ausblenden und Chat-Höhe dynamisch an die Bildschirmtastatur (visualViewport) anpassen
+    function updateMobileChatViewport() {
+        if (!window.matchMedia('(max-width: 1023px)').matches) {
+            if (convPane) convPane.style.height = '';
+            if (mainCard) mainCard.style.minHeight = '';
+            return;
+        }
+        if (appFooter) {
+            appFooter.style.display = 'none';
+        }
+        if (convPane && !convPane.classList.contains('hidden')) {
+            const vvHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            const rect = convPane.getBoundingClientRect();
+            const topOffset = Math.max(56, rect.top);
+            const targetHeight = Math.max(220, Math.floor(vvHeight - topOffset - 10));
+            convPane.style.height = targetHeight + 'px';
+            if (mainCard) {
+                mainCard.style.minHeight = targetHeight + 'px';
+            }
+            scrollToBottom();
+        }
+    }
+
+    if (isMobileDevice) {
+        updateMobileChatViewport();
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateMobileChatViewport);
+            window.visualViewport.addEventListener('scroll', updateMobileChatViewport);
+        }
+        window.addEventListener('resize', updateMobileChatViewport);
+    }
+
     // Schnell-Button zum Aktivieren von System-Benachrichtigungen anzeigen, falls noch nicht freigegeben
     if (btnQuickPush && (chatNotifyMode === 1 || chatNotifyMode === 2) && ('Notification' in window) && Notification.permission === 'default') {
         btnQuickPush.classList.remove('hidden');
@@ -952,9 +988,18 @@ require_once __DIR__ . '/includes/header.php';
         if (isMobileDevice) {
             // Auf Mobilgeräten kompakt 1-zeilig starten und beim Tippen automatisch mitwachsen lassen
             input.setAttribute('rows', '1');
+            input.addEventListener('focus', () => {
+                if (appFooter) appFooter.style.display = 'none';
+                setTimeout(updateMobileChatViewport, 120);
+                setTimeout(scrollToBottom, 180);
+            });
+            input.addEventListener('blur', () => {
+                setTimeout(updateMobileChatViewport, 120);
+            });
             input.addEventListener('input', () => {
                 input.style.height = 'auto';
                 input.style.height = Math.min(input.scrollHeight, 110) + 'px';
+                scrollToBottom();
             });
         } else {
             input.focus();

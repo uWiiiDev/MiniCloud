@@ -12,7 +12,7 @@
    - **📄 MiniCloud Office Light (Word `.docx`, Excel `.xlsx`, `.csv`, `.txt`, `.md`):** Direkt im Browser ohne externe Server neue Word-Dokumente, Excel-Tabellen oder Notizen anlegen sowie bestehende `.docx`- und `.xlsx`-Dateien online öffnen, bearbeiten (inkl. Rich-Text-Formatierung, Tabellen, mehreren Excel-Tabellenblättern und Live-Formeln wie `=SUMME(A1:A10)` / `=MITTELWERT(...)`) und per `Strg+S` speichern.
    - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio und Text-/Codedateien (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
-   - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
+   - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv (am Desktop mit direkter Aktionsleiste, auf Smartphones mit platzsparendem **`⋯`-Touch-Aktionsmenü**).
 2. **Öffentliche Freigabelinks & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
    - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz und Ablaufdatum.
    - Direktfreigabe einzelner Dateien oder ganzer Ordner an andere Cloud-Benutzer (*„Für mich freigegeben“*) mit **3 Berechtigungsstufen** für Ordner: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** (eigene Dateien hochladen & Unterordner anlegen) oder **🗑️ Lesen, Schreiben & Löschen**.
@@ -23,7 +23,7 @@
    - `.ics`-Import/Export sowie persönlicher **`.ics`-Abo-Link** zur Live-Synchronisation mit Smartphone (iOS/Android), Thunderbird oder Outlook.
 4. **Integrierter Messenger, Rundnachrichten & System-Benachrichtigungen (`messages.php`)**
    - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
-   - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
+   - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones (mit ausgeblendetem Footer und dynamischer Anpassung an die Bildschirmtastatur) sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
 5. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
    - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
 6. **Passwort-Wiederherstellung, 2FA (E-Mail & Google Authenticator), Einstellungen & Optionale Registrierung (`forgot_password.php`, `login.php`, `settings.php`, `register.php`)**

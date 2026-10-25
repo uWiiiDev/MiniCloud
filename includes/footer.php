@@ -8,8 +8,9 @@ declare(strict_types=1);
 $footerSettings = isset($appSettings) && is_array($appSettings) ? $appSettings : getAppSettings();
 $footerTitle    = $footerSettings['app_title'] ?? APP_NAME;
 $versionInfo    = getAppVersionInfo();
+$footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
 ?>
-<footer class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto transition-colors">
+<footer id="appFooter" class="<?= $footerMobileClass ?> bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto transition-colors">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
         <p class="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
             <span>&copy; <?= date('Y') ?> <?= e((string)$footerTitle) ?> &ndash; Leichtgewichtiger, sicherer Cloud-Speicher</span>
@@ -413,6 +414,34 @@ $versionInfo    = getAppVersionInfo();
     resetIdleTimer();
 })();
 <?php endif; ?>
+
+// Auf Mobilgeräten den Footer automatisch ausblenden, sobald ein Eingabefeld / die Tastatur aktiv ist
+(() => {
+    const footer = document.getElementById('appFooter');
+    if (!footer) return;
+    const isTextField = (el) => {
+        if (!el || !el.tagName) return false;
+        const tag = el.tagName.toUpperCase();
+        if (tag === 'TEXTAREA' || el.isContentEditable) return true;
+        if (tag === 'INPUT') {
+            const t = (el.type || 'text').toLowerCase();
+            return !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'range', 'color', 'hidden'].includes(t);
+        }
+        return false;
+    };
+    document.addEventListener('focusin', (e) => {
+        if (window.innerWidth < 1024 && isTextField(e.target)) {
+            footer.classList.add('max-lg:hidden');
+        }
+    });
+    document.addEventListener('focusout', () => {
+        setTimeout(() => {
+            if (window.innerWidth < 1024 && !isTextField(document.activeElement)) {
+                footer.classList.remove('max-lg:hidden');
+            }
+        }, 150);
+    });
+})();
 </script>
 </body>
 </html>

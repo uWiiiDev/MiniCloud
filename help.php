@@ -66,7 +66,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Instant Drag &amp; Drop Upload:</strong> Drag individual files or entire folders from your file manager directly onto the dashed upload bar. The upload starts automatically.</li>
-                <li><strong>Selection Buttons:</strong> Use <em>“+ Files”</em> to select multiple files, or <em>“Folder”</em> to upload an entire folder hierarchy including subfolders.</li>
+                <li><strong>Selection Buttons &amp; Office Light:</strong> Use <em>“+ Files”</em> to select multiple files, <em>“Folder”</em> to upload an entire folder hierarchy, or <strong>“📄+ / + Office Light”</strong> to create a new Word document (<code>.docx</code>), Excel spreadsheet (<code>.xlsx</code>), CSV table (<code>.csv</code>), or note (<code>.txt</code> / <code>.md</code>) directly in the cloud.</li>
                 <li><strong>Set Target Folder:</strong> The <em>“Target folder (optional)”</em> field defaults to your currently open folder. You can also enter a new path (e.g. <code>Projects/2026</code>) directly.</li>
                 <li><strong>Create Subfolders:</strong> Use the folder bar to create new folders or subfolders inside the currently active directory at any time.</li>
             </ul>
@@ -74,12 +74,13 @@ require_once __DIR__ . '/includes/header.php';
 
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">👁️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Preview, Browsing &amp; Sorting</h2>
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Preview, Office Light (Word &amp; Excel) &amp; Mobile Menu</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Instant Preview:</strong> Click the eye icon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Preview</span>), the file type badge, or the file name to open the preview modal for images, PDFs, videos, audio files, and text/source code files.</li>
-                <li><strong>Browse Through Folder:</strong> When multiple files are in the current folder, use the Next/Previous buttons or arrow keys <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> and <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> closes the preview).</li>
+                <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Text Online):</strong> Create or edit <strong>Word documents (<code>.docx</code>)</strong> with rich-text formatting, headings, lists, and tables, or <strong>Excel spreadsheets (<code>.xlsx</code> / <code>.csv</code>)</strong> with multiple sheets and live formulas (<code>=SUM(A1:A10)</code>, <code>=AVERAGE(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) directly in your browser and save via <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>.</li>
+                <li><strong>Instant Preview &amp; Browsing:</strong> Click the eye icon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Preview</span>) or the file name to preview images, PDFs, videos, audio, and code/office files; use <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> and <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> to browse (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> closes).</li>
+                <li><strong>Desktop Icons &amp; Mobile ⋯ Action Menu:</strong> On desktop screens, all action icons (Edit ✏️, Preview 👁️, Share 🔗, Vault 🔒, Move/Copy ⇄, Download ⬇️, Delete 🗑️) appear side-by-side. On smartphones, a single compact <strong>⋯ button</strong> opens a clear touch menu with all actions.</li>
                 <li><strong>Table Sorting:</strong> Click the column headers <em>Name</em>, <em>Folder</em>, <em>Size</em>, or <em>Type / Date</em> to sort ascending or descending (<code>↑</code> / <code>↓</code>).</li>
             </ul>
         </section>
@@ -115,7 +116,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Calendar &amp; Appointments (<a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Calendar</a>):</strong> Manage personal, group, and shared events in month or list view with recurrence rules (daily, weekly, monthly, yearly), colors, file attachments, <code>.ics</code> import/export, and a personal <code>.ics</code> subscription link for smartphones, Thunderbird, or Outlook. Share your calendar with users or groups using 3 permission levels (Read, Edit, Edit &amp; Delete).</li>
-                <li><strong>Messenger &amp; Announcements (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Exchange real-time 1:1 messages with visible cloud users or receive official admin broadcasts. Includes one-click chat history clearing, automatic 1-column mobile view, and configurable desktop/mobile system notifications.</li>
+                <li><strong>Messenger &amp; Announcements (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Exchange real-time 1:1 messages with visible cloud users or receive official admin broadcasts. Includes one-click chat history clearing, automatic 1-column mobile view (with automatic footer hiding and dynamic keyboard height adaptation), and configurable desktop/mobile system notifications.</li>
             </ul>
         </section>
     </div>
@@ -314,7 +315,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Glisser-déposer instantané :</strong> Faites glisser des fichiers ou des dossiers entiers directement sur la zone en pointillés. L’envoi démarre automatiquement.</li>
-                <li><strong>Boutons de sélection :</strong> Utilisez <em>« + Fichiers »</em> pour plusieurs fichiers ou <em>« Dossier »</em> pour envoyer toute une arborescence.</li>
+                <li><strong>Boutons de sélection &amp; Office Light :</strong> Utilisez <em>« + Fichiers »</em> pour plusieurs fichiers, <em>« Dossier »</em> pour toute une arborescence, ou <strong>« 📄+ / + Office Light »</strong> pour créer directement un document Word (<code>.docx</code>), un tableur Excel (<code>.xlsx</code>), un fichier CSV (<code>.csv</code>) ou une note (<code>.txt</code> / <code>.md</code>).</li>
                 <li><strong>Dossier cible :</strong> Le champ <em>« Dossier cible (optionnel) »</em> correspond par défaut au dossier actif, mais vous pouvez saisir un nouveau chemin (ex. <code>Projets/2026</code>).</li>
                 <li><strong>Sous-dossiers :</strong> Créez de nouveaux sous-dossiers à tout moment via la barre de dossier active.</li>
             </ul>
@@ -322,12 +323,13 @@ require_once __DIR__ . '/includes/header.php';
 
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">👁️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Aperçu, Navigation &amp; Tri</h2>
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Aperçu, Office Light (Word &amp; Excel) &amp; Menu mobile</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Aperçu direct :</strong> Cliquez sur l’icône d’œil (<span class="text-violet-600 dark:text-violet-400 font-semibold">Aperçu</span>), le badge de type ou le nom du fichier pour prévisualiser images, PDF, vidéos, fichiers audio et textes/codes sources.</li>
-                <li><strong>Navigation :</strong> Parcourez les fichiers du dossier avec les flèches <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> et <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> ferme l’aperçu).</li>
+                <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Notes en ligne) :</strong> Créez et modifiez des documents <strong>Word (<code>.docx</code>)</strong> avec barre de mise en forme ou des feuilles de calcul <strong>Excel (<code>.xlsx</code> / <code>.csv</code>)</strong> multi-onglets avec formules (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) directement dans le navigateur (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>).</li>
+                <li><strong>Aperçu direct &amp; Navigation :</strong> Cliquez sur l’icône d’œil (<span class="text-violet-600 dark:text-violet-400 font-semibold">Aperçu</span>) ou le nom du fichier pour prévisualiser images, PDF, vidéos, audio et textes ; parcourez avec <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> et <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd>.</li>
+                <li><strong>Icônes Bureau &amp; Menu d’actions mobile ⋯ :</strong> Sur ordinateur, toutes les icônes d’action sont affichées côte à côte. Sur smartphone, un bouton compact <strong>⋯</strong> regroupe toutes les actions dans un menu tactile clair.</li>
                 <li><strong>Tri du tableau :</strong> Cliquez sur les en-têtes <em>Nom</em>, <em>Dossier</em>, <em>Taille</em> ou <em>Type / Date</em> pour trier par ordre croissant ou décroissant.</li>
             </ul>
         </section>
@@ -521,7 +523,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Subida instantánea con arrastrar y soltar:</strong> Arrastre archivos o carpetas completas directamente al área punteada. La subida comienza automáticamente.</li>
-                <li><strong>Botones de selección:</strong> Use <em>«+ Archivos»</em> para seleccionar varios archivos o <em>«Carpeta»</em> para subir toda una estructura de directorios.</li>
+                <li><strong>Botones de selección y Office Light:</strong> Use <em>«+ Archivos»</em> para varios archivos, <em>«Carpeta»</em> para subir toda una estructura de directorios o <strong>«📄+ / + Office Light»</strong> para crear directamente documentos Word (<code>.docx</code>), hojas de cálculo Excel (<code>.xlsx</code>), listas CSV (<code>.csv</code>) o notas (<code>.txt</code> / <code>.md</code>).</li>
                 <li><strong>Carpeta de destino:</strong> El campo <em>«Carpeta de destino (opcional)»</em> usa por defecto la carpeta actual, o puede escribir una ruta nueva (p. ej. <code>Proyectos/2026</code>).</li>
                 <li><strong>Subcarpetas:</strong> Cree nuevas carpetas o subcarpetas en cualquier momento desde la barra de carpeta activa.</li>
             </ul>
@@ -529,12 +531,13 @@ require_once __DIR__ . '/includes/header.php';
 
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">👁️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vista previa y Ordenación</h2>
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vista previa, Office Light (Word y Excel) y Menú móvil</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Vista previa directa:</strong> Haga clic en el icono del ojo (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vista previa</span>), la insignia de tipo o el nombre para abrir imágenes, PDF, vídeos, audio y archivos de texto/código.</li>
-                <li><strong>Navegación:</strong> Use las teclas <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> y <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> para pasar de un archivo a otro (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> cierra la vista previa).</li>
+                <li><strong>📄 MiniCloud Office Light (Word, Excel y Notas en línea):</strong> Cree y edite documentos <strong>Word (<code>.docx</code>)</strong> con formato enriquecido o tablas <strong>Excel (<code>.xlsx</code> / <code>.csv</code>)</strong> con múltiples hojas y fórmulas en vivo (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) directamente en el navegador (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>).</li>
+                <li><strong>Vista previa directa y Navegación:</strong> Haga clic en el icono del ojo (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vista previa</span>) o el nombre para abrir imágenes, PDF, vídeos, audio y texto; navegue con <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> y <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd>.</li>
+                <li><strong>Iconos en escritorio y menú móvil ⋯:</strong> En escritorio todos los iconos de acción se muestran uno al lado del otro; en móviles se agrupan en un botón compacto <strong>⋯</strong> que abre un menú táctil claro.</li>
                 <li><strong>Ordenar tabla:</strong> Haga clic en los encabezados <em>Nombre</em>, <em>Carpeta</em>, <em>Tamaño</em> o <em>Tipo / Fecha</em> para ordenar de forma ascendente o descendente.</li>
             </ul>
         </section>
@@ -728,7 +731,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Direct uploaden via Drag &amp; Drop:</strong> Sleep losse bestanden of complete mappen rechtstreeks naar het gestippelde uploadvlak. De upload start automatisch.</li>
-                <li><strong>Keuzeknoppen:</strong> Gebruik <em>“+ Bestanden”</em> voor meerdere bestanden of <em>“Map”</em> om een volledige mappenstructuur inclusief submappen te uploaden.</li>
+                <li><strong>Keuzeknoppen &amp; Office Light:</strong> Gebruik <em>“+ Bestanden”</em> voor meerdere bestanden, <em>“Map”</em> om een volledige mappenstructuur te uploaden of <strong>“📄+ / + Office Light”</strong> om direct een nieuw Word-document (<code>.docx</code>), Excel-werkblad (<code>.xlsx</code>), CSV-bestand (<code>.csv</code>) of notitie (<code>.txt</code> / <code>.md</code>) aan te maken.</li>
                 <li><strong>Doelmap instellen:</strong> In het veld <em>“Doelmap (optioneel)”</em> staat automatisch uw huidige map ingevuld, of typ direct een nieuw pad (bijv. <code>Projecten/2026</code>).</li>
                 <li><strong>Submappen aanmaken:</strong> Maak via de mappenbalk op elk moment nieuwe mappen of submappen aan.</li>
             </ul>
@@ -736,12 +739,13 @@ require_once __DIR__ . '/includes/header.php';
 
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">👁️</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Voorbeeld, Bladeren &amp; Sorteren</h2>
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Voorbeeld, Office Light (Word &amp; Excel) &amp; Mobiel menu</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Direct voorbeeld:</strong> Klik op het oog-icoon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Voorbeeld</span>), de bestandstype-badge of de bestandsnaam om afbeeldingen, pdf’s, video’s, audio en tekst-/codebestanden te bekijken.</li>
-                <li><strong>Bladeren in de map:</strong> Gebruik de knoppen Vorige/Volgende of de pijltjestoetsen <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> en <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> sluit het voorbeeld).</li>
+                <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Notities online):</strong> Maak en bewerk <strong>Word-documenten (<code>.docx</code>)</strong> met opmaakbalk of <strong>Excel-spreadsheets (<code>.xlsx</code> / <code>.csv</code>)</strong> met meerdere werkbladen en formules (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) rechtstreeks in de browser (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>).</li>
+                <li><strong>Direct voorbeeld &amp; Bladeren:</strong> Klik op het oog-icoon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Voorbeeld</span>) of de bestandsnaam om afbeeldingen, pdf’s, video’s, audio en tekstbestanden te bekijken; blader met <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> en <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd>.</li>
+                <li><strong>Desktop-iconen &amp; Mobiel ⋯ actiemenu:</strong> Op desktop staan alle actie-iconen naast elkaar; op smartphones opent één compacte <strong>⋯ knop</strong> een overzichtelijk aanraakmenu met alle acties.</li>
                 <li><strong>Tabel sorteren:</strong> Klik op de kolomkoppen <em>Naam</em>, <em>Map</em>, <em>Grootte</em> of <em>Type / Datum</em> om oplopend of aflopend te sorteren.</li>
             </ul>
         </section>
@@ -965,7 +969,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Sofort-Upload per Drag &amp; Drop:</strong> Ziehen Sie einzelne Dateien oder komplette Ordner aus Ihrem Dateimanager direkt auf die gestrichelte Upload-Fläche. Der Upload startet automatisch.</li>
-                <li><strong>Auswahl-Buttons:</strong> Über <em>„+ Dateien“</em> wählen Sie mehrere Einzeldateien aus, über <em>„Ordner“</em> laden Sie eine komplette Ordnerstruktur samt Unterordnern hoch.</li>
+                <li><strong>Auswahl-Buttons &amp; Office Light:</strong> Über <em>„+ Dateien“</em> wählen Sie mehrere Einzeldateien aus, über <em>„Ordner“</em> laden Sie eine komplette Ordnerstruktur hoch und über <strong>„📄+“ (Mobil) bzw. „+ Office Light“ (Desktop)</strong> erstellen Sie direkt im aktuellen Ordner neue Word-, Excel-, CSV- oder Textdateien.</li>
                 <li><strong>Zielordner festlegen:</strong> Im Feld <em>„Zielordner (optional)“</em> ist automatisch Ihr aktuell geöffneter Ordner voreingestellt. Sie können dort auch direkt einen neuen Pfad (z. B. <code>Projekte/2026</code>) eintragen.</li>
                 <li><strong>Unterordner anlegen:</strong> Über die Ordnerleiste erstellen Sie jederzeit neue Ordner oder Unterordner im aktuell geöffneten Verzeichnis (auch in für Sie mit Schreibrecht freigegebenen Ordnern).</li>
             </ul>
@@ -975,15 +979,16 @@ require_once __DIR__ . '/includes/header.php';
         <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vorschau, Office Light (Word &amp; Excel) &amp; Sortierung</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Vorschau, Office Light (Word &amp; Excel) &amp; Mobil-Menü</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Notizen online bearbeiten):</strong>
                     <ul class="list-disc pl-5 mt-1 space-y-1">
-                        <li><strong>Neu erstellen:</strong> Über den Button <strong>„📄+ Office Light“</strong> in der Upload-Leiste legen Sie direkt im aktuellen Ordner neue <strong>Word-Dokumente (<code>.docx</code>)</strong>, <strong>Excel-Tabellen (<code>.xlsx</code>)</strong>, <strong>CSV-Listen (<code>.csv</code>)</strong> oder <strong>Text-/Markdown-Notizen (<code>.txt</code> / <code>.md</code>)</strong> an.</li>
-                        <li><strong>Online bearbeiten:</strong> Klicken Sie in der Dateiliste auf den Dateinamen oder das <strong>👁️ Vorschau-Symbol</strong> und wählen Sie im Vorschau-Fenster <strong>„✏️ Bearbeiten“ / „In Office Light öffnen“</strong>, um Word-Dokumente mit Formatierungsleiste (Überschriften, Fett/Kursiv, Listen, Tabellen, Druck/PDF) oder Excel-Tabellen mit mehreren Tabellenblättern und Rechenformeln (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direkt im Browser zu bearbeiten und per <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Strg+S</kbd> zu speichern.</li>
+                        <li><strong>Neu erstellen:</strong> Über den Button <strong>„📄+“ / „+ Office Light“</strong> in der Upload-Leiste legen Sie direkt im aktuellen Ordner neue <strong>Word-Dokumente (<code>.docx</code>)</strong>, <strong>Excel-Tabellen (<code>.xlsx</code>)</strong>, <strong>CSV-Listen (<code>.csv</code>)</strong> oder <strong>Text-/Markdown-Notizen (<code>.txt</code> / <code>.md</code>)</strong> an.</li>
+                        <li><strong>Online bearbeiten:</strong> Klicken Sie am Desktop auf das <strong>✏️ Stift-Symbol</strong> (oder im Vorschau-Fenster bzw. mobilen <strong>⋯ Menü</strong> auf <strong>„✏️ In Office Light bearbeiten“</strong>), um Word-Dokumente mit Formatierungsleiste (Überschriften, Fett/Kursiv, Listen, Tabellen, Druck/PDF) oder Excel-Tabellen mit mehreren Tabellenblättern und Rechenformeln (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direkt im Browser zu bearbeiten und per <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Strg+S</kbd> zu speichern.</li>
                     </ul>
                 </li>
+                <li><strong>Desktop-Icons &amp; Mobiles ⋯ Aktionsmenü:</strong> In der Desktop-Ansicht stehen alle Aktions-Icons (Bearbeiten ✏️, Vorschau 👁️, Teilen 🔗, Tresor 🔒, Verschieben/Kopieren ⇄, Download ⬇️, Löschen 🗑️) direkt nebeneinander. Auf Smartphones werden sie platzsparend in einem einzigen <strong>⋯ Button</strong> gebündelt, der ein übersichtliches Touch-Aktionsmenü öffnet.</li>
                 <li><strong>Direktvorschau &amp; Durchblättern:</strong> Ein Klick auf das Augen-Symbol (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vorschau</span>) oder den Dateinamen öffnet Bilder, PDFs, Videos, Audio sowie Text-/Codedateien; mit <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> / <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> blättern Sie durch den Ordner.</li>
                 <li><strong>Tabellensortierung:</strong> Klicken Sie auf <em>Name</em>, <em>Ordner</em>, <em>Größe</em> oder <em>Typ / Datum</em>, um auf- oder absteigend zu sortieren.</li>
             </ul>
@@ -1042,7 +1047,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Direktnachrichten &amp; Ankündigungen (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Schreiben Sie 1:1-Nachrichten mit freigegebenen Cloud-Benutzern oder lesen Sie offizielle Rundnachrichten des Administrators im Kanal <em>„📢 Ankündigungen (Alle)“</em>.</li>
-                <li><strong>Verlauf leeren &amp; Mobil-Darstellung:</strong> Über den Button <em>„🗑️ Verlauf leeren“</em> können Sie einen Chatverlauf jederzeit vollständig bereinigen. Auf Smartphones schaltet der Messenger automatisch in eine übersichtliche 1-Spalten-Navigation (Kontaktliste &leftrightarrow; Vollbild-Chat).</li>
+                <li><strong>Verlauf leeren &amp; Optimierte Mobil-Darstellung:</strong> Über den Button <em>„🗑️ Verlauf leeren“</em> können Sie einen Chatverlauf jederzeit vollständig bereinigen. Auf Smartphones schaltet der Messenger automatisch in eine übersichtliche 1-Spalten-Navigation (Kontaktliste &leftrightarrow; Vollbild-Chat), blendet den Seiten-Footer automatisch aus und passt die Höhe des Chatfensters dynamisch an die Bildschirmtastatur an.</li>
                 <li><strong>System-Benachrichtigungen am PC &amp; Mobilgerät:</strong> Bei neuen Nachrichten blendet MiniCloud auf Wunsch native Betriebssystem-/Smartphone-Meldungen ein. In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> legen Sie fest, ob Sie <em>Nur System-Benachrichtigungen</em> (Standard), zusätzlich ein <em>In-App-Banner</em> oder gar keine Meldungen wünschen.</li>
             </ul>
         </section>
