@@ -171,8 +171,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         exit;
     }
 
-    $storedFilename = generateRandomFilename($cleanBase);
-    $physicalPath   = UPLOAD_DIR . $storedFilename;
+    do {
+        $storedFilename = generateSafeStoredFilename();
+        $physicalPath   = UPLOAD_DIR . $storedFilename;
+    } while (file_exists($physicalPath));
 
     $docTitle = pathinfo($cleanBase, PATHINFO_FILENAME);
     $createdOk = false;
@@ -203,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $mimeType = getOfficeMimeType($cleanBase);
 
     if ($folderPath !== '') {
-        ensureFolderHierarchyExists($pdo, $effectiveOwnerId, $folderPath, $effectiveGfId);
+        registerFolderHierarchy($pdo, $effectiveOwnerId, $folderPath, $effectiveGfId);
     }
 
     $stmtIns = $pdo->prepare(

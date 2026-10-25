@@ -1163,7 +1163,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         type="button"
                                         onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
                                         class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/70 text-violet-700 dark:text-violet-300 transition-colors cursor-pointer"
-                                        title="Vorschau"
+                                        title="<?= $officeEditUrl !== '' ? 'Vorschau / In Office Light bearbeiten' : 'Vorschau' ?>"
                                         aria-label="Vorschau"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1171,20 +1171,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                         </svg>
                                     </button>
-
-                                    <?php if ($officeEditUrl !== ''): ?>
-                                        <!-- OFFICE LIGHT BEARBEITEN / ÖFFNEN BUTTON -->
-                                        <a
-                                            href="<?= e($officeEditUrl) ?>"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
-                                            title="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Schreibgeschützt)' ?>"
-                                            aria-label="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                            </svg>
-                                        </a>
-                                    <?php endif; ?>
 
                                     <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <?php if ($isEncrypted): ?>
@@ -1416,14 +1402,28 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         ?>
                         <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                             <td class="py-3 px-4 sm:px-6">
+                                <?php
+                                $sfOfficeType = getOfficeEditorType((string)$sf['original_name']);
+                                $sfIsEnc = ((int)($sf['is_encrypted'] ?? 0) === 1);
+                                ?>
                                 <div class="flex items-center gap-3">
                                     <span class="inline-flex items-center justify-center w-10 h-8 rounded-lg text-[10px] font-bold <?= e($sfBadge['bg']) ?> <?= e($sfBadge['text']) ?> shrink-0">
                                         <?= e($sfBadge['label']) ?>
                                     </span>
-                                    <span class="font-medium text-slate-900 dark:text-white truncate max-w-xs">
-                                        <?= e((string)$sf['original_name']) ?>
-                                    </span>
-                                    <?php if ((int)($sf['is_encrypted'] ?? 0) === 1): ?>
+                                    <?php if ($sfOfficeType !== null && !$sfIsEnc): ?>
+                                        <a
+                                            href="office.php?id=<?= (int)$sf['id'] ?>"
+                                            class="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-xs transition-colors"
+                                            title="In Office Light öffnen"
+                                        >
+                                            <?= e((string)$sf['original_name']) ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="font-medium text-slate-900 dark:text-white truncate max-w-xs">
+                                            <?= e((string)$sf['original_name']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if ($sfIsEnc): ?>
                                         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Tresor-geschützt (AES-256)">
                                             🔒 Tresor
                                         </span>
@@ -1452,22 +1452,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-4 sm:px-6 text-right">
                                 <div class="inline-flex items-center justify-end gap-1.5">
-                                    <?php
-                                    $sfOfficeType = getOfficeEditorType((string)$sf['original_name']);
-                                    $sfIsEnc = ((int)($sf['is_encrypted'] ?? 0) === 1);
-                                    ?>
-                                    <?php if ($sfOfficeType !== null && !$sfIsEnc): ?>
-                                        <a
-                                            href="office.php?id=<?= (int)$sf['id'] ?>"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
-                                            title="<?= $sfFileCanWrite ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Nur Lesen)' ?>"
-                                            aria-label="<?= $sfFileCanWrite ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                            </svg>
-                                        </a>
-                                    <?php endif; ?>
                                     <a
                                         href="download.php?id=<?= (int)$sf['id'] ?>"
                                         class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
@@ -2096,12 +2080,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     href="#"
                     title="In Office Light öffnen / bearbeiten"
                     aria-label="In Office Light öffnen / bearbeiten"
-                    class="hidden items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
+                    class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
                 >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
-                    <span class="hidden sm:inline">Office Light</span>
+                    <span>Bearbeiten</span>
                 </a>
 
                 <a
