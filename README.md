@@ -1,7 +1,7 @@
 # ☁️ MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher (PHP 8.2+ & MySQL)
 
 **🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces (z. B. STRATO, IONOS, All-Inkl, Netcup) auf Basis von **PHP 8.2+** und **MySQL / MariaDB** – **100 % DSGVO-konform**, inklusive Datei- & Ordnerverwaltung, Tresor-Verschlüsselung (AES-256), Kalender mit `.ics`-Abo, integriertem Messenger mit System-Benachrichtigungen und **1-Klick-GitHub-Updater**.  
-**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, 2FA via Email or Google Authenticator (RFC 6238 TOTP with local offline QR code), password reset, 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **5 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
+**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, 2FA via Email or Google Authenticator (RFC 6238 TOTP with local offline QR code), password reset, 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **6 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇮🇹 IT, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
 
 ---
 
@@ -35,9 +35,9 @@
    - Direkt in der Administration prüft MiniCloud auf neue Commits im GitHub-Repository und aktualisiert alle Programmdateien per 1-Klick-Update, während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` vollständig erhalten bleiben.
    - **🛡️ Automatischer Rollback & freie Versionsauswahl:** Vor jedem Update legt MiniCloud automatisch einen lokalen Sicherungspunkt (`uploads/.system_backups/`) an, sodass ein Update jederzeit per 1-Klick rückgängig gemacht werden kann. Zusätzlich lässt sich in der GitHub-Versionshistorie jeder beliebige frühere Stand gezielt auswählen und installieren (*„⏮️ Diesen Stand installieren“*).
    - Echtzeit-Monitoring für CPU-Auslastung, Arbeitsspeicher (RAM), Festplattenspeicher und Cloud-Belegung.
-8. **Smartphone-App (PWA), 5 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
+8. **Smartphone-App (PWA), 6 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
    - Als Vollbild-App (PWA) auf Android, iPhone/iPad und Desktop installierbar.
-   - **5 Sprachen integriert:** 🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇳🇱 Nederlands.
+   - **6 Sprachen integriert:** 🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇮🇹 Italiano, 🇳🇱 Nederlands.
    - **13 augenschonende Farbthemes** (5 sanfte helle, 4 halbdunkle und 4 dunkle Designs inkl. *🌌 Mitternacht*).
    - Keine Google Fonts, keine externen CDNs (Tailwind CSS liegt lokal unter `assets/tailwind.js`) und keine Tracking-Cookies.
 
@@ -172,7 +172,7 @@ location ^~ /cloud/uploads/ {
 4. **Open the URL in your browser:** MiniCloud automatically creates all required database tables on the first visit (*Zero-Click Auto-Migration*) and creates the initial admin account:
    - **Username:** `admin`
    - **Initial Password:** `Admin1234!` *(Please change immediately in the **Admin** panel!)*
-5. **Switch Language:** Use the language selector in the top navigation bar to switch between **🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, and 🇳🇱 Nederlands**.
+5. **Switch Language:** Use the language selector in the top navigation bar to switch between **🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇮🇹 Italiano, and 🇳🇱 Nederlands**.
 
 ---
 
@@ -188,7 +188,7 @@ MiniCloud/
 │   ├── auth.php              # Session-Management, Timeout, Admin-/Login-Guards, 13 Themes & CSRF-Schutz
 │   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, TOTP/QR-Code, 2FA-Mail/SMTP)
 │   ├── office_functions.php  # OpenXML-Parser & -Generator für Word (.docx), Excel (.xlsx) und CSV ohne Zusatz-Server
-│   ├── i18n.php              # Mehrsprachigkeits-Modul für 5 Sprachen (DE, EN, FR, ES, NL)
+│   ├── i18n.php              # Mehrsprachigkeits-Modul für 6 Sprachen (DE, EN, FR, ES, IT, NL)
 │   ├── header.php            # Responsives Layout, 13 Farbthemes, Sprachwahl, Statusmeldungen & PWA-Header
 │   └── footer.php            # Footer mit Versionsanzeige, PWA-Dialog, Theme-Umschalter & Chat-System-Benachrichtigungen
 ├── sql/
@@ -215,8 +215,8 @@ MiniCloud/
 ├── download.php              # Geschützter Datei- & Ordner-ZIP-Download mit Berechtigungs- & Tresor-Prüfung
 ├── delete.php                # Soft-Delete in den Papierkorb & Löschen von Ordnern (inkl. 3-Stufen-Rechteprüfung)
 ├── theme.php                 # Speichert das gewählte Farbschema pro Benutzer
-├── lang.php                  # Speichert die gewählte Sprache (DE, EN, FR, ES, NL)
-├── help.php                  # Integriertes Benutzer- und Administratorenhandbuch (5-sprachig)
+├── lang.php                  # Speichert die gewählte Sprache (DE, EN, FR, ES, IT, NL)
+├── help.php                  # Integriertes Benutzer- und Administratorenhandbuch (6-sprachig)
 ├── impressum.php             # Im Admin-Bereich frei konfigurierbares Impressum
 ├── manifest.php              # Dynamisches Web-App-Manifest (PWA für Android & iOS)
 ├── app-icon.php              # Dynamischer PNG-Icon-Generator (180x180, 192x192, 512x512 & Maskable)

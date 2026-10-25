@@ -895,6 +895,214 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </section>
 
+<?php elseif ($lang === 'it'): ?>
+    <!-- Header (IT) -->
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+                <svg class="w-6 h-6 text-brand-600 dark:text-brand-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>Guida &amp; Manuale utente – <?= e($appName) ?></span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Panoramica di tutte le funzioni, scorciatoie da tastiera, informazioni sulla sicurezza e dizionario dei dati.
+            </p>
+        </div>
+        <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300/80 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors self-start sm:self-auto">
+            &larr; Torna ai miei file
+        </a>
+    </div>
+
+    <nav aria-label="Indice" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-xs mb-6">
+        <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-semibold">
+            <span class="text-slate-400 dark:text-slate-500 mr-1">Vai a:</span>
+            <a href="#upload-ordner" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">📤 Caricamento &amp; Cartelle</a>
+            <a href="#vorschau-sortierung" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">👁️ Anteprima &amp; Office Light</a>
+            <a href="#verschieben-kopieren" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">⇄ Sposta &amp; Copia</a>
+            <a href="#teilen-gruppen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">🔗 Condivisione &amp; Permessi</a>
+            <a href="#tresor-modus" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">🔒 Modalità Cassaforte</a>
+            <a href="#papierkorb-themes" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">🗑️ Cestino &amp; Impostazioni</a>
+            <?php if ($isAdminUser): ?>
+                <a href="#admin-hilfe" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">⚙️ Amministrazione</a>
+            <?php endif; ?>
+            <a href="#it-sicherheit" class="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors">🛡️ Concetto di sicurezza IT</a>
+            <a href="#datenverzeichnis" class="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-800 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60 transition-colors">🗂️ Dizionario dei dati</a>
+        </div>
+    </nav>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <section id="upload-ordner" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 font-bold">📤</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Caricamento di file e cartelle</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Caricamento immediato tramite Drag &amp; Drop:</strong> Trascina singoli file o intere cartelle direttamente nell'area tratteggiata. Il caricamento si avvia automaticamente.</li>
+                <li><strong>Pulsanti di selezione &amp; Office Light:</strong> Usa <em>“+ File”</em> per selezionare più file, <em>“Cartella”</em> per caricare un'intera struttura di cartelle oppure <strong>“📄+ / + Office Light”</strong> per creare direttamente un nuovo documento Word (<code>.docx</code>), foglio Excel (<code>.xlsx</code>), file CSV (<code>.csv</code>) o nota (<code>.txt</code> / <code>.md</code>).</li>
+                <li><strong>Cartella di destinazione:</strong> Nel campo <em>“Cartella di destinazione (opzionale)”</em> è preimpostata la cartella corrente, oppure puoi digitare un nuovo percorso (es. <code>Progetti/2026</code>).</li>
+                <li><strong>Creazione di sottocartelle:</strong> Crea nuove cartelle o sottocartelle in qualsiasi momento tramite la barra delle cartelle.</li>
+            </ul>
+        </section>
+
+        <section id="vorschau-sortierung" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-300 font-bold">📄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Anteprima, Office Light (Word &amp; Excel) &amp; Menu mobile</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Note online):</strong> Crea e modifica <strong>documenti Word (<code>.docx</code>)</strong> con barra di formattazione o <strong>fogli di calcolo Excel (<code>.xlsx</code> / <code>.csv</code>)</strong> con più fogli e formule (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direttamente nel browser (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>).</li>
+                <li><strong>Anteprima diretta &amp; Navigazione:</strong> Clicca sull'icona dell'occhio (<span class="text-violet-600 dark:text-violet-400 font-semibold">Anteprima</span>) o sul nome del file per visualizzare immagini, PDF, video, audio e file di testo; scorri con <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> e <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd>.</li>
+                <li><strong>Icone desktop &amp; Menu azioni mobile ⋯:</strong> Su desktop tutte le icone di azione sono affiancate; su smartphone un unico pulsante compatto <strong>⋯</strong> apre un chiaro menu touch con tutte le azioni.</li>
+                <li><strong>Ordinamento tabella:</strong> Clicca sulle intestazioni <em>Nome</em>, <em>Cartella</em>, <em>Dimensione</em> o <em>Tipo / Data</em> per ordinare in modo crescente o decrescente.</li>
+            </ul>
+        </section>
+
+        <section id="verschieben-kopieren" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">⇄</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Spostare o copiare file e cartelle</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Icona compatta ⇄ nella colonna Azioni:</strong> Clicca sull'icona <strong>⇄</strong> nella colonna <em>Azioni</em> di un file o di una sottocartella per aprire la finestra di dialogo e scegliere la cartella di destinazione sotto <strong>⇄ Sposta</strong> o <strong>📋 Copia</strong>.</li>
+                <li><strong>Intere cartelle incluso il contenuto:</strong> Sia tramite l'icona <strong>⇄</strong> nella barra superiore delle cartelle sia in ogni riga di sottocartella puoi spostare o copiare intere cartelle inclusi tutti i file.</li>
+                <li><strong>Verso cartelle condivise:</strong> Trasferisci o copia file e cartelle tra il tuo spazio personale e le cartelle condivise con permessi di scrittura.</li>
+            </ul>
+        </section>
+
+        <section id="teilen-gruppen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">🔗</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Condivisione &amp; Permessi a 3 livelli</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Link di condivisione pubblici:</strong> Crea tramite l'icona di condivisione un link sicuro per file o cartelle – opzionalmente con <strong>password</strong> e <strong>data di scadenza</strong>.</li>
+                <li><strong>Condivisione diretta con utenti cloud (3 livelli):</strong> Condividi file o cartelle direttamente con altri utenti registrati (visibili sotto <em>“Condivisi con me”</em>) con permessi di <strong>👁️ Sola lettura</strong>, <strong>✏️ Lettura e scrittura</strong> o <strong>🗑️ Lettura, scrittura ed eliminazione</strong>.</li>
+                <li><strong>Calendario &amp; Chat integrati:</strong> Condividi il tuo calendario (con abbonamento <code>.ics</code>) e comunica in tempo reale tramite il messenger integrato (con vista mobile ottimizzata senza piè di pagina durante la digitazione).</li>
+            </ul>
+        </section>
+    </div>
+
+    <!-- Modalità Cassaforte (IT) -->
+    <section id="tresor-modus" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-800/70 p-5 sm:p-6 shadow-xs mb-6 space-y-4">
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">🔒</span>
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Modalità Cassaforte – Crittografia di singoli file (AES-256)</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Proteggi i documenti sensibili con una password nota solo a te (principio Zero-Knowledge)</p>
+            </div>
+        </div>
+        <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+            <li><strong>Crittografia tramite l'icona del lucchetto:</strong> Clicca sull'icona <strong>🔒 del lucchetto</strong> nella colonna <em>Azioni</em> dell'elenco dei file per crittografare qualsiasi file con <strong>AES-256-GCM (PBKDF2-HMAC-SHA256)</strong>.</li>
+            <li><strong>Decrittografia &amp; Condivisione:</strong> I file nella cassaforte sono contrassegnati dal badge <strong>🔒 Cassaforte</strong>. Al momento del download viene richiesta la password della cassaforte. Puoi anche rimuovere definitivamente la protezione in qualsiasi momento tramite l'icona del lucchetto.</li>
+        </ul>
+        <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-800 text-xs sm:text-sm text-amber-950 dark:text-amber-200 leading-relaxed">
+            <strong>⚠️ Avviso importante sulla password della cassaforte (Zero-Knowledge):</strong><br>
+            La password della cassaforte scelta <strong>non viene salvata da nessuna parte sul server</strong> – né nel database né in un file di configurazione. <strong>Se dimentichi la password della cassaforte di un file, nessuno – nemmeno l'amministratore – potrà recuperare il file!</strong>
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 <?= $isAdminUser ? 'md:grid-cols-2' : '' ?> gap-6 mb-8">
+        <section id="papierkorb-themes" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">🗑️</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cestino, Temi, Lingua &amp; 2FA</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>Conservazione di 30 giorni nel cestino:</strong> I file eliminati restano ripristinabili per 30 giorni nel <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Cestino</a>.</li>
+                <li><strong>Impostazioni &amp; 2FA (E-mail o Google Authenticator):</strong> Clicca sull'icona dell'ingranaggio in alto a destra (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Impostazioni</a>) per cambiare lingua (6 lingue integrate), schema di colori (13 temi) o password, oppure per attivare l'<strong>autenticazione a due fattori opzionale (2FA via e-mail o tramite app Google Authenticator / TOTP con codice QR generato localmente)</strong>.</li>
+            </ul>
+        </section>
+
+        <?php if ($isAdminUser): ?>
+        <section id="admin-hilfe" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">⚙️</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Note per gli amministratori</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>5 schede chiare, Aggiornamenti &amp; Rollback:</strong> Gestisci in <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Amministrazione</a> utenti, moduli, aspetto/note legali, SMTP e aggiornamenti GitHub con 1 clic (inclusi punti di ripristino locali automatici prima di ogni aggiornamento e libera selezione della versione dalla cronologia GitHub).</li>
+                <li><strong>Utenti, Gruppi, Quote &amp; 2FA:</strong> Crea account, assegna quote di archiviazione (in MB), gestisci i gruppi e modifica o reimposta il metodo 2FA degli utenti.</li>
+            </ul>
+        </section>
+        <?php endif; ?>
+    </div>
+
+    <section id="it-sicherheit" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-xs mb-8 space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-lg">🛡️</span>
+                <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Concetto di sicurezza IT</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Misure tecniche e organizzative (TOM) e risultati della verifica di sicurezza</p>
+                </div>
+            </div>
+            <span class="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                Stato: <?= e($dateStr) ?> &bull; Verificato &amp; Protetto
+            </span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <h3 class="font-bold text-slate-900 dark:text-white">1. Autenticazione, 2FA (E-mail &amp; TOTP) &amp; Protezione Brute-Force</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Sistema chiuso senza auto-registrazione pubblica predefinita. Password sottoposte a hashing con <strong>BCRYPT (cost 12)</strong>, 2FA opzionale via e-mail o app di autenticazione (Google Authenticator / RFC 6238 TOTP con codice QR locale) e blocco temporaneo dopo 5 tentativi falliti in 5 minuti.</p>
+            </div>
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <h3 class="font-bold text-slate-900 dark:text-white">2. Sicurezza di sessione e controllo accessi (RBAC)</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Sessioni protette con <code>HttpOnly</code>, <code>SameSite=Lax</code>, <code>Secure</code> e verifica in tempo reale dei permessi utente a ogni caricamento di pagina.</p>
+            </div>
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <h3 class="font-bold text-slate-900 dark:text-white">3. Isolamento dell'archiviazione &amp; Crittografia Cassaforte</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">I file sono salvati con nomi casuali <code>.bin</code> (permessi <code>0640</code>), protetti tramite <code>.htaccess</code> e opzionalmente crittografati con <strong>AES-256-GCM Zero-Knowledge</strong>.</p>
+            </div>
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <h3 class="font-bold text-slate-900 dark:text-white">4. Protezione contro SQLi, XSS, CSRF &amp; Path Traversal</h3>
+                <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Prepared Statement PDO nativi, codifica HTML sistematica e token CSRF a 256 bit per tutte le azioni POST.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="datenverzeichnis" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-xs mb-8 space-y-4">
+        <div class="flex items-center gap-2.5 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <span class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-lg">🗂️</span>
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Dizionario dei dati (Data Dictionary)</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Panoramica di tutte le tabelle del database, posizioni di archiviazione e periodi di conservazione</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <th class="py-3 px-4">Tabella / Posizione</th>
+                        <th class="py-3 px-4">Campi principali</th>
+                        <th class="py-3 px-4">Scopo</th>
+                        <th class="py-3 px-4">Conservazione / Eliminazione</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, is_admin, theme, storage_quota</code></td>
+                        <td class="py-3 px-4">Autenticazione, 2FA opzionale (e-mail o Google Authenticator / TOTP), recupero password, ruolo, quota &amp; tema</td>
+                        <td class="py-3 px-4">Fino all'eliminazione dell'account da parte dell'amministratore</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files &amp; user_folders</td>
+                        <td class="py-3 px-4"><code>filename, original_name, folder_path, file_size, is_encrypted, deleted_at</code></td>
+                        <td class="py-3 px-4">Metadati dei file e struttura delle cartelle</td>
+                        <td class="py-3 px-4">Eliminazione definitiva automatica dopo 30 giorni nel cestino</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">uploads/ &amp; .system_backups/</td>
+                        <td class="py-3 px-4"><code>mc_&lt;uniqid&gt;_&lt;hex16&gt;.bin</code>, <code>snapshot_*.zip</code>, <code>.htaccess</code></td>
+                        <td class="py-3 px-4">Dati binari fisici (pseudonimizzati, opzionalmente crittografati AES-256) e punti di ripristino locali per rollback aggiornamenti</td>
+                        <td class="py-3 px-4">Eliminazione fisica (<code>unlink</code>) allo svuotamento del cestino / rotazione automatica dei 8 snapshot più recenti</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
 <?php else: ?>
     <!-- Standard: Deutsch (DE) -->
     <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1083,7 +1291,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>30 Tage Papierkorb-Aufbewahrung:</strong> Gelöschte Dateien wandern zunächst in den <a href="trash.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Papierkorb</a>. Dort können sie 30 Tage lang mit einem Klick wiederhergestellt oder sofort endgültig gelöscht werden.</li>
-                <li><strong>13 Farbdesigns &amp; 5 Sprachen:</strong> In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> (⚙️ Zahnrad-Symbol) wählen Sie zwischen 5 Sprachen sowie 13 augenfreundlichen Farbschemata (5 helle und 8 dunkle Designs inkl. <em>🌌 Mitternacht</em>).</li>
+                <li><strong>13 Farbdesigns &amp; 6 Sprachen:</strong> In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> (⚙️ Zahnrad-Symbol) wählen Sie zwischen 6 Sprachen (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇮🇹 IT, 🇳🇱 NL) sowie 13 augenfreundlichen Farbschemata (5 helle und 8 dunkle Designs inkl. <em>🌌 Mitternacht</em>).</li>
                 <li><strong>Individuelle Komfort- &amp; Datenschutzoptionen:</strong> Legen Sie Ihre persönliche <strong>Anzeigedauer für Statusmeldungen</strong> (1–300 Sek. oder manuell), Ihr <strong>automatisches Sitzungs-Timeout</strong> (5 Min. bis 24 Std. oder dauerhaft), Ihren <strong>Chat-Benachrichtigungsmodus</strong>, Ihre <strong>Teilen-Sichtbarkeit</strong> sowie Ihre <strong>E-Mail-Adresse</strong> fest.</li>
                 <li><strong>Zwei-Faktor-Authentifizierung (2FA) – E-Mail oder Google Authenticator:</strong> Unter <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen &rarr; Sicherheit &amp; 2FA</a> stehen Ihnen zwei vollwertige Methoden zur Auswahl:
                     <ul class="list-disc pl-5 mt-1 space-y-1">
