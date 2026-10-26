@@ -118,7 +118,7 @@ mysql -e "GRANT ALL PRIVILEGES ON minicloud.* TO 'minicloud_user'@'localhost'; F
 #### 3. MiniCloud herunterladen und Berechtigungen setzen
 ```bash
 cd /var/www/html
-git clone https://github.com/uwebenzelrath/MiniCloud.git cloud
+git clone https://github.com/uWiiiMiniCloud/MiniCloud.git cloud
 chown -R www-data:www-data /var/www/html/cloud
 chmod 750 /var/www/html/cloud/uploads
 ```

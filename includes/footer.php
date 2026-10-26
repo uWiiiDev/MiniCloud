@@ -43,7 +43,7 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
             </a>
             <span class="text-slate-300 dark:text-slate-700">&bull;</span>
             <a
-                href="https://github.com/uwebenzelrath/MiniCloud"
+                href="https://github.com/uWiiiMiniCloud/MiniCloud"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="inline-flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
