@@ -299,184 +299,384 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         </a>
 
         <!-- Right Navigation & Controls -->
-        <nav class="flex items-center gap-1 sm:gap-2.5 shrink-0">
+        <nav class="flex items-center gap-1 sm:gap-2 shrink-0 relative">
             <?php if (isLoggedIn()): ?>
-                <?php if ($headerStorageStats !== null): ?>
-                    <!-- Kompakte Speicherplatz-Anzeige in der Kopfzeile -->
-                    <div
-                        class="hidden sm:flex flex-col justify-center px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 min-w-[140px] lg:min-w-[175px]"
-                        title="Belegt: <?= e(formatBytes($headerStorageStats['used'])) ?> von <?= e(formatBytes($headerStorageStats['quota'])) ?> (<?= e(formatBytes($headerStorageStats['free'])) ?> frei)"
+                <?php
+                $headerUnreadChat = (($appSettings['enable_chat'] ?? '1') === '1')
+                    ? getUnreadMessagesCount(getDB(), (int)$_SESSION['user_id'])
+                    : 0;
+                $trashCountBadge = ($headerStorageStats !== null) ? (int)($headerStorageStats['trash_count'] ?? 0) : 0;
+                ?>
+
+                <!-- Dynamisch angepinnte Favoriten-Module in der Kopfzeile -->
+                <div id="headerPinnedNav" class="flex items-center gap-1 sm:gap-1.5">
+                    <a
+                        href="index.php"
+                        data-nav-item="files"
+                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Meine Dateien"
                     >
-                        <div class="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
-                            <span class="truncate"><?= e(formatBytes($headerStorageStats['used'], 1)) ?> / <?= e(formatBytes($headerStorageStats['quota'], 0)) ?></span>
-                            <span class="font-semibold text-slate-800 dark:text-slate-100"><?= e(number_format($headerStorageStats['percent'], 0, ',', '.')) ?>%</span>
+                        <span>📁</span>
+                        <span class="hidden md:inline">Dateien</span>
+                    </a>
+
+                    <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
+                        <a
+                            href="calendar.php"
+                            data-nav-item="calendar"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Kalender &amp; Termine"
+                        >
+                            <span>📅</span>
+                            <span class="hidden md:inline">Kalender</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
+                        <a
+                            href="messages.php"
+                            data-nav-item="chat"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
+                            title="Chat &amp; Nachrichten"
+                        >
+                            <span>💬</span>
+                            <span class="hidden md:inline">Chat</span>
+                            <span
+                                id="headerUnreadChatBadge"
+                                class="<?= $headerUnreadChat > 0 ? 'inline-flex' : 'hidden' ?> items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-2xs"
+                            >
+                                <?= $headerUnreadChat ?>
+                            </span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
+                        <a
+                            href="tasks.php"
+                            data-nav-item="tasks"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Aufgaben &amp; Kanban-Board"
+                        >
+                            <span>📋</span>
+                            <span class="hidden md:inline">Aufgaben</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
+                        <a
+                            href="notes.php"
+                            data-nav-item="notes"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Notizwand &amp; Pinboard"
+                        >
+                            <span>📌</span>
+                            <span class="hidden md:inline">Notizen</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
+                        <a
+                            href="contacts.php"
+                            data-nav-item="contacts"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Adressbuch &amp; Kontakte"
+                        >
+                            <span>📇</span>
+                            <span class="hidden md:inline">Kontakte</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <a
+                        href="trash.php"
+                        data-nav-item="trash"
+                        style="display:none;"
+                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Papierkorb (30 Tage Aufbewahrung)"
+                    >
+                        <span>🗑️</span>
+                        <span class="hidden md:inline">Papierkorb</span>
+                        <?php if ($trashCountBadge > 0): ?>
+                            <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                                <?= $trashCountBadge ?>
+                            </span>
+                        <?php endif; ?>
+                    </a>
+                </div>
+
+                <!-- ⊞ App-Launcher (Alle Module + ⭐ Favoriten-Pin für die Kopfzeile) -->
+                <div class="relative">
+                    <button
+                        type="button"
+                        id="appLauncherBtn"
+                        onclick="toggleHeaderPopover('appLauncherMenu')"
+                        class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
+                        title="Alle Module &amp; Kopfzeilen-Favoriten (⭐)"
+                        aria-label="Alle Module"
+                    >
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                        </svg>
+                        <span class="hidden sm:inline text-xs font-semibold">Module</span>
+                    </button>
+
+                    <div
+                        id="appLauncherMenu"
+                        class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full sm:mt-2 w-[calc(100vw-1rem)] max-w-[330px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 z-50"
+                    >
+                        <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-200/80 dark:border-slate-800">
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🧩 Cloud-Module</span>
+                            <span class="text-[11px] text-slate-400 dark:text-slate-500">⭐ = Oben anheften</span>
                         </div>
-                        <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                            <div
-                                class="h-full <?= $headerBarColor ?> rounded-full transition-all duration-300"
-                                style="width: <?= e((string)max($headerStorageStats['used'] > 0 ? 3 : 0, $headerStorageStats['percent'])) ?>%"
-                            ></div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <!-- Dateien -->
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="index.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">📁</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Dateien</span>
+                                </a>
+                                <button type="button" data-nav-star="files" onclick="toggleHeaderNavFavorite('files', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">⭐</button>
+                            </div>
+
+                            <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="calendar.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">📅</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kalender</span>
+                                </a>
+                                <button type="button" data-nav-star="calendar" onclick="toggleHeaderNavFavorite('calendar', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="messages.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">💬</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Chat</span>
+                                    <?php if ($headerUnreadChat > 0): ?>
+                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white"><?= $headerUnreadChat ?></span>
+                                    <?php endif; ?>
+                                </a>
+                                <button type="button" data-nav-star="chat" onclick="toggleHeaderNavFavorite('chat', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">⭐</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="tasks.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">📋</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Aufgaben</span>
+                                </a>
+                                <button type="button" data-nav-star="tasks" onclick="toggleHeaderNavFavorite('tasks', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="notes.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">📌</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Notizen</span>
+                                </a>
+                                <button type="button" data-nav-star="notes" onclick="toggleHeaderNavFavorite('notes', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="contacts.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">📇</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kontakte</span>
+                                </a>
+                                <button type="button" data-nav-star="contacts" onclick="toggleHeaderNavFavorite('contacts', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors col-span-2">
+                                <a href="trash.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">🗑️</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Papierkorb (30 Tage)</span>
+                                    <?php if ($trashCountBadge > 0): ?>
+                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= $trashCountBadge ?></span>
+                                    <?php endif; ?>
+                                </a>
+                                <button type="button" data-nav-star="trash" onclick="toggleHeaderNavFavorite('trash', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
                         </div>
                     </div>
-                <?php endif; ?>
-
-                <a
-                    href="index.php"
-                    class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="Meine Dateien"
-                >
-                    <svg class="w-4 h-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                    </svg>
-                    <span class="hidden sm:inline">Dateien</span>
-                </a>
-
-                <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
-                    <a
-                        href="calendar.php"
-                        class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Kalender &amp; Termine"
-                    >
-                        <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                        </svg>
-                        <span class="hidden sm:inline">Kalender</span>
-                    </a>
-                <?php endif; ?>
-
-                <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
-                    <?php $headerUnreadChat = getUnreadMessagesCount(getDB(), (int)$_SESSION['user_id']); ?>
-                    <a
-                        href="messages.php"
-                        class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
-                        title="Chat &amp; Nachrichten"
-                    >
-                        <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                        </svg>
-                        <span class="hidden sm:inline">Chat</span>
-                        <span
-                            id="headerUnreadChatBadge"
-                            class="<?= $headerUnreadChat > 0 ? 'inline-flex' : 'hidden' ?> items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-2xs"
-                        >
-                            <?= $headerUnreadChat ?>
-                        </span>
-                    </a>
-                <?php endif; ?>
-
-                <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
-                    <a
-                        href="tasks.php"
-                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Aufgaben &amp; Kanban-Board"
-                    >
-                        <span>📋</span>
-                        <span class="hidden lg:inline">Aufgaben</span>
-                    </a>
-                <?php endif; ?>
-
-                <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
-                    <a
-                        href="notes.php"
-                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Notizwand &amp; Pinboard"
-                    >
-                        <span>📌</span>
-                        <span class="hidden lg:inline">Notizen</span>
-                    </a>
-                <?php endif; ?>
-
-                <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
-                    <a
-                        href="contacts.php"
-                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Adressbuch &amp; Kontakte"
-                    >
-                        <span>📇</span>
-                        <span class="hidden lg:inline">Kontakte</span>
-                    </a>
-                <?php endif; ?>
-
-                <a
-                    href="trash.php"
-                    class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="Papierkorb (30 Tage Aufbewahrung)"
-                >
-                    <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                    </svg>
-                    <span class="hidden sm:inline">Papierkorb</span>
-                    <?php if ($headerStorageStats !== null && (int)($headerStorageStats['trash_count'] ?? 0) > 0): ?>
-                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                            <?= (int)$headerStorageStats['trash_count'] ?>
-                        </span>
-                    <?php endif; ?>
-                </a>
-
-                <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span class="truncate max-w-[120px]" title="<?= e((string)$_SESSION['username']) ?>">
-                        <?= e((string)$_SESSION['username']) ?>
-                    </span>
-                    <?php if (isAdmin()): ?>
-                        <a href="admin.php" title="Benutzer- &amp; Gruppenordner-Administration" class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 hover:bg-brand-700 text-white transition-colors">Admin</a>
-                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
 
-            <!-- Einstellungen (Zahnrädchen-Symbol) -->
-            <a
-                href="settings.php"
-                class="inline-flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
-                title="Einstellungen"
-                aria-label="Einstellungen"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-            </a>
-
-            <?php if (isLoggedIn()): ?>
-                <form action="logout.php" method="post" class="inline">
-                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <!-- 👤 Konto, Speicherplatz, Einstellungen, Admin & Abmelden -->
+                <div class="relative">
                     <button
-                        type="submit"
-                        title="Abmelden"
-                        class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        type="button"
+                        id="userMenuBtn"
+                        onclick="toggleHeaderPopover('userMenuDropdown')"
+                        class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                        title="Konto, Speicherplatz &amp; Einstellungen"
                     >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span class="hidden sm:inline truncate max-w-[100px]"><?= e((string)$_SESSION['username']) ?></span>
+                        <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                         </svg>
-                        <span class="hidden sm:inline">Abmelden</span>
                     </button>
-                </form>
+
+                    <div
+                        id="userMenuDropdown"
+                        class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full sm:mt-2 w-[calc(100vw-1rem)] max-w-[290px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 z-50 space-y-3"
+                    >
+                        <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80 dark:border-slate-800">
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold text-slate-900 dark:text-white truncate">👤 <?= e((string)$_SESSION['username']) ?></p>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400"><?= isAdmin() ? '🛡️ Administrator' : 'Cloud-Benutzer' ?></p>
+                            </div>
+                            <?php if (isAdmin()): ?>
+                                <a href="admin.php" class="text-[11px] font-bold uppercase px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition-colors">Admin</a>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if ($headerStorageStats !== null): ?>
+                            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70">
+                                <div class="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1.5">
+                                    <span>💾 <?= e(formatBytes($headerStorageStats['used'], 1)) ?> / <?= e(formatBytes($headerStorageStats['quota'], 0)) ?></span>
+                                    <span class="font-bold text-slate-800 dark:text-slate-100"><?= e(number_format($headerStorageStats['percent'], 0, ',', '.')) ?>%</span>
+                                </div>
+                                <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div
+                                        class="h-full <?= $headerBarColor ?> rounded-full transition-all duration-300"
+                                        style="width: <?= e((string)max($headerStorageStats['used'] > 0 ? 3 : 0, $headerStorageStats['percent'])) ?>%"
+                                    ></div>
+                                </div>
+                                <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Noch <?= e(formatBytes($headerStorageStats['free'])) ?> frei</p>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="space-y-1">
+                            <?php if (isAdmin()): ?>
+                                <a href="admin.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors">
+                                    <span>🛡️</span>
+                                    <span>System-Administration</span>
+                                </a>
+                            <?php endif; ?>
+                            <a href="settings.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <span>⚙️</span>
+                                <span>Einstellungen &amp; Design</span>
+                            </a>
+                            <a href="help.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <span>❓</span>
+                                <span>Hilfe &amp; Handbuch</span>
+                            </a>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                            <form action="logout.php" method="post" class="m-0">
+                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                <button
+                                    type="submit"
+                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors cursor-pointer"
+                                >
+                                    <span>🚪</span>
+                                    <span>Abmelden</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                (function() {
+                    const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
+                    const defaultPinned = ['files', 'chat'];
+
+                    function getPinnedNav() {
+                        try {
+                            const raw = localStorage.getItem(storageKey);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed)) return parsed;
+                            }
+                        } catch (e) {}
+                        return defaultPinned.slice();
+                    }
+
+                    function applyPinnedNav() {
+                        const pinned = getPinnedNav();
+                        document.querySelectorAll('[data-nav-item]').forEach(el => {
+                            const key = el.getAttribute('data-nav-item');
+                            el.style.display = pinned.includes(key) ? '' : 'none';
+                        });
+                        document.querySelectorAll('[data-nav-star]').forEach(btn => {
+                            const key = btn.getAttribute('data-nav-star');
+                            const isFav = pinned.includes(key);
+                            btn.textContent = isFav ? '⭐' : '☆';
+                            btn.title = isFav ? 'Aus Kopfzeile lösen' : 'Oben in Kopfzeile anheften';
+                        });
+                    }
+
+                    window.toggleHeaderNavFavorite = function(key, ev) {
+                        if (ev) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                        }
+                        const pinned = getPinnedNav();
+                        const idx = pinned.indexOf(key);
+                        if (idx !== -1) {
+                            pinned.splice(idx, 1);
+                        } else {
+                            pinned.push(key);
+                        }
+                        try {
+                            localStorage.setItem(storageKey, JSON.stringify(pinned));
+                        } catch (e) {}
+                        applyPinnedNav();
+                    };
+
+                    window.toggleHeaderPopover = function(id) {
+                        ['appLauncherMenu', 'userMenuDropdown'].forEach(menuId => {
+                            const el = document.getElementById(menuId);
+                            if (!el) return;
+                            if (menuId === id) {
+                                el.classList.toggle('hidden');
+                            } else {
+                                el.classList.add('hidden');
+                            }
+                        });
+                    };
+
+                    document.addEventListener('click', function(e) {
+                        const launcherBtn = document.getElementById('appLauncherBtn');
+                        const launcherMenu = document.getElementById('appLauncherMenu');
+                        const userBtn = document.getElementById('userMenuBtn');
+                        const userMenu = document.getElementById('userMenuDropdown');
+                        if (launcherMenu && !launcherMenu.classList.contains('hidden')) {
+                            if (!launcherMenu.contains(e.target) && (!launcherBtn || !launcherBtn.contains(e.target))) {
+                                launcherMenu.classList.add('hidden');
+                            }
+                        }
+                        if (userMenu && !userMenu.classList.contains('hidden')) {
+                            if (!userMenu.contains(e.target) && (!userBtn || !userBtn.contains(e.target))) {
+                                userMenu.classList.add('hidden');
+                            }
+                        }
+                    });
+
+                    applyPinnedNav();
+                })();
+                </script>
             <?php else: ?>
+                <a
+                    href="settings.php"
+                    class="inline-flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
+                    title="Einstellungen"
+                >⚙️</a>
                 <a href="login.php" class="text-xs sm:text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl shadow-xs transition-colors">Anmelden</a>
             <?php endif; ?>
         </nav>
     </div>
-
-    <?php if (isLoggedIn() && $headerStorageStats !== null): ?>
-        <!-- Kompakte Mobil-Speicherleiste (nur auf Smartphones < 640px sichtbar) -->
-        <div class="sm:hidden px-3 py-1.5 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-3 text-[11px] text-slate-600 dark:text-slate-300">
-            <div class="flex items-center gap-1.5 min-w-0">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                <span class="font-semibold truncate max-w-[110px]"><?= e((string)$_SESSION['username']) ?></span>
-            </div>
-            <div class="flex items-center gap-2 flex-1 max-w-[210px]">
-                <div class="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                        class="h-full <?= $headerBarColor ?> rounded-full"
-                        style="width: <?= e((string)max($headerStorageStats['used'] > 0 ? 3 : 0, $headerStorageStats['percent'])) ?>%"
-                    ></div>
-                </div>
-                <span class="whitespace-nowrap font-medium text-[10px]">
-                    <?= e(formatBytes($headerStorageStats['used'], 1)) ?> / <?= e(formatBytes($headerStorageStats['quota'], 0)) ?>
-                </span>
-            </div>
-        </div>
-    <?php endif; ?>
 </header>
 
 <!-- Main Container -->

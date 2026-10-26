@@ -974,6 +974,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <tr
                             data-drop-folder="<?= e($subPath) ?>"
                             data-drop-folder-label="<?= e($subDisplayName) ?>"
+                            oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>); }"
                             class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-all"
                         >
                             <td class="py-3 pl-4 pr-2 sm:pl-6 w-9 text-center text-amber-500">
@@ -1024,26 +1025,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3 px-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
-                                <!-- Mobil: Ein einzelner kompakter ⋯ Aktionen-Button -->
-                                <div class="sm:hidden inline-flex items-center justify-end">
-                                    <button
-                                        type="button"
-                                        onclick="openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                                        title="Ordner-Aktionen"
-                                        aria-label="Ordner-Aktionen"
-                                    >
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <!-- Desktop (ab sm): Alle Aktions-Icons direkt nebeneinander -->
-                                <div class="hidden sm:inline-flex items-center justify-end gap-1.5">
+                                <div class="inline-flex items-center justify-end gap-1 sm:gap-1.5">
                                     <?php if ($activeGroupFolder === null && $subFileCount > 0): ?>
                                         <a
                                             href="download.php?folder=<?= rawurlencode($subPath) ?>"
+                                            data-file-action="download"
                                             class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
                                             title="Ordner als ZIP herunterladen"
                                             aria-label="Ordner als ZIP herunterladen"
@@ -1054,11 +1040,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </a>
                                     <?php endif; ?>
 
-                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon) -->
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur wenn als ⭐ Favorit angeheftet) -->
                                     <button
                                         type="button"
+                                        data-file-action="move"
                                         onclick="openTransferModal('folder', 0, <?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        class="hidden items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
                                         title="Ordner verschieben oder kopieren"
                                         aria-label="Ordner verschieben oder kopieren"
                                     >
@@ -1070,6 +1057,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <?php if ($activeGroupFolder === null): ?>
                                         <button
                                             type="button"
+                                            data-file-action="share"
                                             onclick="openShareModal(0, <?= e((string)json_encode($subPath)) ?>, <?= e((string)json_encode($subPath)) ?>)"
                                             class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer"
                                             title="Ordner teilen"
@@ -1085,7 +1073,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <form
                                             action="delete.php"
                                             method="post"
-                                            class="inline"
+                                            data-file-action="delete"
+                                            class="hidden"
                                             onsubmit="return confirm('Möchten Sie den Ordner &quot;<?= e(addslashes($subPath)) ?>&quot; <?= $subFileCount > 0 ? 'inklusive aller darin enthaltenen Dateien ' : '' ?>in den Papierkorb verschieben?');"
                                         >
                                             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
@@ -1105,6 +1094,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </button>
                                         </form>
                                     <?php endif; ?>
+
+                                    <!-- ⋯ Alle Ordner-Aktionen & Favoriten-Icons verwalten -->
+                                    <button
+                                        type="button"
+                                        onclick="openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                                        title="Alle Ordner-Aktionen &amp; Favoriten-Icons anpassen (⋯)"
+                                        aria-label="Ordner-Aktionen"
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                        </svg>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -1150,24 +1152,26 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             : '';
 
                         $previewItemsList[] = [
-                            'id'          => $fId,
-                            'name'        => $origName,
-                            'mime'        => strtolower(trim($mimeType)),
-                            'ext'         => strtolower(pathinfo($origName, PATHINFO_EXTENSION)),
-                            'size'        => $formattedSize,
-                            'date'        => $formattedDate . ' Uhr',
-                            'folder'      => $folderPath !== '' ? $folderPath : 'Hauptverzeichnis',
-                            'rawFolder'   => $folderPath,
-                            'badgeLabel'  => $badge['label'],
-                            'badgeBg'     => $badge['bg'],
-                            'badgeText'   => $badge['text'],
-                            'isEncrypted' => $isEncrypted,
-                            'isFavorite'  => $isFavorite,
-                            'canManage'   => $canManageThisFile,
-                            'officeUrl'   => $officeEditUrl,
-                            'downloadUrl' => 'download.php?id=' . $fId,
-                            'inlineUrl'   => 'download.php?id=' . $fId . '&inline=1',
-                            'textUrl'     => 'download.php?id=' . $fId . '&inline=1&as_text=1',
+                            'id'           => $fId,
+                            'name'         => $origName,
+                            'mime'         => strtolower(trim($mimeType)),
+                            'ext'          => strtolower(pathinfo($origName, PATHINFO_EXTENSION)),
+                            'size'         => $formattedSize,
+                            'date'         => $formattedDate . ' Uhr',
+                            'folder'       => $folderPath !== '' ? $folderPath : 'Hauptverzeichnis',
+                            'rawFolder'    => $folderPath,
+                            'badgeLabel'   => $badge['label'],
+                            'badgeBg'      => $badge['bg'],
+                            'badgeText'    => $badge['text'],
+                            'isEncrypted'  => $isEncrypted,
+                            'isFavorite'   => $isFavorite,
+                            'canManage'    => $canManageThisFile,
+                            'versionCount' => $versionCount,
+                            'commentCount' => $commentCount,
+                            'officeUrl'    => $officeEditUrl,
+                            'downloadUrl'  => 'download.php?id=' . $fId,
+                            'inlineUrl'    => 'download.php?id=' . $fId . '&inline=1',
+                            'textUrl'      => 'download.php?id=' . $fId . '&inline=1&as_text=1',
                         ];
                         $fileGfIdOrNull = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
                         if ($fileGfIdOrNull !== null && $activeGroupFolder !== null) {
@@ -1183,6 +1187,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <tr
                             class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
                             data-file-row-id="<?= $fId ?>"
+                            oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>); }"
                             <?php if ($canManageThisFile): ?>
                                 draggable="true"
                                 data-drag-file-id="<?= $fId ?>"
@@ -1306,26 +1311,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3.5 px-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
-                                <!-- Mobil (< sm): Ein einzelner kompakter ⋯ Aktionen-Button -->
-                                <div class="sm:hidden inline-flex items-center justify-end">
+                                <!-- Aufgeräumte Aktionsleiste: Zeigt nur als ⭐ Favorit markierte Aktions-Icons + den ⋯ Menü-Button -->
+                                <div class="inline-flex items-center justify-end gap-1 sm:gap-1.5">
+                                    <!-- VORSCHAU-BUTTON -->
                                     <button
                                         type="button"
-                                        onclick="openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                                        title="Datei-Aktionen"
-                                        aria-label="Datei-Aktionen"
-                                    >
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <!-- Desktop (ab sm): Alle Aktions-Icons direkt nebeneinander -->
-                                <div class="hidden sm:inline-flex items-center justify-end gap-1.5">
-                                    <!-- VORSCHAU-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
-                                    <button
-                                        type="button"
+                                        data-file-action="preview"
                                         onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
                                         class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/70 text-violet-700 dark:text-violet-300 transition-colors cursor-pointer"
                                         title="Vorschau"
@@ -1338,10 +1329,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     </button>
 
                                     <?php if ($officeEditUrl !== ''): ?>
-                                        <!-- OFFICE LIGHT BEARBEITEN BUTTON (auf Desktop direkt sichtbar) -->
+                                        <!-- OFFICE LIGHT BEARBEITEN BUTTON -->
                                         <a
                                             href="<?= e($officeEditUrl) ?>"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
+                                            data-file-action="office"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors"
                                             title="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen (Schreibgeschützt)' ?>"
                                             aria-label="<?= $canManageThisFile ? 'In Office Light bearbeiten' : 'In Office Light öffnen' ?>"
                                         >
@@ -1351,10 +1343,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </a>
                                     <?php endif; ?>
 
-                                    <!-- HERUNTERLADEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                    <!-- HERUNTERLADEN-BUTTON -->
                                     <?php if ($isEncrypted): ?>
                                         <button
                                             type="button"
+                                            data-file-action="download"
                                             onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, true, <?= $canManageThisFile ? 'true' : 'false' ?>)"
                                             class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors cursor-pointer"
                                             title="Entschlüsseln &amp; Herunterladen"
@@ -1367,6 +1360,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <?php else: ?>
                                         <a
                                             href="download.php?id=<?= $fId ?>"
+                                            data-file-action="download"
                                             class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
                                             title="Herunterladen"
                                             aria-label="Herunterladen"
@@ -1381,8 +1375,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <!-- TRESOR-BUTTON (Einzeldatei-Verschlüsselung AES-256) -->
                                         <button
                                             type="button"
+                                            data-file-action="vault"
                                             onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= $isEncrypted ? 'true' : 'false' ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= $isEncrypted ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 hover:bg-amber-200/80 border border-amber-300/70 dark:border-amber-800/70' : 'bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300' ?> transition-colors cursor-pointer"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg <?= $isEncrypted ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 hover:bg-amber-200/80 border border-amber-300/70 dark:border-amber-800/70' : 'bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300' ?> transition-colors cursor-pointer"
                                             title="<?= $isEncrypted ? 'Tresor-Schutz verwalten / entschlüsseln' : 'Im Tresor verschlüsseln (AES-256)' ?>"
                                             aria-label="<?= $isEncrypted ? 'Tresor-Schutz verwalten / entschlüsseln' : 'Im Tresor verschlüsseln (AES-256)' ?>"
                                         >
@@ -1395,19 +1390,21 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <!-- VERSIONEN & KOMMENTARE BUTTON -->
                                     <button
                                         type="button"
+                                        data-file-action="meta"
                                         onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'comments')"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= ($versionCount > 0 || $commentCount > 0) ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-300/70 dark:border-teal-800/70' : 'bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300' ?> transition-colors cursor-pointer"
+                                        class="hidden items-center justify-center w-8 h-8 rounded-lg <?= ($versionCount > 0 || $commentCount > 0) ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-300/70 dark:border-teal-800/70' : 'bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300' ?> transition-colors cursor-pointer"
                                         title="Kommentare &amp; Dateiversionen (🕓 <?= $versionCount ?> / 💬 <?= $commentCount ?>)"
                                         aria-label="Kommentare &amp; Dateiversionen"
                                     >
                                         <span class="text-xs leading-none">💬</span>
                                     </button>
 
-                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                    <!-- VERSCHIEBEN / KOPIEREN BUTTON -->
                                     <button
                                         type="button"
+                                        data-file-action="move"
                                         onclick="openTransferModal('file', <?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= e((string)json_encode($folderPath)) ?>, <?= $canManageThisFile ? 'true' : 'false' ?>)"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
+                                        class="hidden items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors cursor-pointer"
                                         title="Datei verschieben oder kopieren"
                                         aria-label="Datei verschieben oder kopieren"
                                     >
@@ -1417,9 +1414,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     </button>
 
                                     <?php if ($canManageThisFile): ?>
-                                        <!-- TEILEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                        <!-- TEILEN-BUTTON -->
                                         <button
                                             type="button"
+                                            data-file-action="share"
                                             onclick="openShareModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, '')"
                                             class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer"
                                             title="Teilen"
@@ -1432,11 +1430,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <?php endif; ?>
 
                                     <?php if ($canDeleteThisFile): ?>
-                                        <!-- LÖSCHEN-BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
+                                        <!-- LÖSCHEN-BUTTON -->
                                         <form
                                             action="delete.php"
                                             method="post"
-                                            class="inline"
+                                            data-file-action="delete"
+                                            class="hidden"
                                             onsubmit="return confirm('Möchten Sie die Datei &quot;<?= e(addslashes((string)$file['original_name'])) ?>&quot; in den Papierkorb verschieben?');"
                                         >
                                             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
@@ -1461,6 +1460,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </button>
                                         </form>
                                     <?php endif; ?>
+
+                                    <!-- ⋯ Alle Datei-Aktionen & Favoriten-Icons anpassen (Mobil & Desktop) -->
+                                    <button
+                                        type="button"
+                                        onclick="openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>)"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                                        title="Alle Datei-Aktionen &amp; Favoriten-Icons anpassen (⋯)"
+                                        aria-label="Datei-Aktionen"
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                        </svg>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -2479,7 +2491,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
-<!-- MOBILES AKTIONSMENÜ (Auf Smartphones über den kompakten ⋯ Button pro Zeile) -->
+<!-- AKTIONSMENÜ & FAVORITEN-ICONS ANPASSEN (Über den ⋯ Button oder Rechtsklick pro Zeile) -->
 <div
     id="mobileActionModal"
     class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs"
@@ -2487,7 +2499,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     aria-modal="true"
     aria-labelledby="mobileActionTitle"
 >
-    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col">
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div class="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
             <div class="min-w-0">
                 <h3 id="mobileActionTitle" class="text-sm font-bold text-slate-900 dark:text-white truncate"></h3>
@@ -2505,7 +2517,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             </button>
         </div>
 
-        <div id="mobileActionList" class="p-3 space-y-1.5"></div>
+        <div class="px-4 py-2 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>💡 Rechts auf <strong>⭐/☆</strong> klicken, um Icons außen anzuheften</span>
+            <button
+                type="button"
+                onclick="resetPinnedFileActions()"
+                class="text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer shrink-0"
+                title="Standard-Auswahl (Vorschau, Download, Teilen) wiederherstellen"
+            >
+                Standard
+            </button>
+        </div>
+
+        <div id="mobileActionList" class="p-3 space-y-1.5 overflow-y-auto"></div>
 
         <!-- Verstecktes Lösch-Formular für das mobile Aktionsmenü -->
         <form id="mobileDeleteForm" action="delete.php" method="post" class="hidden">
@@ -3452,7 +3476,7 @@ if (createOfficeModal) {
     });
 }
 
-// --- MOBILES AKTIONSMENÜ (⋯ Button pro Datei- oder Ordnerzeile auf Smartphones) ---
+// --- AKTIONSMENÜ (⋯ Button / Rechtsklick) & ANHEFTBARE FAVORITEN-ICONS PRO ZEILE ---
 const mobileActionModal = document.getElementById('mobileActionModal');
 const mobileActionTitle = document.getElementById('mobileActionTitle');
 const mobileActionSubtitle = document.getElementById('mobileActionSubtitle');
@@ -3460,6 +3484,81 @@ const mobileActionList = document.getElementById('mobileActionList');
 const mobileDeleteForm = document.getElementById('mobileDeleteForm');
 const mobileDeleteFileId = document.getElementById('mobileDeleteFileId');
 const mobileDeleteFolder = document.getElementById('mobileDeleteFolder');
+
+const PINNED_FILE_ACTIONS_STORAGE_KEY = 'mc_pinned_file_actions_u<?= (int)$userId ?>';
+const DEFAULT_PINNED_FILE_ACTIONS = ['preview', 'download', 'share'];
+const ALL_PINNABLE_FILE_ACTIONS = ['preview', 'office', 'download', 'vault', 'meta', 'move', 'share', 'delete'];
+
+function getPinnedFileActions() {
+    try {
+        const raw = localStorage.getItem(PINNED_FILE_ACTIONS_STORAGE_KEY);
+        if (!raw) return [...DEFAULT_PINNED_FILE_ACTIONS];
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return parsed.filter(k => ALL_PINNABLE_FILE_ACTIONS.includes(k));
+        }
+    } catch {}
+    return [...DEFAULT_PINNED_FILE_ACTIONS];
+}
+
+function applyPinnedFileActions() {
+    const pinned = getPinnedFileActions();
+    document.querySelectorAll('[data-file-action]').forEach(el => {
+        const key = el.getAttribute('data-file-action');
+        const isPinned = pinned.includes(key);
+        const isForm = (el.tagName === 'FORM');
+        if (isPinned) {
+            el.classList.remove('hidden');
+            el.classList.add(isForm ? 'inline' : 'inline-flex');
+        } else {
+            el.classList.add('hidden');
+            el.classList.remove('inline', 'inline-flex');
+        }
+    });
+
+    document.querySelectorAll('[data-action-pin-star]').forEach(btn => {
+        const key = btn.getAttribute('data-action-pin-star');
+        const isPinned = pinned.includes(key);
+        btn.textContent = isPinned ? '⭐' : '☆';
+        btn.title = isPinned
+            ? 'Aus der Dateizeile ausblenden (nur im ⋯ Menü zeigen)'
+            : 'Als Favorit direkt außen neben der Datei anheften';
+        if (isPinned) {
+            btn.classList.add('text-amber-500', 'bg-amber-50', 'dark:bg-amber-950/60', 'border-amber-200', 'dark:border-amber-800/70');
+            btn.classList.remove('text-slate-400', 'bg-white/70', 'dark:bg-slate-800/70', 'border-slate-200/80', 'dark:border-slate-700');
+        } else {
+            btn.classList.remove('text-amber-500', 'bg-amber-50', 'dark:bg-amber-950/60', 'border-amber-200', 'dark:border-amber-800/70');
+            btn.classList.add('text-slate-400', 'bg-white/70', 'dark:bg-slate-800/70', 'border-slate-200/80', 'dark:border-slate-700');
+        }
+    });
+}
+
+function toggleFileActionFavorite(actionKey, ev) {
+    if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+    }
+    const pinned = getPinnedFileActions();
+    const idx = pinned.indexOf(actionKey);
+    if (idx !== -1) {
+        pinned.splice(idx, 1);
+    } else {
+        pinned.push(actionKey);
+    }
+    try {
+        localStorage.setItem(PINNED_FILE_ACTIONS_STORAGE_KEY, JSON.stringify(pinned));
+    } catch {}
+    applyPinnedFileActions();
+}
+
+function resetPinnedFileActions() {
+    try {
+        localStorage.setItem(PINNED_FILE_ACTIONS_STORAGE_KEY, JSON.stringify(DEFAULT_PINNED_FILE_ACTIONS));
+    } catch {}
+    applyPinnedFileActions();
+}
+
+applyPinnedFileActions();
 
 function closeMobileActionModal() {
     if (!mobileActionModal) return;
@@ -3475,6 +3574,41 @@ if (mobileActionModal) {
     });
 }
 
+function appendMenuActionRow(label, cls, onClickFn, pinKey = null) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-1.5';
+
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `flex-1 min-w-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
+    b.textContent = label;
+    b.addEventListener('click', () => {
+        closeMobileActionModal();
+        onClickFn();
+    });
+    row.appendChild(b);
+
+    if (pinKey && ALL_PINNABLE_FILE_ACTIONS.includes(pinKey)) {
+        const isPinned = getPinnedFileActions().includes(pinKey);
+        const starBtn = document.createElement('button');
+        starBtn.type = 'button';
+        starBtn.setAttribute('data-action-pin-star', pinKey);
+        starBtn.className = `w-9 h-9 rounded-xl border flex items-center justify-center text-sm transition-all hover:scale-110 cursor-pointer shrink-0 ${
+            isPinned
+                ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800/70'
+                : 'text-slate-400 bg-white/70 dark:bg-slate-800/70 border-slate-200/80 dark:border-slate-700 hover:text-amber-500'
+        }`;
+        starBtn.textContent = isPinned ? '⭐' : '☆';
+        starBtn.title = isPinned
+            ? 'Aus der Dateizeile ausblenden (nur im ⋯ Menü zeigen)'
+            : 'Als Favorit direkt außen neben der Datei anheften';
+        starBtn.addEventListener('click', (ev) => toggleFileActionFavorite(pinKey, ev));
+        row.appendChild(starBtn);
+    }
+
+    mobileActionList.appendChild(row);
+}
+
 function openMobileFileMenu(fileIdx, canDelete) {
     if (!previewItems || !previewItems[fileIdx] || !mobileActionModal) return;
     const item = previewItems[fileIdx];
@@ -3482,68 +3616,63 @@ function openMobileFileMenu(fileIdx, canDelete) {
     mobileActionSubtitle.textContent = `${item.size} • ${item.date}`;
     mobileActionList.innerHTML = '';
 
-    const addBtn = (label, cls, onClickFn) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
-        b.textContent = label;
-        b.addEventListener('click', () => {
-            closeMobileActionModal();
-            onClickFn();
-        });
-        mobileActionList.appendChild(b);
-    };
-
     // 1. Vorschau
-    addBtn('👁️ Vorschau öffnen', 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 hover:bg-violet-100', () => {
+    appendMenuActionRow('👁️ Vorschau öffnen', 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 hover:bg-violet-100', () => {
         openPreviewModal(fileIdx);
-    });
-
-    // 1b. Favorit umschalten
-    if (item.canManage) {
-        addBtn(item.isFavorite ? '⭐ Aus Favoriten entfernen' : '☆ Als Favorit markieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100', () => {
-            toggleFavorite(item.id);
-        });
-    }
+    }, 'preview');
 
     // 2. Office Light (falls unterstützt & unverschlüsselt)
     if (item.officeUrl && item.officeUrl !== '') {
-        addBtn(item.canManage ? '✏️ In Office Light bearbeiten' : '📄 In Office Light öffnen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
+        appendMenuActionRow(item.canManage ? '✏️ In Office Light bearbeiten' : '📄 In Office Light öffnen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
             window.location.href = item.officeUrl;
-        });
+        }, 'office');
     }
 
     // 3. Herunterladen
-    addBtn(item.isEncrypted ? '🔓 Entschlüsseln & Herunterladen' : '⬇️ Datei herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+    appendMenuActionRow(item.isEncrypted ? '🔓 Entschlüsseln & Herunterladen' : '⬇️ Datei herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
         if (item.isEncrypted) {
             openVaultModal(item.id, item.name, true, item.canManage);
         } else {
             window.location.href = item.downloadUrl;
         }
-    });
+    }, 'download');
 
-    // 4. Tresor
-    if (item.canManage || item.isEncrypted) {
-        addBtn(item.isEncrypted ? '🔒 Tresor-Schutz verwalten' : '🔒 Im Tresor verschlüsseln (AES-256)', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
-            openVaultModal(item.id, item.name, item.isEncrypted, item.canManage);
-        });
-    }
+    // 4. Kommentare & Dateiversionen (Zeitreise)
+    const vCount = Number(item.versionCount || 0);
+    const cCount = Number(item.commentCount || 0);
+    appendMenuActionRow(`💬 Kommentare & Versionen (🕓 ${vCount} / 💬 ${cCount})`, 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 hover:bg-teal-100', () => {
+        openFileMetaModal(item.id, item.name, 'comments');
+    }, 'meta');
 
-    // 5. Verschieben / Kopieren
-    addBtn('⇄ Verschieben oder kopieren', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
-        openTransferModal('file', item.id, item.name, item.rawFolder || '', item.canManage);
-    });
-
-    // 6. Teilen
+    // 5. Teilen
     if (item.canManage) {
-        addBtn('🔗 Teilen (Link / Benutzer)', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
+        appendMenuActionRow('🔗 Teilen (Link / Benutzer)', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
             openShareModal(item.id, item.name, '');
-        });
+        }, 'share');
     }
 
-    // 7. Löschen
+    // 6. Tresor
+    if (item.canManage || item.isEncrypted) {
+        appendMenuActionRow(item.isEncrypted ? '🔒 Tresor-Schutz verwalten' : '🔒 Im Tresor verschlüsseln (AES-256)', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+            openVaultModal(item.id, item.name, item.isEncrypted, item.canManage);
+        }, 'vault');
+    }
+
+    // 7. Verschieben / Kopieren
+    appendMenuActionRow('⇄ Verschieben oder kopieren', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
+        openTransferModal('file', item.id, item.name, item.rawFolder || '', item.canManage);
+    }, 'move');
+
+    // 8. Datei selbst als Favorit markieren
+    if (item.canManage) {
+        appendMenuActionRow(item.isFavorite ? '⭐ Datei aus Favoriten entfernen' : '☆ Datei als Favorit markieren', 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100', () => {
+            toggleFavorite(item.id);
+        }, null);
+    }
+
+    // 9. Löschen
     if (canDelete) {
-        addBtn('🗑️ In den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
+        appendMenuActionRow('🗑️ In den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
             if (confirm(`Möchten Sie die Datei "${item.name}" in den Papierkorb verschieben?`)) {
                 mobileDeleteFolder.value = '';
                 mobileDeleteFolder.disabled = true;
@@ -3551,7 +3680,7 @@ function openMobileFileMenu(fileIdx, canDelete) {
                 mobileDeleteFileId.value = String(item.id);
                 mobileDeleteForm.submit();
             }
-        });
+        }, 'delete');
     }
 
     mobileActionModal.classList.remove('hidden');
@@ -3564,36 +3693,24 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
     mobileActionSubtitle.textContent = `${fileCount} ${fileCount === 1 ? 'Datei' : 'Dateien'}`;
     mobileActionList.innerHTML = '';
 
-    const addBtn = (label, cls, onClickFn) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
-        b.textContent = label;
-        b.addEventListener('click', () => {
-            closeMobileActionModal();
-            onClickFn();
-        });
-        mobileActionList.appendChild(b);
-    };
-
     if (canZip) {
-        addBtn('⬇️ Ordner als ZIP herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+        appendMenuActionRow('⬇️ Ordner als ZIP herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
             window.location.href = 'download.php?folder=' + encodeURIComponent(subPath);
-        });
+        }, 'download');
     }
-
-    addBtn('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
-        openTransferModal('folder', 0, displayName, subPath, canDelete);
-    });
 
     if (canShare) {
-        addBtn('🔗 Ordner teilen', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
+        appendMenuActionRow('🔗 Ordner teilen', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
             openShareModal(0, subPath, subPath);
-        });
+        }, 'share');
     }
 
+    appendMenuActionRow('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        openTransferModal('folder', 0, displayName, subPath, canDelete);
+    }, 'move');
+
     if (canDelete) {
-        addBtn('🗑️ Ordner in den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
+        appendMenuActionRow('🗑️ Ordner in den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
             if (confirm(`Möchten Sie den Ordner "${subPath}" in den Papierkorb verschieben?`)) {
                 mobileDeleteFileId.value = '';
                 mobileDeleteFileId.disabled = true;
@@ -3601,7 +3718,7 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
                 mobileDeleteFolder.value = subPath;
                 mobileDeleteForm.submit();
             }
-        });
+        }, 'delete');
     }
 
     mobileActionModal.classList.remove('hidden');
