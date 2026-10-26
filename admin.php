@@ -888,6 +888,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- 0. 1-Klick Datenbank-Backup (.sql) herunterladen ---
     if ($action === 'download_db_backup') {
+        logAuditEvent($pdo, 'db_backup', 'Vollständiges SQL-Datenbank-Backup heruntergeladen');
         $sqlDump = generateDatabaseSqlDump($pdo);
         $filename = 'minicloud_db_backup_' . date('Y-m-d_His') . '.sql';
 
@@ -900,6 +901,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
         echo $sqlDump;
+        exit;
+    }
+
+    // --- 0g. Sicherheits- & Aktivitätsprotokoll (Audit-Log) leeren ---
+    if ($action === 'clear_audit_log') {
+        $pdo->exec('DELETE FROM audit_logs');
+        logAuditEvent($pdo, 'audit_clear', 'Sicherheits- & Aktivitätsprotokoll durch Administrator geleert');
+        setFlash('success', 'Das Sicherheits- und Aktivitätsprotokoll wurde geleert.');
+        header('Location: admin.php#tab-system');
         exit;
     }
 
@@ -942,6 +952,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':aus'   => $allowUserSharing,
                     ':q'     => $quotaMb * 1024 * 1024,
                 ]);
+                logAuditEvent($pdo, 'user_create', sprintf('Neues Benutzerkonto „%s“ (%d MB%s) angelegt', $username, $quotaMb, $makeAdmin ? ', Admin' : ''));
                 setFlash('success', sprintf('Benutzer "%s" (%d MB) wurde erfolgreich angelegt.', $username, $quotaMb));
             }
         }
@@ -955,6 +966,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($targetUserId === $currentAdminId) {
             setFlash('error', 'Sie können Ihr eigenes Administratorkonto nicht löschen.');
         } elseif ($targetUserId > 0) {
+            $stmtTargetUser = $pdo->prepare('SELECT username FROM users WHERE id = :id LIMIT 1');
+            $stmtTargetUser->execute([':id' => $targetUserId]);
+            $deletedUsername = (string)($stmtTargetUser->fetchColumn() ?: ('ID #' . $targetUserId));
+
             // Physische Dateien des Benutzers vor dem Löschen entfernen
             $stmtFiles = $pdo->prepare('SELECT filename FROM files WHERE user_id = :uid');
             $stmtFiles->execute([':uid' => $targetUserId]);
@@ -965,6 +980,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $targetUserId]);
+            logAuditEvent($pdo, 'user_delete', sprintf('Benutzerkonto „%s“ inklusive Dateien gelöscht', $deletedUsername));
             setFlash('success', 'Benutzerkonto und zugehörige Dateien wurden gelöscht.');
         }
         header('Location: admin.php#tab-users');
@@ -1459,6 +1475,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $targetMessage = trim((string)($_POST['target_message'] ?? ''));
 
         $result = performGitHubUpdate($pdo, $repoInput, $targetSha, $targetDate, $targetMessage);
+        if ($result['ok']) {
+            logAuditEvent($pdo, 'system_update', $result['message']);
+        }
         setFlash($result['ok'] ? 'success' : 'error', $result['message']);
         header('Location: admin.php#tab-system');
         exit;
@@ -1480,6 +1499,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'restore_local_snapshot') {
         $snapFile = trim((string)($_POST['snapshot_filename'] ?? ''));
         $res = restoreLocalAppSnapshot($pdo, $snapFile);
+        if ($res['ok']) {
+            logAuditEvent($pdo, 'snapshot_restore', $res['message']);
+        }
         setFlash($res['ok'] ? 'success' : 'error', $res['message']);
         header('Location: admin.php#tab-system');
         exit;
@@ -1551,6 +1573,7 @@ foreach ($permsRaw as $p) {
 }
 
 $serverStats = getServerDashboardMetrics($pdo);
+$auditLogs   = $pdo->query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 120')->fetchAll();
 
 $pageTitle = 'Administration';
 require_once __DIR__ . '/includes/header.php';
@@ -2604,7 +2627,7 @@ $localSnapshots  = getLocalAppSnapshots();
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Exportiert sämtliche 14 MiniCloud-Datenbanktabellen (Benutzer, Dateiverzeichnis, Ordner, Freigaben, Kontakte, Kalender, Chat, Einstellungen) als vollständige SQL-Sicherungsdatei direkt auf Ihr Gerät &ndash; ganz ohne phpMyAdmin.
+                        Exportiert sämtliche 15 MiniCloud-Datenbanktabellen (Benutzer, Dateiverzeichnis, Ordner, Freigaben, Kontakte, Kalender, Chat, Audit-Log, Einstellungen) als vollständige SQL-Sicherungsdatei direkt auf Ihr Gerät &ndash; ganz ohne phpMyAdmin.
                     </p>
                     <form action="admin.php" method="post">
                         <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
@@ -2781,6 +2804,118 @@ $localSnapshots  = getLocalAppSnapshots();
             </div>
         </div>
     </section>
+
+    <!-- 5c. SICHERHEITS- & AKTIVITÄTSPROTOKOLL (AUDIT-LOG) -->
+    <section id="audit-log" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 text-lg">
+                    📜
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Sicherheits- &amp; Aktivitätsprotokoll (Audit-Log)</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        DSGVO-konformes Protokoll sicherheitsrelevanter Ereignisse (Anmeldungen, Freigaben, selbstzerstörende Links, ZIP-Entpackungen, Backups) mit anonymisierten IP-Adressen.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <input
+                    type="search"
+                    id="auditLogFilterInput"
+                    oninput="filterAuditLogRows(this.value)"
+                    placeholder="🔍 Protokoll filtern..."
+                    class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                <?php if (!empty($auditLogs)): ?>
+                    <form
+                        action="admin.php"
+                        method="post"
+                        onsubmit="return confirm('Möchten Sie das gesamte Sicherheits- und Aktivitätsprotokoll wirklich leeren?');"
+                    >
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="clear_audit_log">
+                        <button
+                            type="submit"
+                            class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/60 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                            🗑️ Protokoll leeren
+                        </button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (empty($auditLogs)): ?>
+            <p class="text-xs text-slate-400 italic py-6 text-center">
+                Noch keine Einträge im Sicherheits- &amp; Aktivitätsprotokoll vorhanden.
+            </p>
+        <?php else: ?>
+            <?php
+            $eventBadgeMeta = [
+                'login_success'      => ['label' => '🔑 Login OK',        'cls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'],
+                'login_failed'       => ['label' => '⚠️ Login-Fehler',    'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
+                'password_reset'     => ['label' => '🔐 Passwort-Reset',  'cls' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'],
+                'password_reset_req' => ['label' => '✉️ Reset-Anfrage',   'cls' => 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300'],
+                'share_create'       => ['label' => '🔗 Link erstellt',   'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
+                'share_delete'       => ['label' => '🗑️ Link gelöscht',   'cls' => 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'],
+                'share_burn'         => ['label' => '🔥 Selbstzerstört',  'cls' => 'bg-orange-100 dark:bg-orange-950/80 text-orange-800 dark:text-orange-300'],
+                'file_drop'          => ['label' => '📥 Gast-Upload',     'cls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300'],
+                'zip_extract'        => ['label' => '📦 ZIP entpackt',    'cls' => 'bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300'],
+                'db_backup'          => ['label' => '💾 SQL-Backup',      'cls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'],
+                'user_create'        => ['label' => '👤 Konto angelegt',  'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
+                'user_delete'        => ['label' => '🚫 Konto gelöscht',  'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
+                'system_update'      => ['label' => '⬆️ System-Update',   'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
+                'snapshot_restore'   => ['label' => '⏪ Rollback',        'cls' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'],
+                'audit_clear'        => ['label' => '🧹 Log geleert',     'cls' => 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'],
+            ];
+            ?>
+            <div class="overflow-x-auto max-h-96 overflow-y-auto rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 sticky top-0 z-10">
+                        <tr>
+                            <th class="py-2.5 px-3 font-semibold">Zeitpunkt</th>
+                            <th class="py-2.5 px-3 font-semibold">Ereignis</th>
+                            <th class="py-2.5 px-3 font-semibold">Benutzer</th>
+                            <th class="py-2.5 px-3 font-semibold">Details</th>
+                            <th class="py-2.5 px-3 font-semibold text-right">IP (anonym.)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditLogTableBody" class="divide-y divide-slate-200/70 dark:divide-slate-800">
+                        <?php foreach ($auditLogs as $log): ?>
+                            <?php
+                            $evType = (string)$log['event_type'];
+                            $meta   = $eventBadgeMeta[$evType] ?? ['label' => 'ℹ️ ' . $evType, 'cls' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'];
+                            $logTs  = strtotime((string)$log['created_at']);
+                            $fmtTs  = $logTs ? date('d.m.Y H:i:s', $logTs) : (string)$log['created_at'];
+                            $uLabel = trim((string)($log['username'] ?? '')) !== '' ? (string)$log['username'] : 'Gast / System';
+                            ?>
+                            <tr data-audit-row class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                                <td class="py-2 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                    <?= e($fmtTs) ?>
+                                </td>
+                                <td class="py-2 px-3 whitespace-nowrap">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold <?= $meta['cls'] ?>">
+                                        <?= e($meta['label']) ?>
+                                    </span>
+                                </td>
+                                <td class="py-2 px-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                    <?= e($uLabel) ?>
+                                </td>
+                                <td class="py-2 px-3 text-slate-700 dark:text-slate-300">
+                                    <?= e((string)$log['description']) ?>
+                                </td>
+                                <td class="py-2 px-3 font-mono text-[11px] text-slate-400 text-right whitespace-nowrap">
+                                    <?= e((string)($log['ip_address'] ?? '–')) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </section>
 </div>
 
 <script>
@@ -2793,6 +2928,7 @@ function switchAdminTab(tabId, updateHash = true) {
         'branding': 'tab-branding',
         'system-update': 'tab-system',
         'server-status': 'tab-system',
+        'audit-log': 'tab-system',
         'users': 'tab-users'
     };
     const resolvedTab = hashMap[tabId] || tabId;
@@ -2986,6 +3122,15 @@ async function checkGithubUpdateNow() {
     } finally {
         if (btn) btn.disabled = false;
     }
+}
+
+function filterAuditLogRows(query) {
+    const q = String(query || '').trim().toLowerCase();
+    const rows = document.querySelectorAll('#auditLogTableBody [data-audit-row]');
+    rows.forEach((row) => {
+        const txt = (row.textContent || '').toLowerCase();
+        row.style.display = (q === '' || txt.includes(q)) ? '' : 'none';
+    });
 }
 
 // Beim Öffnen der Admin-Seite einmal automatisch im Hintergrund den GitHub-Update-Status prüfen

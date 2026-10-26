@@ -1937,3 +1937,57 @@ function renderQrCodeSvg(string $data, int $pixelSize = 180): string
     );
 }
 
+/**
+ * Protokolliert ein sicherheits- oder systemrelevantes Ereignis in der Tabelle audit_logs
+ * (und hält das Protokoll automatisch schlank auf maximal 90 Tagen).
+ */
+function logAuditEvent(
+    PDO $pdo,
+    string $eventType,
+    string $description,
+    ?int $userId = null,
+    ?string $username = null
+): void {
+    try {
+        if ($userId === null && isset($_SESSION['user_id'])) {
+            $userId = (int)$_SESSION['user_id'];
+        }
+        if ($username === null && isset($_SESSION['username'])) {
+            $username = (string)$_SESSION['username'];
+        }
+
+        $rawIp = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        // IP-Adresse datenschutzfreundlich anonymisieren (letztes Oktett bei IPv4 / letzte Blöcke bei IPv6 maskieren)
+        if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+            $parts = explode('.', $rawIp);
+            $parts[3] = 'x';
+            $maskedIp = implode('.', $parts);
+        } elseif (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+            $parts = explode(':', $rawIp);
+            $maskedIp = implode(':', array_slice($parts, 0, 3)) . '::x';
+        } else {
+            $maskedIp = 'lokal';
+        }
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO audit_logs (user_id, username, event_type, description, ip_address)
+             VALUES (:uid, :uname, :etype, :descr, :ip)'
+        );
+        $stmt->execute([
+            ':uid'   => ($userId !== null && $userId > 0) ? $userId : null,
+            ':uname' => mb_substr(trim((string)($username ?? 'Gast')), 0, 100),
+            ':etype' => mb_substr(trim($eventType), 0, 50),
+            ':descr' => mb_substr(trim($description), 0, 500),
+            ':ip'    => mb_substr($maskedIp, 0, 64),
+        ]);
+
+        // Gelegentliche automatische Bereinigung alter Einträge (> 90 Tage)
+        if (random_int(1, 25) === 1) {
+            $pdo->exec("DELETE FROM `audit_logs` WHERE `created_at` < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        }
+    } catch (Throwable) {
+        // Protokollfehler dürfen niemals die eigentliche Benutzeraktion blockieren
+    }
+}
+
+

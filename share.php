@@ -19,7 +19,7 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
 } else {
     $stmt = $pdo->prepare(
         'SELECT s.id AS share_id, s.file_id, s.folder_path AS shared_folder_path, s.user_id,
-                s.share_token, s.share_mode, s.password_hash, s.expires_at, s.created_at AS share_date,
+                s.share_token, s.share_mode, s.password_hash, s.expires_at, s.max_downloads, s.download_count, s.created_at AS share_date,
                 f.filename, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date, f.deleted_at AS file_deleted_at,
                 u.username AS owner_username
          FROM shares s
@@ -34,6 +34,9 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
     if (!$share) {
         $errorState = 'missing';
     } elseif ($share['expires_at'] !== null && strtotime((string)$share['expires_at']) < time()) {
+        $errorState = 'expired';
+    } elseif ($share['max_downloads'] !== null && (int)$share['download_count'] >= (int)$share['max_downloads']) {
+        $pdo->prepare('DELETE FROM shares WHERE id = :id')->execute([':id' => (int)$share['share_id']]);
         $errorState = 'expired';
     } elseif (!empty($share['shared_folder_path'])) {
         $isFolderShare = true;
@@ -133,6 +136,39 @@ if ($requiresPassword && !$isUnlocked && $_SERVER['REQUEST_METHOD'] === 'POST' &
 $vaultShareError = '';
 $vaultPromptFile = null; // Falls eine Tresor-Datei in einem freigegebenen Ordner heruntergeladen werden soll
 
+/**
+ * Zählt einen Download auf einem öffentlichen Freigabelink hoch und löscht den Link sofort automatisch,
+ * falls das Download-Limit (Selbstzerstörender Link / "Burn after reading") erreicht wurde.
+ *
+ * @param array<string, mixed> $shareRow
+ */
+function consumeShareDownloadSlot(PDO $pdo, array $shareRow): void
+{
+    $shareId = (int)$shareRow['share_id'];
+    $maxDl   = $shareRow['max_downloads'] !== null ? (int)$shareRow['max_downloads'] : null;
+    $newCnt  = (int)($shareRow['download_count'] ?? 0) + 1;
+
+    if ($maxDl !== null && $newCnt >= $maxDl) {
+        $pdo->prepare('DELETE FROM shares WHERE id = :id')->execute([':id' => $shareId]);
+        logAuditEvent(
+            $pdo,
+            'share_burn',
+            sprintf(
+                'Selbstzerstörender Freigabelink #%d nach %d/%d Download(s) automatisch gelöscht (%s)',
+                $shareId,
+                $newCnt,
+                $maxDl,
+                (string)($shareRow['original_name'] ?? $shareRow['shared_folder_path'] ?? 'Freigabe')
+            ),
+            (int)$shareRow['user_id'],
+            (string)$shareRow['owner_username']
+        );
+    } else {
+        $pdo->prepare('UPDATE shares SET download_count = download_count + 1 WHERE id = :id')
+            ->execute([':id' => $shareId]);
+    }
+}
+
 // Download- & Briefkasten-Upload-Aktionen (nur wenn entsperrt und gültig)
 if ($errorState === null && $share !== null && $isUnlocked) {
     // 0) Öffentlicher Briefkasten / File-Drop Upload in den freigegebenen Ordner
@@ -208,6 +244,18 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 }
 
                 if (!empty($dropUploadedNames)) {
+                    logAuditEvent(
+                        $pdo,
+                        'file_drop',
+                        sprintf(
+                            '%d Datei(en) über Digitalen Briefkasten in Ordner "%s" eingereicht (%s)',
+                            count($dropUploadedNames),
+                            $folderPath,
+                            implode(', ', array_slice($dropUploadedNames, 0, 3))
+                        ),
+                        $ownerId,
+                        $senderTag !== '' ? ('Gast: ' . $senderTag) : 'Gast (Briefkasten)'
+                    );
                     $dropUploadSuccess = sprintf(
                         'Vielen Dank! %d %s erfolgreich in den Ordner hochgeladen.',
                         count($dropUploadedNames),
@@ -271,6 +319,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                         } elseif (!verifyVaultFilePassword($filePath, $vaultPw, $vInfo) || !is_array($vInfo)) {
                             $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
                         } else {
+                            consumeShareDownloadSlot($pdo, $share);
                             if (ob_get_level()) {
                                 ob_end_clean();
                             }
@@ -289,6 +338,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                         }
                     }
                 } else {
+                    consumeShareDownloadSlot($pdo, $share);
                     if (ob_get_level()) {
                         ob_end_clean();
                     }
@@ -344,6 +394,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 $zip->close();
 
                 if ($addedFiles > 0 && is_file($tmpZip)) {
+                    consumeShareDownloadSlot($pdo, $share);
                     $zipDownloadName = (preg_replace('/[^a-zA-Z0-9_.-]/', '_', basename($folderPath)) ?: 'ordner') . '.zip';
                     if (ob_get_level()) {
                         ob_end_clean();
@@ -383,6 +434,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 } elseif (!verifyVaultFilePassword($filePath, $vaultPw, $vInfo) || !is_array($vInfo)) {
                     $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
                 } else {
+                    consumeShareDownloadSlot($pdo, $share);
                     if (ob_get_level()) {
                         ob_end_clean();
                     }
@@ -401,6 +453,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 }
             }
         } else {
+            consumeShareDownloadSlot($pdo, $share);
             if (ob_get_level()) {
                 ob_end_clean();
             }
@@ -558,6 +611,15 @@ require_once __DIR__ . '/includes/header.php';
                         <span class="text-slate-500 dark:text-slate-400">Gültig bis:</span>
                         <span class="text-xs font-medium text-amber-600 dark:text-amber-400">
                             <?= e(date('d.m.Y H:i', strtotime((string)$share['expires_at']))) ?> Uhr
+                        </span>
+                    </div>
+                <?php endif; ?>
+                <?php if ($share['max_downloads'] !== null): ?>
+                    <?php $remDl = max(0, (int)$share['max_downloads'] - (int)$share['download_count']); ?>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Download-Limit:</span>
+                        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                            🔥 Noch <?= $remDl ?> von <?= (int)$share['max_downloads'] ?> Download<?= $remDl === 1 ? '' : 's' ?> verfügbar (selbstzerstörend)
                         </span>
                     </div>
                 <?php endif; ?>
@@ -780,6 +842,15 @@ require_once __DIR__ . '/includes/header.php';
                         <span class="text-slate-500 dark:text-slate-400">Gültig bis:</span>
                         <span class="text-xs font-medium text-amber-600 dark:text-amber-400">
                             <?= e(date('d.m.Y H:i', strtotime((string)$share['expires_at']))) ?> Uhr
+                        </span>
+                    </div>
+                <?php endif; ?>
+                <?php if ($share['max_downloads'] !== null): ?>
+                    <?php $remDl = max(0, (int)$share['max_downloads'] - (int)$share['download_count']); ?>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Download-Limit:</span>
+                        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                            🔥 Noch <?= $remDl ?> von <?= (int)$share['max_downloads'] ?> Download<?= $remDl === 1 ? '' : 's' ?> verfügbar (selbstzerstörend)
                         </span>
                     </div>
                 <?php endif; ?>

@@ -88,6 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 unset($_SESSION['login_attempts'], $_SESSION['pw_reset_attempts']);
+                logAuditEvent(
+                    $pdo,
+                    'password_reset',
+                    'Passwort über E-Mail-Wiederherstellungslink erfolgreich zurückgesetzt',
+                    (int)$targetUser['id'],
+                    (string)$targetUser['username']
+                );
                 setFlash('success', 'Ihr Passwort wurde erfolgreich zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.');
                 header('Location: login.php');
                 exit;
@@ -156,6 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $resetUrl = getBaseUrl() . '/forgot_password.php?uid=' . (int)$foundUser['id'] . '&token=' . urlencode($rawToken);
                 sendPasswordResetEmail($pdo, trim((string)$foundUser['email']), (string)$foundUser['username'], $resetUrl);
+                logAuditEvent(
+                    $pdo,
+                    'password_reset_req',
+                    'Passwort-Wiederherstellungslink per E-Mail angefordert',
+                    (int)$foundUser['id'],
+                    (string)$foundUser['username']
+                );
             }
 
             // Einheitliche Bestätigungsmeldung zum Schutz vor Benutzer-/E-Mail-Enumeration

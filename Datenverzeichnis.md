@@ -102,6 +102,8 @@ Speichert externe Freigabelinks für einzelne Dateien oder ganze persönliche Or
 | `share_mode` | `VARCHAR(20)` | Nein | `'read'` | – | Modus für öffentliche Ordner-Links (`'read'` = Nur Download, `'upload_only'` = Digitaler Briefkasten / Nur Hochladen, `'read_write'` = Download & Upload) |
 | `password_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Optionaler BCRYPT-Hash für Passwortschutz |
 | `expires_at` | `DATETIME` | Ja | `NULL` | – | Optionales Ablaufdatum des Links (`NULL` = unbegrenzt) |
+| `max_downloads` | `INT UNSIGNED` | Ja | `NULL` | – | Optionales Download-Limit für selbstzerstörende Freigabelinks („Burn after reading“, `NULL` = unbegrenzt) |
+| `download_count` | `INT UNSIGNED` | Nein | `0` | – | Anzahl der bisherigen Datei-/ZIP-Downloads über diesen Freigabelink |
 | `created_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Erstellungszeitpunkt |
 
 ---
@@ -142,7 +144,22 @@ Speichern direkte 1:1-Nachrichten zwischen Cloud-Benutzern sowie offizielle Admi
 
 ---
 
-### 2.12 Tabelle `settings` (System-, Modul-, Registrierungs- & Update-Einstellungen)
+### 2.12 Tabelle `audit_logs` (Sicherheits- & Aktivitätsprotokoll)
+Speichert sicherheitsrelevante Ereignisse (Logins, 2FA-/Login-Fehlversuche, Passwort-Resets, öffentliche Freigaben, selbstzerstörte Freigabelinks, Gast-Uploads, ZIP-Entpackungen, Backups und Admin-Aktionen) DSGVO-konform mit anonymisierten IP-Adressen.
+
+| Spalte | Datentyp | Null | Standardwert | Schlüssel / Index | Beschreibung |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `INT UNSIGNED` | Nein | `AUTO_INCREMENT` | `PRIMARY KEY` | Eindeutige Protokoll-ID |
+| `user_id` | `INT UNSIGNED` | Ja | `NULL` | Index (`idx_audit_user`) | Zugeordneter Benutzer (`NULL` bei Gästen oder fehlgeschlagenem Login mit unbekanntem Namen) |
+| `username` | `VARCHAR(64)` | Ja | `NULL` | – | Benutzername zum Zeitpunkt des Ereignisses |
+| `event_type` | `VARCHAR(40)` | Nein | – | Index (`idx_audit_type`) | Ereigniskategorie (`login_success`, `login_failed`, `password_reset`, `share_create`, `share_burn`, `file_drop`, `zip_extract`, `db_backup`, `user_create`, `user_delete`, `system_update`, `snapshot_restore`, `audit_clear`) |
+| `description` | `VARCHAR(500)` | Nein | – | – | Beschreibung des Sicherheits-/Aktivitätsereignisses |
+| `ip_address` | `VARCHAR(45)` | Ja | `NULL` | – | DSGVO-konform anonymisierte IP-Adresse (letztes IPv4-Oktett bzw. hintere IPv6-Blöcke maskiert, z. B. `192.168.1.xxx`) |
+| `created_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | Index (`idx_audit_created`) | Zeitpunkt des Ereignisses (automatische Bereinigung nach 90 Tagen oder manuell durch Admin) |
+
+---
+
+### 2.13 Tabelle `settings` (System-, Modul-, Registrierungs- & Update-Einstellungen)
 Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Spalte | Datentyp | Null | Standardwert | Schlüssel / Index | Beschreibung |

@@ -106,6 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['last_activity'] = time();
                     $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
 
+                    logAuditEvent(
+                        $pdo,
+                        'login_success',
+                        sprintf('Erfolgreiche Anmeldung mit 2FA (%s)', $totpMatched ? 'TOTP / Authenticator' : 'E-Mail-Code'),
+                        (int)$user['id'],
+                        (string)$user['username']
+                    );
+
                     setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
                     header('Location: index.php');
                     exit;
@@ -115,6 +123,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $newAttempts = (int)$user['two_factor_attempts'] + 1;
                     $stmtFail = $pdo->prepare('UPDATE users SET two_factor_attempts = :att WHERE id = :id');
                     $stmtFail->execute([':att' => $newAttempts, ':id' => (int)$user['id']]);
+                    logAuditEvent(
+                        $pdo,
+                        'login_failed',
+                        sprintf('Ungültiger 2FA-Code eingegeben (Versuch %d/5)', $newAttempts),
+                        (int)$user['id'],
+                        (string)$user['username']
+                    );
                     $remaining = max(0, 5 - $newAttempts);
                     if ($remaining > 0) {
                         $errors[] = sprintf('Ungültiger Sicherheitscode. Noch %d %s übrig.', $remaining, $remaining === 1 ? 'Versuch' : 'Versuche');
@@ -257,12 +272,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['theme']      = (string)($user['theme'] ?: 'light');
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
+                    logAuditEvent(
+                        $pdo,
+                        'login_success',
+                        'Erfolgreiche Anmeldung (Benutzername & Passwort)',
+                        (int)$user['id'],
+                        (string)$user['username']
+                    );
+
                     setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
                     header('Location: index.php');
                     exit;
                 }
             } else {
                 $_SESSION['login_attempts'][] = time();
+                logAuditEvent(
+                    $pdo,
+                    'login_failed',
+                    sprintf('Fehlgeschlagener Anmeldeversuch für Benutzername „%s“', mb_substr($usernameInput, 0, 50)),
+                    $user ? (int)$user['id'] : null,
+                    $user ? (string)$user['username'] : mb_substr($usernameInput, 0, 50)
+                );
                 $errors[] = 'Ungültiger Benutzername oder falsches Passwort.';
             }
         }

@@ -809,5 +809,239 @@ if ($action === 'batch_transfer_files') {
     exit;
 }
 
+// 7. ZIP-Archiv im Browser inspizieren (JSON-Dateiliste für das Vorschau-Modal)
+if ($action === 'inspect_zip') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+
+    if (!class_exists('ZipArchive')) {
+        echo json_encode(['success' => false, 'message' => 'Die PHP-Erweiterung ZipArchive ist auf diesem Server nicht aktiviert.']);
+        exit;
+    }
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Keine Leseberechtigung für dieses ZIP-Archiv.']);
+        exit;
+    }
+
+    $physicalPath = UPLOAD_DIR . basename((string)$file['filename']);
+    if (!is_file($physicalPath) || !is_readable($physicalPath)) {
+        echo json_encode(['success' => false, 'message' => 'Die physische ZIP-Datei wurde nicht gefunden.']);
+        exit;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($physicalPath) !== true) {
+        echo json_encode(['success' => false, 'message' => 'Das ZIP-Archiv konnte nicht geöffnet werden (beschädigt oder verschlüsselt).']);
+        exit;
+    }
+
+    $entries = [];
+    $totalUncompressedBytes = 0;
+    $fileCount = 0;
+    $maxPreviewEntries = 300;
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $stat = $zip->statIndex($i);
+        if (!is_array($stat) || !isset($stat['name'])) {
+            continue;
+        }
+        $rawName = str_replace('\\', '/', (string)$stat['name']);
+        $isDir = str_ends_with($rawName, '/');
+        $uSize = max(0, (int)($stat['size'] ?? 0));
+        if (!$isDir) {
+            $fileCount++;
+            $totalUncompressedBytes += $uSize;
+        }
+        if (count($entries) < $maxPreviewEntries) {
+            $entries[] = [
+                'name'   => $rawName,
+                'size'   => formatBytes($uSize),
+                'is_dir' => $isDir,
+            ];
+        }
+    }
+    $zip->close();
+
+    echo json_encode([
+        'success'          => true,
+        'file_count'       => $fileCount,
+        'total_size_human' => formatBytes($totalUncompressedBytes),
+        'entries'          => $entries,
+        'truncated'        => ($zip->numFiles > $maxPreviewEntries),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 8. ZIP-Archiv direkt auf dem Server in die Cloud entpacken
+if ($action === 'extract_zip') {
+    $fileId       = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $intoSub      = isset($_POST['into_subfolder']) && (int)$_POST['into_subfolder'] === 1;
+    $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
+
+    if (!class_exists('ZipArchive')) {
+        setFlash('error', 'Die PHP-Erweiterung ZipArchive ist auf diesem Server nicht aktiviert.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        setFlash('error', 'Zugriff verweigert: ZIP-Archiv nicht gefunden.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $targetGfId   = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+    $baseFolder   = sanitizeFolderPathInput((string)$file['folder_path']);
+    $canWriteHere = ((int)$file['user_id'] === $userId)
+        || ($targetGfId !== null && canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin))
+        || canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], $fileId, $baseFolder);
+
+    if (!$canWriteHere) {
+        setFlash('error', 'Sie haben keine Schreibberechtigung, um dieses ZIP-Archiv hier zu entpacken.');
+        header('Location: index.php');
+        exit;
+    }
+
+    if ($intoSub) {
+        $zipBaseName = pathinfo((string)$file['original_name'], PATHINFO_FILENAME);
+        $cleanZipDir = sanitizeFolderPathInput($zipBaseName) ?: 'Entpackt';
+        $baseFolder  = $baseFolder !== ''
+            ? sanitizeFolderPathInput($baseFolder . '/' . $cleanZipDir)
+            : $cleanZipDir;
+    }
+
+    $physicalPath = UPLOAD_DIR . basename((string)$file['filename']);
+    $zip = new ZipArchive();
+    if (!is_file($physicalPath) || $zip->open($physicalPath) !== true) {
+        setFlash('error', 'Das ZIP-Archiv konnte zum Entpacken nicht geöffnet werden.');
+        header('Location: index.php');
+        exit;
+    }
+
+    // Gesamte entpackte Größe & Datei-Anzahl prüfen (Schutz vor ZIP-Bomben & Kontingent-Überschreitung)
+    $maxExtractedFiles = 500;
+    $totalExtractBytes = 0;
+    $validEntryIndices = [];
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $stat = $zip->statIndex($i);
+        if (!is_array($stat) || empty($stat['name'])) {
+            continue;
+        }
+        $rawName = str_replace('\\', '/', (string)$stat['name']);
+        if (str_ends_with($rawName, '/') || str_starts_with(basename($rawName), '.__') || str_starts_with($rawName, '__MACOSX/')) {
+            continue;
+        }
+        $uSize = max(0, (int)($stat['size'] ?? 0));
+        $totalExtractBytes += $uSize;
+        $validEntryIndices[] = $i;
+        if (count($validEntryIndices) > $maxExtractedFiles) {
+            $zip->close();
+            setFlash('error', sprintf('Das ZIP-Archiv enthält mehr als %d Dateien und kann aus Sicherheitsgründen nicht auf einmal entpackt werden.', $maxExtractedFiles));
+            header('Location: index.php');
+            exit;
+        }
+    }
+
+    $targetOwnerId = $targetGfId === null ? (int)$file['user_id'] : $userId;
+    if ($targetGfId === null) {
+        $stats = getUserStorageStats($pdo, $targetOwnerId);
+        if ($totalExtractBytes > (int)$stats['free']) {
+            $zip->close();
+            setFlash('error', sprintf('Nicht genügend freier Speicherplatz zum Entpacken (%s benötigt, %s frei).', formatBytes($totalExtractBytes), formatBytes((int)$stats['free'])));
+            header('Location: index.php');
+            exit;
+        }
+    }
+
+    ensureUploadDirReady();
+    if ($baseFolder !== '') {
+        registerFolderHierarchy($pdo, $targetOwnerId, $baseFolder, $targetGfId);
+    }
+
+    $finfo = class_exists('finfo') ? new finfo(FILEINFO_MIME_TYPE) : null;
+    $stmtIns = $pdo->prepare(
+        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, 0)'
+    );
+
+    $extractedCount = 0;
+    foreach ($validEntryIndices as $idx) {
+        $stat = $zip->statIndex($idx);
+        $rawName = str_replace('\\', '/', (string)$stat['name']);
+        $dirPart = dirname($rawName);
+        $cleanSubDir = ($dirPart !== '.' && $dirPart !== '/') ? sanitizeFolderPathInput($dirPart) : '';
+        $cleanFileName = sanitizeOriginalFilename(basename($rawName));
+
+        $entryFolder = $baseFolder;
+        if ($cleanSubDir !== '') {
+            $entryFolder = $entryFolder !== ''
+                ? sanitizeFolderPathInput($entryFolder . '/' . $cleanSubDir)
+                : $cleanSubDir;
+        }
+
+        $stream = $zip->getStream($stat['name']);
+        if (!is_resource($stream)) {
+            continue;
+        }
+
+        $storedName = generateSafeStoredFilename();
+        $destPath   = UPLOAD_DIR . $storedName;
+        $outFh      = @fopen($destPath, 'wb');
+        if ($outFh === false) {
+            fclose($stream);
+            continue;
+        }
+
+        stream_copy_to_stream($stream, $outFh);
+        fclose($stream);
+        fclose($outFh);
+        @chmod($destPath, 0640);
+
+        if ($entryFolder !== '') {
+            registerFolderHierarchy($pdo, $targetOwnerId, $entryFolder, $targetGfId);
+        }
+
+        $actualSize = max(0, (int)@filesize($destPath));
+        $detectedMime = ($finfo !== null) ? (string)($finfo->file($destPath) ?: 'application/octet-stream') : 'application/octet-stream';
+
+        $stmtIns->execute([
+            ':uid'   => $targetOwnerId,
+            ':gf_id' => $targetGfId,
+            ':fn'    => $storedName,
+            ':orig'  => $cleanFileName,
+            ':fp'    => $entryFolder,
+            ':sz'    => $actualSize,
+            ':mime'  => mb_substr($detectedMime, 0, 128),
+        ]);
+        $extractedCount++;
+    }
+
+    $zip->close();
+
+    logAuditEvent(
+        $pdo,
+        'zip_extract',
+        sprintf('ZIP-Archiv "%s" entpackt (%d Dateien in %s)', (string)$file['original_name'], $extractedCount, $baseFolder !== '' ? ('"' . $baseFolder . '"') : 'Hauptverzeichnis')
+    );
+
+    setFlash('success', sprintf('ZIP-Archiv "%s" wurde erfolgreich entpackt (%d %s).', (string)$file['original_name'], $extractedCount, $extractedCount === 1 ? 'Datei' : 'Dateien'));
+
+    $queryParams = [];
+    if ($targetGfId !== null) {
+        $queryParams['group_folder'] = (string)$targetGfId;
+    }
+    $redirectFolder = $intoSub ? $baseFolder : $returnFolder;
+    if ($redirectFolder !== '') {
+        $queryParams['folder'] = $redirectFolder;
+    }
+    header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
+    exit;
+}
+
 header('Location: index.php');
 exit;

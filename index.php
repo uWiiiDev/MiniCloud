@@ -1894,10 +1894,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 </h4>
 
                 <form id="createShareLinkForm" class="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <div>
                             <label for="shareLinkPassword" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                Passwortschutz (optional)
+                                Passwort (optional)
                             </label>
                             <input
                                 type="password"
@@ -1909,7 +1909,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         </div>
                         <div>
                             <label for="shareLinkExpires" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                Ablaufdatum (optional)
+                                Ablaufdatum
                             </label>
                             <select
                                 id="shareLinkExpires"
@@ -1920,6 +1920,23 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <option value="1">1 Tag gültig</option>
                                 <option value="7">7 Tage gültig</option>
                                 <option value="30">30 Tage gültig</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="shareLinkMaxDownloads" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1" title="Selbstzerstörender Link (Burn after reading)">
+                                Max. Downloads 🔥
+                            </label>
+                            <select
+                                id="shareLinkMaxDownloads"
+                                name="max_downloads"
+                                class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            >
+                                <option value="0">Unbegrenzt</option>
+                                <option value="1">🔥 1× (Selbstzerstörend)</option>
+                                <option value="3">🔥 3× Downloads</option>
+                                <option value="5">5× Downloads</option>
+                                <option value="10">10× Downloads</option>
+                                <option value="25">25× Downloads</option>
                             </select>
                         </div>
                     </div>
@@ -1948,14 +1965,14 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                         </svg>
-                        <span>Link generieren</span>
+                        <span>Link &amp; QR-Code generieren</span>
                     </button>
                 </form>
 
-                <!-- Frisch generierter Link mit Kopieren-Button -->
-                <div id="generatedLinkBox" class="hidden p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 space-y-2">
+                <!-- Frisch generierter Link mit Kopieren-Button & lokalem QR-Code -->
+                <div id="generatedLinkBox" class="hidden p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 space-y-3">
                     <div class="flex items-center justify-between text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-                        <span>Fertiger Freigabelink:</span>
+                        <span>Fertiger Freigabelink &amp; QR-Code:</span>
                         <span id="copyFeedback" class="hidden text-emerald-600 dark:text-emerald-400">✓ Kopiert!</span>
                     </div>
                     <div class="flex items-center gap-2">
@@ -1972,6 +1989,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         >
                             Kopieren
                         </button>
+                    </div>
+                    <div id="generatedLinkQrContainer" class="hidden pt-1 flex flex-col sm:flex-row items-center gap-3">
+                        <div id="generatedLinkQrSvg" class="shrink-0"></div>
+                        <div class="text-xs text-emerald-900 dark:text-emerald-200 space-y-1.5 text-center sm:text-left">
+                            <p class="font-semibold">📱 Direkt per Smartphone scannen</p>
+                            <p class="text-[11px] text-emerald-700 dark:text-emerald-300/80">
+                                100 % lokal auf Ihrem Server erzeugt (ohne externe Dienste). Ideal zum schnellen Teilen oder Ausdrucken für den Digitalen Briefkasten.
+                            </p>
+                            <button
+                                type="button"
+                                onclick="downloadQrCodeSvg('generatedLinkQrSvg')"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 text-[11px] font-semibold hover:bg-emerald-100 cursor-pointer"
+                            >
+                                ⬇️ QR-Code als SVG speichern
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -2639,6 +2672,39 @@ function isTextPreviewable(item) {
         || textExts.includes(item.ext);
 }
 
+function isZipPreviewable(item) {
+    return item.ext === 'zip'
+        || item.mime === 'application/zip'
+        || item.mime === 'application/x-zip-compressed';
+}
+
+function submitZipExtract(fileId, intoSubfolder) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'folder_action.php';
+    form.className = 'hidden';
+
+    const addField = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+    };
+
+    addField('csrf_token', csrfToken);
+    addField('action', 'extract_zip');
+    addField('file_id', String(fileId));
+    addField('into_subfolder', intoSubfolder ? '1' : '0');
+    const curF = <?= json_encode($currentFolder) ?>;
+    if (curF !== '') {
+        addField('return_folder', curF);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -2738,6 +2804,76 @@ async function renderPreviewItem(index) {
                 </audio>
             </div>
         `;
+    } else if (isZipPreviewable(item)) {
+        try {
+            const fd = new FormData();
+            fd.append('action', 'inspect_zip');
+            fd.append('csrf_token', csrfToken);
+            fd.append('file_id', String(item.id));
+            const res = await fetch('folder_action.php', { method: 'POST', body: fd });
+            const zipData = await res.json();
+            if (zipData.success) {
+                const rowsHtml = (zipData.entries || []).map(eItem => `
+                    <tr class="border-b border-slate-100 dark:border-slate-800/70">
+                        <td class="py-1.5 px-3 font-mono text-xs ${eItem.is_dir ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-700 dark:text-slate-200'} break-all">
+                            ${eItem.is_dir ? '📁 ' : '📄 '}${escapeHtml(String(eItem.name || ''))}
+                        </td>
+                        <td class="py-1.5 px-3 text-right text-[11px] text-slate-400 whitespace-nowrap">
+                            ${eItem.is_dir ? 'Ordner' : escapeHtml(String(eItem.size || ''))}
+                        </td>
+                    </tr>
+                `).join('');
+
+                previewStage.innerHTML = `
+                    <div class="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col max-h-[70vh]">
+                        <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-800/40">
+                            <div>
+                                <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>📦 ZIP-Archiv-Inspektor</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                                        ${Number(zipData.file_count || 0)} Dateien • Entpackt: ${escapeHtml(String(zipData.total_size_human || '0 B'))}
+                                    </span>
+                                </h4>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Inhalt direkt im Browser prüfen oder mit 1 Klick auf dem Server entpacken
+                                </p>
+                            </div>
+                            ${item.canManage ? `
+                                <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                                    <button
+                                        type="button"
+                                        onclick="submitZipExtract(${Number(item.id)}, true)"
+                                        class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                                        title="Erstellt einen eigenen Unterordner mit dem Namen des ZIP-Archivs und entpackt alle Dateien dorthin"
+                                    >
+                                        📂 In Unterordner entpacken
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="submitZipExtract(${Number(item.id)}, false)"
+                                        class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Entpackt den Inhalt direkt in das aktuelle Verzeichnis"
+                                    >
+                                        📥 Direkt hierhin
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="overflow-y-auto flex-1">
+                            <table class="w-full text-left border-collapse">
+                                <tbody>
+                                    ${rowsHtml || '<tr><td class="p-4 text-xs text-slate-400 text-center">Archiv ist leer.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else {
+                previewStage.innerHTML = `<p class="text-xs text-red-500">${escapeHtml(zipData.message || 'ZIP-Archiv konnte nicht gelesen werden.')}</p>`;
+            }
+        } catch {
+            previewStage.innerHTML = '<p class="text-xs text-red-500">Fehler beim Inspizieren des ZIP-Archivs.</p>';
+        }
     } else if (isTextPreviewable(item)) {
         try {
             const res = await fetch(item.textUrl);
@@ -3363,6 +3499,8 @@ function openShareModal(fileId, itemName, folderPath = '') {
     shareModalFilename.textContent = folderPath ? ('📁 ' + itemName) : itemName;
     document.getElementById('shareLinkPassword').value = '';
     document.getElementById('shareLinkExpires').value = '0';
+    const maxDlSelect = document.getElementById('shareLinkMaxDownloads');
+    if (maxDlSelect) maxDlSelect.value = '0';
     const modeWrapper = document.getElementById('shareLinkModeWrapper');
     const modeSelect = document.getElementById('shareLinkMode');
     if (modeWrapper && modeSelect) {
@@ -3382,6 +3520,30 @@ function openShareModal(fileId, itemName, folderPath = '') {
 function closeShareModal() {
     shareModal.classList.add('hidden');
     shareModal.classList.remove('flex');
+}
+
+function downloadQrCodeSvg(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const svg = el.querySelector('svg');
+    if (!svg) return;
+    const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'minicloud-freigabe-qr.svg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function toggleExistingLinkQr(shareId) {
+    const box = document.getElementById('linkQrBox_' + shareId);
+    if (box) {
+        box.classList.toggle('hidden');
+        box.classList.toggle('flex');
+    }
 }
 
 function copyGeneratedLink(customUrl) {
@@ -3427,26 +3589,50 @@ async function loadShareDetails(fileId, folderPath = '') {
                         modeBadge = ' &bull; <span>👁️ Nur Download</span>';
                     }
                 }
+                let burnBadge = '';
+                if (l.max_downloads !== null && Number(l.max_downloads) > 0) {
+                    burnBadge = ` &bull; <span class="text-rose-600 dark:text-rose-400 font-semibold">🔥 ${Number(l.download_count || 0)}/${Number(l.max_downloads)} Downloads</span>`;
+                }
+                const sid = Number(l.id) || 0;
                 return `
-                <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-1.5">
-                            <input type="text" readonly value="${escapeHtml(String(l.url || ''))}" class="w-full bg-transparent font-mono text-slate-700 dark:text-slate-200 truncate focus:outline-none">
+                <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <input type="text" readonly value="${escapeHtml(String(l.url || ''))}" class="w-full bg-transparent font-mono text-slate-700 dark:text-slate-200 truncate focus:outline-none">
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">
+                                ${l.has_password ? '🔒 Passwortgeschützt' : '🌐 Öffentlich'}
+                                ${l.expires_at ? ' &bull; Gültig bis ' + escapeHtml(String(l.expires_at)) : ' &bull; Unbegrenzt'}
+                                ${burnBadge}
+                                ${modeBadge}
+                            </div>
                         </div>
-                        <div class="text-[11px] text-slate-400 mt-0.5">
-                            ${l.has_password ? '🔒 Passwortgeschützt' : '🌐 Öffentlich'}
-                            ${l.expires_at ? ' &bull; Gültig bis ' + escapeHtml(String(l.expires_at)) : ' &bull; Unbegrenzt'}
-                            ${modeBadge}
+                        <div class="flex items-center gap-1 shrink-0">
+                            ${l.qr_svg ? `
+                                <button type="button" onclick="toggleExistingLinkQr(${sid})" class="px-2 py-1 rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-brand-50 cursor-pointer" title="QR-Code anzeigen">
+                                    📱 QR
+                                </button>
+                            ` : ''}
+                            <button type="button" data-copy-url="${escapeHtml(String(l.url || ''))}" onclick="copyGeneratedLink(this.getAttribute('data-copy-url'))" class="px-2 py-1 rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-brand-50 cursor-pointer">
+                                Kopieren
+                            </button>
+                            <button type="button" onclick="deleteShareLink(${sid})" class="px-2 py-1 rounded bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-300 hover:bg-red-100 cursor-pointer">
+                                Löschen
+                            </button>
                         </div>
                     </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button type="button" data-copy-url="${escapeHtml(String(l.url || ''))}" onclick="copyGeneratedLink(this.getAttribute('data-copy-url'))" class="px-2 py-1 rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-brand-50 cursor-pointer">
-                            Kopieren
-                        </button>
-                        <button type="button" onclick="deleteShareLink(${Number(l.id) || 0})" class="px-2 py-1 rounded bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-300 hover:bg-red-100 cursor-pointer">
-                            Löschen
-                        </button>
-                    </div>
+                    ${l.qr_svg ? `
+                        <div id="linkQrBox_${sid}" class="hidden items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                            <div id="linkQrSvg_${sid}" class="shrink-0">${l.qr_svg}</div>
+                            <div class="space-y-1">
+                                <p class="font-semibold text-slate-800 dark:text-slate-200">📱 QR-Code für diesen Link</p>
+                                <button type="button" onclick="downloadQrCodeSvg('linkQrSvg_${sid}')" class="px-2.5 py-1 rounded bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-[11px] font-semibold cursor-pointer">
+                                    ⬇️ Als SVG speichern
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             `;
             }).join('');
@@ -3491,6 +3677,10 @@ document.getElementById('createShareLinkForm').addEventListener('submit', async 
     fd.append('folder_path', folderPath);
     fd.append('password', document.getElementById('shareLinkPassword').value);
     fd.append('expires_days', document.getElementById('shareLinkExpires').value);
+    const maxDlSelect = document.getElementById('shareLinkMaxDownloads');
+    if (maxDlSelect) {
+        fd.append('max_downloads', maxDlSelect.value);
+    }
     const modeSelect = document.getElementById('shareLinkMode');
     if (modeSelect && folderPath) {
         fd.append('share_mode', modeSelect.value);
@@ -3501,6 +3691,12 @@ document.getElementById('createShareLinkForm').addEventListener('submit', async 
     if (data.success) {
         generatedLinkInput.value = data.share_url;
         generatedLinkBox.classList.remove('hidden');
+        const qrContainer = document.getElementById('generatedLinkQrContainer');
+        const qrSvgEl = document.getElementById('generatedLinkQrSvg');
+        if (qrContainer && qrSvgEl && data.qr_svg) {
+            qrSvgEl.innerHTML = data.qr_svg;
+            qrContainer.classList.remove('hidden');
+        }
         document.getElementById('shareLinkPassword').value = '';
         loadShareDetails(fileId, folderPath);
     } else {
@@ -3910,6 +4106,46 @@ async function revokeUserShare(userShareId) {
         const extractedItems = await extractDroppedItems(e.dataTransfer);
         if (extractedItems.length > 0) {
             startImmediateUpload(extractedItems, null, null);
+        }
+    });
+
+    // 4. Zwischenablage-Upload per Strg+V (Screenshots & kopierte Bilder/Dateien sofort hochladen)
+    window.addEventListener('paste', (e) => {
+        if (!uploadForm || isUploading) return;
+        const activeTag = document.activeElement?.tagName?.toLowerCase() || '';
+        const isTyping = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable;
+
+        const clipboardItems = e.clipboardData?.items;
+        if (!clipboardItems || clipboardItems.length === 0) return;
+
+        const pastedUploadItems = [];
+        const now = new Date();
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const ts = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}_${pad2(now.getHours())}-${pad2(now.getMinutes())}-${pad2(now.getSeconds())}`;
+
+        for (let i = 0; i < clipboardItems.length; i++) {
+            const item = clipboardItems[i];
+            if (item.kind === 'file') {
+                const rawFile = item.getAsFile();
+                if (!rawFile) continue;
+                let finalFile = rawFile;
+                // Wenn ein Screenshot aus der Zwischenablage eingefügt wird (Standardname "image.png"), Zeitstempel-Namen vergeben
+                if (!rawFile.name || /^image\.(png|jpe?g|webp|gif)$/i.test(rawFile.name)) {
+                    const ext = (rawFile.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '');
+                    const customName = `Screenshot_${ts}.${ext}`;
+                    try {
+                        finalFile = new File([rawFile], customName, { type: rawFile.type });
+                    } catch {
+                        finalFile = rawFile;
+                    }
+                }
+                pastedUploadItems.push({ file: finalFile, relativePath: finalFile.name });
+            }
+        }
+
+        if (pastedUploadItems.length > 0 && (!isTyping || pastedUploadItems.some(it => it.file.type.startsWith('image/')))) {
+            e.preventDefault();
+            startImmediateUpload(pastedUploadItems, null, null);
         }
     });
 })();

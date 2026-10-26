@@ -205,6 +205,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
         $attEnc  = $attId > 0 && ((int)($m['attached_encrypted'] ?? 0) === 1);
         $attExt  = $attId > 0 ? strtolower(pathinfo($attName, PATHINFO_EXTENSION)) : '';
         $attIsImg = $attId > 0 && !$attEnc && (str_starts_with($attMime, 'image/') || in_array($attExt, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'], true));
+        $attIsAud = $attId > 0 && !$attEnc && (str_starts_with($attMime, 'audio/') || in_array($attExt, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'], true) || ($attExt === 'webm' && str_starts_with($attName, 'Sprachnachricht_')));
 
         $formatted[] = [
             'id'                => (int)$m['id'],
@@ -218,6 +219,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
             'attached_name'     => $attName,
             'attached_size'     => $attId > 0 ? formatBytes((int)($m['attached_size'] ?? 0)) : '',
             'attached_is_image' => $attIsImg,
+            'attached_is_audio' => $attIsAud,
             'is_read'           => ((int)$m['is_read'] === 1),
             'time_str'          => date('H:i', $ts),
             'date_str'          => date('d.m.Y', $ts),
@@ -283,6 +285,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $finfo = new finfo(FILEINFO_MIME_TYPE);
                 $detectedMime = $finfo->file($tmpPath) ?: 'application/octet-stream';
+                if (str_starts_with($origName, 'Sprachnachricht_') && ($detectedMime === 'video/webm' || $detectedMime === 'application/octet-stream')) {
+                    $detectedMime = 'audio/webm';
+                }
                 do {
                     $storedName = generateSafeStoredFilename();
                     $destPath = UPLOAD_DIR . $storedName;
@@ -312,7 +317,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($messageText === '' && $attachedFileId !== null) {
-            $messageText = '📎 ' . $attachedFileName;
+            $messageText = str_starts_with($attachedFileName, 'Sprachnachricht_')
+                ? '🎙️ Sprachnachricht'
+                : ('📎 ' . $attachedFileName);
         }
 
         if ($messageText === '' && $attachedFileId === null) {
@@ -956,6 +963,7 @@ require_once __DIR__ . '/includes/header.php';
                                     $attEnc  = ((int)($msg['attached_encrypted'] ?? 0) === 1);
                                     $attExt  = strtolower(pathinfo($attName, PATHINFO_EXTENSION));
                                     $attIsImg = !$attEnc && (str_starts_with($attMime, 'image/') || in_array($attExt, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'], true));
+                                    $attIsAud = !$attEnc && (str_starts_with($attMime, 'audio/') || in_array($attExt, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'], true) || ($attExt === 'webm' && str_starts_with($attName, 'Sprachnachricht_')));
                                 ?>
                                     <div class="mt-2 space-y-1.5">
                                         <?php if ($attIsImg): ?>
@@ -967,13 +975,22 @@ require_once __DIR__ . '/includes/header.php';
                                                     class="max-h-56 w-auto object-cover"
                                                 >
                                             </a>
+                                        <?php elseif ($attIsAud): ?>
+                                            <div class="p-1.5 rounded-xl <?= $isMine ? 'bg-white/15' : 'bg-slate-100 dark:bg-slate-700/70' ?>">
+                                                <audio
+                                                    controls
+                                                    preload="metadata"
+                                                    src="download.php?id=<?= $attId ?>&amp;inline=1"
+                                                    class="w-full min-w-[210px] max-w-[270px] h-9"
+                                                ></audio>
+                                            </div>
                                         <?php endif; ?>
                                         <a
                                             href="download.php?id=<?= $attId ?>"
                                             class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors <?= $isMine ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100' ?>"
                                             title="Dateianhang herunterladen"
                                         >
-                                            <span>📎</span>
+                                            <span><?= $attIsAud ? '🎙️' : '📎' ?></span>
                                             <span class="truncate max-w-[190px] sm:max-w-[260px]"><?= e($attName) ?></span>
                                             <span class="opacity-75 text-[10px]">(<?= e($attSize) ?>)</span>
                                             <span>⬇️</span>
@@ -1055,16 +1072,71 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
 
+                    <!-- Anzeige für gewählten Anhang / eingefügten Screenshot (Strg+V) / aufgenommene Sprachnachricht -->
+                    <div id="chatSelectedAttachmentBadge" class="hidden items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-800/80 text-xs text-brand-800 dark:text-brand-200">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span id="chatSelectedAttachmentIcon">📎</span>
+                            <span id="chatSelectedAttachmentName" class="font-semibold truncate"></span>
+                        </div>
+                        <button type="button" onclick="clearChatAttachment()" class="text-brand-600 dark:text-brand-300 hover:text-red-500 font-bold cursor-pointer shrink-0" title="Anhang entfernen">✕</button>
+                    </div>
+
+                    <!-- Sprachnachrichten-Aufnahmeleiste -->
+                    <div id="voiceRecordBar" class="hidden items-center justify-between gap-2 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800/80 text-xs text-red-800 dark:text-red-200">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                            <span class="font-bold">🎙️ Aufnahme läuft:</span>
+                            <span id="voiceRecordTimer" class="font-mono font-bold">00:00</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onclick="stopVoiceRecording(true)"
+                                class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition-colors cursor-pointer"
+                                title="Aufnahme beenden und direkt absenden"
+                            >
+                                ⏹️ Senden
+                            </button>
+                            <button
+                                type="button"
+                                onclick="stopVoiceRecording(false)"
+                                class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold transition-colors cursor-pointer"
+                                title="Aufnahme als Anhang anfügen"
+                            >
+                                📎 Anfügen
+                            </button>
+                            <button
+                                type="button"
+                                onclick="cancelVoiceRecording()"
+                                class="px-2 py-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 font-semibold transition-colors cursor-pointer"
+                                title="Aufnahme verwerfen"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="flex items-end gap-2">
                         <button
                             type="button"
                             id="btnToggleChatAttach"
                             onclick="toggleChatAttachPanel()"
-                            title="Datei oder Bild anhängen"
+                            title="Datei oder Bild anhängen (Tipp: Screenshots direkt mit Strg+V einfügen)"
                             aria-label="Datei oder Bild anhängen"
                             class="p-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
                         >
                             📎
+                        </button>
+
+                        <button
+                            type="button"
+                            id="btnVoiceRecord"
+                            onclick="startVoiceRecording()"
+                            title="Sprachnachricht über das Mikrofon aufnehmen"
+                            aria-label="Sprachnachricht aufnehmen"
+                            class="p-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                        >
+                            🎙️
                         </button>
 
                         <textarea
@@ -1072,7 +1144,7 @@ require_once __DIR__ . '/includes/header.php';
                             id="chatMessageInput"
                             rows="2"
                             maxlength="5000"
-                            placeholder="Nachricht schreiben..."
+                            placeholder="Nachricht schreiben... (Strg+V fügt Screenshots direkt ein)"
                             class="flex-1 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                         ></textarea>
 
@@ -1202,6 +1274,26 @@ require_once __DIR__ . '/includes/header.php';
         });
     }
 
+    function updateAttachmentBadge(label, icon = '📎') {
+        const badge = document.getElementById('chatSelectedAttachmentBadge');
+        const nameEl = document.getElementById('chatSelectedAttachmentName');
+        const iconEl = document.getElementById('chatSelectedAttachmentIcon');
+        const btn = document.getElementById('btnToggleChatAttach');
+        if (!badge || !nameEl || !iconEl) return;
+        if (label) {
+            nameEl.textContent = label;
+            iconEl.textContent = icon;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+            if (btn) btn.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50');
+        } else {
+            nameEl.textContent = '';
+            badge.classList.add('hidden');
+            badge.classList.remove('flex');
+            if (btn) btn.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50');
+        }
+    }
+
     window.toggleChatAttachPanel = function() {
         const panel = document.getElementById('chatAttachPanel');
         if (!panel) return;
@@ -1211,29 +1303,214 @@ require_once __DIR__ . '/includes/header.php';
     window.clearChatAttachment = function() {
         const fileInp = document.getElementById('chatAttachmentFileInput');
         const cloudSel = document.getElementById('chatAttachedCloudSelect');
-        const btn = document.getElementById('btnToggleChatAttach');
         const panel = document.getElementById('chatAttachPanel');
         if (fileInp) fileInp.value = '';
         if (cloudSel) cloudSel.value = '';
-        if (btn) btn.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50');
         if (panel) panel.classList.add('hidden');
+        updateAttachmentBadge('');
     };
 
     window.onChatFileUploadChosen = function(inp) {
         const cloudSel = document.getElementById('chatAttachedCloudSelect');
-        const btn = document.getElementById('btnToggleChatAttach');
         if (inp && inp.files && inp.files.length > 0) {
             if (cloudSel) cloudSel.value = '';
-            if (btn) btn.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50');
+            const f = inp.files[0];
+            const isVoice = f.name.startsWith('Sprachnachricht_') || (f.type && f.type.startsWith('audio/'));
+            updateAttachmentBadge(f.name, isVoice ? '🎙️' : '📎');
+        } else {
+            updateAttachmentBadge('');
         }
     };
 
     window.onChatCloudFileChosen = function(sel) {
         const fileInp = document.getElementById('chatAttachmentFileInput');
-        const btn = document.getElementById('btnToggleChatAttach');
         if (sel && sel.value !== '') {
             if (fileInp) fileInp.value = '';
-            if (btn) btn.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50');
+            const optText = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : 'Cloud-Datei';
+            updateAttachmentBadge(optText, '☁️');
+        } else {
+            updateAttachmentBadge('');
+        }
+    };
+
+    // --- Zwischenablage-Einfügen (Strg+V) für Screenshots & Bilder im Messenger ---
+    window.addEventListener('paste', (e) => {
+        if (!form) return;
+        const cd = e.clipboardData;
+        if (!cd || !cd.items) return;
+
+        let pastedFile = null;
+        for (let i = 0; i < cd.items.length; i++) {
+            const item = cd.items[i];
+            if (item.kind === 'file') {
+                const rawFile = item.getAsFile();
+                if (!rawFile) continue;
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+                let fileName = rawFile.name || '';
+                if (!fileName || /^image\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName) || /^blob$/i.test(fileName)) {
+                    const ext = (rawFile.type && rawFile.type.split('/')[1]) ? rawFile.type.split('/')[1].replace(/[^a-z0-9]/gi, '') : 'png';
+                    fileName = `Screenshot_${ts}.${ext || 'png'}`;
+                }
+                pastedFile = new File([rawFile], fileName, { type: rawFile.type || 'image/png' });
+                break;
+            }
+        }
+
+        if (pastedFile) {
+            e.preventDefault();
+            const fileInp = document.getElementById('chatAttachmentFileInput');
+            const cloudSel = document.getElementById('chatAttachedCloudSelect');
+            if (fileInp && typeof DataTransfer !== 'undefined') {
+                const dt = new DataTransfer();
+                dt.items.add(pastedFile);
+                fileInp.files = dt.files;
+                if (cloudSel) cloudSel.value = '';
+                updateAttachmentBadge(`${pastedFile.name} (aus Zwischenablage eingefügt)`, '📋');
+                if (input) input.focus();
+            }
+        }
+    });
+
+    // --- Sprachnachrichten über MediaRecorder aufnehmen ---
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordTimerInterval = null;
+    let recordStartTime = 0;
+    let autoSendOnStop = false;
+    let discardOnStop = false;
+
+    function formatRecordSeconds(sec) {
+        const m = String(Math.floor(sec / 60)).padStart(2, '0');
+        const s = String(sec % 60).padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function stopMicrophoneTracks() {
+        if (mediaRecorder && mediaRecorder.stream) {
+            mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+        }
+        if (recordTimerInterval) {
+            clearInterval(recordTimerInterval);
+            recordTimerInterval = null;
+        }
+        const bar = document.getElementById('voiceRecordBar');
+        const btn = document.getElementById('btnVoiceRecord');
+        if (bar) {
+            bar.classList.add('hidden');
+            bar.classList.remove('flex');
+        }
+        if (btn) {
+            btn.classList.remove('ring-2', 'ring-red-500', 'bg-red-50');
+        }
+    }
+
+    window.startVoiceRecording = async function() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            window.stopVoiceRecording(false);
+            return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+            alert('Ihr Browser unterstützt leider keine direkte Mikrofonaufnahme (MediaRecorder API).');
+            return;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioChunks = [];
+            autoSendOnStop = false;
+            discardOnStop = false;
+
+            const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+            let chosenMime = '';
+            for (const c of mimeCandidates) {
+                if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) {
+                    chosenMime = c;
+                    break;
+                }
+            }
+
+            mediaRecorder = chosenMime ? new MediaRecorder(stream, { mimeType: chosenMime }) : new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = (ev) => {
+                if (ev.data && ev.data.size > 0) {
+                    audioChunks.push(ev.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const usedMime = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : (chosenMime || 'audio/webm');
+                stopMicrophoneTracks();
+                if (discardOnStop || audioChunks.length === 0) {
+                    audioChunks = [];
+                    return;
+                }
+                const blob = new Blob(audioChunks, { type: usedMime });
+                audioChunks = [];
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+                let ext = 'webm';
+                if (usedMime.includes('ogg')) ext = 'ogg';
+                else if (usedMime.includes('mp4') || usedMime.includes('aac')) ext = 'm4a';
+                else if (usedMime.includes('wav')) ext = 'wav';
+
+                const fileName = `Sprachnachricht_${ts}.${ext}`;
+                const voiceFile = new File([blob], fileName, { type: usedMime.split(';')[0] || 'audio/webm' });
+
+                const fileInp = document.getElementById('chatAttachmentFileInput');
+                const cloudSel = document.getElementById('chatAttachedCloudSelect');
+                if (fileInp && typeof DataTransfer !== 'undefined') {
+                    const dt = new DataTransfer();
+                    dt.items.add(voiceFile);
+                    fileInp.files = dt.files;
+                    if (cloudSel) cloudSel.value = '';
+                    updateAttachmentBadge(`${fileName}`, '🎙️');
+                    if (autoSendOnStop && form) {
+                        form.submit();
+                    }
+                }
+            };
+
+            mediaRecorder.start();
+            recordStartTime = Date.now();
+            const timerEl = document.getElementById('voiceRecordTimer');
+            const bar = document.getElementById('voiceRecordBar');
+            const btn = document.getElementById('btnVoiceRecord');
+            if (timerEl) timerEl.textContent = '00:00';
+            if (bar) {
+                bar.classList.remove('hidden');
+                bar.classList.add('flex');
+            }
+            if (btn) {
+                btn.classList.add('ring-2', 'ring-red-500', 'bg-red-50');
+            }
+            recordTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+                if (timerEl) timerEl.textContent = formatRecordSeconds(elapsed);
+            }, 500);
+        } catch (err) {
+            alert('Mikrofonzugriff konnte nicht gestartet werden. Bitte erlauben Sie den Mikrofonzugriff im Browser.');
+        }
+    };
+
+    window.stopVoiceRecording = function(sendImmediately = false) {
+        autoSendOnStop = Boolean(sendImmediately);
+        discardOnStop = false;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        } else {
+            stopMicrophoneTracks();
+        }
+    };
+
+    window.cancelVoiceRecording = function() {
+        discardOnStop = true;
+        autoSendOnStop = false;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        } else {
+            stopMicrophoneTracks();
         }
     };
 
@@ -1300,12 +1577,14 @@ require_once __DIR__ . '/includes/header.php';
                                 : 'bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100';
                             const imgHtml = m.attached_is_image
                                 ? `<a href="download.php?id=${Number(m.attached_file_id)}" class="block rounded-xl overflow-hidden border ${m.is_mine ? 'border-white/25' : 'border-slate-200 dark:border-slate-700'} max-w-xs"><img src="download.php?id=${Number(m.attached_file_id)}&inline=1" alt="${escapeHtml(m.attached_name)}" loading="lazy" class="max-h-56 w-auto object-cover"></a>`
-                                : '';
+                                : (m.attached_is_audio
+                                    ? `<div class="p-1.5 rounded-xl ${m.is_mine ? 'bg-white/15' : 'bg-slate-100 dark:bg-slate-700/70'}"><audio controls preload="metadata" src="download.php?id=${Number(m.attached_file_id)}&inline=1" class="w-full min-w-[210px] max-w-[270px] h-9"></audio></div>`
+                                    : '');
                             attachmentHtml = `
                                 <div class="mt-2 space-y-1.5">
                                     ${imgHtml}
                                     <a href="download.php?id=${Number(m.attached_file_id)}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${dlLinkCls}">
-                                        <span>📎</span>
+                                        <span>${m.attached_is_audio ? '🎙️' : '📎'}</span>
                                         <span class="truncate max-w-[190px] sm:max-w-[260px]">${escapeHtml(m.attached_name)}</span>
                                         <span class="opacity-75 text-[10px]">(${escapeHtml(m.attached_size)})</span>
                                         <span>⬇️</span>

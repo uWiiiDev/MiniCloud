@@ -258,6 +258,8 @@ function ensureSchemaUpdated(PDO $pdo): void
             `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read',
             `password_hash` VARCHAR(255) DEFAULT NULL,
             `expires_at` DATETIME DEFAULT NULL,
+            `max_downloads` INT UNSIGNED DEFAULT NULL,
+            `download_count` INT UNSIGNED NOT NULL DEFAULT 0,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             UNIQUE KEY `idx_shares_token` (`share_token`),
@@ -275,6 +277,12 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('share_mode', $colsShares, true)) {
         $pdo->exec("ALTER TABLE `shares` ADD COLUMN `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read' AFTER `share_token`");
+    }
+    if (!in_array('max_downloads', $colsShares, true)) {
+        $pdo->exec("ALTER TABLE `shares` ADD COLUMN `max_downloads` INT UNSIGNED DEFAULT NULL AFTER `expires_at`");
+    }
+    if (!in_array('download_count', $colsShares, true)) {
+        $pdo->exec("ALTER TABLE `shares` ADD COLUMN `download_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `max_downloads`");
     }
 
     $pdo->exec("
@@ -418,6 +426,21 @@ function ensureSchemaUpdated(PDO $pdo): void
             `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`user_id`),
             CONSTRAINT `fk_mbr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `audit_logs` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED DEFAULT NULL,
+            `username` VARCHAR(100) NOT NULL DEFAULT '',
+            `event_type` VARCHAR(50) NOT NULL,
+            `description` VARCHAR(500) NOT NULL,
+            `ip_address` VARCHAR(64) NOT NULL DEFAULT '',
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_audit_created` (`created_at`),
+            KEY `idx_audit_type` (`event_type`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 

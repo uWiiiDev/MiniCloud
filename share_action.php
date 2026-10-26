@@ -51,7 +51,7 @@ if ($action === 'list') {
     if ($folderPath !== '') {
         // Ordner-Freigaben laden
         $stmtLinks = $pdo->prepare(
-            'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
+            'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, max_downloads, download_count, created_at
              FROM shares
              WHERE user_id = :uid AND folder_path = :fp
              ORDER BY created_at DESC'
@@ -59,14 +59,18 @@ if ($action === 'list') {
         $stmtLinks->execute([':uid' => $userId, ':fp' => $folderPath]);
         $links = [];
         foreach ($stmtLinks->fetchAll() as $row) {
+            $linkUrl = $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']);
             $links[] = [
-                'id'           => (int)$row['id'],
-                'token'        => (string)$row['share_token'],
-                'share_mode'   => (string)($row['share_mode'] ?? 'read'),
-                'url'          => $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']),
-                'has_password' => (bool)$row['has_password'],
-                'expires_at'   => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
-                'created_at'   => date('d.m.Y H:i', strtotime((string)$row['created_at'])),
+                'id'             => (int)$row['id'],
+                'token'          => (string)$row['share_token'],
+                'share_mode'     => (string)($row['share_mode'] ?? 'read'),
+                'url'            => $linkUrl,
+                'qr_svg'         => renderQrCodeSvg($linkUrl, 130),
+                'has_password'   => (bool)$row['has_password'],
+                'max_downloads'  => $row['max_downloads'] !== null ? (int)$row['max_downloads'] : null,
+                'download_count' => (int)($row['download_count'] ?? 0),
+                'expires_at'     => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
+                'created_at'     => date('d.m.Y H:i', strtotime((string)$row['created_at'])),
             ];
         }
 
@@ -107,7 +111,7 @@ if ($action === 'list') {
     }
 
     $stmtLinks = $pdo->prepare(
-        'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
+        'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, max_downloads, download_count, created_at
          FROM shares
          WHERE file_id = :file_id
          ORDER BY created_at DESC'
@@ -115,14 +119,18 @@ if ($action === 'list') {
     $stmtLinks->execute([':file_id' => $fileId]);
     $links = [];
     foreach ($stmtLinks->fetchAll() as $row) {
+        $linkUrl = $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']);
         $links[] = [
-            'id'           => (int)$row['id'],
-            'token'        => (string)$row['share_token'],
-            'share_mode'   => (string)($row['share_mode'] ?? 'read'),
-            'url'          => $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']),
-            'has_password' => (bool)$row['has_password'],
-            'expires_at'   => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
-            'created_at'   => date('d.m.Y H:i', strtotime((string)$row['created_at'])),
+            'id'             => (int)$row['id'],
+            'token'          => (string)$row['share_token'],
+            'share_mode'     => (string)($row['share_mode'] ?? 'read'),
+            'url'            => $linkUrl,
+            'qr_svg'         => renderQrCodeSvg($linkUrl, 130),
+            'has_password'   => (bool)$row['has_password'],
+            'max_downloads'  => $row['max_downloads'] !== null ? (int)$row['max_downloads'] : null,
+            'download_count' => (int)($row['download_count'] ?? 0),
+            'expires_at'     => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
+            'created_at'     => date('d.m.Y H:i', strtotime((string)$row['created_at'])),
         ];
     }
 
@@ -171,15 +179,19 @@ if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
 
 // 1. Öffentlichen Freigabelink generieren (für Datei ODER Ordner)
 if ($action === 'create_link') {
-    $fileId      = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
-    $folderPath  = isset($_POST['folder_path']) ? sanitizeFolderPathInput((string)$_POST['folder_path']) : '';
-    $password    = isset($_POST['password']) ? trim((string)$_POST['password']) : '';
-    $expiresDays = isset($_POST['expires_days']) ? (int)$_POST['expires_days'] : 0;
-    $rawMode     = isset($_POST['share_mode']) ? trim((string)$_POST['share_mode']) : 'read';
-    $shareMode   = ($folderPath !== '' && in_array($rawMode, ['read', 'upload_only', 'read_write'], true))
+    $fileId       = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $folderPath   = isset($_POST['folder_path']) ? sanitizeFolderPathInput((string)$_POST['folder_path']) : '';
+    $password     = isset($_POST['password']) ? trim((string)$_POST['password']) : '';
+    $expiresDays  = isset($_POST['expires_days']) ? (int)$_POST['expires_days'] : 0;
+    $maxDownloads = isset($_POST['max_downloads']) && (int)$_POST['max_downloads'] > 0
+        ? min(10000, (int)$_POST['max_downloads'])
+        : null;
+    $rawMode      = isset($_POST['share_mode']) ? trim((string)$_POST['share_mode']) : 'read';
+    $shareMode    = ($folderPath !== '' && in_array($rawMode, ['read', 'upload_only', 'read_write'], true))
         ? $rawMode
         : 'read';
 
+    $targetNameForLog = $folderPath;
     if ($folderPath === '') {
         $file = getManageableFile($pdo, $userId, $fileId, $isAdmin);
         if (!$file) {
@@ -187,6 +199,7 @@ if ($action === 'create_link') {
             echo json_encode(['success' => false, 'message' => 'Zugriff verweigert: Sie können diese Datei nicht teilen.']);
             exit;
         }
+        $targetNameForLog = (string)$file['original_name'];
     }
 
     // Eindeutigen, nicht erratbaren Token erzeugen per bin2hex(random_bytes(16))
@@ -212,8 +225,8 @@ if ($action === 'create_link') {
     }
 
     $stmtInsert = $pdo->prepare(
-        'INSERT INTO shares (file_id, folder_path, user_id, share_token, share_mode, password_hash, expires_at)
-         VALUES (:file_id, :folder_path, :user_id, :share_token, :share_mode, :password_hash, :expires_at)'
+        'INSERT INTO shares (file_id, folder_path, user_id, share_token, share_mode, password_hash, expires_at, max_downloads, download_count)
+         VALUES (:file_id, :folder_path, :user_id, :share_token, :share_mode, :password_hash, :expires_at, :max_downloads, 0)'
     );
     $stmtInsert->execute([
         ':file_id'       => $folderPath === '' ? $fileId : null,
@@ -223,19 +236,34 @@ if ($action === 'create_link') {
         ':share_mode'    => $shareMode,
         ':password_hash' => $passwordHash,
         ':expires_at'    => $expiresAt,
+        ':max_downloads' => $maxDownloads,
     ]);
 
     $shareUrl = getBaseUrl() . '/share.php?token=' . rawurlencode($token);
+    logAuditEvent(
+        $pdo,
+        'share_create',
+        sprintf(
+            'Öffentlicher Link für %s "%s" erstellt (Modus: %s%s)',
+            $folderPath !== '' ? 'Ordner' : 'Datei',
+            $targetNameForLog,
+            $shareMode,
+            $maxDownloads !== null ? ', Max. Downloads: ' . $maxDownloads : ''
+        )
+    );
 
     echo json_encode([
-        'success'      => true,
-        'message'      => 'Freigabelink erfolgreich generiert!',
-        'share_id'     => (int)$pdo->lastInsertId(),
-        'share_token'  => $token,
-        'share_mode'   => $shareMode,
-        'share_url'    => $shareUrl,
-        'has_password' => ($passwordHash !== null),
-        'expires_at'   => $expiresAt ? date('d.m.Y H:i', strtotime($expiresAt)) : null,
+        'success'        => true,
+        'message'        => 'Freigabelink erfolgreich generiert!',
+        'share_id'       => (int)$pdo->lastInsertId(),
+        'share_token'    => $token,
+        'share_mode'     => $shareMode,
+        'share_url'      => $shareUrl,
+        'qr_svg'         => renderQrCodeSvg($shareUrl, 140),
+        'has_password'   => ($passwordHash !== null),
+        'max_downloads'  => $maxDownloads,
+        'download_count' => 0,
+        'expires_at'     => $expiresAt ? date('d.m.Y H:i', strtotime($expiresAt)) : null,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -263,6 +291,7 @@ if ($action === 'delete_link') {
     }
 
     $pdo->prepare('DELETE FROM shares WHERE id = :id')->execute([':id' => $shareId]);
+    logAuditEvent($pdo, 'share_delete', sprintf('Öffentlicher Freigabelink #%d widerrufen', $shareId));
     echo json_encode(['success' => true, 'message' => 'Freigabelink wurde widerrufen.']);
     exit;
 }
