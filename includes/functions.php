@@ -115,9 +115,14 @@ function getUserStorageStats(PDO $pdo, int $userId): array
     $stmtUsed->execute([':user_id' => $userId]);
     $statsRow = $stmtUsed->fetch();
 
-    $stmtVersionsUsed = $pdo->prepare('SELECT COALESCE(SUM(file_size), 0) FROM file_versions WHERE user_id = :user_id');
-    $stmtVersionsUsed->execute([':user_id' => $userId]);
-    $versionsBytes = (int)$stmtVersionsUsed->fetchColumn();
+    $versionsBytes = 0;
+    try {
+        $stmtVersionsUsed = $pdo->prepare('SELECT COALESCE(SUM(file_size), 0) FROM file_versions WHERE user_id = :user_id');
+        $stmtVersionsUsed->execute([':user_id' => $userId]);
+        $versionsBytes = (int)$stmtVersionsUsed->fetchColumn();
+    } catch (Throwable) {
+        $versionsBytes = 0;
+    }
 
     $used = (int)($statsRow['total_used'] ?? 0) + $versionsBytes;
     $fileCount = (int)($statsRow['active_count'] ?? 0);
@@ -2093,6 +2098,114 @@ function deletePhysicalFileVersions(PDO $pdo, int $fileId): void
         // Ignorieren
     }
 }
+
+/**
+ * Stellt sicher, dass das Upload-Verzeichnis (UPLOAD_DIR) existiert und per .htaccess gegen direkten Webzugriff geschützt ist.
+ */
+function ensureUploadDirReady(): void
+{
+    if (!is_dir(UPLOAD_DIR)) {
+        @mkdir(UPLOAD_DIR, 0755, true);
+    }
+    $htaccessPath = rtrim(UPLOAD_DIR, '/\\') . '/.htaccess';
+    if (!is_file($htaccessPath)) {
+        $htaccessContent = <<<'HTACCESS'
+# MiniCloud Security: Direkten HTTP-Zugriff und Skript-Ausführung im Upload-Verzeichnis verbieten
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+Options -Indexes -ExecCGI
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .pl .py .cgi .sh
+php_flag engine off
+HTACCESS;
+        @file_put_contents($htaccessPath, $htaccessContent . "\n");
+    }
+}
+
+/**
+ * Liefert die ID des aktuell angemeldeten Benutzers (oder 0).
+ */
+function currentUserId(): int
+{
+    return isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+}
+
+/**
+ * Erzeugt ein verstecktes HTML-Input-Feld mit dem aktuellen CSRF-Token.
+ */
+function csrfField(): string
+{
+    return '<input type="hidden" name="csrf_token" value="' . e(getCsrfToken()) . '">';
+}
+
+/**
+ * Liefert alle für den angegebenen Benutzer zum Teilen sichtbaren anderen Benutzer.
+ *
+ * @return array<int, array{id: int, username: string}>
+ */
+function getVisibleUsersForUser(PDO $pdo, int $userId): array
+{
+    $isAdm = isAdmin() ? 1 : 0;
+    $stmt = $pdo->prepare(
+        'SELECT id, username
+         FROM users
+         WHERE id <> :uid AND (allow_user_sharing = 1 OR is_admin = 1 OR :adm = 1)
+         ORDER BY username ASC'
+    );
+    $stmt->execute([':uid' => $userId, ':adm' => $isAdm]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Liefert alle Benutzergruppen, in denen der Benutzer Mitglied ist (oder alle Gruppen für Admins).
+ *
+ * @return array<int, array{id: int, name: string}>
+ */
+function getGroupsForUser(PDO $pdo, int $userId): array
+{
+    if (isAdmin()) {
+        $stmt = $pdo->query('SELECT id, name FROM `groups` ORDER BY name ASC');
+        return $stmt ? $stmt->fetchAll() : [];
+    }
+    $stmt = $pdo->prepare(
+        'SELECT g.id, g.name
+         FROM `groups` g
+         INNER JOIN group_members gm ON gm.group_id = g.id
+         WHERE gm.user_id = :uid
+         ORDER BY g.name ASC'
+    );
+    $stmt->execute([':uid' => $userId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Alias für sanitizeOriginalFilename().
+ */
+function sanitizeFileName(string $filename): string
+{
+    return sanitizeOriginalFilename($filename);
+}
+
+/**
+ * Alias für generateSafeStoredFilename().
+ */
+function generateStoredFileName(string $ext = ''): string
+{
+    return generateSafeStoredFilename();
+}
+
+/**
+ * Alias für extractSanitizedFolderPath().
+ */
+function sanitizeFolderPath(string $path): string
+{
+    return extractSanitizedFolderPath($path);
+}
+
 
 
 

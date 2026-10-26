@@ -235,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             registerFolderHierarchy($pdo, $userId, $folderPath);
 
             $stmtFile = $pdo->prepare(
-                "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `stored_name`, `mime_type`, `file_size`, `is_encrypted`)
+                "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `filename`, `mime_type`, `file_size`, `is_encrypted`)
                  VALUES (:uid, :fp, :orig, :stored, 'text/markdown', :size, 0)"
             );
             $stmtFile->execute([

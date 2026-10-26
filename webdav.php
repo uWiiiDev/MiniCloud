@@ -240,7 +240,7 @@ if ($method === 'PROPFIND') {
     $fileMatch = webdavFindFile($pdo, $userId, $parentFolder, $itemName);
     if ($fileMatch !== null) {
         $href = encodeWebdavHref($scriptName, ($parentFolder !== '' ? $parentFolder . '/' : '') . $fileMatch['original_name'], false);
-        $mtime = strtotime((string)$fileMatch['uploaded_at']) ?: time();
+        $mtime = strtotime((string)$fileMatch['upload_date']) ?: time();
         http_response_code(207);
         header('Content-Type: application/xml; charset=utf-8');
         echo '<?xml version="1.0" encoding="utf-8"?>' . "\n"
@@ -316,7 +316,7 @@ if ($method === 'PROPFIND') {
         foreach ($stmtFiles->fetchAll() as $f) {
             $fRel = ($cleanRelPath !== '' ? $cleanRelPath . '/' : '') . $f['original_name'];
             $fHref = encodeWebdavHref($scriptName, $fRel, false);
-            $fMtime = strtotime((string)$f['uploaded_at']) ?: time();
+            $fMtime = strtotime((string)$f['upload_date']) ?: time();
             $responses .= buildDavResponseXml($fHref, (string)$f['original_name'], false, (int)$f['file_size'], $fMtime, (string)$f['mime_type']);
         }
     }
@@ -338,14 +338,14 @@ if ($method === 'GET' || $method === 'HEAD') {
         exit;
     }
 
-    $physPath = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$fileMatch['stored_name']);
+    $physPath = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$fileMatch['filename']);
     if (!is_file($physPath) || !is_readable($physPath)) {
         http_response_code(404);
         exit;
     }
 
     $size  = (int)filesize($physPath);
-    $mtime = strtotime((string)$fileMatch['uploaded_at']) ?: (int)filemtime($physPath);
+    $mtime = strtotime((string)$fileMatch['upload_date']) ?: (int)filemtime($physPath);
     header('Content-Type: ' . ((string)$fileMatch['mime_type'] ?: 'application/octet-stream'));
     header('Content-Length: ' . $size);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
@@ -413,14 +413,14 @@ if ($method === 'PUT') {
     $existing = webdavFindFile($pdo, $userId, $parentFolder, $itemName);
     if ($existing !== null) {
         createFileVersionSnapshot($pdo, $existing, 'Vor WebDAV-Speicherung');
-        $oldPhys = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$existing['stored_name']);
+        $oldPhys = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$existing['filename']);
         if (is_file($oldPhys)) {
             @unlink($oldPhys);
         }
 
         $stmtUpd = $pdo->prepare(
             "UPDATE `files`
-             SET `stored_name` = :stored, `mime_type` = :mime, `file_size` = :size, `uploaded_at` = NOW()
+             SET `filename` = :stored, `mime_type` = :mime, `file_size` = :size, `upload_date` = NOW()
              WHERE `id` = :id"
         );
         $stmtUpd->execute([
@@ -434,7 +434,7 @@ if ($method === 'PUT') {
     }
 
     $stmtIns = $pdo->prepare(
-        "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `stored_name`, `mime_type`, `file_size`, `is_encrypted`)
+        "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `filename`, `mime_type`, `file_size`, `is_encrypted`)
          VALUES (:uid, :fp, :orig, :stored, :mime, :size, 0)"
     );
     $stmtIns->execute([
@@ -561,7 +561,7 @@ if ($method === 'MOVE' || $method === 'COPY') {
         }
 
         // COPY
-        $srcPhys = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$fileMatch['stored_name']);
+        $srcPhys = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$fileMatch['filename']);
         if (!is_file($srcPhys)) {
             http_response_code(404);
             exit;
@@ -576,7 +576,7 @@ if ($method === 'MOVE' || $method === 'COPY') {
         @chmod($copyPhys, 0640);
 
         $pdo->prepare(
-            "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `stored_name`, `mime_type`, `file_size`, `is_encrypted`)
+            "INSERT INTO `files` (`user_id`, `folder_path`, `original_name`, `filename`, `mime_type`, `file_size`, `is_encrypted`)
              VALUES (:uid, :fp, :orig, :stored, :mime, :size, 0)"
         )->execute([
             ':uid'    => $userId,
