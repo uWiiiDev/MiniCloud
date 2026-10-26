@@ -2441,6 +2441,76 @@ function getAccessibleContactsForUser(PDO $pdo, int $userId): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Ermittelt die Client-IP-Adresse (DSGVO-konform anonymisiert für Rate-Limiting & Audit-Log).
+ */
+function getClientIp(): string
+{
+    $rawIp = trim((string)($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));
+    if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+        $parts = explode('.', $rawIp);
+        $parts[3] = 'x';
+        return implode('.', $parts);
+    }
+    if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+        $parts = explode(':', $rawIp);
+        return implode(':', array_slice($parts, 0, 3)) . '::x';
+    }
+    return 'lokal';
+}
+
+/**
+ * Prüft anhand des Audit-Logs, ob von dieser IP-Adresse in den letzten 5 Minuten
+ * zu viele fehlgeschlagene Anmeldeversuche (WebDAV / CardDAV / Login) erfolgten.
+ */
+function isLoginRateLimited(PDO $pdo, string $clientIp, int $maxFailures = 10): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM `audit_logs`
+             WHERE `event_type` = 'login_failed'
+               AND `ip_address` = :ip
+               AND `created_at` >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+        );
+        $stmt->execute([':ip' => mb_substr($clientIp, 0, 64)]);
+        return ((int)$stmt->fetchColumn()) >= $maxFailures;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Protokolliert einen fehlgeschlagenen Anmeldeversuch für das Rate-Limiting.
+ */
+function recordLoginFailure(PDO $pdo, string $clientIp, string $username): void
+{
+    logAuditEvent($pdo, 'login_failed', 'Fehlgeschlagener Anmeldeversuch (WebDAV/CardDAV)', null, $username);
+}
+
+/**
+ * Kompatibilitäts-Aliase für Modul-Hilfsfunktionen.
+ */
+function generateQrCodeSvg(string $text, int $size = 180): string
+{
+    return renderQrCodeSvg($text, $size);
+}
+
+function getStorageStats(PDO $pdo, int $userId): array
+{
+    return getUserStorageStats($pdo, $userId);
+}
+
+function ensureFolderHierarchyExist(PDO $pdo, int $userId, string $folderPath): void
+{
+    registerFolderHierarchy($pdo, $userId, $folderPath);
+}
+
+function formatDate(string $dateStr): string
+{
+    return formatDateTime($dateStr);
+}
+
+
 
 
 
