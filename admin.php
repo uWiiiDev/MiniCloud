@@ -790,6 +790,78 @@ function performGitHubUpdate(
     ];
 }
 
+/**
+ * Erzeugt einen vollständigen, wiederherstellbaren SQL-Dump (Struktur + Daten) aller MiniCloud-Tabellen.
+ */
+function generateDatabaseSqlDump(PDO $pdo): string
+{
+    $lines = [];
+    $lines[] = '-- ============================================================================';
+    $lines[] = '-- MiniCloud Datenbank-Backup (.sql)';
+    $lines[] = '-- Erstellt am: ' . date('d.m.Y H:i:s') . ' Uhr';
+    $lines[] = '-- Datenbank:   ' . DB_NAME;
+    $lines[] = '-- ============================================================================';
+    $lines[] = '';
+    $lines[] = 'SET NAMES utf8mb4;';
+    $lines[] = 'SET FOREIGN_KEY_CHECKS = 0;';
+    $lines[] = 'SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";';
+    $lines[] = '';
+
+    $tablesStmt = $pdo->query('SHOW TABLES');
+    $tables = $tablesStmt ? $tablesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+
+    foreach ($tables as $table) {
+        $tableName = (string)$table;
+        if ($tableName === '' || !preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
+            continue;
+        }
+
+        $lines[] = '-- ----------------------------------------------------------------------------';
+        $lines[] = '-- Tabelle `' . $tableName . '`';
+        $lines[] = '-- ----------------------------------------------------------------------------';
+        $lines[] = 'DROP TABLE IF EXISTS `' . $tableName . '`;';
+
+        $createStmt = $pdo->query('SHOW CREATE TABLE `' . $tableName . '`');
+        $createRow = $createStmt ? $createStmt->fetch(PDO::FETCH_NUM) : false;
+        if (is_array($createRow) && isset($createRow[1])) {
+            $lines[] = $createRow[1] . ';';
+            $lines[] = '';
+        }
+
+        $rowsStmt = $pdo->query('SELECT * FROM `' . $tableName . '`');
+        $rows = $rowsStmt ? $rowsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        if (!empty($rows)) {
+            $cols = array_keys($rows[0]);
+            $colList = '`' . implode('`, `', $cols) . '`';
+
+            foreach (array_chunk($rows, 100) as $chunk) {
+                $valueGroups = [];
+                foreach ($chunk as $row) {
+                    $escapedVals = [];
+                    foreach ($row as $val) {
+                        if ($val === null) {
+                            $escapedVals[] = 'NULL';
+                        } elseif (is_int($val) || is_float($val)) {
+                            $escapedVals[] = (string)$val;
+                        } else {
+                            $escapedVals[] = $pdo->quote((string)$val);
+                        }
+                    }
+                    $valueGroups[] = '(' . implode(', ', $escapedVals) . ')';
+                }
+                $lines[] = 'INSERT INTO `' . $tableName . '` (' . $colList . ') VALUES';
+                $lines[] = implode(",\n", $valueGroups) . ';';
+            }
+            $lines[] = '';
+        }
+    }
+
+    $lines[] = 'SET FOREIGN_KEY_CHECKS = 1;';
+    $lines[] = '';
+
+    return implode("\n", $lines);
+}
+
 if (isset($_GET['ajax_server_stats']) && $_GET['ajax_server_stats'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(getServerDashboardMetrics($pdo), JSON_UNESCAPED_UNICODE);
@@ -813,6 +885,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $action = (string)($_POST['action'] ?? '');
+
+    // --- 0. 1-Klick Datenbank-Backup (.sql) herunterladen ---
+    if ($action === 'download_db_backup') {
+        $sqlDump = generateDatabaseSqlDump($pdo);
+        $filename = 'minicloud_db_backup_' . date('Y-m-d_His') . '.sql';
+
+        if (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+        header('Content-Type: application/sql; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($sqlDump));
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        echo $sqlDump;
+        exit;
+    }
 
     // --- 1. Neuen Benutzer anlegen ---
     if ($action === 'create_user') {
@@ -2505,6 +2594,28 @@ $localSnapshots  = getLocalAppSnapshots();
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
+                </div>
+
+                <!-- 1-Klick Datenbank-Backup (.sql Export) -->
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            💾 1-Klick Datenbank-Backup (<code class="font-mono">.sql</code>)
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Exportiert sämtliche 14 MiniCloud-Datenbanktabellen (Benutzer, Dateiverzeichnis, Ordner, Freigaben, Kontakte, Kalender, Chat, Einstellungen) als vollständige SQL-Sicherungsdatei direkt auf Ihr Gerät &ndash; ganz ohne phpMyAdmin.
+                    </p>
+                    <form action="admin.php" method="post">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="download_db_backup">
+                        <button
+                            type="submit"
+                            class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            <span>💾 Vollständiges Datenbank-Backup (.sql) herunterladen</span>
+                        </button>
+                    </form>
                 </div>
             </div>
 

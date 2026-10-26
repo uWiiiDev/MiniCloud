@@ -1,7 +1,7 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 1.7  
-**Stand:** 25.10.2026  
+**Dokumentversion:** 1.8  
+**Stand:** 26.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
 ---
@@ -58,6 +58,7 @@ Speichert die Metadaten aller hochgeladenen Dateien.
 | `file_size` | `BIGINT UNSIGNED` | Nein | `0` | – | Dateigröße in Bytes |
 | `mime_type` | `VARCHAR(128)` | Nein | `'application/octet-stream'` | – | Serverseitig per `finfo` ermittelter MIME-Typ |
 | `is_encrypted` | `TINYINT(1)` | Nein | `0` | – | Tresor-Status (`1` = mit AES-256-GCM Zero-Knowledge verschlüsselt, `0` = unverschlüsselt) |
+| `is_favorite` | `TINYINT(1)` | Nein | `0` | – | Favoriten-Markierung (`1` = als Favorit ⭐ angeheftet, `0` = normal) |
 | `upload_date` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Zeitpunkt des Uploads |
 | `deleted_at` | `DATETIME` | Ja | `NULL` | Index (`idx_files_deleted_at`) | Löschzeitpunkt im Papierkorb (`NULL` = aktive Datei) |
 
@@ -98,6 +99,7 @@ Speichert externe Freigabelinks für einzelne Dateien oder ganze persönliche Or
 | `folder_path` | `VARCHAR(500)` | Ja | `NULL` | – | Freigegebener Ordnerpfad (`NULL` bei Einzeldatei) |
 | `user_id` | `INT UNSIGNED` | Nein | – | `FK -> users(id) ON DELETE CASCADE` | Ersteller der Freigabe |
 | `share_token` | `VARCHAR(64)` | Nein | – | `UNIQUE` (`idx_shares_token`) | Kryptografisches 32-Zeichen-Hex-Token (`random_bytes(16)`) |
+| `share_mode` | `VARCHAR(20)` | Nein | `'read'` | – | Modus für öffentliche Ordner-Links (`'read'` = Nur Download, `'upload_only'` = Digitaler Briefkasten / Nur Hochladen, `'read_write'` = Download & Upload) |
 | `password_hash` | `VARCHAR(255)` | Ja | `NULL` | – | Optionaler BCRYPT-Hash für Passwortschutz |
 | `expires_at` | `DATETIME` | Ja | `NULL` | – | Optionales Ablaufdatum des Links (`NULL` = unbegrenzt) |
 | `created_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Erstellungszeitpunkt |
@@ -135,7 +137,7 @@ Speichern direkte 1:1-Nachrichten zwischen Cloud-Benutzern sowie offizielle Admi
 
 | Tabelle | Wesentliche Spalten | Schlüssel / Index | Beschreibung |
 | :--- | :--- | :--- | :--- |
-| `messages` | `id`, `sender_id`, `recipient_id`, `is_broadcast`, `message_text`, `is_read`, `created_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Chat-Nachrichten (max. 5.000 Zeichen); über *„Verlauf leeren“* jederzeit löschbar |
+| `messages` | `id`, `sender_id`, `recipient_id`, `is_broadcast`, `message_text`, `attached_file_id`, `is_read`, `created_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Chat-Nachrichten (max. 5.000 Zeichen) inkl. optionalem Datei-/Bildanhang (`attached_file_id`); über *„Verlauf leeren“* jederzeit löschbar |
 | `message_broadcast_reads` | `user_id`, `last_read_broadcast_id`, `updated_at` | `PRIMARY KEY (user_id)`, `FK -> users(id) ON DELETE CASCADE` | Speichert pro Benutzer die zuletzt gelesene Admin-Rundnachricht |
 
 ---

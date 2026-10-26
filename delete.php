@@ -112,6 +112,67 @@ if (isset($_POST['delete_folder']) && is_string($_POST['delete_folder']) && trim
     exit;
 }
 
+// Option B0: Mehrfachauswahl (Batch-Löschen mehrerer ausgewählter Dateien in den Papierkorb)
+if (isset($_POST['batch_file_ids']) && is_string($_POST['batch_file_ids']) && trim($_POST['batch_file_ids']) !== '') {
+    $rawIds = explode(',', $_POST['batch_file_ids']);
+    $trashedBatchCount = 0;
+
+    $stmtSel = $pdo->prepare('SELECT id, user_id, group_folder_id, folder_path, filename, original_name FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+    $stmtUpd = $pdo->prepare('UPDATE files SET deleted_at = NOW() WHERE id = :id');
+
+    foreach ($rawIds as $rawId) {
+        $fid = (int)trim($rawId);
+        if ($fid <= 0) {
+            continue;
+        }
+        $stmtSel->execute([':id' => $fid]);
+        $fRow = $stmtSel->fetch();
+        if (!$fRow) {
+            continue;
+        }
+
+        $allowed = false;
+        if ((int)$fRow['user_id'] === $userId) {
+            $allowed = true;
+        } elseif (canUserDeleteSharedFileOrFolder($pdo, $userId, (int)$fRow['user_id'], (int)$fRow['id'], (string)$fRow['folder_path'])) {
+            $allowed = true;
+        } elseif (!empty($fRow['group_folder_id']) && canUserAccessGroupFolder($pdo, $userId, (int)$fRow['group_folder_id'], true, $isAdmin)) {
+            $allowed = true;
+        }
+
+        if ($allowed) {
+            $stmtUpd->execute([':id' => $fid]);
+            $trashedBatchCount++;
+        }
+    }
+
+    if ($trashedBatchCount > 0) {
+        setFlash(
+            'success',
+            sprintf(
+                '%d ausgewählte %s in den Papierkorb verschoben (%d Tage Aufbewahrung).',
+                $trashedBatchCount,
+                $trashedBatchCount === 1 ? 'Datei wurde' : 'Dateien wurden',
+                TRASH_RETENTION_DAYS
+            )
+        );
+    } else {
+        setFlash('error', 'Keine der ausgewählten Dateien konnte gelöscht werden (fehlende Berechtigung).');
+    }
+
+    $queryParams = [];
+    if ($returnSharedFolder > 0) {
+        $queryParams['shared_folder'] = (string)$returnSharedFolder;
+    } elseif ($returnGfId > 0) {
+        $queryParams['group_folder'] = (string)$returnGfId;
+    }
+    if ($returnFolder !== '') {
+        $queryParams['folder'] = $returnFolder;
+    }
+    header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
+    exit;
+}
+
 // Option B: Einzelne Datei in den Papierkorb verschieben (Soft-Delete mit 30 Tagen Aufbewahrung)
 $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
 if ($fileId <= 0) {

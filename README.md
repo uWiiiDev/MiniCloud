@@ -11,18 +11,21 @@
    - Drag-&-Drop-Upload für einzelne Dateien, Mehrfachauswahl und komplette Ordnerstrukturen.
    - **📄 MiniCloud Office Light (Word `.docx`, Excel `.xlsx`, `.csv`, `.txt`, `.md`):** Direkt im Browser ohne externe Server neue Word-Dokumente, Excel-Tabellen oder Notizen anlegen sowie bestehende `.docx`- und `.xlsx`-Dateien online öffnen, bearbeiten (inkl. Rich-Text-Formatierung, Tabellen, mehreren Excel-Tabellenblättern und Live-Formeln wie `=SUMME(A1:A10)` / `=MITTELWERT(...)`) und per `Strg+S` speichern.
    - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
+   - **🖼️ Foto-Galerie / Kachel-Ansicht, ⭐ Favoriten & 🔎 Globale Suche:** Nahtloser Wechsel zwischen Tabellenansicht (`📋 Liste`) und Kachel-Ansicht (`🖼️ Kacheln`) mit Live-Bild-Thumbnails, Anheften wichtiger Dateien per Stern (`⭐ Favoriten`) sowie ordnerübergreifende Volltextsuche über alle Unterordner hinweg.
+   - **☑️ Mehrfachauswahl (Sammel-/Batch-Aktionen):** Mehrere Dateien gleichzeitig per Checkbox auswählen und über die schwebende Aktionsleiste gemeinsam als `.zip` herunterladen, verschieben/kopieren oder in den Papierkorb legen.
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio und Text-/Codedateien (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
    - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv (am Desktop mit direkter Aktionsleiste, auf Smartphones mit platzsparendem **`⋯`-Touch-Aktionsmenü**).
-2. **Öffentliche Freigabelinks & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
+2. **Öffentliche Freigabelinks, 📥 Digitaler Briefkasten (File-Drop) & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
    - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz und Ablaufdatum.
+   - **📥 Digitaler Briefkasten (File-Drop) für Ordner-Links:** Für öffentliche Ordner-Links wählbar zwischen **👁️ Nur Download**, **📤 Digitaler Briefkasten / Nur Hochladen** (Gäste können Dateien/Fotos ohne eigenes Konto zusenden, ohne andere Dateien im Ordner zu sehen) und **🔄 Download & Upload**.
    - Direktfreigabe einzelner Dateien oder ganzer Ordner an andere Cloud-Benutzer (*„Für mich freigegeben“*) mit **3 Berechtigungsstufen** für Ordner: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** (eigene Dateien hochladen & Unterordner anlegen) oder **🗑️ Lesen, Schreiben & Löschen**.
    - **Datenschutz-Standard (`allow_user_sharing = 0`):** Benutzer sind standardmäßig in der Teilen- und Chat-Auswahl anderer Nutzer verborgen und können ihre Sichtbarkeit selbst in den Einstellungen freigeben.
 3. **Kalender, Terminserien & Smartphone-.ics-Abo (`calendar.php`)**
    - Übersichtliche Monats- und Listenansicht für Einzel- und Ganztagestermine mit Farbkodierung, Wiederholungen (täglich, wöchentlich, monatlich, jährlich) und verknüpften Cloud-Dateien.
    - **Kalender teilen (3 Berechtigungsstufen):** Eigenen Kalender für sichtbare Benutzer oder Benutzergruppen freigeben (*Nur Lesen*, *Lesen & Bearbeiten*, *Lesen, Bearbeiten & Löschen*) – private Termine (`🔒 Privat`) bleiben geschützt.
    - `.ics`-Import/Export sowie persönlicher **`.ics`-Abo-Link** zur Live-Synchronisation mit Smartphone (iOS/Android), Thunderbird oder Outlook.
-4. **Integrierter Messenger, Rundnachrichten & System-Benachrichtigungen (`messages.php`)**
-   - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
+4. **Integrierter Messenger, 📎 Dateianhänge, Rundnachrichten & System-Benachrichtigungen (`messages.php`)**
+   - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern, direkter Versand von **📎 Datei- und Bildanhängen** (vom Gerät oder aus den eigenen Cloud-Dateien inkl. Inline-Bildvorschau in der Sprechblase) sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
    - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones (mit ausgeblendetem Footer und dynamischer Anpassung an die Bildschirmtastatur) sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
 5. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
    - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
@@ -31,9 +34,10 @@
    - **Zwei-Faktor-Authentifizierung (2FA) nach Wahl:** Pro Benutzer optional aktivierbarer 2FA-Schutz – wahlweise **per 6-stelligem E-Mail-Code** (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button) oder **per Authenticator-App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden nach RFC 6238 TOTP)** mit 100 % lokal auf dem eigenen Server erzeugtem SVG-QR-Code.
    - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
    - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
-7. **1-Klick-GitHub-Updater, Rollback / Zeitreise & Live-Server-Monitoring (`admin.php`)**
+7. **1-Klick-GitHub-Updater, Rollback / Zeitreise, 💾 Datenbank-Backup (`.sql`) & Live-Server-Monitoring (`admin.php`)**
    - Direkt in der Administration prüft MiniCloud auf neue Commits im GitHub-Repository und aktualisiert alle Programmdateien per 1-Klick-Update, während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` vollständig erhalten bleiben.
    - **🛡️ Automatischer Rollback & freie Versionsauswahl:** Vor jedem Update legt MiniCloud automatisch einen lokalen Sicherungspunkt (`uploads/.system_backups/`) an, sodass ein Update jederzeit per 1-Klick rückgängig gemacht werden kann. Zusätzlich lässt sich in der GitHub-Versionshistorie jeder beliebige frühere Stand gezielt auswählen und installieren (*„⏮️ Diesen Stand installieren“*).
+   - **💾 1-Klick Datenbank-Backup (`.sql`):** Vollständiger SQL-Export sämtlicher 14 Datenbanktabellen direkt im Admin-Bereich ohne phpMyAdmin.
    - Echtzeit-Monitoring für CPU-Auslastung, Arbeitsspeicher (RAM), Festplattenspeicher und Cloud-Belegung.
 8. **Smartphone-App (PWA), 6 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
    - Als Vollbild-App (PWA) auf Android, iPhone/iPad und Desktop installierbar.

@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS `files` (
     `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Dateigröße in Bytes',
     `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
     `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Mit individuellem Tresor-Passwort (AES-256-GCM) verschlüsselt',
+    `is_favorite` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Als Favorit markiert (Schnellzugriff)',
     `upload_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL COMMENT 'Zeitstempel bei Verschiebung in den Papierkorb (30 Tage Aufbewahrung)',
     PRIMARY KEY (`id`),
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS `shares` (
     `folder_path` VARCHAR(500) DEFAULT NULL COMMENT 'Gesetzt bei Ordner-Freigabe',
     `user_id` INT UNSIGNED NOT NULL COMMENT 'Ersteller der Freigabe',
     `share_token` VARCHAR(64) NOT NULL COMMENT 'Eindeutiger Token per bin2hex(random_bytes(16))',
+    `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read' COMMENT 'read = Nur Download, upload_only = Briefkasten (File Drop), read_write = Download & Upload',
     `password_hash` VARCHAR(255) DEFAULT NULL COMMENT 'Optionaler BCRYPT-Passwort-Hash',
     `expires_at` DATETIME DEFAULT NULL COMMENT 'Optionales Ablaufdatum der Freigabe',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -216,6 +218,7 @@ CREATE TABLE IF NOT EXISTS `messages` (
     `recipient_id` INT UNSIGNED DEFAULT NULL COMMENT 'NULL bei Rundnachricht an alle (is_broadcast = 1)',
     `is_broadcast` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Admin-Rundnachricht an alle Benutzer',
     `message_text` TEXT NOT NULL,
+    `attached_file_id` INT UNSIGNED DEFAULT NULL COMMENT 'Optional: Im Chat angehängte/geteilte Datei',
     `is_read` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Vom Empfänger gelesen (bei Direktnachrichten)',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -223,7 +226,8 @@ CREATE TABLE IF NOT EXISTS `messages` (
     KEY `idx_msg_recipient_read` (`recipient_id`, `is_read`),
     KEY `idx_msg_broadcast` (`is_broadcast`, `id`),
     CONSTRAINT `fk_msg_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_msg_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_msg_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_msg_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 14. Tabelle für gelesene Admin-Rundnachrichten pro Benutzer

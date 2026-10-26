@@ -67,7 +67,8 @@ $showAllFolders = ($rawFolderParam === '__all__');
 $currentFolder  = (!$showAllFolders && $rawFolderParam !== '')
     ? extractSanitizedFolderPath($rawFolderParam . '/placeholder')
     : '';
-$searchQuery = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+$searchQuery   = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+$onlyFavorites = isset($_GET['fav']) && $_GET['fav'] === '1';
 
 // Sortier-Parameter für die Haupttabelle (Standard: Datum absteigend)
 $allowedSortCols = [
@@ -343,7 +344,7 @@ if ($activeGroupFolder !== null) {
     $params[':user_id'] = $userId;
 }
 
-if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders) {
+if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders && !$onlyFavorites) {
     if ($currentFolder !== '') {
         // Nur Dateien im ausgewählten Ordner anzeigen
         $sqlFiles .= ' AND f.folder_path = :folder_exact';
@@ -354,6 +355,10 @@ if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders) {
     }
 }
 
+if ($onlyFavorites) {
+    $sqlFiles .= ' AND f.is_favorite = 1';
+}
+
 if ($searchQuery !== '') {
     $sqlFiles .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
     $params[':search_name']   = '%' . $searchQuery . '%';
@@ -361,22 +366,24 @@ if ($searchQuery !== '') {
 }
 
 $orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
-$sqlFiles .= sprintf(' ORDER BY %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+$sqlFiles .= sprintf(' ORDER BY f.is_favorite DESC, %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
 
 $stmtFiles = $pdo->prepare($sqlFiles);
 $stmtFiles->execute($params);
 $files = $stmtFiles->fetchAll();
 
-// Direkte Unterordner des aktuell geöffneten Ordners ermitteln (für die Anzeige in der Haupttabelle)
+// Direkte Unterordner des aktuell geöffneten Ordners ermitteln (oder bei globaler Suche alle passenden Ordner)
 $directSubfolders = [];
-if ($activeSharedFolder === null && !$showAllFolders) {
+if ($activeSharedFolder === null && !$showAllFolders && !$onlyFavorites) {
     foreach ($userFolders as $ufItem) {
         $fPath = (string)$ufItem['folder_path'];
         $parentOfF = str_contains($fPath, '/') ? dirname($fPath) : '';
-        if ($parentOfF === $currentFolder) {
-            if ($searchQuery === '' || stripos($fPath, $searchQuery) !== false) {
+        if ($searchQuery !== '') {
+            if (stripos($fPath, $searchQuery) !== false) {
                 $directSubfolders[] = $ufItem;
             }
+        } elseif ($parentOfF === $currentFolder) {
+            $directSubfolders[] = $ufItem;
         }
     }
 
@@ -715,7 +722,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         <div>
             <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    <?php if ($activeGroupFolder !== null): ?>
+                    <?php if ($onlyFavorites): ?>
+                        ⭐ Meine Favoriten
+                    <?php elseif ($searchQuery !== ''): ?>
+                        🔎 Globale Suche: <span class="text-brand-600 dark:text-brand-400">„<?= e($searchQuery) ?>“</span>
+                    <?php elseif ($activeGroupFolder !== null): ?>
                         Gruppenordner: <span class="text-indigo-600 dark:text-indigo-400"><?= e((string)$activeGroupFolder['name']) ?></span>
                     <?php elseif ($activeSharedFolder !== null): ?>
                         Freigegebener Ordner: <span class="text-blue-600 dark:text-blue-400">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
@@ -730,48 +741,91 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <?= count($directSubfolders) > 0 ? count($directSubfolders) . ' Ordner &bull; ' : '' ?><?= count($files) ?> <?= count($files) === 1 ? 'Datei' : 'Dateien' ?>
                 </span>
             </div>
-            <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $showAllFolders): ?>
+            <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $showAllFolders || $onlyFavorites): ?>
                 <div class="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span>Gefilterte Ansicht aktiv</span>
+                    <span><?= $searchQuery !== '' ? 'Ordnerübergreifende Suche aktiv' : 'Gefilterte Ansicht aktiv' ?></span>
                     <span>&bull;</span>
                     <a href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">&larr; Zurück zum Hauptverzeichnis</a>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- Search Input -->
-        <form action="index.php" method="get" class="flex items-center gap-2 w-full sm:w-auto">
-            <?php if ($activeGroupFolder !== null): ?>
-                <input type="hidden" name="group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
-            <?php endif; ?>
-            <?php if ($activeSharedFolder !== null): ?>
-                <input type="hidden" name="shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
-            <?php endif; ?>
-            <?php if ($showAllFolders): ?>
-                <input type="hidden" name="folder" value="__all__">
-            <?php elseif ($currentFolder !== ''): ?>
-                <input type="hidden" name="folder" value="<?= e($currentFolder) ?>">
-            <?php endif; ?>
-            <?php if ($sortBy !== 'date' || $sortDir !== 'desc'): ?>
-                <input type="hidden" name="sort" value="<?= e($sortBy) ?>">
-                <input type="hidden" name="dir" value="<?= e($sortDir) ?>">
-            <?php endif; ?>
-            <div class="relative flex-1 sm:flex-initial">
-                <input
-                    type="search"
-                    name="q"
-                    value="<?= e($searchQuery) ?>"
-                    placeholder="Dateien durchsuchen..."
-                    class="w-full sm:w-64 pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        <!-- Rechts: Favoriten-Filter, Ansicht-Umschalter (Liste / Kacheln) & Globale Suche -->
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <?php
+            $favFilterParams = [];
+            if ($activeGroupFolder !== null) {
+                $favFilterParams['group_folder'] = (int)$activeGroupFolder['id'];
+            }
+            if (!$onlyFavorites) {
+                $favFilterParams['fav'] = '1';
+            } elseif ($currentFolder !== '') {
+                $favFilterParams['folder'] = $currentFolder;
+            }
+            $favFilterUrl = 'index.php' . (!empty($favFilterParams) ? '?' . http_build_query($favFilterParams) : '');
+            ?>
+            <a
+                href="<?= e($favFilterUrl) ?>"
+                title="<?= $onlyFavorites ? 'Alle Dateien anzeigen' : 'Nur Favoriten (⭐) anzeigen' ?>"
+                class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-semibold transition-colors <?= $onlyFavorites ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/40' ?>"
+            >
+                <span><?= $onlyFavorites ? '⭐' : '☆' ?></span>
+                <span class="hidden md:inline">Favoriten</span>
+            </a>
+
+            <!-- Umschalter: Listenansicht <-> Kachel-/Galerieansicht -->
+            <div class="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700">
+                <button
+                    type="button"
+                    id="btnViewList"
+                    onclick="setFileViewMode('list')"
+                    title="Tabellen-/Listenansicht"
+                    aria-label="Listenansicht"
+                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
                 >
-                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
+                    📋 <span class="hidden lg:inline">Liste</span>
+                </button>
+                <button
+                    type="button"
+                    id="btnViewGrid"
+                    onclick="setFileViewMode('grid')"
+                    title="Kachel- & Foto-Galerieansicht"
+                    aria-label="Kachelansicht"
+                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                >
+                    🖼️ <span class="hidden lg:inline">Kacheln</span>
+                </button>
             </div>
-            <button type="submit" class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer">
-                Suchen
-            </button>
-        </form>
+
+            <!-- Globale Suche über alle Ordner -->
+            <form action="index.php" method="get" class="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                <?php if ($activeGroupFolder !== null): ?>
+                    <input type="hidden" name="group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
+                <?php endif; ?>
+                <?php if ($activeSharedFolder !== null): ?>
+                    <input type="hidden" name="shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
+                <?php endif; ?>
+                <?php if ($sortBy !== 'date' || $sortDir !== 'desc'): ?>
+                    <input type="hidden" name="sort" value="<?= e($sortBy) ?>">
+                    <input type="hidden" name="dir" value="<?= e($sortDir) ?>">
+                <?php endif; ?>
+                <div class="relative flex-1 sm:flex-initial">
+                    <input
+                        type="search"
+                        name="q"
+                        value="<?= e($searchQuery) ?>"
+                        placeholder="Alle Ordner durchsuchen..."
+                        class="w-full sm:w-56 pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                    <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+                <button type="submit" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer">
+                    Suchen
+                </button>
+            </form>
+        </div>
     </div>
 
     <?php if (empty($files) && empty($directSubfolders) && $currentFolder === ''): ?>
@@ -816,16 +870,31 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             if ($searchQuery !== '') {
                 $qParams['q'] = $searchQuery;
             }
+            if ($onlyFavorites) {
+                $qParams['fav'] = 1;
+            }
             $qParams['sort'] = $col;
             $qParams['dir']  = $nextDir;
             return 'index.php?' . http_build_query($qParams);
         };
         ?>
-        <div class="overflow-x-auto">
+        <div id="fileListView" class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
-                        <th class="py-3.5 px-4 sm:px-6">
+                        <th class="py-3.5 pl-4 pr-2 sm:pl-6 w-9">
+                            <?php if (!empty($files)): ?>
+                                <input
+                                    type="checkbox"
+                                    id="selectAllFilesCheckbox"
+                                    onchange="toggleSelectAllFiles(this)"
+                                    class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer align-middle"
+                                    title="Alle Dateien auf dieser Seite auswählen"
+                                    aria-label="Alle Dateien auswählen"
+                                >
+                            <?php endif; ?>
+                        </th>
+                        <th class="py-3.5 px-2 sm:px-4">
                             <a
                                 href="<?= e($buildSortHeaderUrl('name')) ?>"
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'name' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
@@ -884,7 +953,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParent !== '' ? '&amp;folder=' . rawurlencode($upParent) : '') : ($upParent !== '' ? '?folder=' . rawurlencode($upParent) : ''));
                         ?>
                         <tr class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors">
-                            <td class="py-2.5 px-4 sm:px-6" colspan="5">
+                            <td class="py-2.5 px-4 sm:px-6" colspan="6">
                                 <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
                                     <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold">
                                         &crarr; ..
@@ -917,7 +986,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $subGfIdOrNull = $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : null;
                         ?>
                         <tr class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-colors">
-                            <td class="py-3 px-2.5 sm:px-6">
+                            <td class="py-3 pl-4 pr-2 sm:pl-6 w-9 text-center text-amber-500">
+                                📁
+                            </td>
+                            <td class="py-3 px-2 sm:px-4">
                                 <div class="flex items-start sm:items-center gap-2.5 sm:gap-3">
                                     <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-10 sm:h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen">
                                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -927,7 +999,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     <div class="min-w-0 flex-1">
                                         <div class="flex flex-wrap items-center gap-1.5">
                                             <a href="<?= $subUrl ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[145px] sm:max-w-xs md:max-w-md" title="Ordner <?= e($subPath) ?> öffnen">
-                                                <?= e($subDisplayName) ?>
+                                                <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
                                             </a>
                                             <?php if ($subLinkShares > 0): ?>
                                                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300" title="<?= $subLinkShares ?> öffentliche(r) Freigabelink(s)">
@@ -949,7 +1021,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-amber-700 dark:text-amber-400 font-medium">
-                                📁 <?= e($currentFolder !== '' ? $currentFolder : 'Hauptverzeichnis') ?>
+                                📁 <?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
@@ -1062,6 +1134,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $linkShares = (int)($file['link_share_count'] ?? 0);
                         $userShares = (int)($file['user_share_count'] ?? 0);
                         $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
+                        $isFavorite  = ((int)($file['is_favorite'] ?? 0) === 1);
                         $canManageThisFile = $activeSharedFolder !== null
                             ? $canWriteSharedFolder
                             : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
@@ -1096,6 +1169,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             'badgeBg'     => $badge['bg'],
                             'badgeText'   => $badge['text'],
                             'isEncrypted' => $isEncrypted,
+                            'isFavorite'  => $isFavorite,
                             'canManage'   => $canManageThisFile,
                             'officeUrl'   => $officeEditUrl,
                             'downloadUrl' => 'download.php?id=' . $fId,
@@ -1107,13 +1181,40 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             $currentLocLabel = $folderPath !== ''
                                 ? '👥 ' . (string)$activeGroupFolder['name'] . ' / 📁 ' . $folderPath
                                 : '👥 ' . (string)$activeGroupFolder['name'] . ' (Hauptverz.)';
+                            $folderJumpUrl = 'index.php?group_folder=' . (int)$activeGroupFolder['id'] . ($folderPath !== '' ? '&folder=' . rawurlencode($folderPath) : '');
                         } else {
                             $currentLocLabel = $folderPath !== '' ? '📁 ' . $folderPath : '🏠 Hauptverzeichnis';
+                            $folderJumpUrl = $folderPath !== '' ? ('index.php?folder=' . rawurlencode($folderPath)) : 'index.php';
                         }
                     ?>
-                        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                            <td class="py-3.5 px-2.5 sm:px-6">
+                        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors" data-file-row-id="<?= $fId ?>">
+                            <td class="py-3.5 pl-4 pr-2 sm:pl-6 w-9 align-middle">
+                                <input
+                                    type="checkbox"
+                                    value="<?= $fId ?>"
+                                    data-file-id="<?= $fId ?>"
+                                    data-can-manage="<?= $canManageThisFile ? '1' : '0' ?>"
+                                    data-can-delete="<?= $canDeleteThisFile ? '1' : '0' ?>"
+                                    onchange="updateBatchSelection()"
+                                    class="file-select-checkbox w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer align-middle"
+                                    aria-label="Datei <?= e($origName) ?> auswählen"
+                                >
+                            </td>
+                            <td class="py-3.5 px-2 sm:px-4">
                                 <div class="flex items-start sm:items-center gap-2.5 sm:gap-3">
+                                    <?php if ($canManageThisFile): ?>
+                                        <button
+                                            type="button"
+                                            onclick="toggleFavorite(<?= $fId ?>, this)"
+                                            data-fav-btn-id="<?= $fId ?>"
+                                            data-fav="<?= $isFavorite ? '1' : '0' ?>"
+                                            class="text-base leading-none shrink-0 cursor-pointer transition-transform hover:scale-110 mt-1 sm:mt-0 <?= $isFavorite ? 'text-amber-400' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400' ?>"
+                                            title="<?= $isFavorite ? 'Aus Favoriten entfernen' : 'Als Favorit markieren' ?>"
+                                            aria-label="Favorit umschalten"
+                                        >
+                                            <?= $isFavorite ? '⭐' : '☆' ?>
+                                        </button>
+                                    <?php endif; ?>
                                     <button
                                         type="button"
                                         onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
@@ -1156,6 +1257,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <p class="text-[11px] text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
                                             <span class="sm:hidden"><?= e($formattedSize) ?> &bull; <?= e($formattedDate) ?></span>
                                             <span class="hidden sm:inline truncate max-w-[220px]"><?= e($mimeType) ?></span>
+                                            <?php if ($searchQuery !== '' || $onlyFavorites): ?>
+                                                <a href="<?= e($folderJumpUrl) ?>" class="md:hidden inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-medium">
+                                                    &bull; <?= e($currentLocLabel) ?>
+                                                </a>
+                                            <?php endif; ?>
                                             <?php if ($activeGroupFolder !== null || $activeSharedFolder !== null): ?>
                                                 <span>&bull; von <?= e((string)$file['uploader_name']) ?></span>
                                             <?php endif; ?>
@@ -1165,7 +1271,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3.5 px-4 whitespace-nowrap hidden md:table-cell text-xs text-slate-600 dark:text-slate-300 font-medium">
-                                <span class="truncate block max-w-[180px]" title="<?= e($currentLocLabel) ?>"><?= e($currentLocLabel) ?></span>
+                                <a href="<?= e($folderJumpUrl) ?>" class="truncate block max-w-[180px] hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Zum Ordner wechseln: <?= e($currentLocLabel) ?>">
+                                    <?= e($currentLocLabel) ?>
+                                </a>
                             </td>
 
                             <td class="py-3.5 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
@@ -1328,8 +1436,179 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 </tbody>
             </table>
         </div>
+
+        <!-- FOTO-GALERIE / KACHEL-ANSICHT (#fileGridView) -->
+        <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+            <?php foreach ($directSubfolders as $subFolder): ?>
+                <?php
+                $subPath = (string)$subFolder['folder_path'];
+                $subDisplayName = basename($subPath);
+                $subFileCount = (int)$subFolder['file_count'];
+                $subSize = (int)$subFolder['folder_size'];
+                $subUrl = 'index.php?' . ($activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroupFolder['id'] . '&amp;' : '') . 'folder=' . rawurlencode($subPath);
+                ?>
+                <a
+                    href="<?= $subUrl ?>"
+                    class="group flex flex-col justify-between p-3.5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 hover:border-amber-400 dark:hover:border-amber-600 transition-all shadow-2xs"
+                >
+                    <div class="flex items-center justify-center h-28 rounded-xl bg-amber-100/70 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mb-2.5 group-hover:scale-[1.02] transition-transform">
+                        <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate" title="<?= e($subPath) ?>">
+                            📁 <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
+                        </p>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($subSize)) ?>
+                        </p>
+                    </div>
+                </a>
+            <?php endforeach; ?>
+
+            <?php foreach ($files as $fileIdx => $file): ?>
+                <?php
+                $fId = (int)$file['id'];
+                $origName = (string)$file['original_name'];
+                $mimeType = strtolower(trim((string)$file['mime_type']));
+                $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+                $badge = getFileTypeBadge($origName, (string)$file['mime_type']);
+                $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
+                $isFavorite  = ((int)($file['is_favorite'] ?? 0) === 1);
+                $isImageThumb = !$isEncrypted && (str_starts_with($mimeType, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'], true));
+                $canManageThisFile = $activeSharedFolder !== null
+                    ? $canWriteSharedFolder
+                    : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
+                $canDeleteThisFile = $activeSharedFolder !== null
+                    ? $canDeleteSharedFolder
+                    : $canManageThisFile;
+                ?>
+                <div class="group relative flex flex-col justify-between p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs">
+                    <!-- Top Overlay: Favorit + Aktionen -->
+                    <div class="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
+                        <?php if ($canManageThisFile): ?>
+                            <button
+                                type="button"
+                                onclick="toggleFavorite(<?= $fId ?>, this)"
+                                data-fav-btn-id="<?= $fId ?>"
+                                data-fav="<?= $isFavorite ? '1' : '0' ?>"
+                                class="pointer-events-auto w-7 h-7 rounded-lg bg-white/90 dark:bg-slate-900/90 shadow-xs flex items-center justify-center text-sm cursor-pointer hover:scale-110 transition-transform"
+                                title="Favorit umschalten"
+                            >
+                                <?= $isFavorite ? '⭐' : '☆' ?>
+                            </button>
+                        <?php else: ?>
+                            <span></span>
+                        <?php endif; ?>
+
+                        <button
+                            type="button"
+                            onclick="openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>)"
+                            class="pointer-events-auto w-7 h-7 rounded-lg bg-white/90 dark:bg-slate-900/90 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 cursor-pointer hover:bg-brand-50"
+                            title="Datei-Aktionen"
+                        >
+                            ⋯
+                        </button>
+                    </div>
+
+                    <!-- Thumbnail / Icon -->
+                    <button
+                        type="button"
+                        onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
+                        class="w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-2.5 cursor-pointer"
+                    >
+                        <?php if ($isImageThumb): ?>
+                            <img
+                                src="download.php?id=<?= $fId ?>&amp;inline=1"
+                                alt="<?= e($origName) ?>"
+                                loading="lazy"
+                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            >
+                        <?php else: ?>
+                            <span class="inline-flex items-center justify-center px-3 py-1.5 rounded-xl text-xs font-extrabold <?= e($badge['bg']) ?> <?= e($badge['text']) ?>">
+                                <?= $isEncrypted ? '🔒 ' : '' ?><?= e($badge['label']) ?>
+                            </span>
+                        <?php endif; ?>
+                    </button>
+
+                    <div class="min-w-0 px-1">
+                        <button
+                            type="button"
+                            onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
+                            class="w-full text-left text-xs font-semibold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate cursor-pointer"
+                            title="<?= e($origName) ?>"
+                        >
+                            <?= e($origName) ?>
+                        </button>
+                        <p class="text-[11px] text-slate-400 truncate">
+                            <?= e(formatBytes((int)$file['file_size'])) ?>
+                        </p>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
     <?php endif; ?>
 </section>
+
+<!-- SCHWEBENDE SAMMEL-AKTIONSLEISTE (Batch-Aktionen bei Mehrfachauswahl) -->
+<div
+    id="batchActionBar"
+    class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 hidden items-center gap-2 sm:gap-3 px-4 py-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-800/95 text-white shadow-2xl border border-slate-700 backdrop-blur-md max-w-[95vw]"
+>
+    <span class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-300 whitespace-nowrap">
+        ☑️ <span id="batchSelectedCount">0</span> ausgewählt
+    </span>
+    <div class="h-4 w-px bg-slate-700"></div>
+    <button
+        type="button"
+        onclick="downloadBatchZip()"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+        title="Ausgewählte Dateien als ZIP herunterladen"
+    >
+        <span>⬇️ ZIP</span>
+    </button>
+    <button
+        type="button"
+        id="btnBatchTransfer"
+        onclick="openBatchTransferModal()"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+        title="Ausgewählte Dateien verschieben oder kopieren"
+    >
+        <span>⇄ Verschieben / Kopieren</span>
+    </button>
+    <button
+        type="button"
+        id="btnBatchDelete"
+        onclick="deleteBatchFiles()"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+        title="Ausgewählte Dateien in den Papierkorb verschieben"
+    >
+        <span>🗑️ Löschen</span>
+    </button>
+    <button
+        type="button"
+        onclick="clearBatchSelection()"
+        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+        title="Auswahl aufheben"
+        aria-label="Auswahl aufheben"
+    >
+        ✕
+    </button>
+</div>
+
+<form id="batchDeleteForm" action="delete.php" method="post" class="hidden">
+    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+    <input type="hidden" name="batch_file_ids" id="batchDeleteIdsInput" value="">
+    <?php if ($currentFolder !== ''): ?>
+        <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+    <?php endif; ?>
+    <?php if ($activeSharedFolder !== null): ?>
+        <input type="hidden" name="return_shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
+    <?php elseif ($activeGroupFolder !== null): ?>
+        <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
+    <?php endif; ?>
+</form>
 
 <!-- FÜR MICH FREIGEGEBEN (Ordner & Dateien, die von anderen Cloud-Benutzern geteilt wurden) -->
 <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
@@ -1614,6 +1893,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         </div>
                     </div>
 
+                    <!-- Freigabe-Modus für Ordner-Links (Idee 1: Digitaler Briefkasten / File-Drop) -->
+                    <div id="shareLinkModeWrapper" class="hidden">
+                        <label for="shareLinkMode" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Ordner-Modus für Besucher dieses Links
+                        </label>
+                        <select
+                            id="shareLinkMode"
+                            name="share_mode"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                            <option value="read">👁️ Nur Download (Besucher können Dateien ansehen &amp; herunterladen)</option>
+                            <option value="upload_only">📤 Digitaler Briefkasten / Nur Hochladen (Besucher sehen keine fremden Dateien)</option>
+                            <option value="read_write">🔄 Download &amp; Upload (Gemeinsamer Austausch-Ordner)</option>
+                        </select>
+                    </div>
+
                     <button
                         type="submit"
                         id="btnGenerateLink"
@@ -1894,6 +2189,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
             <input type="hidden" name="action" id="transferModalAction" value="move_file">
             <input type="hidden" name="file_id" id="transferModalFileId" value="">
+            <input type="hidden" name="batch_file_ids" id="transferModalBatchIds" value="">
             <input type="hidden" name="source_folder" id="transferModalSourceFolder" value="">
             <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
             <?php if ($activeGroupFolder !== null): ?>
@@ -2564,6 +2860,197 @@ vaultModal.addEventListener('click', (e) => {
     }
 });
 
+// --- ANSICHTSUMSCHALTER (Liste <-> Kacheln) & FAVORITEN & MEHRFACHAUSWAHL ---
+function setFileViewMode(mode) {
+    const listView = document.getElementById('fileListView');
+    const gridView = document.getElementById('fileGridView');
+    const btnList = document.getElementById('btnViewList');
+    const btnGrid = document.getElementById('btnViewGrid');
+    const isGrid = (mode === 'grid');
+
+    try {
+        localStorage.setItem('mc_file_view_mode', isGrid ? 'grid' : 'list');
+    } catch {}
+
+    if (listView && gridView) {
+        if (isGrid) {
+            listView.classList.add('hidden');
+            gridView.classList.remove('hidden');
+            gridView.classList.add('grid');
+        } else {
+            gridView.classList.add('hidden');
+            gridView.classList.remove('grid');
+            listView.classList.remove('hidden');
+        }
+    }
+
+    const activeCls = ['bg-white', 'dark:bg-slate-700', 'text-brand-600', 'dark:text-brand-400', 'shadow-2xs'];
+    const inactiveCls = ['text-slate-600', 'dark:text-slate-400'];
+
+    if (btnList && btnGrid) {
+        if (isGrid) {
+            btnGrid.classList.add(...activeCls);
+            btnGrid.classList.remove(...inactiveCls);
+            btnList.classList.remove(...activeCls);
+            btnList.classList.add(...inactiveCls);
+        } else {
+            btnList.classList.add(...activeCls);
+            btnList.classList.remove(...inactiveCls);
+            btnGrid.classList.remove(...activeCls);
+            btnGrid.classList.add(...inactiveCls);
+        }
+    }
+}
+
+(() => {
+    try {
+        const savedView = localStorage.getItem('mc_file_view_mode');
+        if (savedView === 'grid') {
+            setFileViewMode('grid');
+        } else {
+            setFileViewMode('list');
+        }
+    } catch {
+        setFileViewMode('list');
+    }
+})();
+
+async function toggleFavorite(fileId, btnEl) {
+    try {
+        const fd = new FormData();
+        fd.append('action', 'toggle_favorite');
+        fd.append('csrf_token', csrfToken);
+        fd.append('file_id', String(fileId));
+        const res = await fetch('folder_action.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+            body: fd
+        });
+        const data = await res.json();
+        if (!data.success) return;
+        const isFav = Boolean(data.is_favorite);
+        document.querySelectorAll(`[data-fav-btn-id="${fileId}"]`).forEach(el => {
+            el.setAttribute('data-fav', isFav ? '1' : '0');
+            el.textContent = isFav ? '⭐' : '☆';
+            el.title = isFav ? 'Aus Favoriten entfernen' : 'Als Favorit markieren';
+            if (isFav) {
+                el.classList.add('text-amber-400');
+                el.classList.remove('text-slate-300', 'dark:text-slate-600');
+            } else {
+                el.classList.remove('text-amber-400');
+                el.classList.add('text-slate-300', 'dark:text-slate-600');
+            }
+        });
+        if (previewItems) {
+            const pItem = previewItems.find(it => Number(it.id) === Number(fileId));
+            if (pItem) pItem.isFavorite = isFav;
+        }
+    } catch {}
+}
+
+function getSelectedFileCheckboxes() {
+    return Array.from(document.querySelectorAll('.file-select-checkbox:checked'));
+}
+
+function updateBatchSelection() {
+    const allCbs = Array.from(document.querySelectorAll('.file-select-checkbox'));
+    const checkedCbs = getSelectedFileCheckboxes();
+    const selectAllCb = document.getElementById('selectAllFilesCheckbox');
+    const bar = document.getElementById('batchActionBar');
+    const countEl = document.getElementById('batchSelectedCount');
+    const btnDelete = document.getElementById('btnBatchDelete');
+
+    if (selectAllCb && allCbs.length > 0) {
+        selectAllCb.checked = (checkedCbs.length === allCbs.length);
+        selectAllCb.indeterminate = (checkedCbs.length > 0 && checkedCbs.length < allCbs.length);
+    }
+
+    if (!bar || !countEl) return;
+    if (checkedCbs.length === 0) {
+        bar.classList.add('hidden');
+        bar.classList.remove('flex');
+        return;
+    }
+
+    countEl.textContent = String(checkedCbs.length);
+    const anyDeletable = checkedCbs.some(cb => cb.getAttribute('data-can-delete') === '1');
+    if (btnDelete) {
+        btnDelete.classList.toggle('hidden', !anyDeletable);
+    }
+    bar.classList.remove('hidden');
+    bar.classList.add('flex');
+}
+
+function toggleSelectAllFiles(masterCb) {
+    const checked = Boolean(masterCb && masterCb.checked);
+    document.querySelectorAll('.file-select-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateBatchSelection();
+}
+
+function clearBatchSelection() {
+    const selectAllCb = document.getElementById('selectAllFilesCheckbox');
+    if (selectAllCb) {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
+    }
+    document.querySelectorAll('.file-select-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    updateBatchSelection();
+}
+
+function downloadBatchZip() {
+    const ids = getSelectedFileCheckboxes().map(cb => cb.value).filter(Boolean);
+    if (ids.length === 0) return;
+    window.location.href = 'download.php?batch_ids=' + encodeURIComponent(ids.join(','));
+}
+
+function openBatchTransferModal() {
+    const checkedCbs = getSelectedFileCheckboxes();
+    if (checkedCbs.length === 0) return;
+    const ids = checkedCbs.map(cb => cb.value);
+    const allCanManage = checkedCbs.every(cb => cb.getAttribute('data-can-manage') === '1');
+
+    transferModalTitle.textContent = 'Ausgewählte Dateien verschieben / kopieren';
+    transferModalItemName.textContent = `☑️ ${ids.length} ${ids.length === 1 ? 'ausgewählte Datei' : 'ausgewählte Dateien'}`;
+    transferModalAction.value = 'batch_transfer_files';
+    transferModalFileId.value = '';
+    document.getElementById('transferModalBatchIds').value = ids.join(',');
+    transferModalSourceFolder.value = '';
+    transferTargetSelect.setAttribute('name', 'target_folder');
+    transferTargetSelect.value = '';
+
+    if (optGroupMovePersonal) {
+        optGroupMovePersonal.disabled = !allCanManage;
+        optGroupMovePersonal.hidden = !allCanManage;
+    }
+    if (optGroupMoveGroup) {
+        optGroupMoveGroup.disabled = !allCanManage;
+        optGroupMoveGroup.hidden = !allCanManage;
+    }
+
+    transferModal.classList.remove('hidden');
+    transferModal.classList.add('flex');
+    setTimeout(() => transferTargetSelect.focus(), 50);
+}
+
+function deleteBatchFiles() {
+    const checkedCbs = getSelectedFileCheckboxes().filter(cb => cb.getAttribute('data-can-delete') === '1');
+    if (checkedCbs.length === 0) return;
+    const ids = checkedCbs.map(cb => cb.value);
+    if (!confirm(`Möchten Sie die ${ids.length} ausgewählten Datei(en) wirklich in den Papierkorb verschieben?`)) {
+        return;
+    }
+    const input = document.getElementById('batchDeleteIdsInput');
+    const form = document.getElementById('batchDeleteForm');
+    if (input && form) {
+        input.value = ids.join(',');
+        form.submit();
+    }
+}
+
 // --- VERSCHIEBEN / KOPIEREN MODAL LOGIK ---
 const transferModal = document.getElementById('transferModal');
 const transferModalTitle = document.getElementById('transferModalTitle');
@@ -2576,6 +3063,8 @@ const optGroupMovePersonal = document.getElementById('optGroupMovePersonal');
 const optGroupMoveGroup = document.getElementById('optGroupMoveGroup');
 
 function openTransferModal(type, fileId, displayName, folderPath = '', canMove = true) {
+    const batchIdsEl = document.getElementById('transferModalBatchIds');
+    if (batchIdsEl) batchIdsEl.value = '';
     if (type === 'folder') {
         transferModalTitle.textContent = 'Ordner verschieben oder kopieren';
         transferModalItemName.textContent = '📁 ' + displayName;
@@ -2716,6 +3205,13 @@ function openMobileFileMenu(fileIdx, canDelete) {
         openPreviewModal(fileIdx);
     });
 
+    // 1b. Favorit umschalten
+    if (item.canManage) {
+        addBtn(item.isFavorite ? '⭐ Aus Favoriten entfernen' : '☆ Als Favorit markieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100', () => {
+            toggleFavorite(item.id);
+        });
+    }
+
     // 2. Office Light (falls unterstützt & unverschlüsselt)
     if (item.officeUrl && item.officeUrl !== '') {
         addBtn(item.canManage ? '✏️ In Office Light bearbeiten' : '📄 In Office Light öffnen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
@@ -2836,6 +3332,16 @@ function openShareModal(fileId, itemName, folderPath = '') {
     shareModalFilename.textContent = folderPath ? ('📁 ' + itemName) : itemName;
     document.getElementById('shareLinkPassword').value = '';
     document.getElementById('shareLinkExpires').value = '0';
+    const modeWrapper = document.getElementById('shareLinkModeWrapper');
+    const modeSelect = document.getElementById('shareLinkMode');
+    if (modeWrapper && modeSelect) {
+        modeSelect.value = 'read';
+        if (folderPath) {
+            modeWrapper.classList.remove('hidden');
+        } else {
+            modeWrapper.classList.add('hidden');
+        }
+    }
     generatedLinkBox.classList.add('hidden');
     shareModal.classList.remove('hidden');
     shareModal.classList.add('flex');
@@ -2879,7 +3385,18 @@ async function loadShareDetails(fileId, folderPath = '') {
         if (data.links.length === 0) {
             existingLinksList.innerHTML = '<p class="text-xs text-slate-400">Noch keine aktiven Freigabelinks vorhanden.</p>';
         } else {
-            existingLinksList.innerHTML = data.links.map(l => `
+            existingLinksList.innerHTML = data.links.map(l => {
+                let modeBadge = '';
+                if (folderPath) {
+                    if (l.share_mode === 'upload_only') {
+                        modeBadge = ' &bull; <span class="text-amber-600 dark:text-amber-400 font-semibold">📤 Digitaler Briefkasten (Nur Upload)</span>';
+                    } else if (l.share_mode === 'read_write') {
+                        modeBadge = ' &bull; <span class="text-emerald-600 dark:text-emerald-400 font-semibold">🔄 Download &amp; Upload</span>';
+                    } else {
+                        modeBadge = ' &bull; <span>👁️ Nur Download</span>';
+                    }
+                }
+                return `
                 <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5">
@@ -2888,6 +3405,7 @@ async function loadShareDetails(fileId, folderPath = '') {
                         <div class="text-[11px] text-slate-400 mt-0.5">
                             ${l.has_password ? '🔒 Passwortgeschützt' : '🌐 Öffentlich'}
                             ${l.expires_at ? ' &bull; Gültig bis ' + escapeHtml(String(l.expires_at)) : ' &bull; Unbegrenzt'}
+                            ${modeBadge}
                         </div>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
@@ -2899,7 +3417,8 @@ async function loadShareDetails(fileId, folderPath = '') {
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         // Bestehende Benutzer-Freigaben rendern
@@ -2941,6 +3460,10 @@ document.getElementById('createShareLinkForm').addEventListener('submit', async 
     fd.append('folder_path', folderPath);
     fd.append('password', document.getElementById('shareLinkPassword').value);
     fd.append('expires_days', document.getElementById('shareLinkExpires').value);
+    const modeSelect = document.getElementById('shareLinkMode');
+    if (modeSelect && folderPath) {
+        fd.append('share_mode', modeSelect.value);
+    }
 
     const res = await fetch('share_action.php', { method: 'POST', body: fd });
     const data = await res.json();

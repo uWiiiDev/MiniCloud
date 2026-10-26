@@ -272,6 +272,22 @@ function getAuthorizedFileForDownload(PDO $pdo, int $userId, int $fileId, bool $
         }
     }
 
+    // 4. Datei wurde mit dem Benutzer über den Chat (messages.attached_file_id) oder eine Rundnachricht geteilt
+    $stmtChatAtt = $pdo->prepare(
+        'SELECT id FROM messages
+         WHERE attached_file_id = :fid
+           AND (recipient_id = :uid1 OR sender_id = :uid2 OR is_broadcast = 1)
+         LIMIT 1'
+    );
+    $stmtChatAtt->execute([
+        ':fid'  => $fileId,
+        ':uid1' => $userId,
+        ':uid2' => $userId,
+    ]);
+    if ($stmtChatAtt->fetch()) {
+        return $file;
+    }
+
     return null;
 }
 

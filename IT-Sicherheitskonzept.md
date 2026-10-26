@@ -1,7 +1,7 @@
 # IT-Sicherheitskonzept – MiniCloud
 
-**Dokumentversion:** 1.7  
-**Stand:** 25.10.2026  
+**Dokumentversion:** 1.8  
+**Stand:** 26.10.2026  
 **System:** MiniCloud – Leichtgewichtiger, selbstgehosteter Cloud-Speicher mit Office Light, Kalender & Messenger (PHP 8.2+ / MySQL & MariaDB)
 
 ---
@@ -21,7 +21,7 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 2. **Integrität (Integrity):**
    - Schutz vor unbefugter Veränderung, Überschreibung oder Löschung durch 3-stufige Berechtigungsprüfungen (`Nur Lesen`, `Lesen & Schreiben/Bearbeiten`, `Lesen, Schreiben/Bearbeiten & Löschen`) sowie CSRF- und SQL-Injection-Schutz.
 3. **Verfügbarkeit (Availability):**
-   - Schutz vor unbeabsichtigtem Datenverlust durch 30-tägige Papierkorb-Aufbewahrung (Soft-Delete), Benutzer-Speicherkontingente (Quotas) sowie einen abgesicherten **1-Klick-GitHub-Updater mit automatischen lokalen Sicherungspunkten (Snapshots) und 1-Klick-Rollback**, der `uploads/` und Datenbank-Zugangsdaten niemals überschreibt.
+   - Schutz vor unbeabsichtigtem Datenverlust durch 30-tägige Papierkorb-Aufbewahrung (Soft-Delete), Benutzer-Speicherkontingente (Quotas), **1-Klick-Datenbank-Backup (`.sql`)** im Admin-Bereich sowie einen abgesicherten **1-Klick-GitHub-Updater mit automatischen lokalen Sicherungspunkten (Snapshots) und 1-Klick-Rollback**, der `uploads/` und Datenbank-Zugangsdaten niemals überschreibt.
 4. **Authentizität & Nachvollziehbarkeit:**
    - Eindeutige Zuordnung jeder Datei (`user_id`), jeder Freigabe (`owner_id`), jedes Termins (`user_id`) und jeder Nachricht (`sender_id`) zu einem authentifizierten Benutzerkonto.
 
@@ -50,7 +50,7 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
   - Stufe 2: **✏️ Lesen & Schreiben/Bearbeiten** (`can_write = 1, can_delete = 0`)
   - Stufe 3: **🗑️ Lesen, Schreiben/Bearbeiten & Löschen** (`can_write = 1, can_delete = 1`)
 - **Privacy-by-Default (`allow_user_sharing`):** Sowohl in `share_action.php`, `calendar.php` als auch in `messages.php` wird serverseitig geprüft, ob der Zielbenutzer direkte Freigaben/Nachrichten in seinen Datenschutzeinstellungen erlaubt hat (`allow_user_sharing = 1`).
-- **Kryptografische Tokens:** Öffentliche Freigabelinks nutzen 128-Bit-Zufallstokens (`random_bytes(16)`), persönliche `.ics`-Kalender-Feeds nutzen 192-Bit-Zufallstokens (`random_bytes(24)`), verglichen per `hash_equals()`.
+- **Kryptografische Tokens & Digitaler Briefkasten (`share_mode`):** Öffentliche Freigabelinks nutzen 128-Bit-Zufallstokens (`random_bytes(16)`), persönliche `.ics`-Kalender-Feeds nutzen 192-Bit-Zufallstokens (`random_bytes(24)`), verglichen per `hash_equals()`. Bei öffentlichen Ordner-Links im Modus **`upload_only` (Digitaler Briefkasten)** wird serverseitig sowohl die Dateiauflistung als auch der Dateidownload strikt unterbunden, sodass Gäste ausschließlich Dateien in das Kontingent des Ordner-Eigentümers hochladen können, ohne fremde Dateien einzusehen.
 
 ### 3.4 Dateisystem-, Upload-, Office-Light- & Tresor-Sicherheit (`upload.php`, `office.php`, `vault_action.php`, `download.php`)
 - **Pseudonymisierte `.bin`-Speicherung & `.htaccess`-Sperre:** Dateien werden als `mc_<uniqid>_<hex16>.bin` mit Modus `0640` abgelegt; `uploads/.htaccess` blockiert jeden direkten Webzugriff.

@@ -197,6 +197,32 @@ if (isset($_GET['group_folder_zip'])) {
     streamZipArchive($folderFiles, (string)($gfRow['name'] ?? 'gruppenordner'));
 }
 
+// Option C2: Mehrfachauswahl (Batch-Download ausgewählter Dateien als ZIP-Archiv, ?batch_ids=1,2,3)
+if (isset($_GET['batch_ids']) && is_string($_GET['batch_ids']) && trim($_GET['batch_ids']) !== '') {
+    $rawIds = explode(',', $_GET['batch_ids']);
+    $batchFiles = [];
+    foreach ($rawIds as $rawId) {
+        $fid = (int)trim($rawId);
+        if ($fid <= 0) {
+            continue;
+        }
+        $authFile = getAuthorizedFileForDownload($pdo, $userId, $fid, $isAdmin);
+        if ($authFile) {
+            // Für ein flaches/sauberes Auswahl-ZIP setzen wir folder_path leer
+            $authFile['folder_path'] = '';
+            $batchFiles[] = $authFile;
+        }
+    }
+
+    if (empty($batchFiles)) {
+        setFlash('error', 'Keine berechtigten Dateien für den Sammel-Download ausgewählt.');
+        header('Location: index.php');
+        exit;
+    }
+
+    streamZipArchive($batchFiles, 'MiniCloud_Auswahl_' . date('Y-m-d_His'));
+}
+
 // Option D: Einzelne Datei herunterladen (?id=...) – prüft Eigentümer, Benutzer-Freigabe oder Gruppenordner-Recht
 $fileId = isset($_REQUEST['id']) ? (int)$_REQUEST['id'] : 0;
 if ($fileId <= 0) {

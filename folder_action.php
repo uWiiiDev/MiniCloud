@@ -619,5 +619,195 @@ if ($action === 'move_folder') {
     exit;
 }
 
+// 5. Favoriten-Status (⭐) für eine einzelne Datei umschalten (per AJAX oder Formular)
+if ($action === 'toggle_favorite') {
+    $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $stmtF = $pdo->prepare('SELECT id, user_id, group_folder_id, is_favorite, original_name FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+    $stmtF->execute([':id' => $fileId]);
+    $fRow = $stmtF->fetch();
+
+    $canFav = false;
+    if ($fRow) {
+        if ((int)$fRow['user_id'] === $userId) {
+            $canFav = true;
+        } elseif (!empty($fRow['group_folder_id']) && canUserAccessGroupFolder($pdo, $userId, (int)$fRow['group_folder_id'], false, $isAdmin)) {
+            $canFav = true;
+        }
+    }
+
+    if (!$fRow || !$canFav) {
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'message' => 'Keine Berechtigung.']);
+            exit;
+        }
+        setFlash('error', 'Datei nicht gefunden oder keine Berechtigung.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $newFav = ((int)($fRow['is_favorite'] ?? 0) === 1) ? 0 : 1;
+    $pdo->prepare('UPDATE files SET is_favorite = :fav WHERE id = :id')->execute([
+        ':fav' => $newFav,
+        ':id'  => $fileId,
+    ]);
+
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success'     => true,
+            'file_id'     => $fileId,
+            'is_favorite' => ($newFav === 1),
+        ]);
+        exit;
+    }
+
+    setFlash('success', $newFav === 1 ? 'Als Favorit markiert.' : 'Aus Favoriten entfernt.');
+    header('Location: index.php');
+    exit;
+}
+
+// 6. Mehrfachauswahl (Batch): Ausgewählte Dateien gemeinsam verschieben oder kopieren
+if ($action === 'batch_transfer_files') {
+    $rawIds       = isset($_POST['batch_file_ids']) ? explode(',', (string)$_POST['batch_file_ids']) : [];
+    $rawTarget    = isset($_POST['target_folder']) ? (string)$_POST['target_folder'] : '';
+    $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
+
+    $targetSpec   = parseTransferTargetSpec($rawTarget, $groupFolderId);
+    $mode         = $targetSpec['mode'];
+    $targetGfId   = $targetSpec['gf_id'];
+    $targetFolder = $targetSpec['folder'];
+
+    if ($targetGfId !== null && !canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin)) {
+        setFlash('error', 'Sie besitzen keine Schreibberechtigung für den gewählten Ziel-Gruppenordner.');
+        header('Location: index.php');
+        exit;
+    }
+
+    if ($targetFolder !== '') {
+        registerFolderHierarchy($pdo, $userId, $targetFolder, $targetGfId);
+    }
+
+    $destLabel = formatTransferTargetLabel($pdo, $targetGfId, $targetFolder);
+    $processedCount = 0;
+
+    $stmtSel = $pdo->prepare(
+        'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+         FROM files
+         WHERE id = :id AND deleted_at IS NULL
+         LIMIT 1'
+    );
+    $stmtMove = $pdo->prepare(
+        'UPDATE files SET user_id = :uid, group_folder_id = :gf_id, folder_path = :fp WHERE id = :id'
+    );
+    $stmtCopy = $pdo->prepare(
+        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, :enc)'
+    );
+
+    foreach ($rawIds as $rawId) {
+        $fid = (int)trim($rawId);
+        if ($fid <= 0) {
+            continue;
+        }
+        $stmtSel->execute([':id' => $fid]);
+        $file = $stmtSel->fetch();
+        if (!$file) {
+            continue;
+        }
+
+        $sourceGfId   = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+        $sourceFolder = (string)$file['folder_path'];
+
+        if ($mode === 'move') {
+            $canWriteSource = ((int)$file['user_id'] === $userId)
+                || ($sourceGfId !== null && canUserAccessGroupFolder($pdo, $userId, $sourceGfId, true, $isAdmin))
+                || canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], $fid, $sourceFolder);
+            if (!$canWriteSource) {
+                continue;
+            }
+            if ($sourceGfId === $targetGfId && $sourceFolder === $targetFolder) {
+                continue;
+            }
+            $newOwnerId = $targetGfId === null ? $userId : (int)$file['user_id'];
+            $stmtMove->execute([
+                ':uid'   => $newOwnerId,
+                ':gf_id' => $targetGfId,
+                ':fp'    => $targetFolder,
+                ':id'    => $fid,
+            ]);
+            $processedCount++;
+        } else {
+            $authFile = getAuthorizedFileForDownload($pdo, $userId, $fid, $isAdmin);
+            if (!$authFile) {
+                continue;
+            }
+            $srcStored = basename((string)$file['filename']);
+            $srcPath   = UPLOAD_DIR . $srcStored;
+            if (!is_file($srcPath) || !is_readable($srcPath)) {
+                continue;
+            }
+            $fileSize = (int)$file['file_size'];
+            if ($targetGfId === null) {
+                $stats = getUserStorageStats($pdo, $userId);
+                if ($fileSize > $stats['free']) {
+                    continue;
+                }
+            }
+            $newStored = generateSafeStoredFilename();
+            $dstPath   = UPLOAD_DIR . $newStored;
+            if (!@copy($srcPath, $dstPath)) {
+                continue;
+            }
+            @chmod($dstPath, 0640);
+
+            $copyName = (string)$file['original_name'];
+            if ($sourceGfId === $targetGfId && $sourceFolder === $targetFolder) {
+                $dotPos = strrpos($copyName, '.');
+                $copyName = $dotPos !== false
+                    ? substr($copyName, 0, $dotPos) . ' (Kopie)' . substr($copyName, $dotPos)
+                    : $copyName . ' (Kopie)';
+            }
+
+            $stmtCopy->execute([
+                ':uid'   => $userId,
+                ':gf_id' => $targetGfId,
+                ':fn'    => $newStored,
+                ':orig'  => $copyName,
+                ':fp'    => $targetFolder,
+                ':sz'    => $fileSize,
+                ':mime'  => (string)$file['mime_type'],
+                ':enc'   => (int)($file['is_encrypted'] ?? 0),
+            ]);
+            $processedCount++;
+        }
+    }
+
+    if ($processedCount > 0) {
+        setFlash(
+            'success',
+            sprintf(
+                '%d %s in %s %s.',
+                $processedCount,
+                $processedCount === 1 ? 'Datei wurde' : 'Dateien wurden',
+                $destLabel,
+                $mode === 'move' ? 'verschoben' : 'kopiert'
+            )
+        );
+    } else {
+        setFlash('warning', 'Es wurden keine Dateien übertragen (bereits am Zielort oder fehlende Berechtigung).');
+    }
+
+    $queryParams = [];
+    if ($groupFolderId !== null) {
+        $queryParams['group_folder'] = (string)$groupFolderId;
+    }
+    if ($returnFolder !== '') {
+        $queryParams['folder'] = $returnFolder;
+    }
+    header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
+    exit;
+}
+
 header('Location: index.php');
 exit;

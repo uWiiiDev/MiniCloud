@@ -19,7 +19,7 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
 } else {
     $stmt = $pdo->prepare(
         'SELECT s.id AS share_id, s.file_id, s.folder_path AS shared_folder_path, s.user_id,
-                s.share_token, s.password_hash, s.expires_at, s.created_at AS share_date,
+                s.share_token, s.share_mode, s.password_hash, s.expires_at, s.created_at AS share_date,
                 f.filename, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date, f.deleted_at AS file_deleted_at,
                 u.username AS owner_username
          FROM shares s
@@ -90,9 +90,18 @@ if ($token === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $token)) {
 $requiresPassword = $share !== null && $errorState === null && !empty($share['password_hash']);
 $isUnlocked = !$requiresPassword || !empty($_SESSION['unlocked_shares'][$token]);
 $passwordError = '';
+$shareMode = ($isFolderShare && $share !== null) ? (string)($share['share_mode'] ?? 'read') : 'read';
+if (!in_array($shareMode, ['read', 'upload_only', 'read_write'], true)) {
+    $shareMode = 'read';
+}
+$canReadSharedFolder   = ($shareMode !== 'upload_only');
+$canUploadSharedFolder = $isFolderShare && ($shareMode === 'upload_only' || $shareMode === 'read_write');
+$dropUploadSuccess     = '';
+$dropUploadError       = '';
+$dropUploadedNames     = [];
 
 // Passwort-Prüfung bei POST-Anfrage (inkl. Brute-Force-Schutz)
-if ($requiresPassword && !$isUnlocked && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($requiresPassword && !$isUnlocked && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
     $csrfToken = $_POST['csrf_token'] ?? null;
     $inputPassword = (string)($_POST['password'] ?? '');
 
@@ -124,10 +133,115 @@ if ($requiresPassword && !$isUnlocked && $_SERVER['REQUEST_METHOD'] === 'POST') 
 $vaultShareError = '';
 $vaultPromptFile = null; // Falls eine Tresor-Datei in einem freigegebenen Ordner heruntergeladen werden soll
 
-// Download-Aktionen (nur wenn entsperrt und gültig)
+// Download- & Briefkasten-Upload-Aktionen (nur wenn entsperrt und gültig)
 if ($errorState === null && $share !== null && $isUnlocked) {
+    // 0) Öffentlicher Briefkasten / File-Drop Upload in den freigegebenen Ordner
+    if ($canUploadSharedFolder && $_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'public_drop_upload') {
+        $csrfToken = $_POST['csrf_token'] ?? null;
+        if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
+            $dropUploadError = 'Ungültiges Sicherheits-Token (CSRF). Bitte laden Sie die Seite neu.';
+        } elseif (empty($_FILES['drop_files']) || !is_array($_FILES['drop_files']['name'])) {
+            $dropUploadError = 'Bitte wählen Sie mindestens eine Datei zum Hochladen aus.';
+        } else {
+            $ownerId    = (int)$share['user_id'];
+            $folderPath = (string)$share['shared_folder_path'];
+            $senderTag  = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß _.-]/u', '', trim((string)($_POST['sender_name'] ?? ''))) ?? '';
+            $senderTag  = mb_substr(trim($senderTag), 0, 32, 'UTF-8');
+
+            $ownerStats = getUserStorageStats($pdo, $ownerId);
+            $freeBytes  = (int)$ownerStats['free'];
+
+            $fileNames = $_FILES['drop_files']['name'];
+            $tmpNames  = $_FILES['drop_files']['tmp_name'];
+            $errors    = $_FILES['drop_files']['error'];
+            $sizes     = $_FILES['drop_files']['size'];
+            $count     = count($fileNames);
+
+            $totalBatchBytes = 0;
+            $validIndices    = [];
+            for ($i = 0; $i < $count; $i++) {
+                if ((int)($errors[$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && is_uploaded_file((string)$tmpNames[$i])) {
+                    $sz = max(0, (int)($sizes[$i] ?? 0));
+                    $totalBatchBytes += $sz;
+                    $validIndices[] = $i;
+                }
+            }
+
+            if (empty($validIndices)) {
+                $dropUploadError = 'Keine gültige Datei empfangen oder Datei überschreitet das Server-Uploadlimit.';
+            } elseif ($totalBatchBytes > $freeBytes) {
+                $dropUploadError = 'Der Speicherplatz des Ordner-Eigentümers reicht für diesen Upload leider nicht mehr aus.';
+            } else {
+                ensureUploadDirReady();
+                registerFolderHierarchy($pdo, $ownerId, $folderPath, null);
+                $finfo = class_exists('finfo') ? new finfo(FILEINFO_MIME_TYPE) : null;
+
+                $stmtInsFile = $pdo->prepare(
+                    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+                     VALUES (:uid, NULL, :fn, :orig, :fp, :sz, :mime, 0)'
+                );
+
+                foreach ($validIndices as $idx) {
+                    $tmpPath  = (string)$tmpNames[$idx];
+                    $rawOrig  = (string)$fileNames[$idx];
+                    $cleanOrig = sanitizeOriginalFilename($rawOrig);
+                    if ($senderTag !== '') {
+                        $cleanOrig = sanitizeOriginalFilename('[' . $senderTag . '] ' . $cleanOrig);
+                    }
+                    $fSize    = max(0, (int)filesize($tmpPath));
+                    $detected = ($finfo !== null) ? (string)($finfo->file($tmpPath) ?: 'application/octet-stream') : 'application/octet-stream';
+                    $stored   = generateSafeStoredFilename();
+                    $destPath = UPLOAD_DIR . $stored;
+
+                    if (@move_uploaded_file($tmpPath, $destPath)) {
+                        @chmod($destPath, 0640);
+                        $stmtInsFile->execute([
+                            ':uid'  => $ownerId,
+                            ':fn'   => $stored,
+                            ':orig' => $cleanOrig,
+                            ':fp'   => $folderPath,
+                            ':sz'   => $fSize,
+                            ':mime' => mb_substr($detected, 0, 128),
+                        ]);
+                        $dropUploadedNames[] = $cleanOrig;
+                    }
+                }
+
+                if (!empty($dropUploadedNames)) {
+                    $dropUploadSuccess = sprintf(
+                        'Vielen Dank! %d %s erfolgreich in den Ordner hochgeladen.',
+                        count($dropUploadedNames),
+                        count($dropUploadedNames) === 1 ? 'Datei wurde' : 'Dateien wurden'
+                    );
+                    // Dateiliste aktualisieren falls Lesezugriff aktiv ist
+                    if ($canReadSharedFolder) {
+                        $stmtFiles = $pdo->prepare(
+                            'SELECT id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date
+                             FROM files
+                             WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL
+                               AND (folder_path = :fp_exact OR folder_path LIKE :fp_prefix)
+                             ORDER BY folder_path ASC, original_name ASC'
+                        );
+                        $stmtFiles->execute([
+                            ':uid'       => $ownerId,
+                            ':fp_exact'  => $folderPath,
+                            ':fp_prefix' => $folderPath . '/%',
+                        ]);
+                        $sharedFolderFiles = $stmtFiles->fetchAll();
+                        $totalFolderSize = 0;
+                        foreach ($sharedFolderFiles as $sfRow) {
+                            $totalFolderSize += (int)$sfRow['file_size'];
+                        }
+                    }
+                } else {
+                    $dropUploadError = 'Dateien konnten nicht gespeichert werden.';
+                }
+            }
+        }
+    }
+
     // A) Einzelne Datei aus einem freigegebenen Ordner herunterladen (?download_file=ID)
-    if ($isFolderShare && isset($_REQUEST['download_file'])) {
+    if ($isFolderShare && $canReadSharedFolder && isset($_REQUEST['download_file'])) {
         $reqFileId = (int)$_REQUEST['download_file'];
         $targetFile = null;
         foreach ($sharedFolderFiles as $candidate) {
@@ -195,7 +309,7 @@ if ($errorState === null && $share !== null && $isUnlocked) {
     }
 
     // B) Kompletten freigegebenen Ordner als ZIP herunterladen (?download=1)
-    if ($isFolderShare && isset($_GET['download']) && $_GET['download'] === '1' && !empty($sharedFolderFiles) && class_exists('ZipArchive')) {
+    if ($isFolderShare && $canReadSharedFolder && isset($_GET['download']) && $_GET['download'] === '1' && !empty($sharedFolderFiles) && class_exists('ZipArchive')) {
         $folderPath = (string)$share['shared_folder_path'];
         $tmpZip = tempnam(sys_get_temp_dir(), 'mc_share_zip_');
         if ($tmpZip !== false) {
@@ -397,16 +511,22 @@ require_once __DIR__ . '/includes/header.php';
             </form>
 
         <?php elseif ($isFolderShare): ?>
-            <!-- Freigeschaltete Ordner-Ansicht mit ZIP-Download & Dateiliste -->
+            <!-- Freigeschaltete Ordner-Ansicht (Download, Digitaler Briefkasten / File-Drop oder kombiniert) -->
             <div class="text-center mb-6">
                 <div class="mx-auto w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/70 text-amber-500 flex items-center justify-center mb-4 shadow-xs">
                     <svg class="w-9 h-9" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                     </svg>
                 </div>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 mb-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    Geteilter Ordner
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $shareMode === 'upload_only' ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60' ?> mb-2">
+                    <span class="w-1.5 h-1.5 rounded-full <?= $shareMode === 'upload_only' ? 'bg-indigo-500' : 'bg-emerald-500' ?>"></span>
+                    <?php if ($shareMode === 'upload_only'): ?>
+                        📥 Digitaler Briefkasten (Datei-Abgabe)
+                    <?php elseif ($shareMode === 'read_write'): ?>
+                        🔄 Geteilter Austausch-Ordner (Download &amp; Upload)
+                    <?php else: ?>
+                        Geteilter Ordner
+                    <?php endif; ?>
                 </span>
                 <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white break-all mt-1">
                     📁 <?= e((string)$share['shared_folder_path']) ?>
@@ -414,16 +534,23 @@ require_once __DIR__ . '/includes/header.php';
             </div>
 
             <div class="bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200/80 dark:border-slate-700/80 p-4 mb-6 space-y-2 text-sm">
+                <?php if ($canReadSharedFolder): ?>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Enthaltene Dateien:</span>
+                        <span class="font-semibold text-slate-900 dark:text-white"><?= count($sharedFolderFiles) ?> <?= count($sharedFolderFiles) === 1 ? 'Datei' : 'Dateien' ?></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Gesamtgröße:</span>
+                        <span class="font-semibold text-slate-900 dark:text-white"><?= e(formatBytes($totalFolderSize)) ?></span>
+                    </div>
+                <?php else: ?>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Modus:</span>
+                        <span class="font-semibold text-indigo-600 dark:text-indigo-400">🔒 Geschützter Briefkasten (Nur Datei-Upload)</span>
+                    </div>
+                <?php endif; ?>
                 <div class="flex items-center justify-between">
-                    <span class="text-slate-500 dark:text-slate-400">Enthaltene Dateien:</span>
-                    <span class="font-semibold text-slate-900 dark:text-white"><?= count($sharedFolderFiles) ?> <?= count($sharedFolderFiles) === 1 ? 'Datei' : 'Dateien' ?></span>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-500 dark:text-slate-400">Gesamtgröße:</span>
-                    <span class="font-semibold text-slate-900 dark:text-white"><?= e(formatBytes($totalFolderSize)) ?></span>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-500 dark:text-slate-400">Freigegeben von:</span>
+                    <span class="text-slate-500 dark:text-slate-400">Bereitgestellt von:</span>
                     <span class="font-medium text-slate-800 dark:text-slate-200"><?= e((string)$share['owner_username']) ?></span>
                 </div>
                 <?php if ($share['expires_at'] !== null): ?>
@@ -435,6 +562,90 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 <?php endif; ?>
             </div>
+
+            <?php if ($canUploadSharedFolder): ?>
+                <!-- Digitaler Briefkasten / Öffentlicher Datei-Upload -->
+                <div class="mb-6 p-4 sm:p-5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/25 border-2 border-dashed border-indigo-300 dark:border-indigo-800/80 space-y-4">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-lg shrink-0">
+                            📤
+                        </span>
+                        <div>
+                            <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                                Dateien in diesen Ordner senden
+                            </h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">
+                                <?= $shareMode === 'upload_only'
+                                    ? 'Laden Sie Ihre Dateien einfach hier hoch. Bereits im Ordner vorhandene Dateien anderer Personen bleiben geschützt und unsichtbar.'
+                                    : 'Wählen Sie eine oder mehrere Dateien aus, um sie direkt in diesen Ordner hochzuladen.' ?>
+                            </p>
+                        </div>
+                    </div>
+
+                    <?php if ($dropUploadSuccess !== ''): ?>
+                        <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm space-y-1">
+                            <p class="font-bold">✅ <?= e($dropUploadSuccess) ?></p>
+                            <?php if (!empty($dropUploadedNames)): ?>
+                                <ul class="list-disc pl-5 text-xs">
+                                    <?php foreach ($dropUploadedNames as $upName): ?>
+                                        <li><?= e($upName) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($dropUploadError !== ''): ?>
+                        <div class="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 text-xs sm:text-sm font-medium">
+                            ⚠️ <?= e($dropUploadError) ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <form action="share.php?token=<?= rawurlencode($token) ?>" method="post" enctype="multipart/form-data" class="space-y-3">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="token" value="<?= e($token) ?>">
+                        <input type="hidden" name="action" value="public_drop_upload">
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label for="drop_sender_name" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Ihr Name / Kennzeichnung (optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="drop_sender_name"
+                                    name="sender_name"
+                                    maxlength="32"
+                                    placeholder="z.B. Max Mustermann"
+                                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                            </div>
+                            <div>
+                                <label for="drop_files_input" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Dateien auswählen
+                                </label>
+                                <input
+                                    type="file"
+                                    id="drop_files_input"
+                                    name="drop_files[]"
+                                    multiple
+                                    required
+                                    class="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 dark:file:bg-indigo-950 dark:file:text-indigo-300 cursor-pointer"
+                                >
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            <span>📤 Dateien jetzt absenden</span>
+                        </button>
+                    </form>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($canReadSharedFolder): ?>
 
             <?php if ($vaultPromptFile !== null): ?>
                 <div class="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 space-y-3">
@@ -531,6 +742,7 @@ require_once __DIR__ . '/includes/header.php';
                     Dieser freigegebene Ordner ist aktuell noch leer.
                 </div>
             <?php endif; ?>
+            <?php endif; // end if ($canReadSharedFolder) ?>
 
         <?php else: ?>
             <!-- Freigeschaltete Datei-Ansicht mit großem Download-Button -->

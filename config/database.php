@@ -217,6 +217,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
             `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
             `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0,
+            `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
             `upload_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`id`),
@@ -239,6 +240,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     if (!in_array('is_encrypted', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `mime_type`");
     }
+    if (!in_array('is_favorite', $colsFiles, true)) {
+        $pdo->exec("ALTER TABLE `files` ADD COLUMN `is_favorite` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_encrypted`");
+    }
     if (!in_array('deleted_at', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `deleted_at` DATETIME DEFAULT NULL AFTER `upload_date`");
         $pdo->exec("ALTER TABLE `files` ADD KEY `idx_files_deleted_at` (`deleted_at`)");
@@ -251,6 +255,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `folder_path` VARCHAR(500) DEFAULT NULL,
             `user_id` INT UNSIGNED NOT NULL,
             `share_token` VARCHAR(64) NOT NULL,
+            `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read',
             `password_hash` VARCHAR(255) DEFAULT NULL,
             `expires_at` DATETIME DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -267,6 +272,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     if (!in_array('folder_path', $colsShares, true)) {
         $pdo->exec("ALTER TABLE `shares` MODIFY COLUMN `file_id` INT UNSIGNED DEFAULT NULL");
         $pdo->exec("ALTER TABLE `shares` ADD COLUMN `folder_path` VARCHAR(500) DEFAULT NULL AFTER `file_id`");
+    }
+    if (!in_array('share_mode', $colsShares, true)) {
+        $pdo->exec("ALTER TABLE `shares` ADD COLUMN `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read' AFTER `share_token`");
     }
 
     $pdo->exec("
@@ -397,6 +405,11 @@ function ensureSchemaUpdated(PDO $pdo): void
             CONSTRAINT `fk_msg_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $colsMessages = $pdo->query("SHOW COLUMNS FROM `messages`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('attached_file_id', $colsMessages, true)) {
+        $pdo->exec("ALTER TABLE `messages` ADD COLUMN `attached_file_id` INT UNSIGNED DEFAULT NULL AFTER `message_text`");
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `message_broadcast_reads` (

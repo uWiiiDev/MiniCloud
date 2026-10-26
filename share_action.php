@@ -51,7 +51,7 @@ if ($action === 'list') {
     if ($folderPath !== '') {
         // Ordner-Freigaben laden
         $stmtLinks = $pdo->prepare(
-            'SELECT id, share_token, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
+            'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
              FROM shares
              WHERE user_id = :uid AND folder_path = :fp
              ORDER BY created_at DESC'
@@ -62,6 +62,7 @@ if ($action === 'list') {
             $links[] = [
                 'id'           => (int)$row['id'],
                 'token'        => (string)$row['share_token'],
+                'share_mode'   => (string)($row['share_mode'] ?? 'read'),
                 'url'          => $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']),
                 'has_password' => (bool)$row['has_password'],
                 'expires_at'   => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
@@ -106,7 +107,7 @@ if ($action === 'list') {
     }
 
     $stmtLinks = $pdo->prepare(
-        'SELECT id, share_token, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
+        'SELECT id, share_token, share_mode, (password_hash IS NOT NULL) AS has_password, expires_at, created_at
          FROM shares
          WHERE file_id = :file_id
          ORDER BY created_at DESC'
@@ -117,6 +118,7 @@ if ($action === 'list') {
         $links[] = [
             'id'           => (int)$row['id'],
             'token'        => (string)$row['share_token'],
+            'share_mode'   => (string)($row['share_mode'] ?? 'read'),
             'url'          => $baseUrl . '/share.php?token=' . rawurlencode((string)$row['share_token']),
             'has_password' => (bool)$row['has_password'],
             'expires_at'   => $row['expires_at'] ? date('d.m.Y H:i', strtotime((string)$row['expires_at'])) : null,
@@ -173,6 +175,10 @@ if ($action === 'create_link') {
     $folderPath  = isset($_POST['folder_path']) ? sanitizeFolderPathInput((string)$_POST['folder_path']) : '';
     $password    = isset($_POST['password']) ? trim((string)$_POST['password']) : '';
     $expiresDays = isset($_POST['expires_days']) ? (int)$_POST['expires_days'] : 0;
+    $rawMode     = isset($_POST['share_mode']) ? trim((string)$_POST['share_mode']) : 'read';
+    $shareMode   = ($folderPath !== '' && in_array($rawMode, ['read', 'upload_only', 'read_write'], true))
+        ? $rawMode
+        : 'read';
 
     if ($folderPath === '') {
         $file = getManageableFile($pdo, $userId, $fileId, $isAdmin);
@@ -206,14 +212,15 @@ if ($action === 'create_link') {
     }
 
     $stmtInsert = $pdo->prepare(
-        'INSERT INTO shares (file_id, folder_path, user_id, share_token, password_hash, expires_at)
-         VALUES (:file_id, :folder_path, :user_id, :share_token, :password_hash, :expires_at)'
+        'INSERT INTO shares (file_id, folder_path, user_id, share_token, share_mode, password_hash, expires_at)
+         VALUES (:file_id, :folder_path, :user_id, :share_token, :share_mode, :password_hash, :expires_at)'
     );
     $stmtInsert->execute([
         ':file_id'       => $folderPath === '' ? $fileId : null,
         ':folder_path'   => $folderPath !== '' ? $folderPath : null,
         ':user_id'       => $userId,
         ':share_token'   => $token,
+        ':share_mode'    => $shareMode,
         ':password_hash' => $passwordHash,
         ':expires_at'    => $expiresAt,
     ]);
@@ -225,6 +232,7 @@ if ($action === 'create_link') {
         'message'      => 'Freigabelink erfolgreich generiert!',
         'share_id'     => (int)$pdo->lastInsertId(),
         'share_token'  => $token,
+        'share_mode'   => $shareMode,
         'share_url'    => $shareUrl,
         'has_password' => ($passwordHash !== null),
         'expires_at'   => $expiresAt ? date('d.m.Y H:i', strtotime($expiresAt)) : null,

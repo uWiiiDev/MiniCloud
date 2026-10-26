@@ -80,6 +80,8 @@ require_once __DIR__ . '/includes/header.php';
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>📄 MiniCloud Office Light (Word, Excel &amp; Text Online):</strong> Create or edit <strong>Word documents (<code>.docx</code>)</strong> with rich-text formatting, headings, lists, and tables, or <strong>Excel spreadsheets (<code>.xlsx</code> / <code>.csv</code>)</strong> with multiple sheets and live formulas (<code>=SUM(A1:A10)</code>, <code>=AVERAGE(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) directly in your browser and save via <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Ctrl+S</kbd>.</li>
                 <li><strong>Instant Preview &amp; Browsing:</strong> Click the eye icon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Preview</span>) or the file name to preview images, PDFs, videos, audio, and code/office files; use <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> and <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> to browse (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> closes).</li>
+                <li><strong>Photo Gallery / Grid View, ⭐ Favorites &amp; Global Search:</strong> Switch anytime between the classic table (<strong>📋 List</strong>) and the visual thumbnail gallery (<strong>🖼️ Grid</strong>), pin important files to the top with a star (<strong>⭐ Favorites</strong>), or search across all folders and subfolders using the global search bar.</li>
+                <li><strong>Multi-Select Batch Actions:</strong> Select multiple files via checkboxes to download them together as a ZIP archive, move/copy them in one step, or move them to the Trash via the floating action bar.</li>
                 <li><strong>Desktop Icons &amp; Mobile ⋯ Action Menu:</strong> On desktop screens, all action icons (Edit ✏️, Preview 👁️, Share 🔗, Vault 🔒, Move/Copy ⇄, Download ⬇️, Delete 🗑️) appear side-by-side. On smartphones, a single compact <strong>⋯ button</strong> opens a clear touch menu with all actions.</li>
                 <li><strong>Table Sorting:</strong> Click the column headers <em>Name</em>, <em>Folder</em>, <em>Size</em>, or <em>Type / Date</em> to sort ascending or descending (<code>↑</code> / <code>↓</code>).</li>
             </ul>
@@ -103,7 +105,7 @@ require_once __DIR__ . '/includes/header.php';
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Sharing &amp; 3-Level Permissions</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Public Share Links:</strong> Click the share icon to generate a cryptographically secure link for files or folders – optionally protected by a <strong>password</strong> and <strong>expiration date</strong>.</li>
+                <li><strong>Public Share Links &amp; Digital Drop Box (File-Drop):</strong> Click the share icon to generate a cryptographically secure link for files or folders – optionally protected by a <strong>password</strong> and <strong>expiration date</strong>. For folder links, choose between <strong>👁️ Download Only</strong>, <strong>📤 Digital Drop Box / Upload Only</strong> (guests can upload files without seeing other files), or <strong>🔄 Download &amp; Upload</strong>.</li>
                 <li><strong>Direct Sharing with Cloud Users (3 Levels):</strong> Share files or folders directly with other users who have enabled their privacy visibility in Settings. For shared folders, choose between <strong>👁️ Read Only</strong>, <strong>✏️ Read &amp; Write</strong> (upload &amp; create subfolders), or <strong>🗑️ Read, Write &amp; Delete</strong>.</li>
                 <li><strong>Privacy Protection by Default:</strong> New accounts are hidden from the sharing/chat user list by default and can opt in anytime in Settings.</li>
             </ul>
@@ -116,7 +118,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Calendar &amp; Appointments (<a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Calendar</a>):</strong> Manage personal, group, and shared events in month or list view with recurrence rules (daily, weekly, monthly, yearly), colors, file attachments, <code>.ics</code> import/export, and a personal <code>.ics</code> subscription link for smartphones, Thunderbird, or Outlook. Share your calendar with users or groups using 3 permission levels (Read, Edit, Edit &amp; Delete).</li>
-                <li><strong>Messenger &amp; Announcements (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Exchange real-time 1:1 messages with visible cloud users or receive official admin broadcasts. Includes one-click chat history clearing, automatic 1-column mobile view (with automatic footer hiding and dynamic keyboard height adaptation), and configurable desktop/mobile system notifications.</li>
+                <li><strong>Messenger, File Attachments &amp; Announcements (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Exchange real-time 1:1 messages with visible cloud users, attach files or photos directly via the <strong>📎</strong> button (with inline image preview), or receive official admin broadcasts. Includes one-click chat history clearing, automatic 1-column mobile view, and configurable desktop/mobile system notifications.</li>
             </ul>
         </section>
     </div>
@@ -1197,6 +1199,8 @@ require_once __DIR__ . '/includes/header.php';
                     </ul>
                 </li>
                 <li><strong>Desktop-Icons &amp; Mobiles ⋯ Aktionsmenü:</strong> In der Desktop-Ansicht stehen alle Aktions-Icons (Bearbeiten ✏️, Vorschau 👁️, Teilen 🔗, Tresor 🔒, Verschieben/Kopieren ⇄, Download ⬇️, Löschen 🗑️) direkt nebeneinander. Auf Smartphones werden sie platzsparend in einem einzigen <strong>⋯ Button</strong> gebündelt, der ein übersichtliches Touch-Aktionsmenü öffnet.</li>
+                <li><strong>🖼️ Foto-Galerie / Kachel-Ansicht &amp; ⭐ Favoriten:</strong> Schalten Sie über der Dateiliste jederzeit zwischen der klassischen Tabellenansicht (<strong>📋 Liste</strong>) und der Kachel-Ansicht (<strong>🖼️ Kacheln</strong>) mit Live-Bild-Thumbnails um. Wichtige Dateien heften Sie per Klick auf den Stern (<strong>☆ / ⭐</strong>) ganz oben an oder filtern sie über <strong>⭐ Favoriten</strong>.</li>
+                <li><strong>☑️ Mehrfachauswahl (Sammel-Aktionen) &amp; 🔎 Globale Suche:</strong> Haken Sie beliebig viele Dateien gleichzeitig an, um sie über die schwebende Aktionsleiste gemeinsam als ZIP herunterzuladen, zu verschieben/kopieren oder in den Papierkorb zu legen. Das Suchfeld durchsucht automatisch alle Ordner und Unterordner gleichzeitig.</li>
                 <li><strong>Direktvorschau &amp; Durchblättern:</strong> Ein Klick auf das Augen-Symbol (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vorschau</span>) oder den Dateinamen öffnet Bilder, PDFs, Videos, Audio sowie Text-/Codedateien; mit <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> / <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> blättern Sie durch den Ordner.</li>
                 <li><strong>Tabellensortierung:</strong> Klicken Sie auf <em>Name</em>, <em>Ordner</em>, <em>Größe</em> oder <em>Typ / Datum</em>, um auf- oder absteigend zu sortieren.</li>
             </ul>
@@ -1219,17 +1223,17 @@ require_once __DIR__ . '/includes/header.php';
         <section id="teilen-gruppen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">🔗</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Freigaben &amp; 3-stufige Berechtigungen</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Freigaben, Digitaler Briefkasten &amp; 3-stufige Rechte</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Öffentliche Freigabelinks:</strong> Über das Teilen-Symbol erstellen Sie für Dateien oder ganze Ordner einen kryptografisch gesicherten Link – optional mit <strong>Passwortschutz</strong> und <strong>Ablaufdatum</strong>.</li>
-                <li><strong>Direktes Teilen mit Cloud-Benutzern (3 Stufen):</strong> Geben Sie Dateien oder Ordner gezielt für andere Benutzer frei (sichtbar unter <em>„Für mich freigegeben“</em>). Für Ordner wählen Sie zwischen:
+                <li><strong>Öffentliche Freigabelinks &amp; 📥 Digitaler Briefkasten (File-Drop):</strong> Über das Teilen-Symbol erstellen Sie für Dateien oder ganze Ordner einen kryptografisch gesicherten Link – optional mit <strong>Passwortschutz</strong> und <strong>Ablaufdatum</strong>. Für Ordner-Links wählen Sie zwischen:
                     <ul class="list-disc pl-4 mt-1 space-y-0.5">
-                        <li><strong>👁️ Nur Lesen:</strong> Ansehen &amp; Herunterladen</li>
-                        <li><strong>✏️ Lesen &amp; Schreiben:</strong> Zusätzlich eigene Dateien hochladen &amp; Unterordner anlegen</li>
-                        <li><strong>🗑️ Lesen, Schreiben &amp; Löschen:</strong> Vollzugriff inkl. Löschen von Dateien &amp; Unterordnern</li>
+                        <li><strong>👁️ Nur Download:</strong> Besucher können Dateien ansehen und herunterladen.</li>
+                        <li><strong>📤 Digitaler Briefkasten (Nur Hochladen):</strong> Gäste können Ihnen Dateien/Fotos ohne eigenes Benutzerkonto zusenden, ohne bereits im Ordner liegende Dateien anderer Personen zu sehen.</li>
+                        <li><strong>🔄 Download &amp; Upload:</strong> Gemeinsamer Austausch-Ordner für alle Link-Empfänger.</li>
                     </ul>
                 </li>
+                <li><strong>Direktes Teilen mit Cloud-Benutzern (3 Stufen):</strong> Geben Sie Dateien oder Ordner gezielt für andere Benutzer frei (sichtbar unter <em>„Für mich freigegeben“</em>) – mit <strong>👁️ Nur Lesen</strong>, <strong>✏️ Lesen &amp; Schreiben</strong> oder <strong>🗑️ Lesen, Schreiben &amp; Löschen</strong>.</li>
                 <li><strong>Datenschutz-Standard:</strong> Neue Benutzerkonten sind standardmäßig in der Teilen- und Chat-Auswahl anderer Nutzer verborgen und können ihre Sichtbarkeit jederzeit in den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> aktivieren.</li>
             </ul>
         </section>
@@ -1251,10 +1255,10 @@ require_once __DIR__ . '/includes/header.php';
         <section id="chat-nachrichten" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold">💬</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Chat, Rundnachrichten &amp; Meldungen</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Chat, Dateianhänge &amp; Meldungen</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>Direktnachrichten &amp; Ankündigungen (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Schreiben Sie 1:1-Nachrichten mit freigegebenen Cloud-Benutzern oder lesen Sie offizielle Rundnachrichten des Administrators im Kanal <em>„📢 Ankündigungen (Alle)“</em>.</li>
+                <li><strong>Direktnachrichten, 📎 Dateianhänge &amp; Ankündigungen (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Schreiben Sie 1:1-Nachrichten mit freigegebenen Cloud-Benutzern, hängen Sie über das <strong>📎 Büroklammer-Symbol</strong> direkt Fotos oder Dateien vom Gerät bzw. aus Ihrer Cloud an (mit Inline-Bildvorschau in der Sprechblase) oder lesen Sie offizielle Rundnachrichten des Administrators im Kanal <em>„📢 Ankündigungen (Alle)“</em>.</li>
                 <li><strong>Verlauf leeren &amp; Optimierte Mobil-Darstellung:</strong> Über den Button <em>„🗑️ Verlauf leeren“</em> können Sie einen Chatverlauf jederzeit vollständig bereinigen. Auf Smartphones schaltet der Messenger automatisch in eine übersichtliche 1-Spalten-Navigation (Kontaktliste &leftrightarrow; Vollbild-Chat), blendet den Seiten-Footer automatisch aus und passt die Höhe des Chatfensters dynamisch an die Bildschirmtastatur an.</li>
                 <li><strong>System-Benachrichtigungen am PC &amp; Mobilgerät:</strong> Bei neuen Nachrichten blendet MiniCloud auf Wunsch native Betriebssystem-/Smartphone-Meldungen ein. In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> legen Sie fest, ob Sie <em>Nur System-Benachrichtigungen</em> (Standard), zusätzlich ein <em>In-App-Banner</em> oder gar keine Meldungen wünschen.</li>
             </ul>
@@ -1312,7 +1316,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>Thematisch geordnete 5-Reiter-Administration:</strong> Die <a href="admin.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Administration</a> ist übersichtlich in 5 Themenbereiche gegliedert: <strong>👥 Benutzer &amp; Registrierung</strong>, <strong>🧩 Module &amp; Funktionen</strong>, <strong>🎨 Darstellung &amp; Impressum</strong>, <strong>✉️ E-Mail &amp; SMTP</strong> sowie <strong>🖥️ System, Update &amp; Status</strong> (plus Gesamtansicht <em>📋 Alle Bereiche</em>).</li>
-                <li><strong>1-Klick-System-Update, Versionsauswahl &amp; Rollback:</strong> Im Reiter <em>🖥️ System, Update &amp; Status</em> prüft MiniCloud per Klick den aktuellen Commit-Stand auf GitHub und aktualisiert alle Programmdateien vollautomatisch, während <code>uploads/</code> und die Datenbank-Zugangsdaten in <code>config/database.php</code> geschützt bleiben. Vor jedem Update wird automatisch ein <strong>lokaler Sicherungspunkt (Snapshot)</strong> angelegt, sodass Sie ein Update jederzeit per 1-Klick über <strong>„⏪ Letztes Update rückgängig machen“</strong> zurücknehmen oder aus der GitHub-Versionshistorie über <strong>„⏮️ Diesen Stand installieren“</strong> zu jedem beliebigen früheren Stand wechseln können.</li>
+                <li><strong>1-Klick-System-Update, Versionsauswahl, Rollback &amp; Datenbank-Backup (<code>.sql</code>):</strong> Im Reiter <em>🖥️ System, Update &amp; Status</em> prüft MiniCloud per Klick den aktuellen Commit-Stand auf GitHub und aktualisiert alle Programmdateien vollautomatisch, während <code>uploads/</code> und die Datenbank-Zugangsdaten in <code>config/database.php</code> geschützt bleiben. Vor jedem Update wird automatisch ein <strong>lokaler Sicherungspunkt (Snapshot)</strong> angelegt, sodass Sie ein Update jederzeit per 1-Klick über <strong>„⏪ Letztes Update rückgängig machen“</strong> zurücknehmen oder aus der GitHub-Versionshistorie über <strong>„⏮️ Diesen Stand installieren“</strong> zu jedem beliebigen früheren Stand wechseln können. Zudem können Sie dort per 1-Klick ein vollständiges <strong>💾 Datenbank-Backup (<code>.sql</code>)</strong> aller 14 Tabellen herunterladen.</li>
                 <li><strong>Module, Selbstregistrierung &amp; Branding:</strong> Schalten Sie das Kalender- oder Chat-Modul global ein/aus, aktivieren Sie bei Bedarf die Selbstregistrierung (optional mit Einladungs-Code &amp; Start-Kontingent) und passen Sie Titel, Logo, SMTP-Server und Impressum an.</li>
                 <li><strong>Benutzer, Quotas &amp; 2FA-Verwaltung:</strong> Verwalten Sie Benutzerkonten, Speicher-Quotas (in MB) und Benutzergruppen. In der Benutzertabelle sehen Sie am Badge (<code>🔒 2FA</code> bzw. <code>📱 TOTP</code>) die aktive 2FA-Methode und können die 2FA eines Benutzers bei Geräteverlust jederzeit umstellen oder deaktivieren.</li>
             </ul>
@@ -1409,8 +1413,8 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">files</td>
-                        <td class="py-3 px-4"><code>id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date, deleted_at</code></td>
-                        <td class="py-3 px-4">Metadaten hochgeladener Dateien &amp; Zuordnung zu Benutzern und Ordnerpfaden</td>
+                        <td class="py-3 px-4"><code>id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, is_favorite, upload_date, deleted_at</code></td>
+                        <td class="py-3 px-4">Metadaten hochgeladener Dateien, Favoriten-Markierung (<code>is_favorite</code>) &amp; Zuordnung zu Benutzern und Ordnerpfaden</td>
                         <td class="py-3 px-4">Aktiv bis zum Löschen; im Papierkorb (<code>deleted_at</code>) automatische Endlöschung nach 30 Tagen</td>
                     </tr>
                     <tr>
@@ -1427,8 +1431,8 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">shares</td>
-                        <td class="py-3 px-4"><code>id, file_id, folder_path, user_id, share_token, password_hash, expires_at, created_at</code></td>
-                        <td class="py-3 px-4">Öffentliche Freigabelinks (Einzeldatei oder Ordner) inkl. optionalem BCRYPT-Passwort &amp; Ablaufdatum</td>
+                        <td class="py-3 px-4"><code>id, file_id, folder_path, user_id, share_token, share_mode, password_hash, expires_at, created_at</code></td>
+                        <td class="py-3 px-4">Öffentliche Freigabelinks (Einzeldatei oder Ordner im Modus <code>read</code>, <code>upload_only</code> / Digitaler Briefkasten oder <code>read_write</code>) inkl. optionalem BCRYPT-Passwort &amp; Ablaufdatum</td>
                         <td class="py-3 px-4">Bis zum manuellen Widerruf, Ablauf (<code>expires_at</code>) oder Löschen der Datei / des Ordners</td>
                     </tr>
                     <tr>
@@ -1445,8 +1449,8 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">messages &amp; message_broadcast_reads</td>
-                        <td class="py-3 px-4"><code>id, sender_id, recipient_id, is_broadcast, message_text, is_read, created_at</code> / <code>user_id, last_read_broadcast_id</code></td>
-                        <td class="py-3 px-4">Direkte 1:1-Chat-Nachrichten zwischen Cloud-Benutzern sowie offizielle Admin-Rundnachrichten samt Lesestatus</td>
+                        <td class="py-3 px-4"><code>id, sender_id, recipient_id, is_broadcast, message_text, attached_file_id, is_read, created_at</code> / <code>user_id, last_read_broadcast_id</code></td>
+                        <td class="py-3 px-4">Direkte 1:1-Chat-Nachrichten (inkl. optionaler Dateianhänge <code>attached_file_id</code>) sowie offizielle Admin-Rundnachrichten samt Lesestatus</td>
                         <td class="py-3 px-4">Bis zur Einzellöschung, Leerung des Chatverlaufs (<em>„Verlauf leeren“</em>) oder Kontolöschung</td>
                     </tr>
                     <tr>
