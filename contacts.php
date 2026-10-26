@@ -9,17 +9,52 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-requireLogin();
-
-$pdo    = getDB();
-$userId = currentUserId();
-
+$pdo         = getDB();
 $appSettings = getAppSettings($pdo);
+
 if (($appSettings['enable_contacts'] ?? '1') !== '1') {
-    setFlash('error', 'Das Modul „Adressbuch & Kontakte“ ist durch den Administrator deaktiviert.');
-    header('Location: index.php');
+    if (isLoggedIn()) {
+        setFlash('error', 'Das Modul „Adressbuch & Kontakte“ ist durch den Administrator deaktiviert.');
+        header('Location: index.php');
+    } else {
+        header('Location: login.php');
+    }
     exit;
 }
+
+// --- 1. Öffentlicher .vcf-Abo-Feed über persönliches Token (analog zum Kalender-Abo) ---
+if (isset($_GET['vcf_token']) && is_string($_GET['vcf_token'])) {
+    $token = trim($_GET['vcf_token']);
+    if (!preg_match('/^[a-f0-9]{32,64}$/', $token)) {
+        http_response_code(403);
+        exit('Ungültiges Adressbuch-Token.');
+    }
+
+    $stmtTokenUser = $pdo->prepare('SELECT id, username, contacts_token FROM users WHERE contacts_token = :t LIMIT 1');
+    $stmtTokenUser->execute([':t' => $token]);
+    $tokenUser = $stmtTokenUser->fetch();
+
+    if (!$tokenUser || !hash_equals((string)$tokenUser['contacts_token'], $token)) {
+        http_response_code(404);
+        exit('Adressbuch-Feed nicht gefunden.');
+    }
+
+    $feedContacts = getAccessibleContactsForUser($pdo, (int)$tokenUser['id']);
+    $vcfContent   = '';
+    foreach ($feedContacts as $fc) {
+        $vcfContent .= buildVcardEntry($fc);
+    }
+
+    header('Content-Type: text/vcard; charset=utf-8');
+    header('Content-Disposition: inline; filename="minicloud-kontakte-' . preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$tokenUser['username']) . '.vcf"');
+    header('Cache-Control: no-cache, must-revalidate');
+    echo $vcfContent;
+    exit;
+}
+
+requireLogin();
+
+$userId = currentUserId();
 
 $visiblePeers   = getVisibleUsersForUser($pdo, $userId);
 $visiblePeerIds = array_map(static fn(array $u): int => (int)$u['id'], $visiblePeers);
@@ -43,210 +78,7 @@ function canAccessContact(array $contact, int $userId, array $myGroupIds): bool
     return false;
 }
 
-/**
- * Escaping für vCard 3.0 Textfelder.
- */
-function vcardEscape(string $val): string
-{
-    $val = str_replace(["\r\n", "\r"], "\n", $val);
-    $val = str_replace(['\\', ';', ',', "\n"], ['\\\\', '\;', '\,', '\n'], $val);
-    return $val;
-}
-
-/**
- * Erzeugt einen vCard 3.0 Block für einen Kontakt.
- */
-function buildVcardEntry(array $c): string
-{
-    $first = trim((string)($c['first_name'] ?? ''));
-    $last  = trim((string)($c['last_name'] ?? ''));
-    $fn    = trim($first . ' ' . $last);
-    if ($fn === '') {
-        $fn = trim((string)($c['organization'] ?? 'Kontakt'));
-    }
-
-    $lines = [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        'N:' . vcardEscape($last) . ';' . vcardEscape($first) . ';;;',
-        'FN:' . vcardEscape($fn),
-    ];
-
-    if (!empty($c['organization'])) {
-        $lines[] = 'ORG:' . vcardEscape((string)$c['organization']);
-    }
-    if (!empty($c['role_title'])) {
-        $lines[] = 'TITLE:' . vcardEscape((string)$c['role_title']);
-    }
-    if (!empty($c['email'])) {
-        $lines[] = 'EMAIL;TYPE=INTERNET:' . vcardEscape((string)$c['email']);
-    }
-    if (!empty($c['phone'])) {
-        $lines[] = 'TEL;TYPE=WORK,VOICE:' . vcardEscape((string)$c['phone']);
-    }
-    if (!empty($c['mobile'])) {
-        $lines[] = 'TEL;TYPE=CELL,VOICE:' . vcardEscape((string)$c['mobile']);
-    }
-    if (!empty($c['street']) || !empty($c['city']) || !empty($c['postal_code']) || !empty($c['country'])) {
-        $lines[] = 'ADR;TYPE=HOME:;;'
-            . vcardEscape((string)($c['street'] ?? '')) . ';'
-            . vcardEscape((string)($c['city'] ?? '')) . ';;'
-            . vcardEscape((string)($c['postal_code'] ?? '')) . ';'
-            . vcardEscape((string)($c['country'] ?? ''));
-    }
-    if (!empty($c['website'])) {
-        $lines[] = 'URL:' . vcardEscape((string)$c['website']);
-    }
-    if (!empty($c['birthday']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$c['birthday'])) {
-        $lines[] = 'BDAY:' . (string)$c['birthday'];
-    }
-    if (!empty($c['notes'])) {
-        $lines[] = 'NOTE:' . vcardEscape((string)$c['notes']);
-    }
-
-    $lines[] = 'END:VCARD';
-    return implode("\r\n", $lines) . "\r\n";
-}
-
-/**
- * Parst den Inhalt einer .vcf-Datei und gibt ein Array von Kontakt-Datensätzen zurück.
- */
-function parseVcardFileContent(string $raw): array
-{
-    // Line unfolding gemäß RFC 2426 / 6350
-    $unfolded = preg_replace("/\r\n[ \t]|\n[ \t]/", '', $raw) ?? $raw;
-    $lines    = preg_split("/\r\n|\n|\r/", $unfolded) ?: [];
-
-    $contacts = [];
-    $current  = null;
-
-    $decodeVal = static function (string $keyPart, string $valPart): string {
-        if (stripos($keyPart, 'ENCODING=QUOTED-PRINTABLE') !== false) {
-            $valPart = quoted_printable_decode($valPart);
-        }
-        $valPart = str_replace(['\n', '\N', '\,', '\;', '\\\\'], ["\n", "\n", ',', ';', '\\'], $valPart);
-        return trim($valPart);
-    };
-
-    foreach ($lines as $line) {
-        $trimmed = trim($line);
-        if ($trimmed === '') {
-            continue;
-        }
-        if (strcasecmp($trimmed, 'BEGIN:VCARD') === 0) {
-            $current = [
-                'first_name'   => '',
-                'last_name'    => '',
-                'organization' => '',
-                'role_title'   => '',
-                'email'        => '',
-                'phone'        => '',
-                'mobile'       => '',
-                'street'       => '',
-                'postal_code'  => '',
-                'city'         => '',
-                'country'      => '',
-                'website'      => '',
-                'birthday'     => null,
-                'notes'        => '',
-            ];
-            continue;
-        }
-        if (strcasecmp($trimmed, 'END:VCARD') === 0) {
-            if ($current !== null) {
-                if ($current['first_name'] !== '' || $current['last_name'] !== '' || $current['organization'] !== '' || $current['email'] !== '') {
-                    $contacts[] = $current;
-                }
-            }
-            $current = null;
-            continue;
-        }
-        if ($current === null || !str_contains($trimmed, ':')) {
-            continue;
-        }
-
-        [$propRaw, $valRaw] = explode(':', $trimmed, 2);
-        $propParts = explode(';', strtoupper($propRaw));
-        $propName  = $propParts[0];
-
-        if ($propName === 'N') {
-            $nParts = explode(';', $valRaw);
-            $current['last_name']  = $decodeVal($propRaw, $nParts[0] ?? '');
-            $current['first_name'] = $decodeVal($propRaw, $nParts[1] ?? '');
-        } elseif ($propName === 'FN' && $current['first_name'] === '' && $current['last_name'] === '') {
-            $fn = $decodeVal($propRaw, $valRaw);
-            $fnParts = preg_split('/\s+/', $fn, 2) ?: [];
-            $current['first_name'] = $fnParts[0] ?? '';
-            $current['last_name']  = $fnParts[1] ?? '';
-        } elseif ($propName === 'ORG') {
-            $orgParts = explode(';', $valRaw);
-            $current['organization'] = $decodeVal($propRaw, $orgParts[0] ?? '');
-        } elseif ($propName === 'TITLE') {
-            $current['role_title'] = $decodeVal($propRaw, $valRaw);
-        } elseif ($propName === 'EMAIL' && $current['email'] === '') {
-            $current['email'] = $decodeVal($propRaw, $valRaw);
-        } elseif ($propName === 'TEL') {
-            $tel = $decodeVal($propRaw, $valRaw);
-            if (stripos($propRaw, 'CELL') !== false || stripos($propRaw, 'MOBILE') !== false) {
-                if ($current['mobile'] === '') {
-                    $current['mobile'] = $tel;
-                }
-            } else {
-                if ($current['phone'] === '') {
-                    $current['phone'] = $tel;
-                } elseif ($current['mobile'] === '') {
-                    $current['mobile'] = $tel;
-                }
-            }
-        } elseif ($propName === 'ADR' && $current['street'] === '' && $current['city'] === '') {
-            $adrParts = explode(';', $valRaw);
-            $current['street']      = $decodeVal($propRaw, $adrParts[2] ?? '');
-            $current['city']        = $decodeVal($propRaw, $adrParts[3] ?? '');
-            $current['postal_code'] = $decodeVal($propRaw, $adrParts[5] ?? '');
-            $current['country']     = $decodeVal($propRaw, $adrParts[6] ?? '');
-        } elseif ($propName === 'URL' && $current['website'] === '') {
-            $current['website'] = $decodeVal($propRaw, $valRaw);
-        } elseif ($propName === 'BDAY') {
-            $bday = trim($valRaw);
-            if (preg_match('/^(\d{4})-?(\d{2})-?(\d{2})/', $bday, $m)) {
-                $current['birthday'] = $m[1] . '-' . $m[2] . '-' . $m[3];
-            }
-        } elseif ($propName === 'NOTE') {
-            $current['notes'] = $decodeVal($propRaw, $valRaw);
-        }
-    }
-
-    return $contacts;
-}
-
-// Alle für den Benutzer sichtbaren Kontakte laden
-$sql = "SELECT c.*, u.`username` AS `owner_name`, su.`username` AS `shared_username`, g.`name` AS `group_name`
-        FROM `contacts` c
-        INNER JOIN `users` u ON u.`id` = c.`user_id`
-        LEFT JOIN `users` su ON su.`id` = c.`shared_user_id`
-        LEFT JOIN `groups` g ON g.`id` = c.`group_id`
-        WHERE c.`user_id` = :uid OR c.`shared_user_id` = :suid";
-
-$params = [
-    ':uid'  => $userId,
-    ':suid' => $userId,
-];
-
-if (!empty($myGroupIds)) {
-    $placeholders = [];
-    foreach ($myGroupIds as $idx => $gid) {
-        $ph = ':gid_' . $idx;
-        $placeholders[] = $ph;
-        $params[$ph] = $gid;
-    }
-    $sql .= " OR c.`group_id` IN (" . implode(',', $placeholders) . ")";
-}
-
-$sql .= " ORDER BY c.`is_favorite` DESC, c.`last_name` ASC, c.`first_name` ASC";
-
-$stmtContacts = $pdo->prepare($sql);
-$stmtContacts->execute($params);
-$allContacts = $stmtContacts->fetchAll();
+$allContacts = getAccessibleContactsForUser($pdo, $userId);
 
 // vCard Export (GET ?export=vcf [&id=X])
 if (isset($_GET['export']) && $_GET['export'] === 'vcf') {
@@ -486,7 +318,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: contacts.php');
         exit;
     }
+
+    if ($action === 'regenerate_contacts_token') {
+        $newToken = bin2hex(random_bytes(24));
+        $pdo->prepare('UPDATE users SET contacts_token = :t WHERE id = :uid')
+            ->execute([':t' => $newToken, ':uid' => $userId]);
+        setFlash('success', 'Persönlicher .vcf-Adressbuch-Abo-Link wurde neu generiert.');
+        header('Location: contacts.php?sync_modal=1');
+        exit;
+    }
+
+    if ($action === 'revoke_contacts_token') {
+        $pdo->prepare('UPDATE users SET contacts_token = NULL WHERE id = :uid')
+            ->execute([':uid' => $userId]);
+        setFlash('success', 'Der .vcf-Adressbuch-Abo-Link wurde deaktiviert.');
+        header('Location: contacts.php?sync_modal=1');
+        exit;
+    }
 }
+
+$stmtUserToken = $pdo->prepare('SELECT contacts_token FROM users WHERE id = :uid LIMIT 1');
+$stmtUserToken->execute([':uid' => $userId]);
+$myContactsToken = (string)($stmtUserToken->fetchColumn() ?: '');
+$vcfFeedUrl      = $myContactsToken !== '' ? (getBaseUrl() . '/contacts.php?vcf_token=' . $myContactsToken) : '';
+$carddavUrl      = getBaseUrl() . '/carddav.php';
 
 $pageTitle = 'Adressbuch & Kontakte';
 require_once __DIR__ . '/includes/header.php';
@@ -542,7 +397,8 @@ require_once __DIR__ . '/includes/header.php';
         <p class="page-subtitle" style="margin:0.25rem 0 0 0;">Persönliche &amp; geteilte Kontakte inkl. vCard (<code>.vcf</code>) Import/Export und automatischer Geburtstags-Anzeige im Kalender</p>
     </div>
     <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-        <input type="search" id="contactSearchInput" class="form-control" placeholder="🔍 Name, Firma, E-Mail, Ort..." style="max-width:240px;" oninput="filterContacts()">
+        <input type="search" id="contactSearchInput" class="form-control" placeholder="🔍 Name, Firma, E-Mail, Ort..." style="max-width:220px;" oninput="filterContacts()">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('contactsSyncModal').style.display='flex'" title="Adressbuch abonnieren (CardDAV &amp; .vcf-Link)">📡 Abo &amp; CardDAV</button>
         <button type="button" class="btn btn-outline" onclick="document.getElementById('vcfImportModal').style.display='flex'">📥 .vcf Import</button>
         <?php if (!empty($allContacts)): ?>
             <a href="contacts.php?export=vcf" class="btn btn-outline" title="Alle sichtbaren Kontakte als vCard (.vcf) herunterladen">📤 .vcf Export</a>
@@ -846,6 +702,94 @@ require_once __DIR__ . '/includes/header.php';
                 <button type="submit" class="btn btn-primary">📥 Jetzt importieren</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal: Adressbuch abonnieren (CardDAV & persönlicher .vcf-Link + QR-Code) -->
+<div class="modal-overlay" id="contactsSyncModal" style="display:<?= !empty($_GET['sync_modal']) ? 'flex' : 'none' ?>;" onclick="if(event.target===this) this.style.display='none';">
+    <div class="modal-box" style="max-width:640px; max-height:92vh; overflow-y:auto;">
+        <div class="modal-header">
+            <h3 style="margin:0;">📡 Adressbuch abonnieren &amp; synchronisieren</h3>
+            <button type="button" class="modal-close" onclick="document.getElementById('contactsSyncModal').style.display='none'">✕</button>
+        </div>
+
+        <!-- 1. Nativer CardDAV-Server (2-Wege-Sync für iOS, macOS, Thunderbird, Android) -->
+        <div style="padding:1rem; border-radius:0.85rem; border:1px solid var(--border); background:var(--bg-hover); margin-bottom:1.1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+                <div style="font-weight:700; font-size:0.95rem;">📱 1. Live-Synchronisation per CardDAV (Smartphone &amp; PC)</div>
+                <span class="badge" style="background:rgba(16,185,129,0.18); color:#10b981;">2-Wege-Sync</span>
+            </div>
+            <p class="text-muted" style="font-size:0.82rem; margin:0 0 0.65rem 0;">
+                Verbinde dein Adressbuch direkt über das <strong>CardDAV-Protokoll</strong> mit deinem iPhone/iPad, macOS Kontakte, Mozilla Thunderbird oder Android (z.&nbsp;B. über <em>DAVx⁵</em>). Neue und geänderte Kontakte werden automatisch synchronisiert.
+            </p>
+            <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.75rem;">
+                <input type="text" id="carddavUrlInput" class="form-control" readonly value="<?= e($carddavUrl) ?>" style="font-family:monospace; font-size:0.82rem;">
+                <button type="button" class="btn btn-primary" style="flex-shrink:0;" onclick="navigator.clipboard.writeText(document.getElementById('carddavUrlInput').value); this.textContent='✅ Kopiert!'; setTimeout(()=>this.textContent='📋 Kopieren', 2000);">📋 Kopieren</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:0.55rem; font-size:0.76rem;" class="text-muted">
+                <div style="padding:0.55rem; border-radius:0.6rem; border:1px solid var(--border); background:var(--bg-card);">
+                    <strong style="color:var(--text);">🍎 iPhone / iPad / macOS</strong><br>
+                    <em>Einstellungen &rarr; Apps &rarr; Kontakte &rarr; Accounts &rarr; Account hinzufügen &rarr; Andere &rarr; CardDAV-Account</em> &rarr; Server: <code><?= e($carddavUrl) ?></code> + dein Cloud-Benutzername &amp; Passwort.
+                </div>
+                <div style="padding:0.55rem; border-radius:0.6rem; border:1px solid var(--border); background:var(--bg-card);">
+                    <strong style="color:var(--text);">🦅 Mozilla Thunderbird</strong><br>
+                    <em>Adressbuch &rarr; Neues Adressbuch &rarr; CardDAV-Adressbuch hinzufügen</em> &rarr; Benutzername &amp; Adresse <code><?= e($carddavUrl) ?></code> eintragen.
+                </div>
+                <div style="padding:0.55rem; border-radius:0.6rem; border:1px solid var(--border); background:var(--bg-card);">
+                    <strong style="color:var(--text);">🤖 Android (DAVx⁵)</strong><br>
+                    In <em>DAVx⁵</em> &rarr; <em>Mit URL und Benutzername anmelden</em> &rarr; Basis-URL <code><?= e($carddavUrl) ?></code> und deine Cloud-Zugangsdaten eingeben.
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Persönlicher .vcf-Abo-Link per Token (analog zum .ics-Kalender-Abo) -->
+        <div style="padding:1rem; border-radius:0.85rem; border:1px solid var(--border); background:var(--bg-hover);">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+                <div style="font-weight:700; font-size:0.95rem;">🔗 2. Persönlicher .vcf-Abo-Link &amp; QR-Code (wie beim Kalender)</div>
+                <span class="badge" style="background:<?= $vcfFeedUrl !== '' ? 'rgba(59,130,246,0.18); color:#3b82f6;' : 'rgba(148,163,184,0.2); color:var(--text-muted);' ?>">
+                    <?= $vcfFeedUrl !== '' ? 'Aktiv' : 'Inaktiv' ?>
+                </span>
+            </div>
+            <p class="text-muted" style="font-size:0.82rem; margin:0 0 0.75rem 0;">
+                Über diesen geheimen Token-Link kannst du dein gesamtes Adressbuch ohne erneute Passworteingabe als Live-<code>.vcf</code>-Feed abrufen oder per QR-Code direkt auf dein Smartphone laden.
+            </p>
+
+            <?php if ($vcfFeedUrl !== ''): ?>
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.85rem;">
+                    <input type="text" id="vcfFeedUrlInput" class="form-control" readonly value="<?= e($vcfFeedUrl) ?>" style="font-family:monospace; font-size:0.8rem;">
+                    <button type="button" class="btn btn-primary" style="flex-shrink:0;" onclick="navigator.clipboard.writeText(document.getElementById('vcfFeedUrlInput').value); this.textContent='✅ Kopiert!'; setTimeout(()=>this.textContent='📋 Kopieren', 2000);">📋 Kopieren</button>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.85rem; padding:0.75rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-card);">
+                    <div style="flex-shrink:0;">
+                        <?= generateQrCodeSvg($vcfFeedUrl, 128) ?>
+                    </div>
+                    <div style="flex:1; min-width:200px; font-size:0.8rem;" class="text-muted">
+                        <strong style="color:var(--text); display:block; margin-bottom:0.25rem;">📱 QR-Code mit der Smartphone-Kamera scannen</strong>
+                        Scanne diesen 100&nbsp;% lokal erzeugten QR-Code mit deinem Handy, um alle aktuellen Kontakte sofort als <code>.vcf</code>-Adressbuch zu öffnen und zu importieren.
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                    <form method="post" action="contacts.php" style="margin:0;">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="regenerate_contacts_token">
+                        <button type="submit" class="btn btn-xs btn-outline">🔄 Neuen Link generieren (alten ungültig machen)</button>
+                    </form>
+                    <form method="post" action="contacts.php" style="margin:0;" onsubmit="return confirm('Möchtest du den .vcf-Abo-Link wirklich deaktivieren?');">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="revoke_contacts_token">
+                        <button type="submit" class="btn btn-xs btn-danger">🗑️ Abo-Link deaktivieren</button>
+                    </form>
+                </div>
+            <?php else: ?>
+                <form method="post" action="contacts.php" style="margin:0;">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="regenerate_contacts_token">
+                    <button type="submit" class="btn btn-primary">🔗 Persönlichen .vcf-Abo-Link jetzt aktivieren</button>
+                </form>
+            <?php endif; ?>
+        </div>
     </div>
 </div>
 

@@ -1282,10 +1282,16 @@ require_once __DIR__ . '/includes/header.php';
         <section id="kontakte-webdav" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-bold">📇</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adressbuch (vCard) &amp; WebDAV-Netzlaufwerk</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adressbuch (CardDAV &amp; vCard-Abo) &amp; WebDAV-Netzlaufwerk</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
                 <li><strong>📇 Adressbuch &amp; Kontakte (<a href="contacts.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kontakte</a>):</strong> Pflegen Sie persönliche oder im Team geteilte Kontakte inkl. Favoriten-Stern, Firma, Telefon/Mobil, E-Mail, Adresse und Geburtstag. Importieren und exportieren Sie Kontakte jederzeit im <strong>vCard-Standardformat (<code>.vcf</code>)</strong>. Hinterlegte Geburtstage (<code>🎂</code>) erscheinen automatisch als jährliche Ganztagstermine im <a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kalender</a>!</li>
+                <li><strong>📡 Kontakte abonnieren &amp; synchronisieren (CardDAV &amp; <code>.vcf</code>-Feed):</strong> Über den Button <strong>„📡 Abo &amp; CardDAV“</strong> im Adressbuch stehen Ihnen zwei Wege zur Verfügung:
+                    <ul class="list-disc pl-5 mt-1 space-y-1">
+                        <li><strong>📱 2-Wege-Synchronisation per CardDAV (<code>carddav.php</code>):</strong> Binden Sie Ihr Adressbuch nativ in iPhone/iPad (iOS), macOS Kontakte, Mozilla Thunderbird oder Android (<em>DAVx⁵</em>) ein – Änderungen werden in beide Richtungen synchronisiert.</li>
+                        <li><strong>🔗 Persönlicher <code>.vcf</code>-Abo-Link &amp; QR-Code:</strong> Analog zum Kalender-Abo können Sie einen geheimen Token-Link (<code>contacts.php?vcf_token=...</code>) samt lokalem QR-Code erzeugen.</li>
+                    </ul>
+                </li>
                 <li><strong>📡 WebDAV-Netzlaufwerk (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a>):</strong> Über den integrierten Endpunkt <code>webdav.php</code> binden Sie Ihre Cloud ohne Zusatzsoftware als echtes Netzlaufwerk im Windows Explorer, macOS Finder, unter Linux oder auf dem Smartphone ein.</li>
             </ul>
         </section>

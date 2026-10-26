@@ -94,6 +94,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `chat_notify_mode` TINYINT UNSIGNED NOT NULL DEFAULT 1,
             `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0,
             `calendar_token` VARCHAR(64) DEFAULT NULL,
+            `contacts_token` VARCHAR(64) DEFAULT NULL,
             `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -147,6 +148,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('calendar_token', $colsUsers, true)) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `calendar_token` VARCHAR(64) DEFAULT NULL AFTER `allow_user_sharing`");
+    }
+    if (!in_array('contacts_token', $colsUsers, true)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `contacts_token` VARCHAR(64) DEFAULT NULL AFTER `calendar_token`");
     }
 
     // Neue Tabellen anlegen, falls noch nicht vorhanden
@@ -546,16 +550,28 @@ function ensureSchemaUpdated(PDO $pdo): void
             `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
             `shared_user_id` INT UNSIGNED DEFAULT NULL,
             `group_id` INT UNSIGNED DEFAULT NULL,
+            `vcard_uid` VARCHAR(120) DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             KEY `idx_contacts_user` (`user_id`, `last_name`),
             KEY `idx_contacts_shared` (`shared_user_id`),
             KEY `idx_contacts_group` (`group_id`),
+            KEY `idx_contacts_uid` (`user_id`, `vcard_uid`),
             CONSTRAINT `fk_contacts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
             CONSTRAINT `fk_contacts_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
             CONSTRAINT `fk_contacts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $colsContacts = $pdo->query("SHOW COLUMNS FROM `contacts`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('vcard_uid', $colsContacts, true)) {
+        $pdo->exec("ALTER TABLE `contacts` ADD COLUMN `vcard_uid` VARCHAR(120) DEFAULT NULL AFTER `group_id`");
+        $pdo->exec("ALTER TABLE `contacts` ADD KEY `idx_contacts_uid` (`user_id`, `vcard_uid`)");
+    }
+    if (!in_array('updated_at', $colsContacts, true)) {
+        $pdo->exec("ALTER TABLE `contacts` ADD COLUMN `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created_at`");
+    }
 
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();

@@ -2206,6 +2206,242 @@ function sanitizeFolderPath(string $path): string
     return extractSanitizedFolderPath($path);
 }
 
+/**
+ * Escaping für vCard 3.0 Textfelder.
+ */
+function vcardEscape(string $val): string
+{
+    $val = str_replace(["\r\n", "\r"], "\n", $val);
+    $val = str_replace(['\\', ';', ',', "\n"], ['\\\\', '\;', '\,', '\n'], $val);
+    return $val;
+}
+
+/**
+ * Erzeugt einen RFC-2426 / CardDAV-konformen vCard 3.0 Block für einen Kontakt (inkl. UID und REV).
+ *
+ * @param array<string, mixed> $c
+ */
+function buildVcardEntry(array $c): string
+{
+    $id    = (int)($c['id'] ?? 0);
+    $uid   = !empty($c['vcard_uid']) ? (string)$c['vcard_uid'] : ('uwiiiminicloud-contact-' . $id . '@minicloud');
+    $first = trim((string)($c['first_name'] ?? ''));
+    $last  = trim((string)($c['last_name'] ?? ''));
+    $fn    = trim($first . ' ' . $last);
+    if ($fn === '') {
+        $fn = trim((string)($c['organization'] ?? 'Kontakt'));
+    }
+
+    $revTs = !empty($c['updated_at']) ? (strtotime((string)$c['updated_at']) ?: time()) : time();
+
+    $lines = [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        'PRODID:-//uWiiiMiniCloud//CardDAV 1.0//DE',
+        'UID:' . vcardEscape($uid),
+        'REV:' . gmdate('Ymd\THis\Z', $revTs),
+        'N:' . vcardEscape($last) . ';' . vcardEscape($first) . ';;;',
+        'FN:' . vcardEscape($fn),
+    ];
+
+    if (!empty($c['organization'])) {
+        $lines[] = 'ORG:' . vcardEscape((string)$c['organization']);
+    }
+    if (!empty($c['role_title'])) {
+        $lines[] = 'TITLE:' . vcardEscape((string)$c['role_title']);
+    }
+    if (!empty($c['email'])) {
+        $lines[] = 'EMAIL;TYPE=INTERNET:' . vcardEscape((string)$c['email']);
+    }
+    if (!empty($c['phone'])) {
+        $lines[] = 'TEL;TYPE=WORK,VOICE:' . vcardEscape((string)$c['phone']);
+    }
+    if (!empty($c['mobile'])) {
+        $lines[] = 'TEL;TYPE=CELL,VOICE:' . vcardEscape((string)$c['mobile']);
+    }
+    if (!empty($c['street']) || !empty($c['city']) || !empty($c['postal_code']) || !empty($c['country'])) {
+        $lines[] = 'ADR;TYPE=HOME:;;'
+            . vcardEscape((string)($c['street'] ?? '')) . ';'
+            . vcardEscape((string)($c['city'] ?? '')) . ';;'
+            . vcardEscape((string)($c['postal_code'] ?? '')) . ';'
+            . vcardEscape((string)($c['country'] ?? ''));
+    }
+    if (!empty($c['website'])) {
+        $lines[] = 'URL:' . vcardEscape((string)$c['website']);
+    }
+    if (!empty($c['birthday']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$c['birthday'])) {
+        $lines[] = 'BDAY:' . (string)$c['birthday'];
+    }
+    if (!empty($c['notes'])) {
+        $lines[] = 'NOTE:' . vcardEscape((string)$c['notes']);
+    }
+
+    $lines[] = 'END:VCARD';
+    return implode("\r\n", $lines) . "\r\n";
+}
+
+/**
+ * Parst den Inhalt einer .vcf-Datei (oder eines CardDAV PUT-Requests) und gibt ein Array von Kontakt-Datensätzen zurück.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function parseVcardFileContent(string $raw): array
+{
+    $unfolded = preg_replace("/\r\n[ \t]|\n[ \t]/", '', $raw) ?? $raw;
+    $lines    = preg_split("/\r\n|\n|\r/", $unfolded) ?: [];
+
+    $contacts = [];
+    $current  = null;
+
+    $decodeVal = static function (string $keyPart, string $valPart): string {
+        if (stripos($keyPart, 'ENCODING=QUOTED-PRINTABLE') !== false) {
+            $valPart = quoted_printable_decode($valPart);
+        }
+        $valPart = str_replace(['\n', '\N', '\,', '\;', '\\\\'], ["\n", "\n", ',', ';', '\\'], $valPart);
+        return trim($valPart);
+    };
+
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if ($trimmed === '') {
+            continue;
+        }
+        if (strcasecmp($trimmed, 'BEGIN:VCARD') === 0) {
+            $current = [
+                'vcard_uid'    => '',
+                'first_name'   => '',
+                'last_name'    => '',
+                'organization' => '',
+                'role_title'   => '',
+                'email'        => '',
+                'phone'        => '',
+                'mobile'       => '',
+                'street'       => '',
+                'postal_code'  => '',
+                'city'         => '',
+                'country'      => '',
+                'website'      => '',
+                'birthday'     => null,
+                'notes'        => '',
+            ];
+            continue;
+        }
+        if (strcasecmp($trimmed, 'END:VCARD') === 0) {
+            if ($current !== null) {
+                if ($current['first_name'] !== '' || $current['last_name'] !== '' || $current['organization'] !== '' || $current['email'] !== '' || $current['phone'] !== '' || $current['mobile'] !== '') {
+                    $contacts[] = $current;
+                }
+            }
+            $current = null;
+            continue;
+        }
+        if ($current === null || !str_contains($trimmed, ':')) {
+            continue;
+        }
+
+        [$propRaw, $valRaw] = explode(':', $trimmed, 2);
+        // Optionale vCard-Gruppenpräfixe (z.B. "item1.EMAIL") abtrennen
+        $propBase = $propRaw;
+        if (str_contains($propBase, '.')) {
+            $dotParts = explode('.', $propBase, 2);
+            $propBase = $dotParts[1];
+        }
+        $propParts = explode(';', strtoupper($propBase));
+        $propName  = $propParts[0];
+
+        if ($propName === 'UID') {
+            $current['vcard_uid'] = mb_substr($decodeVal($propRaw, $valRaw), 0, 120);
+        } elseif ($propName === 'N') {
+            $nParts = explode(';', $valRaw);
+            $current['last_name']  = $decodeVal($propRaw, $nParts[0] ?? '');
+            $current['first_name'] = $decodeVal($propRaw, $nParts[1] ?? '');
+        } elseif ($propName === 'FN' && $current['first_name'] === '' && $current['last_name'] === '') {
+            $fn = $decodeVal($propRaw, $valRaw);
+            $fnParts = preg_split('/\s+/', $fn, 2) ?: [];
+            $current['first_name'] = $fnParts[0] ?? '';
+            $current['last_name']  = $fnParts[1] ?? '';
+        } elseif ($propName === 'ORG') {
+            $orgParts = explode(';', $valRaw);
+            $current['organization'] = $decodeVal($propRaw, $orgParts[0] ?? '');
+        } elseif ($propName === 'TITLE') {
+            $current['role_title'] = $decodeVal($propRaw, $valRaw);
+        } elseif ($propName === 'EMAIL' && $current['email'] === '') {
+            $current['email'] = $decodeVal($propRaw, $valRaw);
+        } elseif ($propName === 'TEL') {
+            $tel = $decodeVal($propRaw, $valRaw);
+            if (stripos($propRaw, 'CELL') !== false || stripos($propRaw, 'MOBILE') !== false || stripos($propRaw, 'IPHONE') !== false) {
+                if ($current['mobile'] === '') {
+                    $current['mobile'] = $tel;
+                }
+            } else {
+                if ($current['phone'] === '') {
+                    $current['phone'] = $tel;
+                } elseif ($current['mobile'] === '') {
+                    $current['mobile'] = $tel;
+                }
+            }
+        } elseif ($propName === 'ADR' && $current['street'] === '' && $current['city'] === '') {
+            $adrParts = explode(';', $valRaw);
+            $current['street']      = $decodeVal($propRaw, $adrParts[2] ?? '');
+            $current['city']        = $decodeVal($propRaw, $adrParts[3] ?? '');
+            $current['postal_code'] = $decodeVal($propRaw, $adrParts[5] ?? '');
+            $current['country']     = $decodeVal($propRaw, $adrParts[6] ?? '');
+        } elseif ($propName === 'URL' && $current['website'] === '') {
+            $current['website'] = $decodeVal($propRaw, $valRaw);
+        } elseif ($propName === 'BDAY') {
+            $bday = trim($valRaw);
+            if (preg_match('/^(\d{4})-?(\d{2})-?(\d{2})/', $bday, $m)) {
+                $current['birthday'] = $m[1] . '-' . $m[2] . '-' . $m[3];
+            }
+        } elseif ($propName === 'NOTE') {
+            $current['notes'] = $decodeVal($propRaw, $valRaw);
+        }
+    }
+
+    return $contacts;
+}
+
+/**
+ * Lädt alle für einen Benutzer sichtbaren Kontakte (eigene, direkt geteilte und Gruppen-Kontakte).
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function getAccessibleContactsForUser(PDO $pdo, int $userId): array
+{
+    $stmtGrp = $pdo->prepare('SELECT group_id FROM group_members WHERE user_id = :uid');
+    $stmtGrp->execute([':uid' => $userId]);
+    $groupIds = array_map('intval', $stmtGrp->fetchAll(PDO::FETCH_COLUMN));
+
+    $sql = "SELECT c.*, u.`username` AS `owner_name`, su.`username` AS `shared_username`, g.`name` AS `group_name`
+            FROM `contacts` c
+            INNER JOIN `users` u ON u.`id` = c.`user_id`
+            LEFT JOIN `users` su ON su.`id` = c.`shared_user_id`
+            LEFT JOIN `groups` g ON g.`id` = c.`group_id`
+            WHERE c.`user_id` = :uid OR c.`shared_user_id` = :suid";
+
+    $params = [
+        ':uid'  => $userId,
+        ':suid' => $userId,
+    ];
+
+    if (!empty($groupIds)) {
+        $placeholders = [];
+        foreach ($groupIds as $idx => $gid) {
+            $ph = ':gid_' . $idx;
+            $placeholders[] = $ph;
+            $params[$ph] = $gid;
+        }
+        $sql .= " OR c.`group_id` IN (" . implode(',', $placeholders) . ")";
+    }
+
+    $sql .= " ORDER BY c.`is_favorite` DESC, c.`last_name` ASC, c.`first_name` ASC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+
 
 
 
