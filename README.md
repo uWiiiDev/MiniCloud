@@ -138,15 +138,32 @@ chmod 750 /var/www/html/cloud/uploads
 #### 4. Datenbank-Passwort in `config/database.php` eintragen
 Öffne `/var/www/html/cloud/config/database.php` (z. B. mit `nano /var/www/html/cloud/config/database.php`) und trage dein gewähltes Datenbank-Passwort bei `DB_PASS` ein.
 
-#### 5. Wichtig bei Nutzung von Nginx (Upload-Ordner schützen)
-Wenn du **Nginx** statt Apache verwendest, füge in deiner Nginx-Konfiguration (`/etc/nginx/sites-available/...`) diesen Block ein, damit niemand Dateien im Ordner `uploads/` direkt per URL aufrufen kann:
+#### 5. Wichtig bei Nutzung von Nginx (Upload-Ordner schützen & WebDAV/CardDAV aktivieren)
+Wenn du **Nginx** statt Apache verwendest, füge in deiner Nginx-Konfiguration (`/etc/nginx/sites-available/...`) diese beiden Anpassungen ein:
+
+1. **Upload-Ordner direkt sperren:**
 ```nginx
 location ^~ /cloud/uploads/ {
     deny all;
     return 403;
 }
 ```
-*(Bei Apache erledigt das die mitgelieferte Datei `uploads/.htaccess` bereits automatisch.)*
+2. **PHP-Block für WebDAV (`webdav.php/...`) & CardDAV (`carddav.php/...`) mit `PATH_INFO` erweitern:**
+Damit Nginx auch Unterpfade hinter `.php` (z. B. `/cloud/webdav.php/Dokument.pdf` oder `/cloud/carddav.php/addressbooks/...`) an PHP-FPM weiterleitet und nicht auf die Startseite umleitet, ersetze `location ~ \.php$` durch:
+```nginx
+location ~ [^/]\.php(/|$) {
+    fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+    if (!-f $document_root$fastcgi_script_name) {
+        return 404;
+    }
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param PATH_INFO $fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+    fastcgi_pass unix:/run/php/php-fpm.sock; # Pfad ggf. an deine PHP-FPM-Version anpassen (z. B. php8.2-fpm.sock)
+}
+```
+*(Bei Apache erledigen die mitgelieferten Dateien `.htaccess` und `uploads/.htaccess` beides bereits automatisch.)*
 
 ---
 

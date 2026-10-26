@@ -30,7 +30,7 @@ header('Accept-Ranges: bytes');
 header('X-Content-Type-Options: nosniff');
 
 if ($method === 'OPTIONS') {
-    header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, PROPFIND, MOVE, COPY, LOCK, UNLOCK');
+    header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, PROPFIND, PROPPATCH, MOVE, COPY, LOCK, UNLOCK');
     http_response_code(200);
     exit;
 }
@@ -170,6 +170,7 @@ function webdavFindFile(PDO $pdo, int $userId, string $folderPath, string $fileN
 function buildDavResponseXml(string $href, string $displayName, bool $isDir, int $size = 0, int $mtime = 0, string $mime = 'application/octet-stream'): string
 {
     $mtimeFormatted = gmdate('D, d M Y H:i:s', $mtime > 0 ? $mtime : time()) . ' GMT';
+    $cdateFormatted = gmdate('Y-m-d\TH:i:s\Z', $mtime > 0 ? $mtime : time());
     $etag = '"' . md5($href . ':' . $size . ':' . $mtime) . '"';
 
     $xml  = "  <D:response>\n";
@@ -177,6 +178,7 @@ function buildDavResponseXml(string $href, string $displayName, bool $isDir, int
     $xml .= "    <D:propstat>\n";
     $xml .= "      <D:prop>\n";
     $xml .= "        <D:displayname>" . htmlspecialchars($displayName, ENT_XML1 | ENT_QUOTES, 'UTF-8') . "</D:displayname>\n";
+    $xml .= "        <D:creationdate>{$cdateFormatted}</D:creationdate>\n";
     $xml .= "        <D:getlastmodified>{$mtimeFormatted}</D:getlastmodified>\n";
     $xml .= "        <D:getetag>" . htmlspecialchars($etag, ENT_XML1 | ENT_QUOTES, 'UTF-8') . "</D:getetag>\n";
     if ($isDir) {
@@ -229,6 +231,19 @@ if ($method === 'LOCK') {
 
 if ($method === 'UNLOCK') {
     http_response_code(204);
+    exit;
+}
+
+// 1b. PROPPATCH (Wird von Linux gvfs/davfs2 & Windows Explorer beim Datei-Kopieren gesendet)
+if ($method === 'PROPPATCH') {
+    $href = encodeWebdavHref($scriptName, $cleanRelPath, webdavFolderExists($pdo, $userId, $cleanRelPath));
+    http_response_code(207);
+    header('Content-Type: application/xml; charset=utf-8');
+    echo '<?xml version="1.0" encoding="utf-8"?>' . "\n"
+       . '<D:multistatus xmlns:D="DAV:">'
+       . '<D:response><D:href>' . htmlspecialchars($href, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</D:href>'
+       . '<D:propstat><D:prop><D:getlastmodified/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>'
+       . '</D:response></D:multistatus>';
     exit;
 }
 
@@ -335,6 +350,15 @@ if ($method === 'PROPFIND') {
 if ($method === 'GET' || $method === 'HEAD') {
     $fileMatch = webdavFindFile($pdo, $userId, $parentFolder, $itemName);
     if ($fileMatch === null) {
+        if (webdavFolderExists($pdo, $userId, $cleanRelPath)) {
+            header('Content-Type: text/html; charset=utf-8');
+            http_response_code(200);
+            if ($method === 'GET') {
+                echo '<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>WebDAV – ' . e($cleanRelPath !== '' ? $cleanRelPath : 'Hauptverzeichnis') . '</title></head><body>';
+                echo '<h3>📁 uWiiiMiniCloud WebDAV: /' . e($cleanRelPath) . '</h3><p>Verzeichnis bereit.</p></body></html>';
+            }
+            exit;
+        }
         http_response_code(404);
         exit;
     }
@@ -652,4 +676,4 @@ if ($method === 'MOVE' || $method === 'COPY') {
 }
 
 http_response_code(405);
-header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, PROPFIND, MOVE, COPY, LOCK, UNLOCK');
+header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, PROPFIND, PROPPATCH, MOVE, COPY, LOCK, UNLOCK');

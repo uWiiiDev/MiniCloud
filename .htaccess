@@ -1,0 +1,19 @@
+# MiniCloud Root .htaccess (Apache 2.4+)
+# Erforderlich für WebDAV (webdav.php/...) und CardDAV (carddav.php/...)
+
+# PATH_INFO für /webdav.php/Pfad und /carddav.php/addressbooks/... aktivieren
+AcceptPathInfo On
+
+# HTTP Basic Auth Header an PHP-FPM / FastCGI weiterreichen
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} ^(.*)
+    RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+</IfModule>
+
+# Verzeichnisauflistung deaktivieren
+Options -Indexes
