@@ -8,7 +8,7 @@
 ## ✨ Kernfunktionen im Überblick
 
 1. **Dateiverwaltung, MiniCloud Office Light, Tresor-Modus & Direkt-Vorschau (`index.php`, `office.php`, `vault_action.php`)**
-   - Drag-&-Drop-Upload für einzelne Dateien, Mehrfachauswahl und komplette Ordnerstrukturen.
+   - **📥 Direkte Ordner-Drag-&-Drop-Zonen & kompakte Schnell-Buttons:** Jede Ordner-Zeile und Ordner-Kachel ist eine direkte Drop-Zone – ziehen Sie Dateien oder ganze Ordner vom Computer direkt auf einen Ordner, um sie ohne vorheriges Öffnen sofort dorthin hochzuladen (oder ziehen Sie vorhandene Cloud-Dateien per Drag & Drop in einen Unterordner). Kompakte Buttons (`+ Dateien`, `📁+ Ordner`, `📄+ Office`) direkt in der Kopfzeile der Dateiliste sparen insbesondere auf Smartphones wertvollen Platz.
    - **📄 MiniCloud Office Light (Word `.docx`, Excel `.xlsx`, `.csv`, `.txt`, `.md`):** Direkt im Browser ohne externe Server neue Word-Dokumente, Excel-Tabellen oder Notizen anlegen sowie bestehende `.docx`- und `.xlsx`-Dateien online öffnen, bearbeiten (inkl. Rich-Text-Formatierung, Tabellen, mehreren Excel-Tabellenblättern und Live-Formeln wie `=SUMME(A1:A10)` / `=MITTELWERT(...)`) und per `Strg+S` speichern.
    - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
    - **🖼️ Foto-Galerie / Kachel-Ansicht, ⭐ Favoriten & 🔎 Globale Suche:** Nahtloser Wechsel zwischen Tabellenansicht (`📋 Liste`) und Kachel-Ansicht (`🖼️ Kacheln`) mit Live-Bild-Thumbnails, Anheften wichtiger Dateien per Stern (`⭐ Favoriten`) sowie ordnerübergreifende Volltextsuche über alle Unterordner hinweg.

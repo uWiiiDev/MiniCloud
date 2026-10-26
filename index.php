@@ -453,112 +453,6 @@ $pageTitle = $activeGroupFolder
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!-- Kompakte Upload-Leiste mit direktem Auto-Upload bei Drag & Drop oder Auswahl -->
-<?php if ($canUploadHere): ?>
-<section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-xs mb-5">
-    <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-        <?php if ($activeSharedFolder !== null): ?>
-            <input type="hidden" name="shared_folder_id" value="<?= (int)$activeSharedFolder['id'] ?>">
-        <?php elseif ($activeGroupFolder !== null): ?>
-            <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
-        <?php endif; ?>
-
-        <div
-            id="dropZone"
-            class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-400 rounded-xl px-4 py-3 transition-all bg-slate-50/60 dark:bg-slate-800/40 hover:bg-brand-50/30 dark:hover:bg-brand-950/20 cursor-pointer"
-        >
-            <input type="file" id="fileInput" name="files[]" multiple class="sr-only">
-            <input type="file" id="folderInput" webkitdirectory directory multiple class="sr-only">
-
-            <!-- Links: Icon + Hinweis -->
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-950 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                    </svg>
-                </div>
-                <div class="min-w-0">
-                    <p id="selectionSummary" class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
-                        Dateien oder Ordner hierher ziehen <span class="font-normal text-slate-500 dark:text-slate-400">(lädt sofort automatisch hoch)</span>
-                    </p>
-                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                        Frei: <?= e(formatBytes($storageStats['free'])) ?> &bull; Max. pro Upload: <?= e(formatBytes($phpLimits['effective_max_bytes'])) ?>
-                    </p>
-                </div>
-            </div>
-
-            <!-- Rechts: Zielordner & Auswahl-Buttons -->
-            <div class="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0" onclick="event.stopPropagation();">
-                <div class="relative w-full sm:w-44">
-                    <input
-                        type="text"
-                        id="target_folder"
-                        name="target_folder"
-                        list="existingFoldersList"
-                        value="<?= e($currentFolder) ?>"
-                        placeholder="Zielordner (optional)"
-                        title="Optionaler Zielordner für den Upload"
-                        class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                    <datalist id="existingFoldersList">
-                        <?php foreach ($userFolders as $ufOpt): ?>
-                            <option value="<?= e((string)$ufOpt['folder_path']) ?>"></option>
-                        <?php endforeach; ?>
-                    </datalist>
-                </div>
-
-                <div class="flex items-center gap-1.5 w-full sm:w-auto">
-                    <button
-                        type="button"
-                        id="btnSelectFiles"
-                        class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                    >
-                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-                        </svg>
-                        <span>Dateien</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        id="btnSelectFolder"
-                        class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                    >
-                        <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                        </svg>
-                        <span>Ordner</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onclick="openCreateOfficeModal()"
-                        title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
-                        aria-label="Office Light – Neues Dokument erstellen"
-                        class="shrink-0 inline-flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                    >
-                        <span>📄+</span>
-                        <span class="hidden sm:inline">Office Light</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Upload Progress Bar -->
-        <div id="uploadProgressWrapper" class="hidden space-y-1 pt-2.5">
-            <div class="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
-                <span id="uploadProgressText">Dateien werden hochgeladen...</span>
-                <span id="uploadProgressPercent">0%</span>
-            </div>
-            <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div id="uploadProgressBar" class="h-full bg-brand-600 transition-all duration-150" style="width: 0%"></div>
-            </div>
-        </div>
-    </form>
-</section>
-<?php endif; ?>
-
 <!-- ORDNER-VERWALTUNG: Neuen Ordner anlegen & Ordner-Übersicht (bei eigenen Dateien oder im Gruppenordner) -->
 <?php if ($activeSharedFolder === null): ?>
 <?php
@@ -717,8 +611,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 <?php endif; ?>
 
 <!-- Haupt-Dateitabelle (Eigene Dateien, aktiver Gruppenordner oder geöffneter freigegebener Ordner) -->
-<section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8">
-    <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<section id="mainFilesSection" class="mc-card relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8 transition-all">
+    <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
             <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
@@ -745,13 +639,69 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 <div class="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <span><?= $searchQuery !== '' ? 'Ordnerübergreifende Suche aktiv' : 'Gefilterte Ansicht aktiv' ?></span>
                     <span>&bull;</span>
-                    <a href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">&larr; Zurück zum Hauptverzeichnis</a>
+                    <a
+                        href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
+                        data-drop-folder=""
+                        data-drop-folder-label="Hauptverzeichnis"
+                        class="text-brand-600 dark:text-brand-400 hover:underline font-semibold rounded px-1 -mx-1 transition-all"
+                    >&larr; Zurück zum Hauptverzeichnis</a>
                 </div>
+            <?php else: ?>
+                <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    💡 Tipp: Dateien oder Ordner einfach per Drag &amp; Drop direkt auf einen Ordner (oder in diese Liste) ziehen.
+                </p>
             <?php endif; ?>
         </div>
 
-        <!-- Rechts: Favoriten-Filter, Ansicht-Umschalter (Liste / Kacheln) & Globale Suche -->
-        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <!-- Rechts: Kompakte Upload-Buttons, Favoriten-Filter, Ansicht-Umschalter (Liste / Kacheln) & Globale Suche -->
+        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <?php if ($canUploadHere): ?>
+                <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data" class="inline-flex items-center gap-1.5">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" id="target_folder" name="target_folder" value="<?= e($currentFolder) ?>">
+                    <?php if ($activeSharedFolder !== null): ?>
+                        <input type="hidden" name="shared_folder_id" value="<?= (int)$activeSharedFolder['id'] ?>">
+                    <?php elseif ($activeGroupFolder !== null): ?>
+                        <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+                    <?php endif; ?>
+                    <input type="file" id="fileInput" name="files[]" multiple class="sr-only">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple class="sr-only">
+
+                    <button
+                        type="button"
+                        id="btnSelectFiles"
+                        title="Dateien in <?= e($currentFolder !== '' ? '„' . $currentFolder . '“' : 'das aktuelle Verzeichnis') ?> hochladen (Frei: <?= e(formatBytes($storageStats['free'])) ?>)"
+                        class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8.5 7.5M12 4l3.5 3.5"/>
+                        </svg>
+                        <span>+ Dateien</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="btnSelectFolder"
+                        title="Kompletten Ordner samt Unterordnern hochladen"
+                        class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <span>📁+</span>
+                        <span class="hidden sm:inline">Ordner</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onclick="openCreateOfficeModal()"
+                        title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
+                        aria-label="Office Light – Neues Dokument erstellen"
+                        class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <span>📄+</span>
+                        <span class="hidden xl:inline">Office</span>
+                    </button>
+                </form>
+            <?php endif; ?>
+
             <?php
             $favFilterParams = [];
             if ($activeGroupFolder !== null) {
@@ -815,7 +765,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         name="q"
                         value="<?= e($searchQuery) ?>"
                         placeholder="Alle Ordner durchsuchen..."
-                        class="w-full sm:w-56 pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        class="w-full sm:w-48 pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                     <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -828,8 +778,28 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         </div>
     </div>
 
+    <?php if ($canUploadHere): ?>
+        <!-- Schlanker Drag-&-Drop-Hinweis & Fortschrittsbalken (erscheint nur bei aktivem Drag & Drop oder Upload) -->
+        <div id="globalDropHint" class="hidden px-4 sm:px-6 py-2.5 bg-brand-50/90 dark:bg-brand-950/60 border-b border-brand-200 dark:border-brand-800 text-xs sm:text-sm font-semibold text-brand-700 dark:text-brand-300 items-center justify-between gap-2">
+            <span id="globalDropHintText">📥 Dateien oder Ordner hier ablegen, um sie direkt in <?= e($currentFolder !== '' ? '„' . $currentFolder . '“' : 'das aktuelle Verzeichnis') ?> hochzuladen</span>
+            <span class="text-[11px] font-normal text-brand-600 dark:text-brand-400">Frei: <?= e(formatBytes($storageStats['free'])) ?></span>
+        </div>
+        <div id="uploadProgressWrapper" class="hidden px-4 sm:px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 space-y-1.5">
+            <div class="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <span id="uploadProgressText">Dateien werden hochgeladen...</span>
+                <span id="uploadProgressPercent">0%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div id="uploadProgressBar" class="h-full bg-brand-600 transition-all duration-150" style="width: 0%"></div>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <?php if (empty($files) && empty($directSubfolders) && $currentFolder === ''): ?>
-        <div class="p-10 sm:p-12 text-center">
+        <div
+            class="p-10 sm:p-12 text-center <?= $canUploadHere ? 'cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition-colors' : '' ?>"
+            <?php if ($canUploadHere): ?>onclick="document.getElementById('fileInput')?.click()"<?php endif; ?>
+        >
             <div class="mx-auto w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-3">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
@@ -837,7 +807,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             </div>
             <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Keine Dateien oder Ordner vorhanden</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                <?= $canUploadHere ? 'Laden Sie oben Ihre erste Datei oder einen Ordner hoch.' : 'In diesem Ordner befinden sich aktuell keine Dateien.' ?>
+                <?= $canUploadHere ? 'Ziehen Sie Dateien oder Ordner einfach per Drag & Drop hierher oder klicken Sie auf „+ Dateien“.' : 'In diesem Ordner befinden sich aktuell keine Dateien.' ?>
             </p>
         </div>
     <?php else: ?>
@@ -951,15 +921,25 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $upParent = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
                         $upUrl = 'index.php'
                             . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParent !== '' ? '&amp;folder=' . rawurlencode($upParent) : '') : ($upParent !== '' ? '?folder=' . rawurlencode($upParent) : ''));
+                        $upLabel = $upParent !== '' ? $upParent : 'Hauptverzeichnis';
                         ?>
-                        <tr class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors">
+                        <tr
+                            data-drop-folder="<?= e($upParent) ?>"
+                            data-drop-folder-label="<?= e($upLabel) ?>"
+                            class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-all"
+                        >
                             <td class="py-2.5 px-4 sm:px-6" colspan="6">
-                                <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
-                                    <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold">
-                                        &crarr; ..
+                                <div class="flex items-center justify-between gap-2">
+                                    <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
+                                        <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold">
+                                            &crarr; ..
+                                        </span>
+                                        <span>Übergeordneter Ordner (<?= e($upLabel) ?>)</span>
+                                    </a>
+                                    <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500">
+                                        📥 Dateien hierher ziehen zum Ablegen in <?= e($upLabel) ?>
                                     </span>
-                                    <span>Übergeordneter Ordner (<?= $upParent !== '' ? e($upParent) : 'Hauptverzeichnis' ?>)</span>
-                                </a>
+                                </div>
                             </td>
                         </tr>
                     <?php endif; ?>
@@ -985,20 +965,24 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         }
                         $subGfIdOrNull = $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : null;
                         ?>
-                        <tr class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-colors">
+                        <tr
+                            data-drop-folder="<?= e($subPath) ?>"
+                            data-drop-folder-label="<?= e($subDisplayName) ?>"
+                            class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-all"
+                        >
                             <td class="py-3 pl-4 pr-2 sm:pl-6 w-9 text-center text-amber-500">
                                 📁
                             </td>
                             <td class="py-3 px-2 sm:px-4">
                                 <div class="flex items-start sm:items-center gap-2.5 sm:gap-3">
-                                    <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-10 sm:h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen">
+                                    <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-10 sm:h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen (oder Dateien per Drag & Drop hier ablegen)">
                                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                         </svg>
                                     </a>
                                     <div class="min-w-0 flex-1">
                                         <div class="flex flex-wrap items-center gap-1.5">
-                                            <a href="<?= $subUrl ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[145px] sm:max-w-xs md:max-w-md" title="Ordner <?= e($subPath) ?> öffnen">
+                                            <a href="<?= $subUrl ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[145px] sm:max-w-xs md:max-w-md" title="Ordner <?= e($subPath) ?> öffnen (oder Dateien direkt hierher ziehen)">
                                                 <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
                                             </a>
                                             <?php if ($subLinkShares > 0): ?>
@@ -1015,6 +999,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                                             <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?>
                                             <span class="sm:hidden"> &bull; <?= e(formatBytes($subSize)) ?></span>
+                                            <span class="hidden md:inline text-amber-700/70 dark:text-amber-400/70"> &bull; 📥 Drop-Zone</span>
                                         </p>
                                     </div>
                                 </div>
@@ -1187,7 +1172,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             $folderJumpUrl = $folderPath !== '' ? ('index.php?folder=' . rawurlencode($folderPath)) : 'index.php';
                         }
                     ?>
-                        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors" data-file-row-id="<?= $fId ?>">
+                        <tr
+                            class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
+                            data-file-row-id="<?= $fId ?>"
+                            <?php if ($canManageThisFile): ?>
+                                draggable="true"
+                                data-drag-file-id="<?= $fId ?>"
+                                data-drag-file-name="<?= e($origName) ?>"
+                            <?php endif; ?>
+                        >
                             <td class="py-3.5 pl-4 pr-2 sm:pl-6 w-9 align-middle">
                                 <input
                                     type="checkbox"
@@ -1439,6 +1432,34 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
         <!-- FOTO-GALERIE / KACHEL-ANSICHT (#fileGridView) -->
         <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+            <?php if ($currentFolder !== '' && $activeSharedFolder === null): ?>
+                <?php
+                $upParentGrid = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
+                $upUrlGrid = 'index.php'
+                    . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParentGrid !== '' ? '&amp;folder=' . rawurlencode($upParentGrid) : '') : ($upParentGrid !== '' ? '?folder=' . rawurlencode($upParentGrid) : ''));
+                $upLabelGrid = $upParentGrid !== '' ? $upParentGrid : 'Hauptverzeichnis';
+                ?>
+                <a
+                    href="<?= $upUrlGrid ?>"
+                    data-drop-folder="<?= e($upParentGrid) ?>"
+                    data-drop-folder-label="<?= e($upLabelGrid) ?>"
+                    class="group flex flex-col justify-between p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs"
+                    title="Übergeordneter Ordner (oder Dateien hierher ziehen)"
+                >
+                    <div class="flex items-center justify-center h-28 rounded-xl bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300 mb-2.5 group-hover:scale-[1.02] transition-transform text-xl font-bold">
+                        &crarr; ..
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
+                            Übergeordneter Ordner
+                        </p>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                            <?= e($upLabelGrid) ?> &bull; 📥 Drop-Zone
+                        </p>
+                    </div>
+                </a>
+            <?php endif; ?>
+
             <?php foreach ($directSubfolders as $subFolder): ?>
                 <?php
                 $subPath = (string)$subFolder['folder_path'];
@@ -1449,7 +1470,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 ?>
                 <a
                     href="<?= $subUrl ?>"
+                    data-drop-folder="<?= e($subPath) ?>"
+                    data-drop-folder-label="<?= e($subDisplayName) ?>"
                     class="group flex flex-col justify-between p-3.5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 hover:border-amber-400 dark:hover:border-amber-600 transition-all shadow-2xs"
+                    title="Ordner <?= e($subPath) ?> öffnen (oder Dateien per Drag & Drop direkt hierher ziehen)"
                 >
                     <div class="flex items-center justify-center h-28 rounded-xl bg-amber-100/70 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mb-2.5 group-hover:scale-[1.02] transition-transform">
                         <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
@@ -1461,7 +1485,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             📁 <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
                         </p>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($subSize)) ?>
+                            <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($subSize)) ?> &bull; 📥
                         </p>
                     </div>
                 </a>
@@ -1484,7 +1508,14 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     ? $canDeleteSharedFolder
                     : $canManageThisFile;
                 ?>
-                <div class="group relative flex flex-col justify-between p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs">
+                <div
+                    class="group relative flex flex-col justify-between p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
+                    <?php if ($canManageThisFile): ?>
+                        draggable="true"
+                        data-drag-file-id="<?= $fId ?>"
+                        data-drag-file-name="<?= e($origName) ?>"
+                    <?php endif; ?>
+                >
                     <!-- Top Overlay: Favorit + Aktionen -->
                     <div class="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
                         <?php if ($canManageThisFile): ?>
@@ -3525,24 +3556,30 @@ async function revokeUserShare(userShareId) {
     loadShareDetails(shareModalFileId.value, shareModalFolderPath.value);
 }
 
-// --- UPLOAD DRAG & DROP LOGIK (Sofortiger Auto-Upload ohne Bestätigung) ---
+// --- UPLOAD & DIREKTE ORDNER-DRAG-&-DROP LOGIK (Externer Auto-Upload + Internes Datei-Verschieben) ---
 (() => {
-    const dropZone = document.getElementById('dropZone');
-    if (!dropZone) return;
+    const mainFilesSection = document.getElementById('mainFilesSection');
+    if (!mainFilesSection) return;
 
     const fileInput = document.getElementById('fileInput');
     const folderInput = document.getElementById('folderInput');
     const btnSelectFiles = document.getElementById('btnSelectFiles');
     const btnSelectFolder = document.getElementById('btnSelectFolder');
-    const selectionSummary = document.getElementById('selectionSummary');
     const uploadForm = document.getElementById('uploadForm');
     const progressWrapper = document.getElementById('uploadProgressWrapper');
     const progressBar = document.getElementById('uploadProgressBar');
     const progressPercent = document.getElementById('uploadProgressPercent');
     const progressText = document.getElementById('uploadProgressText');
+    const globalDropHint = document.getElementById('globalDropHint');
+    const globalDropHintText = document.getElementById('globalDropHintText');
 
     const remainingQuota = <?= (int)$storageStats['free'] ?>;
+    const defaultTargetFolder = <?= json_encode($currentFolder) ?>;
+    const defaultTargetLabel = defaultTargetFolder !== '' ? `„${defaultTargetFolder}“` : 'das aktuelle Verzeichnis';
+    const activeGroupFolderId = <?= $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : 'null' ?>;
     let isUploading = false;
+    let draggedInternalFileIds = [];
+    let draggedInternalLabel = '';
 
     function formatSize(bytes) {
         if (bytes <= 0) return '0 B';
@@ -3551,31 +3588,53 @@ async function revokeUserShare(userShareId) {
         return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2).replace('.', ',') + ' ' + units[i];
     }
 
-    function startImmediateUpload(itemsToUpload) {
-        if (isUploading || itemsToUpload.length === 0) return;
+    function showDropHint(text) {
+        if (!globalDropHint || !globalDropHintText) return;
+        globalDropHintText.textContent = text;
+        globalDropHint.classList.remove('hidden');
+        globalDropHint.classList.add('flex');
+    }
+
+    function hideDropHint() {
+        if (!globalDropHint) return;
+        globalDropHint.classList.add('hidden');
+        globalDropHint.classList.remove('flex');
+    }
+
+    function clearFolderDropHighlights() {
+        document.querySelectorAll('[data-drop-folder]').forEach((el) => {
+            el.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50/90', 'dark:bg-brand-950/60');
+        });
+        mainFilesSection.classList.remove('ring-2', 'ring-brand-500');
+    }
+
+    function startImmediateUpload(itemsToUpload, overrideTargetFolder = null, overrideLabel = null) {
+        if (!uploadForm || isUploading || itemsToUpload.length === 0) return;
 
         const totalBytes = itemsToUpload.reduce((acc, item) => acc + (item.file.size || 0), 0);
         if (totalBytes > remainingQuota) {
-            selectionSummary.textContent = `Fehler: ${itemsToUpload.length} Datei(en) (${formatSize(totalBytes)}) überschreiten Ihren freien Speicher (${formatSize(remainingQuota)})!`;
-            selectionSummary.className = 'text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 truncate';
+            alert(`Fehler: ${itemsToUpload.length} Datei(en) (${formatSize(totalBytes)}) überschreiten Ihren freien Speicher (${formatSize(remainingQuota)})!`);
             return;
         }
 
-        isUploading = true;
-        selectionSummary.textContent = `Lade ${itemsToUpload.length} Datei(en) (${formatSize(totalBytes)}) hoch...`;
-        selectionSummary.className = 'text-xs sm:text-sm font-semibold text-brand-600 dark:text-brand-400 truncate';
+        const effectiveFolder = overrideTargetFolder !== null
+            ? overrideTargetFolder
+            : (document.getElementById('target_folder')?.value ?? defaultTargetFolder);
+        const targetDisplay = overrideLabel || (effectiveFolder !== '' ? `Ordner „${effectiveFolder}“` : 'Hauptverzeichnis');
 
-        progressWrapper.classList.remove('hidden');
-        progressBar.style.width = '0%';
-        progressPercent.textContent = '0%';
+        isUploading = true;
+        hideDropHint();
+
+        if (progressWrapper) {
+            progressWrapper.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressText.textContent = `Lade ${itemsToUpload.length} Datei(en) in ${targetDisplay} hoch...`;
+        }
 
         const formData = new FormData();
         formData.append('csrf_token', csrfToken);
-        formData.append('target_folder', document.getElementById('target_folder').value);
-        const vaultPwInput = document.getElementById('upload_vault_password');
-        if (vaultPwInput && vaultPwInput.value !== '') {
-            formData.append('vault_password', vaultPwInput.value);
-        }
+        formData.append('target_folder', effectiveFolder);
         const sfInput = uploadForm.querySelector('input[name="shared_folder_id"]');
         if (sfInput) {
             formData.append('shared_folder_id', sfInput.value);
@@ -3596,11 +3655,11 @@ async function revokeUserShare(userShareId) {
         xhr.setRequestHeader('Accept', 'application/json');
 
         xhr.upload.addEventListener('progress', (evt) => {
-            if (evt.lengthComputable) {
+            if (evt.lengthComputable && progressBar && progressPercent && progressText) {
                 const pct = Math.round((evt.loaded / evt.total) * 100);
                 progressBar.style.width = pct + '%';
                 progressPercent.textContent = pct + '%';
-                progressText.textContent = `Hochladen (${formatSize(evt.loaded)} von ${formatSize(evt.total)})...`;
+                progressText.textContent = `Hochladen in ${targetDisplay} (${formatSize(evt.loaded)} von ${formatSize(evt.total)})...`;
             }
         });
 
@@ -3616,36 +3675,38 @@ async function revokeUserShare(userShareId) {
         xhr.addEventListener('error', () => {
             isUploading = false;
             alert('Netzwerkfehler beim Hochladen.');
-            progressWrapper.classList.add('hidden');
+            if (progressWrapper) progressWrapper.classList.add('hidden');
         });
 
         xhr.send(formData);
     }
 
-    function handleFileListAndUpload(fileList) {
+    function handleFileListAndUpload(fileList, overrideTargetFolder = null, overrideLabel = null) {
         const items = [];
         for (const file of fileList) {
             const relPath = file.webkitRelativePath || file.name;
             items.push({ file, relativePath: relPath });
         }
-        startImmediateUpload(items);
+        startImmediateUpload(items, overrideTargetFolder, overrideLabel);
     }
 
-    btnSelectFiles.addEventListener('click', () => fileInput.click());
-    btnSelectFolder.addEventListener('click', () => folderInput.click());
-    dropZone.addEventListener('click', (e) => {
-        if (e.target === dropZone || e.target.closest('#selectionSummary')) {
-            fileInput.click();
-        }
-    });
+    if (btnSelectFiles && fileInput) {
+        btnSelectFiles.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) handleFileListAndUpload(fileInput.files);
+        });
+    }
 
-    fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) handleFileListAndUpload(fileInput.files);
-    });
+    if (btnSelectFolder && folderInput) {
+        btnSelectFolder.addEventListener('click', () => folderInput.click());
+        folderInput.addEventListener('change', () => {
+            if (folderInput.files.length > 0) handleFileListAndUpload(folderInput.files);
+        });
+    }
 
-    folderInput.addEventListener('change', () => {
-        if (folderInput.files.length > 0) handleFileListAndUpload(folderInput.files);
-    });
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', (e) => e.preventDefault());
+    }
 
     async function readEntryRecursively(entry, pathPrefix = '') {
         if (entry.isFile) {
@@ -3679,43 +3740,177 @@ async function revokeUserShare(userShareId) {
         return [];
     }
 
-    ['dragenter', 'dragover'].forEach(evtName => {
-        dropZone.addEventListener(evtName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.add('border-brand-600', 'bg-brand-50/60');
-        });
-    });
-
-    ['dragleave', 'drop'].forEach(evtName => {
-        dropZone.addEventListener(evtName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.remove('border-brand-600', 'bg-brand-50/60');
-        });
-    });
-
-    dropZone.addEventListener('drop', async (e) => {
-        const items = e.dataTransfer?.items;
+    async function extractDroppedItems(dataTransfer) {
+        const items = dataTransfer?.items;
         if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
             const entries = [];
             for (let i = 0; i < items.length; i++) {
                 const entry = items[i].webkitGetAsEntry();
                 if (entry) entries.push(entry);
             }
-            const extractedItems = [];
-            for (const entry of entries) {
-                const extracted = await readEntryRecursively(entry, '');
-                extractedItems.push(...extracted);
+            if (entries.length > 0) {
+                const extractedItems = [];
+                for (const entry of entries) {
+                    const extracted = await readEntryRecursively(entry, '');
+                    extractedItems.push(...extracted);
+                }
+                return extractedItems;
             }
-            startImmediateUpload(extractedItems);
-        } else if (e.dataTransfer?.files?.length > 0) {
-            handleFileListAndUpload(e.dataTransfer.files);
+        }
+        if (dataTransfer?.files?.length > 0) {
+            const fallback = [];
+            for (const file of dataTransfer.files) {
+                fallback.push({ file, relativePath: file.webkitRelativePath || file.name });
+            }
+            return fallback;
+        }
+        return [];
+    }
+
+    // 1. Internes Ziehen von Cloud-Dateien ([data-drag-file-id]) in Ordner
+    document.querySelectorAll('[data-drag-file-id]').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+            const fileId = el.getAttribute('data-drag-file-id');
+            const fileName = el.getAttribute('data-drag-file-name') || 'Datei';
+            if (!fileId) return;
+
+            // Falls die gezogene Datei Teil einer Mehrfachauswahl ist, alle markierten Dateien gemeinsam verschieben
+            const checkedIds = typeof getSelectedBatchCheckboxes === 'function'
+                ? getSelectedBatchCheckboxes()
+                    .filter(cb => cb.getAttribute('data-can-manage') === '1')
+                    .map(cb => cb.value)
+                : [];
+
+            if (checkedIds.length > 1 && checkedIds.includes(fileId)) {
+                draggedInternalFileIds = checkedIds;
+                draggedInternalLabel = `${checkedIds.length} ausgewählte Dateien`;
+            } else {
+                draggedInternalFileIds = [fileId];
+                draggedInternalLabel = `„${fileName}“`;
+            }
+
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/x-minicloud-files', draggedInternalFileIds.join(','));
+            el.classList.add('opacity-50');
+        });
+
+        el.addEventListener('dragend', () => {
+            el.classList.remove('opacity-50');
+            draggedInternalFileIds = [];
+            draggedInternalLabel = '';
+            clearFolderDropHighlights();
+            hideDropHint();
+        });
+    });
+
+    function submitInternalMoveToFolder(fileIds, targetFolderPath) {
+        if (!fileIds || fileIds.length === 0) return;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'folder_action.php';
+        form.className = 'hidden';
+
+        const addField = (name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        };
+
+        addField('csrf_token', csrfToken);
+        addField('action', 'batch_transfer_files');
+        addField('batch_file_ids', fileIds.join(','));
+        addField('target_folder', 'move|' + (targetFolderPath !== '' ? targetFolderPath : '__root__'));
+        if (defaultTargetFolder !== '') {
+            addField('return_folder', defaultTargetFolder);
+        }
+        if (activeGroupFolderId !== null) {
+            addField('group_folder_id', String(activeGroupFolderId));
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    // 2. Direkte Drop-Zonen auf allen Ordner-Zeilen & Ordner-Kacheln ([data-drop-folder])
+    document.querySelectorAll('[data-drop-folder]').forEach((folderEl) => {
+        const folderPath = folderEl.getAttribute('data-drop-folder') ?? '';
+        const folderLabel = folderEl.getAttribute('data-drop-folder-label') || (folderPath !== '' ? folderPath : 'Hauptverzeichnis');
+
+        folderEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clearFolderDropHighlights();
+            folderEl.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50/90', 'dark:bg-brand-950/60');
+
+            if (draggedInternalFileIds.length > 0) {
+                e.dataTransfer.dropEffect = 'move';
+                showDropHint(`📂 Loslassen, um ${draggedInternalLabel} direkt in „${folderLabel}“ zu verschieben`);
+            } else if (uploadForm) {
+                e.dataTransfer.dropEffect = 'copy';
+                showDropHint(`📥 Loslassen, um Dateien direkt in den Ordner „${folderLabel}“ hochzuladen`);
+            }
+        });
+
+        folderEl.addEventListener('dragleave', (e) => {
+            if (!folderEl.contains(e.relatedTarget)) {
+                folderEl.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50/90', 'dark:bg-brand-950/60');
+            }
+        });
+
+        folderEl.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clearFolderDropHighlights();
+            hideDropHint();
+
+            // Fall A: Internes Verschieben von Cloud-Dateien in diesen Ordner
+            if (draggedInternalFileIds.length > 0) {
+                const idsToMove = [...draggedInternalFileIds];
+                draggedInternalFileIds = [];
+                submitInternalMoveToFolder(idsToMove, folderPath);
+                return;
+            }
+
+            // Fall B: Externer Datei-/Ordner-Upload direkt in diesen Ordner
+            if (!uploadForm) return;
+            const extractedItems = await extractDroppedItems(e.dataTransfer);
+            if (extractedItems.length > 0) {
+                startImmediateUpload(extractedItems, folderPath, `Ordner „${folderLabel}“`);
+            }
+        });
+    });
+
+    // 3. Fallback Drop-Zone auf dem gesamten Dateibereich (#mainFilesSection) für das aktuelle Verzeichnis
+    mainFilesSection.addEventListener('dragover', (e) => {
+        if (draggedInternalFileIds.length > 0 || !uploadForm) return;
+        e.preventDefault();
+        if (!e.target.closest('[data-drop-folder]')) {
+            clearFolderDropHighlights();
+            mainFilesSection.classList.add('ring-2', 'ring-brand-500');
+            showDropHint(`📥 Dateien oder Ordner hier ablegen, um sie direkt in ${defaultTargetLabel} hochzuladen`);
         }
     });
 
-    uploadForm.addEventListener('submit', (e) => {
+    mainFilesSection.addEventListener('dragleave', (e) => {
+        if (!mainFilesSection.contains(e.relatedTarget)) {
+            clearFolderDropHighlights();
+            hideDropHint();
+        }
+    });
+
+    mainFilesSection.addEventListener('drop', async (e) => {
+        if (draggedInternalFileIds.length > 0 || !uploadForm) return;
+        if (e.target.closest('[data-drop-folder]')) return;
         e.preventDefault();
+        clearFolderDropHighlights();
+        hideDropHint();
+
+        const extractedItems = await extractDroppedItems(e.dataTransfer);
+        if (extractedItems.length > 0) {
+            startImmediateUpload(extractedItems, null, null);
+        }
     });
 })();
 </script>
