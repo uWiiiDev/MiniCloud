@@ -970,13 +970,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtTargetUser->execute([':id' => $targetUserId]);
             $deletedUsername = (string)($stmtTargetUser->fetchColumn() ?: ('ID #' . $targetUserId));
 
-            // Physische Dateien des Benutzers vor dem Löschen entfernen
-            $stmtFiles = $pdo->prepare('SELECT filename FROM files WHERE user_id = :uid');
+            // Physische Dateien (und Versionsstände) des Benutzers vor dem Löschen entfernen
+            $stmtFiles = $pdo->prepare('SELECT id, filename, stored_name FROM files WHERE user_id = :uid');
             $stmtFiles->execute([':uid' => $targetUserId]);
             foreach ($stmtFiles->fetchAll() as $f) {
-                $p = UPLOAD_DIR . basename((string)$f['filename']);
-                if (is_file($p)) {
-                    @unlink($p);
+                deletePhysicalFileVersions($pdo, (int)$f['id']);
+                $sn = !empty($f['stored_name']) ? (string)$f['stored_name'] : (string)($f['filename'] ?? '');
+                if ($sn !== '') {
+                    $p = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename($sn);
+                    if (is_file($p)) {
+                        @unlink($p);
+                    }
                 }
             }
             $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $targetUserId]);
@@ -1217,15 +1221,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 11b. Module & Funktionen (Kalender & Chat) aktualisieren ---
+    // --- 11b. Module & Funktionen (Kalender, Chat, Aufgaben, Notizen, Kontakte, WebDAV) aktualisieren ---
     if ($action === 'update_modules_settings') {
         $enableCalendar = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
         $enableChat     = isset($_POST['enable_chat']) && $_POST['enable_chat'] === '1' ? '1' : '0';
+        $enableTasks    = isset($_POST['enable_tasks']) && $_POST['enable_tasks'] === '1' ? '1' : '0';
+        $enableNotes    = isset($_POST['enable_notes']) && $_POST['enable_notes'] === '1' ? '1' : '0';
+        $enableContacts = isset($_POST['enable_contacts']) && $_POST['enable_contacts'] === '1' ? '1' : '0';
+        $enableWebdav   = isset($_POST['enable_webdav']) && $_POST['enable_webdav'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
+        saveAppSetting($pdo, 'enable_tasks', $enableTasks);
+        saveAppSetting($pdo, 'enable_notes', $enableNotes);
+        saveAppSetting($pdo, 'enable_contacts', $enableContacts);
+        saveAppSetting($pdo, 'enable_webdav', $enableWebdav);
 
-        setFlash('success', 'Modul-Einstellungen (Kalender & Chat) wurden erfolgreich gespeichert.');
+        setFlash('success', 'Modul-Einstellungen (Kalender, Chat, Aufgaben, Notizen, Kontakte & WebDAV) wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
         exit;
     }
@@ -2058,6 +2070,150 @@ $localSnapshots  = getLocalAppSnapshots();
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="messages.php?channel=broadcast" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 📢 Rundnachricht an alle Benutzer senden &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 3: Aufgaben & Kanban-Board -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📋 Aufgaben &amp; Kanban-Board
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_tasks'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_tasks'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_tasks"
+                                value="1"
+                                <?= ($currentSettings['enable_tasks'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Aufgaben- &amp; Kanban-Board aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    3-Spalten-Board (Offen, In Arbeit, Erledigt) mit Drag &amp; Drop, Prioritäten, Fälligkeiten, Checklisten, Cloud-Dateianhängen und Teilen im Team.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_tasks'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="tasks.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📋 Aufgaben-Board öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 4: Notizwand & Pinboard -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📌 Notizwand &amp; Pinboard
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_notes'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_notes'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_notes"
+                                value="1"
+                                <?= ($currentSettings['enable_notes'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Digitale Haftnotizen / Pinboard aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Farbige Haftnotizen mit Anpinnen, #Tags, Live-Suche, Teilen mit Benutzern/Gruppen und 1-Klick-Export als Markdown-Datei in die Cloud.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_notes'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="notes.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📌 Notizwand öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 5: Adressbuch & Kontakte -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📇 Adressbuch &amp; Kontakte
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_contacts'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_contacts'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_contacts"
+                                value="1"
+                                <?= ($currentSettings['enable_contacts'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Adressbuch &amp; Kontakte aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Persönliche und geteilte Kontakte inkl. vCard (<code>.vcf</code>) Import/Export und automatischer Anzeige von Geburtstagen im Kalender.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_contacts'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="contacts.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📇 Adressbuch öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 6: WebDAV-Schnittstelle -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📡 WebDAV-Netzlaufwerk
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_webdav'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_webdav'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_webdav"
+                                value="1"
+                                <?= ($currentSettings['enable_webdav'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>WebDAV-Server-Endpunkt (<code>webdav.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Erlaubt Benutzern das Einbinden ihrer Cloud als natives Netzlaufwerk unter Windows Explorer, macOS Finder, Linux und Smartphones.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_webdav'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="settings.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📡 Verbindungs-URL in Einstellungen anzeigen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

@@ -224,6 +224,50 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         button, a, select, input, label {
             touch-action: manipulation;
         }
+
+        /* --- Globale Komponenten-Klassen für Aufgaben-, Notiz- und Kontakt-Module --- */
+        :root {
+            --bg-card: #e2e8f0;
+            --bg-hover: rgba(100, 116, 139, 0.12);
+            --border: #cbd5e1;
+            --radius: 1rem;
+            --radius-sm: 0.75rem;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.12);
+            --primary: #2563eb;
+            --primary-light: rgba(37, 99, 235, 0.14);
+            --text: #0f172a;
+            --text-muted: #475569;
+        }
+        html.dark {
+            --bg-card: #0f172a;
+            --bg-hover: rgba(148, 163, 184, 0.12);
+            --border: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        .page-title { font-size: 1.5rem; font-weight: 700; }
+        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+        .text-muted { color: var(--text-muted); }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.5rem 0.95rem; border-radius: 0.75rem; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; border: 1px solid transparent; text-decoration: none; }
+        .btn-xs { padding: 0.25rem 0.55rem; font-size: 0.75rem; border-radius: 0.55rem; }
+        .btn-primary { background: #2563eb; color: #ffffff !important; border-color: #2563eb; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-outline { background: rgba(148, 163, 184, 0.12); color: inherit; border-color: var(--border); }
+        .btn-outline:hover, .btn-outline.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.14); }
+        .btn-danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.35); }
+        .btn-danger:hover { background: #ef4444; color: #ffffff !important; }
+        .form-group { margin-bottom: 0.85rem; }
+        .form-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .form-control { width: 100%; padding: 0.5rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border); background: var(--bg-card); color: inherit; font-size: 0.875rem; }
+        .form-control:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
+        .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+        .modal-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+        .modal-box { width: 100%; background: var(--bg-card); border: 1px solid var(--border); border-radius: 1rem; padding: 1.35rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; padding-bottom: 0.65rem; border-bottom: 1px solid var(--border); }
+        .modal-close { background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text-muted); padding: 0.2rem 0.45rem; border-radius: 0.5rem; }
+        .modal-close:hover { background: var(--bg-hover); color: inherit; }
     </style>
 </head>
 <body class="min-h-full flex flex-col overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased selection:bg-brand-600 selection:text-white transition-colors duration-200">
@@ -317,6 +361,39 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         >
                             <?= $headerUnreadChat ?>
                         </span>
+                    </a>
+                <?php endif; ?>
+
+                <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
+                    <a
+                        href="tasks.php"
+                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Aufgaben &amp; Kanban-Board"
+                    >
+                        <span>📋</span>
+                        <span class="hidden lg:inline">Aufgaben</span>
+                    </a>
+                <?php endif; ?>
+
+                <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
+                    <a
+                        href="notes.php"
+                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Notizwand &amp; Pinboard"
+                    >
+                        <span>📌</span>
+                        <span class="hidden lg:inline">Notizen</span>
+                    </a>
+                <?php endif; ?>
+
+                <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
+                    <a
+                        href="contacts.php"
+                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Adressbuch &amp; Kontakte"
+                    >
+                        <span>📇</span>
+                        <span class="hidden lg:inline">Kontakte</span>
                     </a>
                 <?php endif; ?>
 

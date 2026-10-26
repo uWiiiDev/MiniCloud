@@ -223,6 +223,55 @@ if (isset($_GET['batch_ids']) && is_string($_GET['batch_ids']) && trim($_GET['ba
     streamZipArchive($batchFiles, 'MiniCloud_Auswahl_' . date('Y-m-d_His'));
 }
 
+// Option C3: Frühere Dateiversion herunterladen (?version_id=...)
+if (isset($_GET['version_id']) && (int)$_GET['version_id'] > 0) {
+    $verId = (int)$_GET['version_id'];
+    $stmtVer = $pdo->prepare('SELECT * FROM file_versions WHERE id = :vid LIMIT 1');
+    $stmtVer->execute([':vid' => $verId]);
+    $verRow = $stmtVer->fetch();
+
+    if (!$verRow) {
+        setFlash('error', 'Die angeforderte Dateiversion existiert nicht.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $parentFile = getAuthorizedFileForDownload($pdo, $userId, (int)$verRow['file_id'], $isAdmin);
+    if (!$parentFile) {
+        http_response_code(403);
+        setFlash('error', 'Zugriff verweigert: Keine Berechtigung für diese Dateiversion.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $verPath = UPLOAD_DIR . basename((string)$verRow['stored_filename']);
+    if (!is_file($verPath) || !is_readable($verPath)) {
+        http_response_code(404);
+        setFlash('error', 'Die physische Versionsdatei wurde nicht gefunden.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $origName = sanitizeOriginalFilename((string)$parentFile['original_name']);
+    $ext = pathinfo($origName, PATHINFO_EXTENSION);
+    $base = pathinfo($origName, PATHINFO_FILENAME);
+    $tsStr = date('Y-m-d_Hi', strtotime((string)$verRow['created_at']) ?: time());
+    $dlName = $base . '_v' . $verId . '_' . $tsStr . ($ext !== '' ? '.' . $ext : '');
+
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    header('Content-Description: File Transfer');
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . addslashes($dlName) . '"; filename*=UTF-8\'\'' . rawurlencode($dlName));
+    header('Content-Length: ' . (string)filesize($verPath));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-transform, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    readfile($verPath);
+    exit;
+}
+
 // Option D: Einzelne Datei herunterladen (?id=...) – prüft Eigentümer, Benutzer-Freigabe oder Gruppenordner-Recht
 $fileId = isset($_REQUEST['id']) ? (int)$_REQUEST['id'] : 0;
 if ($fileId <= 0) {

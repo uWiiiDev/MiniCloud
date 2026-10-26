@@ -115,7 +115,11 @@ function getUserStorageStats(PDO $pdo, int $userId): array
     $stmtUsed->execute([':user_id' => $userId]);
     $statsRow = $stmtUsed->fetch();
 
-    $used = (int)($statsRow['total_used'] ?? 0);
+    $stmtVersionsUsed = $pdo->prepare('SELECT COALESCE(SUM(file_size), 0) FROM file_versions WHERE user_id = :user_id');
+    $stmtVersionsUsed->execute([':user_id' => $userId]);
+    $versionsBytes = (int)$stmtVersionsUsed->fetchColumn();
+
+    $used = (int)($statsRow['total_used'] ?? 0) + $versionsBytes;
     $fileCount = (int)($statsRow['active_count'] ?? 0);
     $trashCount = (int)($statsRow['trash_count'] ?? 0);
     $free = max(0, $quota - $used);
@@ -697,6 +701,10 @@ function getAppSettings(?PDO $pdo = null): array
         'registration_default_quota_mb' => '100',
         'enable_calendar'               => '1',
         'enable_chat'                   => '1',
+        'enable_tasks'                  => '1',
+        'enable_notes'                  => '1',
+        'enable_contacts'               => '1',
+        'enable_webdav'                 => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
@@ -1989,5 +1997,102 @@ function logAuditEvent(
         // Protokollfehler dürfen niemals die eigentliche Benutzeraktion blockieren
     }
 }
+
+/**
+ * Erstellt vor dem Überschreiben/Speichern einer Datei automatisch einen Sicherungsstand in file_versions
+ * (und behält pro Datei maximal die 5 jüngsten Vorgängerversionen).
+ *
+ * @param array<string, mixed> $fileRow
+ */
+function createFileVersionSnapshot(PDO $pdo, array $fileRow, string $versionNote = 'Vorheriger Stand', int $maxVersions = 5): bool
+{
+    $fileId     = (int)($fileRow['id'] ?? 0);
+    $ownerId    = (int)($fileRow['user_id'] ?? 0);
+    $storedName = basename((string)($fileRow['filename'] ?? ''));
+    $mimeType   = (string)($fileRow['mime_type'] ?? 'application/octet-stream');
+
+    if ($fileId <= 0 || $ownerId <= 0 || $storedName === '') {
+        return false;
+    }
+
+    $srcPath = UPLOAD_DIR . $storedName;
+    if (!is_file($srcPath) || !is_readable($srcPath)) {
+        return false;
+    }
+
+    // Verschlüsselte Tresor-Dateien nicht doppelt versionieren
+    if ((int)($fileRow['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($srcPath)) {
+        return false;
+    }
+
+    if (!is_dir(UPLOAD_DIR)) {
+        mkdir(UPLOAD_DIR, 0755, true);
+    }
+
+    do {
+        $verStoredName = generateSafeStoredFilename();
+        $destPath = UPLOAD_DIR . $verStoredName;
+    } while (file_exists($destPath));
+
+    if (!@copy($srcPath, $destPath)) {
+        return false;
+    }
+    @chmod($destPath, 0640);
+    $verSize = (int)(@filesize($destPath) ?: (int)($fileRow['file_size'] ?? 0));
+
+    $stmtIns = $pdo->prepare(
+        'INSERT INTO file_versions (file_id, user_id, stored_filename, file_size, mime_type, version_note)
+         VALUES (:fid, :uid, :sf, :sz, :mime, :note)'
+    );
+    $stmtIns->execute([
+        ':fid'  => $fileId,
+        ':uid'  => $ownerId,
+        ':sf'   => $verStoredName,
+        ':sz'   => $verSize,
+        ':mime' => mb_substr($mimeType, 0, 120),
+        ':note' => mb_substr(trim($versionNote), 0, 190),
+    ]);
+
+    // Ältere Versionen über dem Limit ($maxVersions) bereinigen
+    $stmtAll = $pdo->prepare('SELECT id, stored_filename FROM file_versions WHERE file_id = :fid ORDER BY id DESC');
+    $stmtAll->execute([':fid' => $fileId]);
+    $allVers = $stmtAll->fetchAll();
+
+    if (count($allVers) > $maxVersions) {
+        $stmtDelVer = $pdo->prepare('DELETE FROM file_versions WHERE id = :id');
+        foreach (array_slice($allVers, $maxVersions) as $oldVer) {
+            $oldPath = UPLOAD_DIR . basename((string)$oldVer['stored_filename']);
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+            $stmtDelVer->execute([':id' => (int)$oldVer['id']]);
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Löscht alle physischen Vorgängerversionen einer Datei aus dem Dateisystem (uploads/).
+ */
+function deletePhysicalFileVersions(PDO $pdo, int $fileId): void
+{
+    if ($fileId <= 0) {
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT stored_filename FROM file_versions WHERE file_id = :fid');
+        $stmt->execute([':fid' => $fileId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $sf) {
+            $p = UPLOAD_DIR . basename((string)$sf);
+            if (is_file($p)) {
+                @unlink($p);
+            }
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    }
+}
+
 
 

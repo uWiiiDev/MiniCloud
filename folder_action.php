@@ -1043,5 +1043,228 @@ if ($action === 'extract_zip') {
     exit;
 }
 
+// 9. Dateiversionen & Kommentare einer Datei laden (AJAX für #fileMetaModal)
+if ($action === 'file_meta') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Keine Berechtigung für diese Datei.']);
+        exit;
+    }
+
+    $targetGfId = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+    $baseFolder = sanitizeFolderPathInput((string)$file['folder_path']);
+    $isOwner    = ((int)$file['user_id'] === $userId) || $isAdmin;
+    $canWrite   = $isOwner
+        || ($targetGfId !== null && canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin))
+        || canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], $fileId, $baseFolder);
+
+    $stmtVers = $pdo->prepare(
+        'SELECT id, file_size, version_note, created_at
+         FROM file_versions
+         WHERE file_id = :fid
+         ORDER BY id DESC'
+    );
+    $stmtVers->execute([':fid' => $fileId]);
+    $versions = [];
+    foreach ($stmtVers->fetchAll() as $v) {
+        $ts = strtotime((string)$v['created_at']) ?: time();
+        $versions[] = [
+            'id'         => (int)$v['id'],
+            'size_human' => formatBytes((int)$v['file_size']),
+            'note'       => (string)$v['version_note'],
+            'date_fmt'   => date('d.m.Y H:i', $ts) . ' Uhr',
+        ];
+    }
+
+    $stmtCom = $pdo->prepare(
+        'SELECT fc.id, fc.user_id, fc.comment_text, fc.created_at, u.username
+         FROM file_comments fc
+         INNER JOIN users u ON u.id = fc.user_id
+         WHERE fc.file_id = :fid
+         ORDER BY fc.id ASC'
+    );
+    $stmtCom->execute([':fid' => $fileId]);
+    $comments = [];
+    foreach ($stmtCom->fetchAll() as $c) {
+        $ts = strtotime((string)$c['created_at']) ?: time();
+        $comments[] = [
+            'id'         => (int)$c['id'],
+            'username'   => (string)$c['username'],
+            'text'       => (string)$c['comment_text'],
+            'date_fmt'   => date('d.m.Y H:i', $ts) . ' Uhr',
+            'can_delete' => ($isOwner || (int)$c['user_id'] === $userId),
+        ];
+    }
+
+    echo json_encode([
+        'success'   => true,
+        'file_id'   => $fileId,
+        'file_name' => (string)$file['original_name'],
+        'can_write' => $canWrite,
+        'is_owner'  => $isOwner,
+        'versions'  => $versions,
+        'comments'  => $comments,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 10. Frühere Dateiversion wiederherstellen (AJAX)
+if ($action === 'restore_version') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId    = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $versionId = isset($_POST['version_id']) ? (int)$_POST['version_id'] : 0;
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Datei nicht gefunden oder keine Berechtigung.']);
+        exit;
+    }
+
+    $targetGfId = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+    $baseFolder = sanitizeFolderPathInput((string)$file['folder_path']);
+    $canWrite   = ((int)$file['user_id'] === $userId)
+        || $isAdmin
+        || ($targetGfId !== null && canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin))
+        || canUserWriteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], $fileId, $baseFolder);
+
+    if (!$canWrite) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Keine Schreibberechtigung zum Wiederherstellen einer Version.']);
+        exit;
+    }
+
+    $stmtVer = $pdo->prepare('SELECT * FROM file_versions WHERE id = :vid AND file_id = :fid LIMIT 1');
+    $stmtVer->execute([':vid' => $versionId, ':fid' => $fileId]);
+    $verRow = $stmtVer->fetch();
+
+    if (!$verRow) {
+        echo json_encode(['success' => false, 'message' => 'Die gewählte Dateiversion wurde nicht gefunden.']);
+        exit;
+    }
+
+    $verPath = UPLOAD_DIR . basename((string)$verRow['stored_filename']);
+    if (!is_file($verPath) || !is_readable($verPath)) {
+        echo json_encode(['success' => false, 'message' => 'Die physische Versionsdatei ist nicht mehr vorhanden.']);
+        exit;
+    }
+
+    // Aktuellen Stand vor dem Zurückrollen ebenfalls sichern
+    createFileVersionSnapshot($pdo, $file, 'Stand vor Wiederherstellung von #' . $versionId);
+
+    $currentPath = UPLOAD_DIR . basename((string)$file['filename']);
+    if (!@copy($verPath, $currentPath)) {
+        echo json_encode(['success' => false, 'message' => 'Fehler beim Wiederherstellen der Dateiversion.']);
+        exit;
+    }
+    @chmod($currentPath, 0640);
+    $restoredSize = (int)(@filesize($currentPath) ?: (int)$verRow['file_size']);
+
+    $pdo->prepare(
+        'UPDATE files SET file_size = :sz, mime_type = :mime, upload_date = CURRENT_TIMESTAMP WHERE id = :id'
+    )->execute([
+        ':sz'   => $restoredSize,
+        ':mime' => (string)$verRow['mime_type'],
+        ':id'   => $fileId,
+    ]);
+
+    logAuditEvent($pdo, 'version_restore', sprintf('Dateiversion #%d für „%s“ wiederhergestellt', $versionId, (string)$file['original_name']));
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Die ausgewählte Vorgängerversion wurde erfolgreich wiederhergestellt.',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 11. Einzelne Dateiversion löschen (AJAX)
+if ($action === 'delete_version') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId    = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $versionId = isset($_POST['version_id']) ? (int)$_POST['version_id'] : 0;
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file || (((int)$file['user_id'] !== $userId) && !$isAdmin)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Nur der Eigentümer darf alte Dateiversionen löschen.']);
+        exit;
+    }
+
+    $stmtVer = $pdo->prepare('SELECT * FROM file_versions WHERE id = :vid AND file_id = :fid LIMIT 1');
+    $stmtVer->execute([':vid' => $versionId, ':fid' => $fileId]);
+    $verRow = $stmtVer->fetch();
+
+    if ($verRow) {
+        $verPath = UPLOAD_DIR . basename((string)$verRow['stored_filename']);
+        if (is_file($verPath)) {
+            @unlink($verPath);
+        }
+        $pdo->prepare('DELETE FROM file_versions WHERE id = :id')->execute([':id' => $versionId]);
+    }
+
+    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 12. Datei-Kommentar hinzufügen (AJAX)
+if ($action === 'add_comment') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId      = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $commentText = mb_substr(trim((string)($_POST['comment_text'] ?? '')), 0, 1000);
+
+    if ($commentText === '') {
+        echo json_encode(['success' => false, 'message' => 'Bitte geben Sie einen Kommentartext ein.']);
+        exit;
+    }
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Keine Berechtigung für diese Datei.']);
+        exit;
+    }
+
+    $stmtIns = $pdo->prepare(
+        'INSERT INTO file_comments (file_id, user_id, comment_text) VALUES (:fid, :uid, :txt)'
+    );
+    $stmtIns->execute([
+        ':fid' => $fileId,
+        ':uid' => $userId,
+        ':txt' => $commentText,
+    ]);
+
+    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 13. Datei-Kommentar löschen (AJAX)
+if ($action === 'delete_comment') {
+    header('Content-Type: application/json; charset=utf-8');
+    $fileId    = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $commentId = isset($_POST['comment_id']) ? (int)$_POST['comment_id'] : 0;
+
+    $file = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+    if (!$file) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Keine Berechtigung.']);
+        exit;
+    }
+
+    $stmtCom = $pdo->prepare('SELECT * FROM file_comments WHERE id = :cid AND file_id = :fid LIMIT 1');
+    $stmtCom->execute([':cid' => $commentId, ':fid' => $fileId]);
+    $cRow = $stmtCom->fetch();
+
+    if ($cRow && ((int)$cRow['user_id'] === $userId || (int)$file['user_id'] === $userId || $isAdmin)) {
+        $pdo->prepare('DELETE FROM file_comments WHERE id = :id')->execute([':id' => $commentId]);
+    }
+
+    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 header('Location: index.php');
 exit;

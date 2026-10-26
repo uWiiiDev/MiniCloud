@@ -319,14 +319,18 @@ $params = [];
 if ($activeGroupFolder !== null) {
     $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
                         (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count
+                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
                  FROM files f
                  INNER JOIN users u ON u.id = f.user_id
                  WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
     $params[':gf_id'] = (int)$activeGroupFolder['id'];
 } elseif ($activeSharedFolder !== null) {
     $sharedFp = (string)$activeSharedFolder['folder_path'];
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name, 0 AS link_share_count, 0 AS user_share_count
+    $sqlFiles = 'SELECT f.*, u.username AS uploader_name, 0 AS link_share_count, 0 AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
                  FROM files f
                  INNER JOIN users u ON u.id = f.user_id
                  WHERE f.user_id = :owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
@@ -337,7 +341,9 @@ if ($activeGroupFolder !== null) {
 } else {
     $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
                         (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count
+                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
                  FROM files f
                  INNER JOIN users u ON u.id = f.user_id
                  WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
@@ -1118,6 +1124,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $formattedSize = formatBytes((int)$file['file_size']);
                         $linkShares = (int)($file['link_share_count'] ?? 0);
                         $userShares = (int)($file['user_share_count'] ?? 0);
+                        $versionCount = (int)($file['version_count'] ?? 0);
+                        $commentCount = (int)($file['comment_count'] ?? 0);
                         $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
                         $isFavorite  = ((int)($file['is_favorite'] ?? 0) === 1);
                         $canManageThisFile = $activeSharedFolder !== null
@@ -1246,6 +1254,26 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                     👤 <?= $userShares ?>
                                                 </span>
                                             <?php endif; ?>
+                                            <?php if ($versionCount > 0): ?>
+                                                <button
+                                                    type="button"
+                                                    onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'versions')"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 cursor-pointer transition-colors"
+                                                    title="<?= $versionCount ?> frühere Dateiversion(en) verfügbar (Klicken für Zeitreise / Wiederherstellung)"
+                                                >
+                                                    🕓 <?= $versionCount ?>
+                                                </button>
+                                            <?php endif; ?>
+                                            <?php if ($commentCount > 0): ?>
+                                                <button
+                                                    type="button"
+                                                    onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'comments')"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900 cursor-pointer transition-colors"
+                                                    title="<?= $commentCount ?> Datei-Kommentar(e) / Notizen"
+                                                >
+                                                    💬 <?= $commentCount ?>
+                                                </button>
+                                            <?php endif; ?>
                                         </div>
                                         <p class="text-[11px] text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
                                             <span class="sm:hidden"><?= e($formattedSize) ?> &bull; <?= e($formattedDate) ?></span>
@@ -1363,6 +1391,17 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </svg>
                                         </button>
                                     <?php endif; ?>
+
+                                    <!-- VERSIONEN & KOMMENTARE BUTTON -->
+                                    <button
+                                        type="button"
+                                        onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'comments')"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg <?= ($versionCount > 0 || $commentCount > 0) ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-300/70 dark:border-teal-800/70' : 'bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300' ?> transition-colors cursor-pointer"
+                                        title="Kommentare &amp; Dateiversionen (🕓 <?= $versionCount ?> / 💬 <?= $commentCount ?>)"
+                                        aria-label="Kommentare &amp; Dateiversionen"
+                                    >
+                                        <span class="text-xs leading-none">💬</span>
+                                    </button>
 
                                     <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur Icon, Beschriftung als Hover-Tooltip) -->
                                     <button
@@ -2619,6 +2658,94 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             >
                 <span>Nächste Datei &rarr;</span>
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: DATEIVERSIONEN (🕓 ZEITREISE) & DATEI-KOMMENTARE (💬 NOTIZEN) -->
+<div
+    id="fileMetaModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="fileMetaModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-2xl max-h-[90vh] rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-bold text-base shrink-0">
+                    💬
+                </span>
+                <div class="min-w-0">
+                    <h3 id="fileMetaModalTitle" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                        Kommentare &amp; Dateiversionen
+                    </h3>
+                    <p id="fileMetaModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeFileMetaModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="p-5 overflow-y-auto space-y-6 flex-1">
+            <!-- 1. Datei-Kommentare & Notizen -->
+            <section class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                        <span>💬</span>
+                        <span>Kommentare &amp; Datei-Notizen</span>
+                    </h4>
+                    <span id="fileMetaCommentCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300">0</span>
+                </div>
+
+                <div id="fileMetaCommentsList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <p class="text-xs text-slate-400 italic py-2">Lade Kommentare...</p>
+                </div>
+
+                <form id="fileMetaCommentForm" onsubmit="submitFileComment(event)" class="flex items-center gap-2 pt-1">
+                    <input
+                        type="text"
+                        id="fileMetaCommentInput"
+                        maxlength="1000"
+                        placeholder="Notiz oder Kommentar zu dieser Datei schreiben..."
+                        class="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                    <button
+                        type="submit"
+                        class="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer shrink-0"
+                    >
+                        Senden
+                    </button>
+                </form>
+            </section>
+
+            <!-- 2. Automatische Dateiversionen (Zeitreise) -->
+            <section class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                            <span>🕓</span>
+                            <span>Frühere Dateiversionen (Zeitreise – max. 5 Stände)</span>
+                        </h4>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Wird eine Datei in Office Light gespeichert oder gleichnamig neu hochgeladen, hebt MiniCloud automatisch die letzten 5 Stände auf.
+                        </p>
+                    </div>
+                    <span id="fileMetaVersionCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 shrink-0">0</span>
+                </div>
+
+                <div id="fileMetaVersionsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    <p class="text-xs text-slate-400 italic py-2">Lade Dateiversionen...</p>
+                </div>
+            </section>
         </div>
     </div>
 </div>
@@ -4149,6 +4276,175 @@ async function revokeUserShare(userShareId) {
         }
     });
 })();
+
+// --- DATEIVERSIONEN (🕓) & DATEI-KOMMENTARE (💬) MODAL LOGIK ---
+let currentMetaFileId = 0;
+let currentMetaFileName = '';
+
+function openFileMetaModal(fileId, fileName, focusSection = 'comments') {
+    currentMetaFileId = Number(fileId) || 0;
+    currentMetaFileName = String(fileName || '');
+    const modal = document.getElementById('fileMetaModal');
+    const sub = document.getElementById('fileMetaModalSubtitle');
+    if (!modal || currentMetaFileId <= 0) return;
+
+    if (sub) sub.textContent = currentMetaFileName;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+
+    loadFileMetaData(currentMetaFileId, focusSection);
+}
+
+function closeFileMetaModal() {
+    const modal = document.getElementById('fileMetaModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+}
+
+async function loadFileMetaData(fileId, focusSection = '') {
+    const comList = document.getElementById('fileMetaCommentsList');
+    const verList = document.getElementById('fileMetaVersionsList');
+    const comBadge = document.getElementById('fileMetaCommentCountBadge');
+    const verBadge = document.getElementById('fileMetaVersionCountBadge');
+    const comInp = document.getElementById('fileMetaCommentInput');
+
+    try {
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('action', 'file_meta');
+        fd.append('file_id', String(fileId));
+
+        const res = await fetch('folder_action.php', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (!d || !d.success) {
+            if (comList) comList.innerHTML = `<p class="text-xs text-red-600 dark:text-red-400">${escapeHtml(d?.message || 'Fehler beim Laden.')}</p>`;
+            return;
+        }
+
+        const comments = Array.isArray(d.comments) ? d.comments : [];
+        const versions = Array.isArray(d.versions) ? d.versions : [];
+
+        if (comBadge) comBadge.textContent = String(comments.length);
+        if (verBadge) verBadge.textContent = String(versions.length);
+
+        if (comList) {
+            if (comments.length === 0) {
+                comList.innerHTML = '<p class="text-xs text-slate-400 italic py-2">Noch keine Kommentare oder Notizen zu dieser Datei vorhanden.</p>';
+            } else {
+                comList.innerHTML = comments.map((c) => `
+                    <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex items-start justify-between gap-2 text-xs">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 mb-0.5">
+                                <span class="font-bold text-brand-600 dark:text-brand-400">${escapeHtml(c.username)}</span>
+                                <span class="text-[10px] text-slate-400">${escapeHtml(c.date_fmt)}</span>
+                            </div>
+                            <p class="text-slate-800 dark:text-slate-200 whitespace-pre-line break-words">${escapeHtml(c.text)}</p>
+                        </div>
+                        ${c.can_delete ? `<button type="button" onclick="deleteFileComment(${Number(c.id)})" class="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 cursor-pointer shrink-0" title="Kommentar löschen">🗑️</button>` : ''}
+                    </div>
+                `).join('');
+                comList.scrollTop = comList.scrollHeight;
+            }
+        }
+
+        if (verList) {
+            if (versions.length === 0) {
+                verList.innerHTML = '<p class="text-xs text-slate-400 italic py-2">Noch keine früheren Dateiversionen gespeichert. Sobald die Datei in Office Light bearbeitet oder erneut unter gleichem Namen hochgeladen wird, erscheint der vorherige Stand automatisch hier.</p>';
+            } else {
+                verList.innerHTML = versions.map((v) => `
+                    <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 font-mono font-bold text-[10px]">#${Number(v.id)}</span>
+                                <span class="font-semibold text-slate-900 dark:text-white">${escapeHtml(v.date_fmt)}</span>
+                                <span class="text-slate-400">(${escapeHtml(v.size_human)})</span>
+                            </div>
+                            ${v.note ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${escapeHtml(v.note)}</p>` : ''}
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <a href="download.php?version_id=${Number(v.id)}" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-semibold transition-colors" title="Diesen Stand herunterladen">⬇️ Download</a>
+                            ${d.can_write ? `<button type="button" onclick="restoreFileVersion(${Number(v.id)})" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-colors cursor-pointer" title="Auf diesen Stand zurücksetzen">⏪ Wiederherstellen</button>` : ''}
+                            ${d.is_owner ? `<button type="button" onclick="deleteFileVersion(${Number(v.id)})" class="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 cursor-pointer" title="Version löschen">🗑️</button>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        if (focusSection === 'comments' && comInp) {
+            setTimeout(() => comInp.focus(), 80);
+        }
+    } catch {
+        if (comList) comList.innerHTML = '<p class="text-xs text-red-600">Verbindungsfehler beim Laden.</p>';
+    }
+}
+
+async function submitFileComment(e) {
+    e.preventDefault();
+    const inp = document.getElementById('fileMetaCommentInput');
+    if (!inp || currentMetaFileId <= 0) return;
+    const txt = inp.value.trim();
+    if (!txt) return;
+
+    const fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('action', 'add_comment');
+    fd.append('file_id', String(currentMetaFileId));
+    fd.append('comment_text', txt);
+
+    const res = await fetch('folder_action.php', { method: 'POST', body: fd });
+    const d = await res.json();
+    if (d && d.success) {
+        inp.value = '';
+        await loadFileMetaData(currentMetaFileId, 'comments');
+    } else {
+        alert(d?.message || 'Kommentar konnte nicht gespeichert werden.');
+    }
+}
+
+async function deleteFileComment(commentId) {
+    if (!confirm('Diesen Kommentar wirklich löschen?')) return;
+    const fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('action', 'delete_comment');
+    fd.append('file_id', String(currentMetaFileId));
+    fd.append('comment_id', String(commentId));
+
+    await fetch('folder_action.php', { method: 'POST', body: fd });
+    await loadFileMetaData(currentMetaFileId);
+}
+
+async function restoreFileVersion(versionId) {
+    if (!confirm(`Möchten Sie die Datei „${currentMetaFileName}“ auf die ausgewählte Version #${versionId} zurücksetzen?\n\nDer aktuelle Stand geht dabei nicht verloren, sondern wird automatisch als neue Version gesichert.`)) return;
+    const fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('action', 'restore_version');
+    fd.append('file_id', String(currentMetaFileId));
+    fd.append('version_id', String(versionId));
+
+    const res = await fetch('folder_action.php', { method: 'POST', body: fd });
+    const d = await res.json();
+    if (d && d.success) {
+        window.location.reload();
+    } else {
+        alert(d?.message || 'Wiederherstellung fehlgeschlagen.');
+    }
+}
+
+async function deleteFileVersion(versionId) {
+    if (!confirm('Diese alte Dateiversion endgültig löschen?')) return;
+    const fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('action', 'delete_version');
+    fd.append('file_id', String(currentMetaFileId));
+    fd.append('version_id', String(versionId));
+
+    await fetch('folder_action.php', { method: 'POST', body: fd });
+    await loadFileMetaData(currentMetaFileId);
+}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -444,6 +444,119 @@ function ensureSchemaUpdated(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `file_versions` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `file_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `stored_filename` VARCHAR(255) NOT NULL,
+            `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            `mime_type` VARCHAR(120) NOT NULL DEFAULT 'application/octet-stream',
+            `version_note` VARCHAR(190) NOT NULL DEFAULT '',
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_fv_file` (`file_id`, `id`),
+            KEY `idx_fv_user` (`user_id`),
+            CONSTRAINT `fk_fv_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_fv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `file_comments` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `file_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `comment_text` VARCHAR(1000) NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_fc_file` (`file_id`, `id`),
+            CONSTRAINT `fk_fc_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_fc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `tasks` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(255) NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            `status` VARCHAR(20) NOT NULL DEFAULT 'todo',
+            `priority` VARCHAR(16) NOT NULL DEFAULT 'medium',
+            `due_date` DATE DEFAULT NULL,
+            `checklist_json` TEXT DEFAULT NULL,
+            `attached_file_id` INT UNSIGNED DEFAULT NULL,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_tasks_user` (`user_id`, `status`),
+            KEY `idx_tasks_shared` (`shared_user_id`),
+            KEY `idx_tasks_group` (`group_id`),
+            CONSTRAINT `fk_tasks_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_tasks_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_tasks_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_tasks_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `notes` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(190) NOT NULL DEFAULT '',
+            `content` TEXT NOT NULL,
+            `color` VARCHAR(24) NOT NULL DEFAULT 'amber',
+            `tags` VARCHAR(255) NOT NULL DEFAULT '',
+            `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_notes_user` (`user_id`, `is_pinned`),
+            KEY `idx_notes_shared` (`shared_user_id`),
+            KEY `idx_notes_group` (`group_id`),
+            CONSTRAINT `fk_notes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_notes_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_notes_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `contacts` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `first_name` VARCHAR(100) NOT NULL DEFAULT '',
+            `last_name` VARCHAR(100) NOT NULL DEFAULT '',
+            `organization` VARCHAR(150) NOT NULL DEFAULT '',
+            `role_title` VARCHAR(120) NOT NULL DEFAULT '',
+            `email` VARCHAR(190) NOT NULL DEFAULT '',
+            `phone` VARCHAR(80) NOT NULL DEFAULT '',
+            `mobile` VARCHAR(80) NOT NULL DEFAULT '',
+            `street` VARCHAR(190) NOT NULL DEFAULT '',
+            `postal_code` VARCHAR(30) NOT NULL DEFAULT '',
+            `city` VARCHAR(100) NOT NULL DEFAULT '',
+            `country` VARCHAR(100) NOT NULL DEFAULT '',
+            `website` VARCHAR(255) NOT NULL DEFAULT '',
+            `birthday` DATE DEFAULT NULL,
+            `notes` TEXT DEFAULT NULL,
+            `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_contacts_user` (`user_id`, `last_name`),
+            KEY `idx_contacts_shared` (`shared_user_id`),
+            KEY `idx_contacts_group` (`group_id`),
+            CONSTRAINT `fk_contacts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_contacts_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_contacts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();
     if ($adminCount === 0) {
@@ -486,10 +599,18 @@ function purgeExpiredTrashFiles(PDO $pdo): int
         return 0;
     }
 
+    $stmtVersions = $pdo->prepare("SELECT `stored_filename` FROM `file_versions` WHERE `file_id` = :fid");
     $stmtDelete = $pdo->prepare("DELETE FROM `files` WHERE `id` = :id");
     $purgedCount = 0;
 
     foreach ($expiredRows as $row) {
+        $stmtVersions->execute([':fid' => (int)$row['id']]);
+        foreach ($stmtVersions->fetchAll(PDO::FETCH_COLUMN) as $vFile) {
+            $vPath = UPLOAD_DIR . basename((string)$vFile);
+            if (is_file($vPath)) {
+                @unlink($vPath);
+            }
+        }
         $physicalPath = UPLOAD_DIR . basename((string)$row['filename']);
         if (is_file($physicalPath)) {
             @unlink($physicalPath);

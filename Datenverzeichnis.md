@@ -159,12 +159,33 @@ Speichert sicherheitsrelevante Ereignisse (Logins, 2FA-/Login-Fehlversuche, Pass
 
 ---
 
-### 2.13 Tabelle `settings` (System-, Modul-, Registrierungs- & Update-Einstellungen)
+### 2.13 Tabelle `file_versions` & 2.14 Tabelle `file_comments` (Dateiversionierung & Datei-Kommentare)
+Speichern bis zu 5 frühere Dateistände („Zeitreise“) bei Änderungen in Office Light, WebDAV oder gleichnamigem Upload sowie Kommentare/Notizen direkt an Dateien.
+
+| Tabelle | Wesentliche Spalten | Schlüssel / Index | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `file_versions` | `id`, `file_id`, `user_id`, `stored_name`, `file_size`, `mime_type`, `version_note`, `created_at` | `PRIMARY KEY (id)`, `FK -> files(id) ON DELETE CASCADE` | Physischer Versions-Snapshot in `uploads/`; automatische Rotation ab 5 Versionen |
+| `file_comments` | `id`, `file_id`, `user_id`, `comment_text`, `created_at` | `PRIMARY KEY (id)`, `FK -> files(id) ON DELETE CASCADE` | Kommentare und Notizen direkt an einer Datei |
+
+---
+
+### 2.15 Tabelle `tasks`, 2.16 Tabelle `notes` & 2.17 Tabelle `contacts` (Aufgaben, Notizwand & Adressbuch)
+Speichern Kanban-Aufgaben, farbige Haftnotizen und Kontakte.
+
+| Tabelle | Wesentliche Spalten | Schlüssel / Index | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `tasks` | `id`, `user_id`, `title`, `description`, `status` (`todo`, `in_progress`, `done`), `priority`, `due_date`, `checklist_json`, `attached_file_id`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Aufgaben & Kanban-Board inkl. interaktiver Unteraufgaben-Checkliste, Dateianhang und Teilen |
+| `notes` | `id`, `user_id`, `title`, `content`, `color`, `tags`, `is_pinned`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Farbige Haftnotizen (Pinboard) mit `#Tags`, Anpinnen und 1-Klick-Export als `.md` in die Cloud |
+| `contacts` | `id`, `user_id`, `first_name`, `last_name`, `organization`, `role_title`, `email`, `phone`, `mobile`, `street`, `postal_code`, `city`, `country`, `website`, `birthday`, `notes`, `is_favorite`, `shared_user_id`, `group_id`, `created_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Persönliche und geteilte Kontakte inkl. vCard (`.vcf`) Import/Export und automatischer Geburtstagsanzeige im Kalender |
+
+---
+
+### 2.18 Tabelle `settings` (System-, Modul-, Registrierungs- & Update-Einstellungen)
 Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Spalte | Datentyp | Null | Standardwert | Schlüssel / Index | Beschreibung |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`, `enable_calendar`, `enable_chat`, `allow_registration`, `registration_code`, `registration_default_quota_mb`, `installed_commit_sha`, `installed_commit_date`, `mail_from`, `mail_transport`, `smtp_host`, `smtp_port`, `smtp_encryption`, `smtp_user`, `smtp_pass`) |
+| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`, `enable_calendar`, `enable_chat`, `enable_tasks`, `enable_notes`, `enable_contacts`, `enable_webdav`, `allow_registration`, `registration_code`, `registration_default_quota_mb`, `installed_commit_sha`, `installed_commit_date`, `mail_from`, `mail_transport`, `smtp_host`, `smtp_port`, `smtp_encryption`, `smtp_user`, `smtp_pass`) |
 | `setting_value` | `MEDIUMTEXT` | Ja | `NULL` | – | Zugehöriger Konfigurationswert |
 | `updated_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Letzte Änderung |
 

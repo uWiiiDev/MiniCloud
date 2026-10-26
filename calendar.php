@@ -191,7 +191,71 @@ function getAccessibleEventsForUser(PDO $pdo, int $uid): array
         ':uid_cs'          => $uid,
         ':uid_cs_grp'      => $uid,
     ]);
-    return $stmt->fetchAll();
+    $events = $stmt->fetchAll();
+
+    // Geburtstage aus dem Adressbuch (contacts) automatisch als jährliche Ganztagstermine ergänzen
+    try {
+        $stmtBdays = $pdo->prepare(
+            "SELECT c.*, u.username AS owner_username, g.name AS group_name, su.username AS shared_username
+             FROM `contacts` c
+             JOIN `users` u ON u.`id` = c.`user_id`
+             LEFT JOIN `groups` g ON g.`id` = c.`group_id`
+             LEFT JOIN `users` su ON su.`id` = c.`shared_user_id`
+             WHERE c.`birthday` IS NOT NULL
+               AND (
+                   c.`user_id` = :b_uid
+                   OR c.`shared_user_id` = :b_suid
+                   OR (c.`group_id` IS NOT NULL AND EXISTS (
+                       SELECT 1 FROM `group_members` gm WHERE gm.`group_id` = c.`group_id` AND gm.`user_id` = :b_gmuid
+                   ))
+               )"
+        );
+        $stmtBdays->execute([
+            ':b_uid'   => $uid,
+            ':b_suid'  => $uid,
+            ':b_gmuid' => $uid,
+        ]);
+        foreach ($stmtBdays->fetchAll() as $contact) {
+            $bdayStr = (string)$contact['birthday'];
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $bdayStr)) {
+                continue;
+            }
+            $cName = trim($contact['first_name'] . ' ' . $contact['last_name']);
+            if ($cName === '') {
+                $cName = (string)$contact['organization'];
+            }
+            $birthYear = (int)substr($bdayStr, 0, 4);
+            $events[] = [
+                'id'                      => -100000 - (int)$contact['id'],
+                'user_id'                 => (int)$contact['user_id'],
+                'title'                   => '🎂 Geburtstag: ' . $cName . ($birthYear > 1900 ? ' (*' . $birthYear . ')' : ''),
+                'description'             => 'Automatischer Geburtstagseintrag aus dem Adressbuch (' . date('d.m.Y', strtotime($bdayStr)) . ').',
+                'location'                => '',
+                'start_at'                => $bdayStr . ' 00:00:00',
+                'end_at'                  => $bdayStr . ' 23:59:59',
+                'all_day'                 => 1,
+                'recurrence'              => 'yearly',
+                'color'                   => '#ec4899',
+                'is_private'              => 0,
+                'shared_user_id'          => $contact['shared_user_id'],
+                'group_id'                => $contact['group_id'],
+                'group_can_edit'          => 0,
+                'attached_file_id'        => null,
+                'created_at'              => $contact['created_at'],
+                'owner_username'          => $contact['owner_username'],
+                'group_name'              => $contact['group_name'],
+                'shared_username'         => $contact['shared_username'],
+                'attached_file_name'      => null,
+                'attached_file_encrypted' => 0,
+                'can_edit_event'          => 0,
+                'can_delete_event'        => 0,
+            ];
+        }
+    } catch (Throwable $e) {
+        // Falls Tabelle contacts noch nicht initialisiert ist, ignorieren
+    }
+
+    return $events;
 }
 
 // --- 1. Öffentlicher .ics-Abo-Feed über persönliches Token (z.B. für Smartphone / Thunderbird) ---

@@ -78,16 +78,19 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 | **6** | `login.php`, `register.php`, `share.php` | **Brute-Force-Angriffe:** Unbegrenzte Passwort-/Code-Versuche. | Session-basiertes Rate-Limiting (max. 5 Fehlversuche) sowie Honeypot-Schutz bei der Registrierung. | **Behoben** |
 | **7** | `calendar.php` & `share_action.php` | **Datenschutz & 3-Stufen-Rechte:** Umgehung der Sichtbarkeit oder fehlende Gruppen-Löschberechtigung bei Kalenderfreigaben. | Serverseitige Erzwingung von `allow_user_sharing = 1` sowie vollständige Prüfung von `can_write`/`can_edit` und `can_delete` für Benutzer und Gruppen. | **Behoben** |
 | **8** | `admin.php` (`performGitHubUpdate`) | **Supply-Chain / Zip-Slip / Datenverlust beim Update:** Überschreiben von Nutzerdaten oder DB-Zugangsdaten. | Strikte TLS-Prüfung, `..`-Pfadfilter, Ausschluss von `uploads/` & `.git/` sowie automatische Beibehaltung von `DB_HOST`..`DB_PASS`. | **Behoben** |
+| **9** | `webdav.php`, `tasks.php`, `notes.php`, `contacts.php` | **WebDAV-Zugriffsschutz & Modul-Isolierung:** Schutz vor Brute-Force auf HTTP Basic Auth und unbefugtem Zugriff auf geteilte Aufgaben, Notizen und Kontakte. | `isLoginRateLimited` / `recordLoginFailure` auch auf dem WebDAV-Endpunkt aktiv; strikte Eigentümer-/Freigabeprüfung (`canAccessTask`, `canAccessNote`, `canAccessContact`) sowie `sanitizeFolderPath` / `sanitizeFileName` bei allen WebDAV-Operationen. | **Umgesetzt** |
 
 ---
 
-## 5. Datensicherungs-, Papierkorb- und Löschkonzept
+## 5. Datensicherungs-, Versionierungs-, Papierkorb- und Löschkonzept
 
-1. **Zweistufiges Löschen (Soft-Delete & Papierkorb):**
-   - Beim Löschen einer Datei oder eines Ordners wird zunächst der Zeitstempel `deleted_at = NOW()` gesetzt.
+1. **Automatische Dateiversionierung („Zeitreise“ bis 5 Versionen):**
+   - Wird eine bestehende Datei in `office.php`, über `upload.php` (gleicher Dateiname im selben Ordner) oder über `webdav.php` (`PUT` / `MOVE`) überschrieben, legt `createFileVersionSnapshot()` automatisch eine physische Kopie des bisherigen Stands in `uploads/` und `file_versions` an (max. 5 historische Stände pro Datei; ältere Stände werden automatisch rotiert und physisch per `unlink` entfernt).
+2. **Zweistufiges Löschen (Soft-Delete & Papierkorb):**
+   - Beim Löschen einer Datei oder eines Ordners (auch per WebDAV `DELETE`) wird zunächst der Zeitstempel `deleted_at = NOW()` gesetzt.
    - Die Datei ist ab diesem Zeitpunkt nicht mehr über normale Ansichten oder Freigabelinks abrufbar, kann aber vom Eigentümer unter `trash.php` innerhalb von **30 Tagen (`TRASH_RETENTION_DAYS`)** wiederhergestellt werden.
-2. **Automatische und endgültige Löschung (Purge):**
-   - Die Funktion `purgeExpiredTrashFiles()` entfernt bei der Datenbankinitialisierung sowie beim Aufruf des Papierkorbs automatisch alle Dateien, deren `deleted_at` länger als 30 Tage zurückliegt, sowohl physisch aus `uploads/` (`unlink`) als auch aus der Datenbank (`DELETE FROM files`).
+3. **Automatische und endgültige Löschung (Purge):**
+   - Die Funktion `purgeExpiredTrashFiles()` entfernt bei der Datenbankinitialisierung sowie beim Aufruf des Papierkorbs automatisch alle Dateien, deren `deleted_at` länger als 30 Tage zurückliegt, inklusive aller zugehörigen physischen Versionsstände (`deletePhysicalFileVersions()`) aus `uploads/` (`unlink`) sowie aus der Datenbank (`DELETE FROM files`).
    - Benutzer können einzelne Dateien oder den gesamten Papierkorb jederzeit manuell endgültig leeren.
-3. **Vollständige Kontolöschung:**
-   - Löscht ein Administrator in `admin.php` ein Benutzerkonto, werden zuerst alle physischen Dateien dieses Benutzers im Verzeichnis `uploads/` gelöscht und anschließend der Benutzerdatensatz entfernt. Durch `ON DELETE CASCADE` werden sämtliche abhängigen Einträge (`files`, `user_folders`, `group_members`, `group_folder_permissions`, `shares`, `user_shares`) rückstandsfrei aus der Datenbank gelöscht.
+4. **Vollständige Kontolöschung:**
+   - Löscht ein Administrator in `admin.php` ein Benutzerkonto, werden zuerst alle physischen Dateien und Dateiversionen dieses Benutzers im Verzeichnis `uploads/` gelöscht und anschließend der Benutzerdatensatz entfernt. Durch `ON DELETE CASCADE` werden sämtliche abhängigen Einträge (`files`, `file_versions`, `file_comments`, `user_folders`, `tasks`, `notes`, `contacts`, `group_members`, `group_folder_permissions`, `shares`, `user_shares`) rückstandsfrei aus der Datenbank gelöscht.

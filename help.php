@@ -1199,7 +1199,8 @@ require_once __DIR__ . '/includes/header.php';
                         <li><strong>Online bearbeiten:</strong> Klicken Sie am Desktop auf das <strong>✏️ Stift-Symbol</strong> (oder im Vorschau-Fenster bzw. mobilen <strong>⋯ Menü</strong> auf <strong>„✏️ In Office Light bearbeiten“</strong>), um Word-Dokumente mit Formatierungsleiste (Überschriften, Fett/Kursiv, Listen, Tabellen, Druck/PDF) oder Excel-Tabellen mit mehreren Tabellenblättern und Rechenformeln (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direkt im Browser zu bearbeiten und per <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Strg+S</kbd> zu speichern.</li>
                     </ul>
                 </li>
-                <li><strong>Desktop-Icons &amp; Mobiles ⋯ Aktionsmenü:</strong> In der Desktop-Ansicht stehen alle Aktions-Icons (Bearbeiten ✏️, Vorschau 👁️, Teilen 🔗, Tresor 🔒, Verschieben/Kopieren ⇄, Download ⬇️, Löschen 🗑️) direkt nebeneinander. Auf Smartphones werden sie platzsparend in einem einzigen <strong>⋯ Button</strong> gebündelt, der ein übersichtliches Touch-Aktionsmenü öffnet.</li>
+                <li><strong>Desktop-Icons &amp; Mobiles ⋯ Aktionsmenü:</strong> In der Desktop-Ansicht stehen alle Aktions-Icons (Bearbeiten ✏️, Vorschau 👁️, Kommentare &amp; Versionen 💬, Teilen 🔗, Tresor 🔒, Verschieben/Kopieren ⇄, Download ⬇️, Löschen 🗑️) direkt nebeneinander. Auf Smartphones werden sie platzsparend in einem einzigen <strong>⋯ Button</strong> gebündelt, der ein übersichtliches Touch-Aktionsmenü öffnet.</li>
+                <li><strong>🕓 Automatische Dateiversionierung („Zeitreise“) &amp; 💬 Datei-Kommentare:</strong> Beim Speichern in Office Light, beim erneuten Hochladen einer gleichnamigen Datei oder beim Überschreiben per WebDAV bewahrt uWiiiMiniCloud automatisch bis zu <strong>5 frühere Versionen</strong> auf. Über das <strong>💬 Symbol</strong> (oder die Badges <code>🕓</code> / <code>💬</code> hinter dem Dateinamen) öffnen Sie den Dialog <em>Kommentare &amp; Versionen</em>, um ältere Stände mit 1 Klick herunterzuladen, wiederherzustellen oder teaminterne Notizen direkt an der Datei zu hinterlassen.</li>
                 <li><strong>🖼️ Foto-Galerie / Kachel-Ansicht &amp; ⭐ Favoriten:</strong> Schalten Sie über der Dateiliste jederzeit zwischen der klassischen Tabellenansicht (<strong>📋 Liste</strong>) und der Kachel-Ansicht (<strong>🖼️ Kacheln</strong>) mit Live-Bild-Thumbnails um. Wichtige Dateien heften Sie per Klick auf den Stern (<strong>☆ / ⭐</strong>) ganz oben an oder filtern sie über <strong>⭐ Favoriten</strong>.</li>
                 <li><strong>☑️ Mehrfachauswahl (Sammel-Aktionen) &amp; 🔎 Globale Suche:</strong> Haken Sie beliebig viele Dateien gleichzeitig an, um sie über die schwebende Aktionsleiste gemeinsam als ZIP herunterzuladen, zu verschieben/kopieren oder in den Papierkorb zu legen. Das Suchfeld durchsucht automatisch alle Ordner und Unterordner gleichzeitig.</li>
                 <li><strong>Direktvorschau &amp; Durchblättern:</strong> Ein Klick auf das Augen-Symbol (<span class="text-violet-600 dark:text-violet-400 font-semibold">Vorschau</span>) oder den Dateinamen öffnet Bilder, PDFs, Videos, Audio sowie Text-/Codedateien; mit <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> / <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> blättern Sie durch den Ordner.</li>
@@ -1262,6 +1263,30 @@ require_once __DIR__ . '/includes/header.php';
                 <li><strong>Direktnachrichten, 🎙️ Sprachnachrichten, 📋 <kbd class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[11px] font-mono">Strg+V</kbd>-Screenshots &amp; 📎 Dateianhänge (<a href="messages.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Chat</a>):</strong> Schreiben Sie 1:1-Nachrichten mit freigegebenen Cloud-Benutzern, nehmen Sie über den <strong>🎙️ Mikrofon-Button</strong> direkt Sprachnachrichten im Browser auf (mit integriertem Audio-Player in der Sprechblase), fügen Sie Screenshots direkt per <kbd class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[11px] font-mono">Strg+V</kbd> ein, hängen Sie über <strong>📎</strong> Dateien an oder lesen Sie offizielle Rundnachrichten im Kanal <em>„📢 Ankündigungen (Alle)“</em>.</li>
                 <li><strong>Verlauf leeren &amp; Optimierte Mobil-Darstellung:</strong> Über den Button <em>„🗑️ Verlauf leeren“</em> können Sie einen Chatverlauf jederzeit vollständig bereinigen. Auf Smartphones schaltet der Messenger automatisch in eine übersichtliche 1-Spalten-Navigation (Kontaktliste &leftrightarrow; Vollbild-Chat), blendet den Seiten-Footer automatisch aus und passt die Höhe des Chatfensters dynamisch an die Bildschirmtastatur an.</li>
                 <li><strong>System-Benachrichtigungen am PC &amp; Mobilgerät:</strong> Bei neuen Nachrichten blendet MiniCloud auf Wunsch native Betriebssystem-/Smartphone-Meldungen ein. In den <a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a> legen Sie fest, ob Sie <em>Nur System-Benachrichtigungen</em> (Standard), zusätzlich ein <em>In-App-Banner</em> oder gar keine Meldungen wünschen.</li>
+            </ul>
+        </section>
+
+        <!-- 4c. Aufgaben & Kanban-Board + Notizwand -->
+        <section id="aufgaben-notizen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">📋</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Aufgaben (Kanban-Board) &amp; Notizwand</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>📋 Aufgaben &amp; Kanban-Board (<a href="tasks.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Aufgaben</a>):</strong> Verwalten Sie Projekte und To-dos in 3 übersichtlichen Spalten (<em>📌 Offen</em>, <em>⏳ In Arbeit</em>, <em>✅ Erledigt</em>). Verschieben Sie Karten einfach per <strong>Drag &amp; Drop</strong> zwischen den Spalten, definieren Sie Prioritäten, Fälligkeitsdaten und interaktive Unteraufgaben-Checklisten, verknüpfen Sie Cloud-Dateien und teilen Sie Aufgaben mit Benutzern oder Gruppen.</li>
+                <li><strong>📌 Notizwand &amp; Pinboard (<a href="notes.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Notizen</a>):</strong> Erstellen Sie farbige digitale Haftnotizen (Gelb, Blau, Grün, Rosa, Violett, Neutral), pinnen Sie wichtige Zettel oben an, filtern Sie nach <code>#Schlagworten</code> und exportieren Sie jede Notiz per Klick auf <strong>☁️ .md</strong> direkt als Markdown-Datei in Ihren Cloud-Ordner <code>Notizen</code>.</li>
+            </ul>
+        </section>
+
+        <!-- 4d. Adressbuch / Kontakte & WebDAV-Netzlaufwerk -->
+        <section id="kontakte-webdav" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-bold">📇</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adressbuch (vCard) &amp; WebDAV-Netzlaufwerk</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>📇 Adressbuch &amp; Kontakte (<a href="contacts.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kontakte</a>):</strong> Pflegen Sie persönliche oder im Team geteilte Kontakte inkl. Favoriten-Stern, Firma, Telefon/Mobil, E-Mail, Adresse und Geburtstag. Importieren und exportieren Sie Kontakte jederzeit im <strong>vCard-Standardformat (<code>.vcf</code>)</strong>. Hinterlegte Geburtstage (<code>🎂</code>) erscheinen automatisch als jährliche Ganztagstermine im <a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kalender</a>!</li>
+                <li><strong>📡 WebDAV-Netzlaufwerk (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a>):</strong> Über den integrierten Endpunkt <code>webdav.php</code> binden Sie Ihre Cloud ohne Zusatzsoftware als echtes Netzlaufwerk im Windows Explorer, macOS Finder, unter Linux oder auf dem Smartphone ein.</li>
             </ul>
         </section>
     </div>
@@ -1453,6 +1478,18 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4"><code>id, sender_id, recipient_id, is_broadcast, message_text, attached_file_id, is_read, created_at</code> / <code>user_id, last_read_broadcast_id</code></td>
                         <td class="py-3 px-4">Direkte 1:1-Chat-Nachrichten (inkl. optionaler Dateianhänge <code>attached_file_id</code>) sowie offizielle Admin-Rundnachrichten samt Lesestatus</td>
                         <td class="py-3 px-4">Bis zur Einzellöschung, Leerung des Chatverlaufs (<em>„Verlauf leeren“</em>) oder Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">file_versions &amp; file_comments</td>
+                        <td class="py-3 px-4"><code>file_id, user_id, stored_name, file_size, version_note, created_at</code> / <code>file_id, user_id, comment_text, created_at</code></td>
+                        <td class="py-3 px-4">Automatische Dateiversionierung (bis zu 5 Stände pro Datei für 1-Klick-Zeitreise) sowie Kommentare &amp; Notizen direkt an Dateien</td>
+                        <td class="py-3 px-4">Automatische Rotation älterer Versionen ab 5 Ständen; Endlöschung zusammen mit der Hauptdatei</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">tasks, notes &amp; contacts</td>
+                        <td class="py-3 px-4"><code>title, status, priority, checklist_json</code> / <code>title, content, color, tags, is_pinned</code> / <code>first_name, last_name, email, phone, birthday</code></td>
+                        <td class="py-3 px-4">Aufgaben &amp; Kanban-Board, farbige Haftnotizen (Pinboard) sowie persönliches/geteiltes Adressbuch (inkl. vCard Import/Export &amp; Geburtstags-Synchronisation in den Kalender)</td>
+                        <td class="py-3 px-4">Bis zur manuellen Löschung durch den Eigentümer oder Löschung des Benutzerkontos</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">audit_logs</td>

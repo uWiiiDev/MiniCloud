@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $file = $stmt->fetch();
 
         if ($file && (int)$file['user_id'] === $userId) {
+            deletePhysicalFileVersions($pdo, (int)$file['id']);
             $physicalPath = UPLOAD_DIR . basename((string)$file['filename']);
             if (is_file($physicalPath)) {
                 @unlink($physicalPath);
@@ -97,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rows = $stmtAll->fetchAll();
 
         foreach ($rows as $r) {
+            deletePhysicalFileVersions($pdo, (int)$r['id']);
             $physicalPath = UPLOAD_DIR . basename((string)$r['filename']);
             if (is_file($physicalPath)) {
                 @unlink($physicalPath);

@@ -878,6 +878,57 @@ $themeGroups = [
                 </div>
             </form>
         </section>
+
+        <?php if (($appSettings['enable_webdav'] ?? '1') === '1'):
+            $webdavEndpointUrl = getBaseUrl() . '/webdav.php/';
+        ?>
+        <!-- WEBDAV NETZLAUFWERK -->
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">📡 WebDAV-Netzlaufwerk einbinden</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Binde deine persönlichen Cloud-Ordner direkt als Laufwerk im Windows Explorer, macOS Finder, unter Linux oder auf dem Smartphone ein.
+                    </p>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                    Aktiv
+                </span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+                <input
+                    type="text"
+                    id="webdavUrlField"
+                    readonly
+                    value="<?= e($webdavEndpointUrl) ?>"
+                    class="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white"
+                >
+                <button
+                    type="button"
+                    onclick="navigator.clipboard.writeText(document.getElementById('webdavUrlField').value); this.textContent='✅ Kopiert!'; setTimeout(()=>this.textContent='📋 URL kopieren', 2000);"
+                    class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                    📋 URL kopieren
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-300">
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/70">
+                    <div class="font-bold text-slate-900 dark:text-white mb-1">🪟 Windows Explorer</div>
+                    Rechtsklick auf <em>Dieser PC</em> &rarr; <em>Netzlaufwerk verbinden…</em> &rarr; WebDAV-URL einfügen und mit deinem Benutzernamen (<code><?= e((string)$userRow['username']) ?></code>) &amp; Passwort anmelden.
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/70">
+                    <div class="font-bold text-slate-900 dark:text-white mb-1">🍎 macOS Finder</div>
+                    Im Finder <code>⌘ + K</code> (<em>Gehe zu &rarr; Mit Server verbinden…</em>) drücken, die WebDAV-URL eingeben und mit deinen Cloud-Zugangsdaten verbinden.
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/70">
+                    <div class="font-bold text-slate-900 dark:text-white mb-1">🐧 Linux &amp; 📱 Mobil</div>
+                    In GNOME/Nautilus oder Dolphin <code>davs://</code> bzw. <code>dav://</code> mit obiger Adresse öffnen oder Apps wie <em>Owlfiles</em> / <em>CX File Explorer</em> nutzen.
+                </div>
+            </div>
+        </section>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 

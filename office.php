@@ -338,6 +338,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         }
     }
 
+    // Vor dem Überschreiben automatisch einen Versions-Snapshot (max. 5 Versionen) anlegen
+    createFileVersionSnapshot($pdo, $file, 'Office Light (' . (string)($_SESSION['username'] ?? 'Editor') . ')');
+
     if (!@rename($tmpSave, $physicalPath)) {
         if (!@copy($tmpSave, $physicalPath)) {
             @unlink($tmpSave);

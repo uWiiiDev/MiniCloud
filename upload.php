@@ -249,16 +249,63 @@ foreach ($validCandidates as $fileItem) {
     }
 
     try {
-        $stmtInsert->execute([
-            ':user_id'         => $effectiveOwnerId,
-            ':group_folder_id' => $groupFolderId > 0 ? $groupFolderId : null,
-            ':filename'        => $storedFilename,
-            ':original_name'   => $originalName,
-            ':folder_path'     => $finalFolderPath,
-            ':file_size'       => $actualSize,
-            ':mime_type'       => $mimeType,
-            ':is_encrypted'    => $isEncryptedFlag,
-        ]);
+        $existingFile = null;
+        if ($isEncryptedFlag === 0) {
+            if ($groupFolderId > 0) {
+                $stmtEx = $pdo->prepare(
+                    'SELECT * FROM files
+                     WHERE group_folder_id = :gfid AND folder_path = :fp AND original_name = :orig AND deleted_at IS NULL AND is_encrypted = 0
+                     ORDER BY id DESC LIMIT 1'
+                );
+                $stmtEx->execute([
+                    ':gfid' => $groupFolderId,
+                    ':fp'   => $finalFolderPath,
+                    ':orig' => $originalName,
+                ]);
+            } else {
+                $stmtEx = $pdo->prepare(
+                    'SELECT * FROM files
+                     WHERE user_id = :uid AND group_folder_id IS NULL AND folder_path = :fp AND original_name = :orig AND deleted_at IS NULL AND is_encrypted = 0
+                     ORDER BY id DESC LIMIT 1'
+                );
+                $stmtEx->execute([
+                    ':uid'  => $effectiveOwnerId,
+                    ':fp'   => $finalFolderPath,
+                    ':orig' => $originalName,
+                ]);
+            }
+            $existingFile = $stmtEx->fetch() ?: null;
+        }
+
+        if ($existingFile) {
+            createFileVersionSnapshot($pdo, $existingFile, 'Vor neuem Upload (' . (string)($_SESSION['username'] ?? 'Upload') . ')');
+            $oldPath = UPLOAD_DIR . basename((string)$existingFile['filename']);
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+            $stmtUpdExisting = $pdo->prepare(
+                'UPDATE files
+                 SET filename = :filename, file_size = :file_size, mime_type = :mime_type, upload_date = CURRENT_TIMESTAMP
+                 WHERE id = :id'
+            );
+            $stmtUpdExisting->execute([
+                ':filename'  => $storedFilename,
+                ':file_size' => $actualSize,
+                ':mime_type' => $mimeType,
+                ':id'        => (int)$existingFile['id'],
+            ]);
+        } else {
+            $stmtInsert->execute([
+                ':user_id'         => $effectiveOwnerId,
+                ':group_folder_id' => $groupFolderId > 0 ? $groupFolderId : null,
+                ':filename'        => $storedFilename,
+                ':original_name'   => $originalName,
+                ':folder_path'     => $finalFolderPath,
+                ':file_size'       => $actualSize,
+                ':mime_type'       => $mimeType,
+                ':is_encrypted'    => $isEncryptedFlag,
+            ]);
+        }
 
         if ($finalFolderPath !== '') {
             registerFolderHierarchy($pdo, $effectiveOwnerId, $finalFolderPath, $groupFolderId > 0 ? $groupFolderId : null);
