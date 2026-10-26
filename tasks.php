@@ -229,8 +229,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif (preg_match('/^group:(\d+)$/', $shareTarget, $mg)) {
             $candGid = (int)$mg[1];
-            $stmtG = $pdo->prepare('SELECT id FROM `groups` WHERE id = :id LIMIT 1');
-            $stmtG->execute([':id' => $candGid]);
+            if ($isAdmin) {
+                $stmtG = $pdo->prepare('SELECT id FROM `groups` WHERE id = :id LIMIT 1');
+                $stmtG->execute([':id' => $candGid]);
+            } else {
+                $stmtG = $pdo->prepare(
+                    'SELECT g.id FROM `groups` g
+                     INNER JOIN group_members gm ON gm.group_id = g.id
+                     WHERE g.id = :id AND gm.user_id = :uid LIMIT 1'
+                );
+                $stmtG->execute([':id' => $candGid, ':uid' => $userId]);
+            }
             if ($stmtG->fetch()) {
                 $groupId = $candGid;
             }

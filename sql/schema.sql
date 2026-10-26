@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `chat_notify_mode` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1 = Nur System-Benachrichtigung, 2 = System + In-App, 3 = Nur In-App, 0 = Aus',
     `allow_user_sharing` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Für andere Nutzer beim Teilen/Chat sichtbar, 0 = Datenschutz (verborgen)',
     `calendar_token` VARCHAR(64) DEFAULT NULL COMMENT 'Persönlicher Token für .ics Kalender-Abo-Feed',
+    `contacts_token` VARCHAR(64) DEFAULT NULL COMMENT 'Persönlicher Token für .vcf Adressbuch-Abo-Feed',
     `storage_quota` BIGINT UNSIGNED NOT NULL DEFAULT 104857600 COMMENT 'Standard: 100 MB in Bytes',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -115,6 +116,8 @@ CREATE TABLE IF NOT EXISTS `shares` (
     `share_mode` VARCHAR(20) NOT NULL DEFAULT 'read' COMMENT 'read = Nur Download, upload_only = Briefkasten (File Drop), read_write = Download & Upload',
     `password_hash` VARCHAR(255) DEFAULT NULL COMMENT 'Optionaler BCRYPT-Passwort-Hash',
     `expires_at` DATETIME DEFAULT NULL COMMENT 'Optionales Ablaufdatum der Freigabe',
+    `max_downloads` INT UNSIGNED DEFAULT NULL COMMENT 'Optionales Download-Limit (Selbstzerstörung / Burn after reading)',
+    `download_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Anzahl bisheriger Downloads über diesen Link',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `idx_shares_token` (`share_token`),
@@ -237,4 +240,138 @@ CREATE TABLE IF NOT EXISTS `message_broadcast_reads` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`user_id`),
     CONSTRAINT `fk_mbr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15. Tabelle für Brute-Force-Schutz (Login, WebDAV & CardDAV)
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `ip_address` VARCHAR(45) NOT NULL,
+    `username` VARCHAR(64) NOT NULL DEFAULT '',
+    `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ip_time` (`ip_address`, `attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 16. Tabelle für Sicherheits- & Aktivitätsprotokoll (Audit-Log, DSGVO-konform)
+CREATE TABLE IF NOT EXISTS `audit_logs` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED DEFAULT NULL,
+    `username` VARCHAR(64) DEFAULT NULL,
+    `event_type` VARCHAR(40) NOT NULL,
+    `description` VARCHAR(500) NOT NULL,
+    `ip_address` VARCHAR(45) DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_audit_created` (`created_at`),
+    KEY `idx_audit_type` (`event_type`),
+    KEY `idx_audit_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 17. Tabelle für automatische Dateiversionierung (Zeitreise bis 5 Versionen)
+CREATE TABLE IF NOT EXISTS `file_versions` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `file_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `stored_filename` VARCHAR(255) NOT NULL,
+    `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
+    `version_note` VARCHAR(190) NOT NULL DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_fv_file` (`file_id`),
+    CONSTRAINT `fk_fv_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_fv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 18. Tabelle für Datei-Kommentare & Notizen an Dateien
+CREATE TABLE IF NOT EXISTS `file_comments` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `file_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `comment_text` VARCHAR(1000) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_fc_file` (`file_id`),
+    CONSTRAINT `fk_fc_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_fc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 19. Tabelle für Aufgaben & Kanban-Board (tasks.php)
+CREATE TABLE IF NOT EXISTS `tasks` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(255) NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'todo' COMMENT 'todo, in_progress, done',
+    `priority` VARCHAR(20) NOT NULL DEFAULT 'medium' COMMENT 'low, medium, high, urgent',
+    `due_date` DATE DEFAULT NULL,
+    `checklist_json` TEXT DEFAULT NULL,
+    `attached_file_id` INT UNSIGNED DEFAULT NULL,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_tasks_user` (`user_id`),
+    KEY `idx_tasks_shared_user` (`shared_user_id`),
+    KEY `idx_tasks_group` (`group_id`),
+    CONSTRAINT `fk_tasks_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_tasks_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_tasks_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_tasks_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 20. Tabelle für digitale Haftnotizen / Pinboard (notes.php)
+CREATE TABLE IF NOT EXISTS `notes` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(190) NOT NULL DEFAULT '',
+    `content` TEXT NOT NULL,
+    `color` VARCHAR(24) NOT NULL DEFAULT 'amber' COMMENT 'amber, blue, emerald, rose, violet, slate',
+    `tags` VARCHAR(255) NOT NULL DEFAULT '',
+    `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_notes_user` (`user_id`),
+    KEY `idx_notes_shared_user` (`shared_user_id`),
+    KEY `idx_notes_group` (`group_id`),
+    CONSTRAINT `fk_notes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_notes_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_notes_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 21. Tabelle für Adressbuch & Kontakte inkl. CardDAV (contacts.php, carddav.php)
+CREATE TABLE IF NOT EXISTS `contacts` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `first_name` VARCHAR(100) NOT NULL DEFAULT '',
+    `last_name` VARCHAR(100) NOT NULL DEFAULT '',
+    `organization` VARCHAR(150) NOT NULL DEFAULT '',
+    `role_title` VARCHAR(120) NOT NULL DEFAULT '',
+    `email` VARCHAR(190) NOT NULL DEFAULT '',
+    `phone` VARCHAR(80) NOT NULL DEFAULT '',
+    `mobile` VARCHAR(80) NOT NULL DEFAULT '',
+    `street` VARCHAR(190) NOT NULL DEFAULT '',
+    `postal_code` VARCHAR(30) NOT NULL DEFAULT '',
+    `city` VARCHAR(100) NOT NULL DEFAULT '',
+    `country` VARCHAR(100) NOT NULL DEFAULT '',
+    `website` VARCHAR(255) NOT NULL DEFAULT '',
+    `birthday` DATE DEFAULT NULL,
+    `notes` TEXT DEFAULT NULL,
+    `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
+    `vcard_uid` VARCHAR(120) DEFAULT NULL,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_contacts_user` (`user_id`),
+    KEY `idx_contacts_shared_user` (`shared_user_id`),
+    KEY `idx_contacts_group` (`group_id`),
+    CONSTRAINT `fk_contacts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_contacts_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_contacts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -27,6 +27,7 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 header('DAV: 1, 2');
 header('MS-Author-Via: DAV');
 header('Accept-Ranges: bytes');
+header('X-Content-Type-Options: nosniff');
 
 if ($method === 'OPTIONS') {
     header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, PROPFIND, MOVE, COPY, LOCK, UNLOCK');
@@ -370,9 +371,13 @@ if ($method === 'PUT') {
         exit;
     }
 
-    if (!is_dir(UPLOAD_DIR)) {
-        mkdir(UPLOAD_DIR, 0750, true);
+    $contentLen = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+    if ($contentLen > MAX_FILE_SIZE) {
+        http_response_code(413); // Payload Too Large
+        exit;
     }
+
+    ensureUploadDirReady(UPLOAD_DIR);
 
     $ext = strtolower(pathinfo($itemName, PATHINFO_EXTENSION));
     $newStored = generateStoredFileName($ext);
@@ -385,13 +390,19 @@ if ($method === 'PUT') {
         exit;
     }
 
-    $writtenBytes = stream_copy_to_stream($inStream, $outStream);
+    $writtenBytes = stream_copy_to_stream($inStream, $outStream, MAX_FILE_SIZE + 1);
     fclose($inStream);
     fclose($outStream);
 
     if ($writtenBytes === false) {
         @unlink($destPath);
         http_response_code(500);
+        exit;
+    }
+
+    if ($writtenBytes > MAX_FILE_SIZE) {
+        @unlink($destPath);
+        http_response_code(413); // Payload Too Large
         exit;
     }
 
@@ -561,6 +572,11 @@ if ($method === 'MOVE' || $method === 'COPY') {
         }
 
         // COPY
+        $stats = getUserStorageStats($pdo, $userId);
+        if (($stats['used'] + (int)$fileMatch['file_size']) > $stats['quota']) {
+            http_response_code(507); // Insufficient Storage
+            exit;
+        }
         $srcPhys = UPLOAD_DIR . DIRECTORY_SEPARATOR . basename((string)$fileMatch['filename']);
         if (!is_file($srcPhys)) {
             http_response_code(404);

@@ -275,8 +275,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: contacts.php');
             exit;
         }
-        $rawContent = (string)file_get_contents($_FILES['vcf_file']['tmp_name']);
-        $parsedList = parseVcardFileContent($rawContent);
+        $vcfSize = (int)($_FILES['vcf_file']['size'] ?? 0);
+        if ($vcfSize <= 0 || $vcfSize > 5 * 1024 * 1024) {
+            setFlash('error', 'Die vCard-Datei darf maximal 5 MB groß sein.');
+            header('Location: contacts.php');
+            exit;
+        }
+        $rawContent = (string)file_get_contents($_FILES['vcf_file']['tmp_name'], false, null, 0, 5 * 1024 * 1024);
+        $parsedList = array_slice(parseVcardFileContent($rawContent), 0, 2000);
 
         if (empty($parsedList)) {
             setFlash('error', 'Es konnten keine vCard-Kontakte in der Datei erkannt werden.');

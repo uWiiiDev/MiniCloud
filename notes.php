@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_note') {
         $noteId  = isset($_POST['note_id']) ? (int)$_POST['note_id'] : 0;
         $title   = trim((string)($_POST['title'] ?? ''));
-        $content = trim((string)($_POST['content'] ?? ''));
+        $content = mb_substr(trim((string)($_POST['content'] ?? '')), 0, 50000);
         $color   = (string)($_POST['color'] ?? 'amber');
         $tagsRaw = trim((string)($_POST['tags'] ?? ''));
         $pinned  = !empty($_POST['is_pinned']) ? 1 : 0;
@@ -216,9 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        if (!is_dir(UPLOAD_DIR)) {
-            mkdir(UPLOAD_DIR, 0750, true);
-        }
+        ensureUploadDirReady(UPLOAD_DIR);
 
         $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $noteTitle);
         $safeBase = trim((string)$safeBase, '_');

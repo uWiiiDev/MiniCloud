@@ -82,7 +82,7 @@ require_once __DIR__ . '/includes/header.php';
                 <li><strong>Instant Preview &amp; Browsing:</strong> Click the eye icon (<span class="text-violet-600 dark:text-violet-400 font-semibold">Preview</span>) or the file name to preview images, PDFs, videos, audio, and code/office files; use <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&larr;</kbd> and <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">&rarr;</kbd> to browse (<kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Esc</kbd> closes).</li>
                 <li><strong>Photo Gallery / Grid View, ⭐ Favorites &amp; Global Search:</strong> Switch anytime between the classic table (<strong>📋 List</strong>) and the visual thumbnail gallery (<strong>🖼️ Grid</strong>), pin important files to the top with a star (<strong>⭐ Favorites</strong>), or search across all folders and subfolders using the global search bar.</li>
                 <li><strong>Multi-Select Batch Actions:</strong> Select multiple files via checkboxes to download them together as a ZIP archive, move/copy them in one step, or move them to the Trash via the floating action bar.</li>
-                <li><strong>Desktop Icons &amp; Mobile ⋯ Action Menu:</strong> On desktop screens, all action icons (Edit ✏️, Preview 👁️, Share 🔗, Vault 🔒, Move/Copy ⇄, Download ⬇️, Delete 🗑️) appear side-by-side. On smartphones, a single compact <strong>⋯ button</strong> opens a clear touch menu with all actions.</li>
+                <li><strong>Customizable Favorites in Header &amp; File Actions (⭐ / ☆):</strong> Both in the top <strong>⊞ Modules</strong> launcher and in the <strong>⋯ file action menu</strong> (also accessible via <strong>right-click</strong> on any file or folder row), click the <strong>⭐ / ☆ star</strong> next to any module or file action to pin it directly to the outside bar or unpin it back into the menu.</li>
                 <li><strong>Table Sorting:</strong> Click the column headers <em>Name</em>, <em>Folder</em>, <em>Size</em>, or <em>Type / Date</em> to sort ascending or descending (<code>↑</code> / <code>↓</code>).</li>
             </ul>
         </section>
@@ -1150,6 +1150,12 @@ require_once __DIR__ . '/includes/header.php';
             <a href="#chat-nachrichten" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                 💬 Chat &amp; Meldungen
             </a>
+            <a href="#aufgaben-notizen" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                📋 Aufgaben &amp; Notizen
+            </a>
+            <a href="#kontakte-webdav" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                📇 Kontakte, CardDAV &amp; WebDAV
+            </a>
             <a href="#tresor-modus" class="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors">
                 🔒 Tresor-Modus
             </a>
@@ -1199,7 +1205,12 @@ require_once __DIR__ . '/includes/header.php';
                         <li><strong>Online bearbeiten:</strong> Klicken Sie am Desktop auf das <strong>✏️ Stift-Symbol</strong> (oder im Vorschau-Fenster bzw. mobilen <strong>⋯ Menü</strong> auf <strong>„✏️ In Office Light bearbeiten“</strong>), um Word-Dokumente mit Formatierungsleiste (Überschriften, Fett/Kursiv, Listen, Tabellen, Druck/PDF) oder Excel-Tabellen mit mehreren Tabellenblättern und Rechenformeln (<code>=SUMME(A1:A10)</code>, <code>=MITTELWERT(...)</code>, <code>=MIN(...)</code>, <code>=MAX(...)</code>, <code>=A1*B1</code>) direkt im Browser zu bearbeiten und per <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-xs font-mono">Strg+S</kbd> zu speichern.</li>
                     </ul>
                 </li>
-                <li><strong>Desktop-Icons &amp; Mobiles ⋯ Aktionsmenü:</strong> In der Desktop-Ansicht stehen alle Aktions-Icons (Bearbeiten ✏️, Vorschau 👁️, Kommentare &amp; Versionen 💬, Teilen 🔗, Tresor 🔒, Verschieben/Kopieren ⇄, Download ⬇️, Löschen 🗑️) direkt nebeneinander. Auf Smartphones werden sie platzsparend in einem einzigen <strong>⋯ Button</strong> gebündelt, der ein übersichtliches Touch-Aktionsmenü öffnet.</li>
+                <li><strong>⭐ Flexibel anheftbare Favoriten-Icons in Kopfzeile &amp; Dateiliste:</strong>
+                    <ul class="list-disc pl-5 mt-1 space-y-1">
+                        <li><strong>Kopfzeile (<code>⊞ Module</code> &amp; <code>👤</code> Konto-Menü):</strong> Im <strong>⊞ Module</strong>-Menü oben rechts sind alle 7 Cloud-Module gebündelt. Über den <strong>⭐ / ☆ Stern</strong> oben rechts auf jeder Modulkachel legen Sie Ihre meistgenutzten Module direkt nach außen in die Kopfzeile oder räumen sie wieder ins Menü auf. Speicheranzeige, Admin, Einstellungen, Hilfe und Abmelden befinden sich gebündelt im <strong>👤 Konto-Menü</strong>.</li>
+                        <li><strong>Datei-Aktionen &amp; <code>⋯</code>-Menü (inkl. Rechtsklick):</strong> Neben jeder Datei und jedem Ordner zeigt die Aktionsspalte Ihre favorisierten Schnellzugriffs-Icons (Standard: 👁️ Vorschau, ⬇️ Download, 🔗 Teilen) sowie den <strong>⋯ Button</strong> (auch per <strong>Rechtsklick</strong> auf die Zeile erreichbar). Im <code>⋯</code>-Menü können Sie jede Aktion (z. B. ✏️ Office Light, 💬 Kommentare &amp; Versionen, 🔒 Tresor, ⇄ Verschieben, 🗑️ Löschen) per Klick auf <strong>⭐ / ☆</strong> flexibel nach außen legen oder wieder ausblenden.</li>
+                    </ul>
+                </li>
                 <li><strong>🕓 Automatische Dateiversionierung („Zeitreise“) &amp; 💬 Datei-Kommentare:</strong> Beim Speichern in Office Light, beim erneuten Hochladen einer gleichnamigen Datei oder beim Überschreiben per WebDAV bewahrt uWiiiMiniCloud automatisch bis zu <strong>5 frühere Versionen</strong> auf. Über das <strong>💬 Symbol</strong> (oder die Badges <code>🕓</code> / <code>💬</code> hinter dem Dateinamen) öffnen Sie den Dialog <em>Kommentare &amp; Versionen</em>, um ältere Stände mit 1 Klick herunterzuladen, wiederherzustellen oder teaminterne Notizen direkt an der Datei zu hinterlassen.</li>
                 <li><strong>🖼️ Foto-Galerie / Kachel-Ansicht &amp; ⭐ Favoriten:</strong> Schalten Sie über der Dateiliste jederzeit zwischen der klassischen Tabellenansicht (<strong>📋 Liste</strong>) und der Kachel-Ansicht (<strong>🖼️ Kacheln</strong>) mit Live-Bild-Thumbnails um. Wichtige Dateien heften Sie per Klick auf den Stern (<strong>☆ / ⭐</strong>) ganz oben an oder filtern sie über <strong>⭐ Favoriten</strong>.</li>
                 <li><strong>☑️ Mehrfachauswahl (Sammel-Aktionen) &amp; 🔎 Globale Suche:</strong> Haken Sie beliebig viele Dateien gleichzeitig an, um sie über die schwebende Aktionsleiste gemeinsam als ZIP herunterzuladen, zu verschieben/kopieren oder in den Papierkorb zu legen. Das Suchfeld durchsucht automatisch alle Ordner und Unterordner gleichzeitig.</li>
@@ -1411,7 +1422,7 @@ require_once __DIR__ . '/includes/header.php';
                 <li><strong>Datenschutz-Sichtbarkeit &amp; 3-Stufen-Rechteprüfung:</strong> Strikte serverseitige Prüfung von <code>allow_user_sharing = 1</code> sowie granulare Berechtigungsprüfung (<code>can_write</code>, <code>can_delete</code>, <code>can_edit</code>) für Datei-, Ordner-, Office-Light- und Kalender-Freigaben.</li>
                 <li><strong>Abgesicherter GitHub-Updater, Lokale Snapshots &amp; Rollback:</strong> Zertifikatsvalidierung (<code>CURLOPT_SSL_VERIFYPEER</code> / <code>CURLOPT_SSL_VERIFYHOST = 2</code>), Schutz vor Zip-Slip (<code>..</code>-Filter), automatische lokale Sicherungspunkte (<code>uploads/.system_backups/</code> mit <code>.htaccess</code>-Sperre) vor jedem Update sowie automatischer Erhalt von <code>uploads/</code> und <code>config/database.php</code>-Zugangsdaten.</li>
                 <li><strong>Host-Header-, Open-Redirect- &amp; Forced-Logout-Schutz:</strong> Strikte Regex-Validierung von <code>HTTP_HOST</code>, Whitelist-Prüfung lokaler Zielseiten und CSRF-geschützter <code>POST</code>-Logout.</li>
-                <li><strong>Brute-Force-Sperre &amp; SVG-Sanitisierung:</strong> Ratenbegrenzung für Login, Registrierung und Freigabelinks sowie Abwehr aktiver Skriptelemente in SVG-Logos.</li>
+                <li><strong>Brute-Force-Sperre, WebDAV/CardDAV-Härtung &amp; SVG-Sanitisierung:</strong> Ratenbegrenzung für Login, Registrierung, Freigabelinks sowie die nativen <code>webdav.php</code>- und <code>carddav.php</code>-Endpunkte (inkl. Quota- &amp; Größenprüfung), Gruppen-Mitgliedschaftsprüfung bei Aufgaben sowie Abwehr aktiver Skriptelemente in SVG-Logos.</li>
             </ul>
         </div>
     </section>
@@ -1439,8 +1450,8 @@ require_once __DIR__ . '/includes/header.php';
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">users</td>
-                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, reset_expires_at, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, storage_quota, created_at</code></td>
-                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale 2FA (E-Mail-Code oder Google Authenticator / TOTP), Passwort-Wiederherstellung, Rollensteuerung, Kontingent, UI-Präferenzen &amp; Datenschutz-Sichtbarkeit (personenbezogen)</td>
+                        <td class="py-3 px-4"><code>id, username, email, password_hash, two_factor_enabled, totp_secret, reset_token_hash, reset_expires_at, is_admin, theme, session_timeout, flash_duration, chat_notify_mode, allow_user_sharing, calendar_token, contacts_token, storage_quota, created_at</code></td>
+                        <td class="py-3 px-4">Benutzerauthentifizierung, optionale 2FA (E-Mail-Code oder Google Authenticator / TOTP), Passwort-Wiederherstellung, Rollensteuerung, Kontingent, Kalender-/Adressbuch-Abo-Tokens (<code>calendar_token</code>, <code>contacts_token</code>), UI-Präferenzen &amp; Datenschutz-Sichtbarkeit (personenbezogen)</td>
                         <td class="py-3 px-4">Bis zur Löschung des Benutzerkontos durch den Administrator (Kaskadenlöschung)</td>
                     </tr>
                     <tr>
@@ -1493,8 +1504,8 @@ require_once __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">tasks, notes &amp; contacts</td>
-                        <td class="py-3 px-4"><code>title, status, priority, checklist_json</code> / <code>title, content, color, tags, is_pinned</code> / <code>first_name, last_name, email, phone, birthday</code></td>
-                        <td class="py-3 px-4">Aufgaben &amp; Kanban-Board, farbige Haftnotizen (Pinboard) sowie persönliches/geteiltes Adressbuch (inkl. vCard Import/Export &amp; Geburtstags-Synchronisation in den Kalender)</td>
+                        <td class="py-3 px-4"><code>title, status, priority, checklist_json</code> / <code>title, content, color, tags, is_pinned</code> / <code>first_name, last_name, email, phone, birthday, vcard_uid</code></td>
+                        <td class="py-3 px-4">Aufgaben &amp; Kanban-Board, farbige Haftnotizen (Pinboard) sowie persönliches/geteiltes Adressbuch (inkl. CardDAV-Server <code>carddav.php</code>, <code>.vcf</code>-Abo-Feed, vCard Import/Export &amp; Geburtstags-Synchronisation in den Kalender)</td>
                         <td class="py-3 px-4">Bis zur manuellen Löschung durch den Eigentümer oder Löschung des Benutzerkontos</td>
                     </tr>
                     <tr>
@@ -1520,6 +1531,12 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4"><code>snapshot_&lt;YYYYmmdd_His&gt;_&lt;sha&gt;.zip</code>, <code>.htaccess</code></td>
                         <td class="py-3 px-4">Lokale Programm-Sicherungspunkte für den 1-Klick-Update-Rollback (reiner Anwendungscode ohne Nutzerdateien und ohne <code>config/database.php</code>)</td>
                         <td class="py-3 px-4">Automatische Rotation (max. die 8 neuesten Sicherungspunkte werden aufbewahrt; jederzeit im Admin-Bereich löschbar)</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">Browser localStorage</td>
+                        <td class="py-3 px-4"><code>mc_pinned_header_nav_u&lt;id&gt;</code>, <code>mc_pinned_file_actions_u&lt;id&gt;</code>, <code>mc_file_view_mode</code></td>
+                        <td class="py-3 px-4">Vom Benutzer per <code>⭐</code> angeheftete Favoriten-Module in der Kopfzeile, Favoriten-Aktions-Icons in der Dateiauflistung sowie Listen-/Kachel-Ansicht (rein lokal im Browser)</td>
+                        <td class="py-3 px-4">Bis zum Zurücksetzen auf „Standard“ oder Löschen der Browserdaten</td>
                     </tr>
                 </tbody>
             </table>

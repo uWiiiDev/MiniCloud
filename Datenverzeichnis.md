@@ -1,6 +1,6 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 1.8  
+**Dokumentversion:** 1.9  
 **Stand:** 26.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
@@ -8,7 +8,7 @@
 
 ## 1. Übersicht der Datenbestände
 
-MiniCloud speichert strukturierte Anwendungs-, Berechtigungs-, Kalender-, Chat- und Metadaten in einer relationalen MySQL-/MariaDB-Datenbank (**14 Tabellen**) sowie die eigentlichen Dateiinhalte in pseudonymisierter Binärform im lokalen Verzeichnis **`uploads/`**.
+MiniCloud speichert strukturierte Anwendungs-, Berechtigungs-, Kalender-, Chat-, Aufgaben-, Notiz-, Kontakt- und Metadaten in einer relationalen MySQL-/MariaDB-Datenbank (**21 Tabellen**) sowie die eigentlichen Dateiinhalte in pseudonymisierter Binärform im lokalen Verzeichnis **`uploads/`**.
 
 ---
 
@@ -37,6 +37,7 @@ Speichert alle registrierten Benutzerkonten, deren Rollen, Darstellungspräferen
 | `chat_notify_mode` | `TINYINT UNSIGNED` | Nein | `1` | – | Chat-Benachrichtigungsmodus (`1` = Nur System-Meldung, `2` = System + In-App-Banner, `3` = Nur In-App-Banner, `0` = Aus) |
 | `allow_user_sharing` | `TINYINT(1)` | Nein | `0` | – | Datenschutz-Sichtbarkeit in der Teilen- & Chat-Auswahl anderer Benutzer (`0` = verborgen [Standard], `1` = sichtbar) |
 | `calendar_token` | `VARCHAR(64)` | Ja | `NULL` | – | Optionales persönliches Token für den `.ics`-Kalender-Abo-Feed |
+| `contacts_token` | `VARCHAR(64)` | Ja | `NULL` | – | Optionales persönliches Token für den `.vcf`-Adressbuch-Abo-Feed (`contacts.php?vcf_token=...`) |
 | `storage_quota` | `BIGINT UNSIGNED` | Nein | `104857600` | – | Persönliches Speicherkontingent in Bytes (Standard: 100 MB) |
 | `created_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Zeitpunkt der Kontoerstellung |
 
@@ -176,7 +177,8 @@ Speichern Kanban-Aufgaben, farbige Haftnotizen und Kontakte.
 | :--- | :--- | :--- | :--- |
 | `tasks` | `id`, `user_id`, `title`, `description`, `status` (`todo`, `in_progress`, `done`), `priority`, `due_date`, `checklist_json`, `attached_file_id`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Aufgaben & Kanban-Board inkl. interaktiver Unteraufgaben-Checkliste, Dateianhang und Teilen |
 | `notes` | `id`, `user_id`, `title`, `content`, `color`, `tags`, `is_pinned`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Farbige Haftnotizen (Pinboard) mit `#Tags`, Anpinnen und 1-Klick-Export als `.md` in die Cloud |
-| `contacts` | `id`, `user_id`, `first_name`, `last_name`, `organization`, `role_title`, `email`, `phone`, `mobile`, `street`, `postal_code`, `city`, `country`, `website`, `birthday`, `notes`, `is_favorite`, `shared_user_id`, `group_id`, `created_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Persönliche und geteilte Kontakte inkl. vCard (`.vcf`) Import/Export und automatischer Geburtstagsanzeige im Kalender |
+| `contacts` | `id`, `user_id`, `first_name`, `last_name`, `organization`, `role_title`, `email`, `phone`, `mobile`, `street`, `postal_code`, `city`, `country`, `website`, `birthday`, `notes`, `is_favorite`, `vcard_uid`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Persönliche und geteilte Kontakte inkl. CardDAV-Synchronisation (`carddav.php`), `.vcf`-Abo-Feed, vCard Import/Export und automatischer Geburtstagsanzeige im Kalender |
+| `login_attempts` | `id`, `ip_address`, `username`, `attempted_at` | `PRIMARY KEY (id)`, `KEY (ip_address, attempted_at)` | Temporäre Brute-Force-Sperrtabelle (max. 5 Fehlversuche pro 5 Minuten für Login, WebDAV & CardDAV; automatische Bereinigung nach 15 Minuten) |
 
 ---
 
@@ -200,3 +202,4 @@ Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 | `/tmp/mc_zip_*` / `/tmp/mc_upd_*` / `/tmp/mc_office_*` | Temporäre ZIP-/OpenXML-Arbeitsdateien (Ordner-Download, GitHub-Update, Office Light) | Zufälliger Dateiname über `tempnam()`, Auslieferung nur an autorisierte Nutzer | Sofortige Löschung (`unlink`) unmittelbar nach Abschluss der Operation |
 | PHP-Session (`PHPSESSID`) | `user_id`, `username`, `is_admin`, `theme`, `session_timeout`, `flash_duration`, `chat_notify_mode`, `csrf_token` | Serverseitige Ablage, Cookie mit `HttpOnly`, `SameSite=Lax`, `Secure` (bei HTTPS) | Bis zum Logout (`logout.php`), Ablauf des Inaktivitäts-Timeouts oder Schließen des Browsers |
 | Cookies `mc_theme`, `mc_lang` | Gewähltes Farbschema (`light`..`obsidian`) & Sprache (`de`..`nl`) | Reine UI-Präferenz ohne Personenbezug, `SameSite=Lax` | 365 Tage |
+| Browser `localStorage` (`mc_pinned_header_nav_u<id>`, `mc_pinned_file_actions_u<id>`, `mc_file_view_mode`) | Vom Benutzer per `⭐` nach außen gelegte Favoriten-Module in der Kopfzeile, Favoriten-Aktions-Icons in der Dateiliste sowie Listen-/Kachel-Ansicht | Reine lokale UI-Präferenz im Browser des Endgeräts (keine Übertragung an Dritte) | Bis zum Zurücksetzen auf „Standard“ oder Löschen der Browserdaten |

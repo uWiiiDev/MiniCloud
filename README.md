@@ -16,7 +16,8 @@
    - **🖼️ Foto-Galerie / Kachel-Ansicht, ⭐ Favoriten & 🔎 Globale Suche:** Nahtloser Wechsel zwischen Tabellenansicht (`📋 Liste`) und Kachel-Ansicht (`🖼️ Kacheln`) mit Live-Bild-Thumbnails, Anheften wichtiger Dateien per Stern (`⭐ Favoriten`) sowie ordnerübergreifende Volltextsuche über alle Unterordner hinweg.
    - **☑️ Mehrfachauswahl (Sammel-/Batch-Aktionen):** Mehrere Dateien gleichzeitig per Checkbox auswählen und über die schwebende Aktionsleiste gemeinsam als `.zip` herunterladen, verschieben/kopieren oder in den Papierkorb legen.
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio, Text-/Codedateien und ZIP-Archive (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
-   - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv (am Desktop mit direkter Aktionsleiste, auf Smartphones mit platzsparendem **`⋯`-Touch-Aktionsmenü**).
+   - **⭐ Flexibel anheftbare Favoriten-Icons in Kopfzeile & Dateiliste:** Sowohl im neuen **`⊞ Module`-App-Launcher** der Kopfzeile als auch im **`⋯`-Datei-Aktionsmenü** (auch per **Rechtsklick** auf jede Zeile erreichbar) kann jedes Modul bzw. jede Datei-Aktion per Klick auf **`⭐` / `☆`** individuell nach außen gelegt oder wieder ins Menü aufgeräumt werden.
+   - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
 2. **Öffentliche Freigabelinks, 📱 Lokaler QR-Code, 🔥 Selbstzerstörung („Burn after reading“), 📥 Digitaler Briefkasten & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
    - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz, Ablaufdatum, **🔥 Download-Limit / Selbstzerstörung** (Link löscht sich z. B. nach `1×`, `3×`, `5×` oder `10×` Downloads automatisch selbst) sowie **📱 100 % lokal generierter SVG-QR-Code** zum direkten Scannen mit dem Smartphone.
    - **📥 Digitaler Briefkasten (File-Drop) für Ordner-Links:** Für öffentliche Ordner-Links wählbar zwischen **👁️ Nur Download**, **📤 Digitaler Briefkasten / Nur Hochladen** (Gäste können Dateien/Fotos ohne eigenes Konto zusenden, ohne andere Dateien im Ordner zu sehen) und **🔄 Download & Upload**.
@@ -210,7 +211,12 @@ MiniCloud/
 ├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Office-Light-Start, Vorschau-Modal, Tresor, Freigaben)
 ├── office.php                # MiniCloud Office Light (Online-Editor für Word .docx, Excel .xlsx, .csv, .txt & .md)
 ├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
-├── messages.php              # Integrierter Messenger (1:1-Chat, Admin-Rundnachrichten, Verlauf leeren, Mobil-Ansicht)
+├── messages.php              # Integrierter Messenger (1:1-Chat, Sprachnachrichten, Admin-Rundnachrichten, Mobil-Ansicht)
+├── tasks.php                 # Aufgaben & Kanban-Board (Drag & Drop, Prioritäten, Checklisten, Dateianhänge, Teilen)
+├── notes.php                 # Digitale Haftnotizwand / Pinboard (Farben, #Tags, Anpinnen, .md-Cloud-Export)
+├── contacts.php              # Adressbuch & Kontakte (vCard Import/Export, .vcf-Abo mit QR-Code, Kalender-Geburtstage)
+├── carddav.php               # Nativer CardDAV-Server (RFC 6352) für 2-Wege-Sync mit iOS, macOS, Thunderbird & Android
+├── webdav.php                # Nativer WebDAV-Server zum Einbinden als Netzlaufwerk (Windows, macOS, Linux, Mobil)
 ├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, 2FA per E-Mail & Google Auth)
 ├── trash.php                 # Papierkorb mit 30 Tagen Aufbewahrungsfrist
 ├── folder_action.php         # Ordner erstellen, verschieben, kopieren und umbenennen

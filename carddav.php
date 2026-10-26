@@ -27,6 +27,7 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 // CardDAV-fähige DAV-Header senden
 header('DAV: 1, 2, 3, addressbook');
 header('MS-Author-Via: DAV');
+header('X-Content-Type-Options: nosniff');
 
 if ($method === 'OPTIONS') {
     header('Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, REPORT');
@@ -322,7 +323,7 @@ if ($method === 'PROPFIND') {
 
 // 3. REPORT (addressbook-multiget & addressbook-query für das Abrufen der vCard-Daten)
 if ($method === 'REPORT') {
-    $rawBody = (string)file_get_contents('php://input');
+    $rawBody = (string)file_get_contents('php://input', false, null, 0, 524288);
     $requestedHrefs = [];
     if (preg_match_all('/<[a-zA-Z0-9_:-]*href[^>]*>(.*?)<\/[a-zA-Z0-9_:-]*href>/si', $rawBody, $mHrefs)) {
         foreach ($mHrefs[1] as $hRaw) {
@@ -408,7 +409,7 @@ if ($method === 'GET' || $method === 'HEAD') {
 
 // 5. PUT (Kontakt vom Smartphone / Thunderbird anlegen oder aktualisieren)
 if ($method === 'PUT') {
-    $rawBody = (string)file_get_contents('php://input');
+    $rawBody = (string)file_get_contents('php://input', false, null, 0, 524288);
     $parsed  = parseVcardFileContent($rawBody);
     if (empty($parsed)) {
         http_response_code(400);
