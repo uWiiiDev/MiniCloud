@@ -1228,10 +1228,15 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="space-y-4">
                     <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                         <label class="block text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                            📤 Optional: Weitere PDFs vom Gerät hinzufügen
+                            📤 Optional: Weitere PDFs vom Gerät nacheinander hinzufügen
                         </label>
-                        <input type="file" name="upload_pdfs[]" accept="application/pdf,.pdf" multiple
+                        <input type="file" name="upload_pdfs[]" id="mergePdfsInput" accept="application/pdf,.pdf" multiple
+                               onchange="addSelectedMergePdfs(this)"
                                class="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-brand-600 file:text-white hover:file:bg-brand-700 cursor-pointer">
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                            💡 Du kannst mehrfach nacheinander auf „Dateien auswählen“ klicken – jede neu gewählte PDF wird zur Liste unten hinzugefügt.
+                        </p>
+                        <div id="mergePreviewStrip" class="hidden pt-2 space-y-1.5"></div>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1759,20 +1764,171 @@ function prepareRedactionSubmit() {
     return true;
 }
 
+// --- Nacheinander hinzugefügte Scan-Bilder & Merge-PDFs sammeln (statt zu überschreiben) ---
+let accumulatedScanFiles  = [];
+let accumulatedMergeFiles = [];
+
+function syncInputFiles(inputId, fileListArray) {
+    const input = document.getElementById(inputId);
+    if (!input || typeof DataTransfer === 'undefined') return;
+    const dt = new DataTransfer();
+    fileListArray.forEach(file => dt.items.add(file));
+    input.files = dt.files;
+}
+
 function previewSelectedScanImages(input) {
+    if (input && input.files && input.files.length > 0) {
+        Array.from(input.files).forEach(f => {
+            if (accumulatedScanFiles.length < 40) {
+                accumulatedScanFiles.push(f);
+            }
+        });
+        syncInputFiles('scanImagesInput', accumulatedScanFiles);
+    }
+    renderScanPreviewStrip();
+}
+
+function renderScanPreviewStrip() {
     const strip = document.getElementById('scanPreviewStrip');
     if (!strip) return;
     strip.innerHTML = '';
-    if (!input.files || input.files.length === 0) {
+    if (accumulatedScanFiles.length === 0) {
         strip.classList.add('hidden');
         return;
     }
     strip.classList.remove('hidden');
-    Array.from(input.files).slice(0, 12).forEach((f, idx) => {
-        const badge = document.createElement('div');
-        badge.className = 'px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-200';
-        badge.textContent = `Seite ${idx + 1}: ${f.name}`;
-        strip.appendChild(badge);
+    strip.className = 'pt-2 space-y-1.5';
+
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300 pb-1';
+    header.innerHTML = `<span>📑 ${accumulatedScanFiles.length} Seite(n) in der Warteschlange (du kannst weitere hinzufügen):</span>`;
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'text-rose-600 hover:underline cursor-pointer';
+    clearBtn.textContent = '🗑️ Alle leeren';
+    clearBtn.onclick = () => {
+        accumulatedScanFiles = [];
+        const inp = document.getElementById('scanImagesInput');
+        if (inp) inp.value = '';
+        renderScanPreviewStrip();
+    };
+    header.appendChild(clearBtn);
+    strip.appendChild(header);
+
+    accumulatedScanFiles.forEach((f, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs';
+
+        const label = document.createElement('span');
+        label.className = 'font-semibold text-slate-800 dark:text-slate-200 truncate';
+        label.textContent = `Seite ${idx + 1}: ${f.name}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'flex items-center gap-1 shrink-0';
+
+        if (idx > 0) {
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-[11px] font-bold cursor-pointer';
+            upBtn.textContent = '↑';
+            upBtn.title = 'Nach oben schieben';
+            upBtn.onclick = () => {
+                const tmp = accumulatedScanFiles[idx - 1];
+                accumulatedScanFiles[idx - 1] = accumulatedScanFiles[idx];
+                accumulatedScanFiles[idx] = tmp;
+                syncInputFiles('scanImagesInput', accumulatedScanFiles);
+                renderScanPreviewStrip();
+            };
+            actions.appendChild(upBtn);
+        }
+
+        if (idx < accumulatedScanFiles.length - 1) {
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-[11px] font-bold cursor-pointer';
+            downBtn.textContent = '↓';
+            downBtn.title = 'Nach unten schieben';
+            downBtn.onclick = () => {
+                const tmp = accumulatedScanFiles[idx + 1];
+                accumulatedScanFiles[idx + 1] = accumulatedScanFiles[idx];
+                accumulatedScanFiles[idx] = tmp;
+                syncInputFiles('scanImagesInput', accumulatedScanFiles);
+                renderScanPreviewStrip();
+            };
+            actions.appendChild(downBtn);
+        }
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 hover:bg-rose-600 hover:text-white text-[11px] font-bold cursor-pointer';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Diese Seite entfernen';
+        delBtn.onclick = () => {
+            accumulatedScanFiles.splice(idx, 1);
+            if (accumulatedScanFiles.length === 0) {
+                const inp = document.getElementById('scanImagesInput');
+                if (inp) inp.value = '';
+            } else {
+                syncInputFiles('scanImagesInput', accumulatedScanFiles);
+            }
+            renderScanPreviewStrip();
+        };
+        actions.appendChild(delBtn);
+
+        row.appendChild(label);
+        row.appendChild(actions);
+        strip.appendChild(row);
+    });
+}
+
+function addSelectedMergePdfs(input) {
+    if (input && input.files && input.files.length > 0) {
+        Array.from(input.files).forEach(f => {
+            if (accumulatedMergeFiles.length < 30) {
+                accumulatedMergeFiles.push(f);
+            }
+        });
+        syncInputFiles('mergePdfsInput', accumulatedMergeFiles);
+    }
+    renderMergePreviewStrip();
+}
+
+function renderMergePreviewStrip() {
+    const strip = document.getElementById('mergePreviewStrip');
+    if (!strip) return;
+    strip.innerHTML = '';
+    if (accumulatedMergeFiles.length === 0) {
+        strip.classList.add('hidden');
+        return;
+    }
+    strip.classList.remove('hidden');
+
+    accumulatedMergeFiles.forEach((f, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs';
+
+        const label = document.createElement('span');
+        label.className = 'font-semibold text-slate-800 dark:text-slate-200 truncate';
+        label.textContent = `📄 ${idx + 1}. ${f.name}`;
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 hover:bg-rose-600 hover:text-white text-[11px] font-bold cursor-pointer';
+        delBtn.textContent = '✕';
+        delBtn.onclick = () => {
+            accumulatedMergeFiles.splice(idx, 1);
+            if (accumulatedMergeFiles.length === 0) {
+                const inp = document.getElementById('mergePdfsInput');
+                if (inp) inp.value = '';
+            } else {
+                syncInputFiles('mergePdfsInput', accumulatedMergeFiles);
+            }
+            renderMergePreviewStrip();
+        };
+
+        row.appendChild(label);
+        row.appendChild(delBtn);
+        strip.appendChild(row);
     });
 }
 
