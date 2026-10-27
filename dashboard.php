@@ -421,6 +421,11 @@ require_once __DIR__ . '/includes/header.php';
                     🔐 Schlüsselbund
                 </a>
             <?php endif; ?>
+            <?php if (($appSettings['enable_office'] ?? '1') === '1'): ?>
+                <a href="office.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
+                    📝 Office Light
+                </a>
+            <?php endif; ?>
             <?php if (($appSettings['enable_pdf_tools'] ?? '1') === '1'): ?>
                 <a href="pdf_tools.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
                     📄 PDF &amp; Scan

@@ -177,16 +177,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     } while (file_exists($physicalPath));
 
     $docTitle = pathinfo($cleanBase, PATHINFO_FILENAME);
+    $templateKey = trim((string)($_POST['template_key'] ?? 'blank'));
     $createdOk = false;
 
     if ($docType === 'docx') {
-        $starterHtml = '<h1>' . htmlspecialchars($docTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h1><p></p>';
+        $safeTitle = htmlspecialchars($docTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $todayStr  = date('d.m.Y');
+        if ($templateKey === 'letter') {
+            $starterHtml = '<p><strong>Absender:</strong> ' . htmlspecialchars((string)($_SESSION['username'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ' · Musterstraße 1 · 12345 Musterstadt</p>'
+                . '<p><strong>Empfänger:</strong><br>Firma / Name<br>Straße &amp; Hausnummer<br>PLZ Ort</p>'
+                . '<p>Datum: ' . $todayStr . '</p>'
+                . '<h1>Betreff: ' . $safeTitle . '</h1>'
+                . '<p>Sehr geehrte Damen und Herren,</p>'
+                . '<p>hiermit übersende ich Ihnen die gewünschten Unterlagen und Informationen.</p>'
+                . '<p>Für Rückfragen stehe ich Ihnen jederzeit gerne zur Verfügung.</p>'
+                . '<p>Mit freundlichen Grüßen</p>'
+                . '<p><strong>' . htmlspecialchars((string)($_SESSION['username'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</strong></p>';
+        } elseif ($templateKey === 'protocol') {
+            $starterHtml = '<h1>📋 Besprechungsprotokoll: ' . $safeTitle . '</h1>'
+                . '<p><strong>Datum:</strong> ' . $todayStr . ' &nbsp;|&nbsp; <strong>Protokollführung:</strong> ' . htmlspecialchars((string)($_SESSION['username'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>'
+                . '<h2>1. Teilnehmer</h2><ul><li>Name 1</li><li>Name 2</li></ul>'
+                . '<h2>2. Tagesordnung &amp; Besprechungspunkte</h2><p>Wichtigste Themen und Diskussionsergebnisse...</p>'
+                . '<h2>3. Beschlüsse &amp; Aufgaben (To-Dos)</h2><ul><li>[ ] Aufgabe 1 – Verantwortlich: ... – Bis: ...</li><li>[ ] Aufgabe 2 – Verantwortlich: ... – Bis: ...</li></ul>';
+        } else {
+            $starterHtml = '<h1>' . $safeTitle . '</h1><p></p>';
+        }
         $createdOk = writeHtmlAsDocx($starterHtml, $physicalPath);
     } elseif ($docType === 'xlsx' || $docType === 'csv') {
         $starterRows = array_fill(0, 18, array_fill(0, 8, ''));
-        $createdOk = writeSpreadsheetData([['name' => 'Tabelle1', 'rows' => $starterRows]], $physicalPath, $cleanBase);
+        $sheetTitle  = 'Tabelle1';
+        if ($templateKey === 'budget_xlsx') {
+            $sheetTitle = 'Budgetplan';
+            $starterRows[0] = ['Datum', 'Kategorie', 'Beschreibung', 'Einnahmen (€)', 'Ausgaben (€)', 'Saldo (€)', 'Beleg-Nr.', 'Notiz'];
+            $starterRows[1] = [date('d.m.Y'), 'Startbestand', 'Übertrag', '1000', '0', '=D2-E2', '001', ''];
+            $starterRows[2] = [date('d.m.Y'), 'Büro & IT', 'Server / Hosting', '0', '49.90', '=D3-E3', '002', ''];
+            $starterRows[3] = ['', 'SUMME', 'Gesamtübersicht', '=SUM(D2:D3)', '=SUM(E2:E3)', '=D4-E4', '', ''];
+        } elseif ($templateKey === 'timesheet_xlsx') {
+            $sheetTitle = 'Zeiterfassung';
+            $starterRows[0] = ['Datum', 'Projekt / Kunde', 'Tätigkeit', 'Beginn', 'Ende', 'Stunden', 'Stundensatz (€)', 'Betrag (€)'];
+            $starterRows[1] = [date('d.m.Y'), 'Projekt A', 'Konzeption & Umsetzung', '08:30', '12:30', '4.0', '85', '340'];
+            $starterRows[2] = [date('d.m.Y'), 'Projekt A', 'Dokumentation & Test', '13:15', '16:15', '3.0', '85', '255'];
+            $starterRows[3] = ['', '', 'SUMME STUNDEN / HONORAR', '', '', '=SUM(F2:F3)', '', '=SUM(H2:H3)'];
+        }
+        $createdOk = writeSpreadsheetData([['name' => $sheetTitle, 'rows' => $starterRows]], $physicalPath, $cleanBase);
     } elseif ($docType === 'md') {
-        $starterMd = '# ' . $docTitle . "\n\n";
+        if ($templateKey === 'md_notes') {
+            $starterMd = "# 📝 {$docTitle}\n\n_Erstellt am " . date('d.m.Y') . "_\n\n## 🎯 Ziele & Zusammenfassung\n- Punkt 1\n- Punkt 2\n\n## ✅ Checkliste\n- [ ] Erster Schritt\n- [ ] Zweiter Schritt\n\n## 💡 Notizen\nHier Text eingeben...\n";
+        } else {
+            $starterMd = '# ' . $docTitle . "\n\n";
+        }
         $createdOk = (@file_put_contents($physicalPath, $starterMd) !== false);
         @chmod($physicalPath, 0640);
     } else {
@@ -582,10 +621,428 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'colla
 }
 
 // ============================================================================
-// C) GET: DOKUMENT IM EDITOR ÖFFNEN
+// C) GET: OFFICE LIGHT START-ZENTRALE (wenn keine Datei-ID übergeben wurde)
+//    ODER DOKUMENT IM EDITOR ÖFFNEN (?id=...)
 // ============================================================================
+$appSettings = getAppSettings($pdo);
+if (($appSettings['enable_office'] ?? '1') !== '1' && !$isAdmin) {
+    setFlash('warning', 'Das Modul „Office Light“ ist aktuell durch den Administrator deaktiviert.');
+    header('Location: index.php');
+    exit;
+}
+
 $fileId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$access = $fileId > 0 ? resolveOfficeFileAccess($pdo, $fileId, $userId, $isAdmin) : null;
+
+if ($fileId <= 0) {
+    // ------------------------------------------------------------------------
+    // OFFICE LIGHT START-ZENTRALE (Modul-Übersicht, Vorlagen & Dokumentenliste)
+    // ------------------------------------------------------------------------
+    $officeExts = ['docx', 'xlsx', 'csv', 'md', 'txt', 'html', 'htm', 'json', 'xml', 'yml', 'yaml', 'ini', 'sql', 'log'];
+
+    // 1. Eigene Dateien abrufen
+    $stmtOwn = $pdo->prepare(
+        'SELECT f.id, f.user_id, f.group_folder_id, f.original_name, f.folder_path, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
+                u.username AS owner_username, gf.name AS group_folder_name
+         FROM files f
+         INNER JOIN users u ON u.id = f.user_id
+         LEFT JOIN group_folders gf ON gf.id = f.group_folder_id
+         WHERE f.deleted_at IS NULL AND f.is_encrypted = 0 AND f.user_id = :uid
+         ORDER BY f.upload_date DESC
+         LIMIT 250'
+    );
+    $stmtOwn->execute([':uid' => $userId]);
+    $rawOwn = $stmtOwn->fetchAll();
+
+    // 2. Direkt mit mir geteilte Einzeldateien abrufen
+    $stmtSharedFiles = $pdo->prepare(
+        'SELECT f.id, f.user_id, f.group_folder_id, f.original_name, f.folder_path, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
+                u.username AS owner_username, us.can_write
+         FROM user_shares us
+         INNER JOIN files f ON f.id = us.file_id
+         INNER JOIN users u ON u.id = f.user_id
+         WHERE us.shared_with_user_id = :uid AND us.file_id IS NOT NULL AND f.deleted_at IS NULL AND f.is_encrypted = 0
+         ORDER BY f.upload_date DESC
+         LIMIT 150'
+    );
+    $stmtSharedFiles->execute([':uid' => $userId]);
+    $rawShared = $stmtSharedFiles->fetchAll();
+
+    // 3. Aktive Live-Mitarbeiter in Dokumenten zählen
+    $livePresenceCounts = [];
+    try {
+        $stmtLive = $pdo->query(
+            'SELECT file_id, COUNT(*) AS cnt
+             FROM office_collab_presence
+             WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 15 SECOND)
+             GROUP BY file_id'
+        );
+        foreach ($stmtLive->fetchAll() as $lRow) {
+            $livePresenceCounts[(int)$lRow['file_id']] = (int)$lRow['cnt'];
+        }
+    } catch (Throwable) {}
+
+    $officeDocs = [];
+    $seenIds    = [];
+
+    foreach ($rawOwn as $row) {
+        $edType = getOfficeEditorType((string)$row['original_name']);
+        if ($edType === null) {
+            continue;
+        }
+        $fid = (int)$row['id'];
+        $seenIds[$fid] = true;
+        $ext = strtolower(pathinfo((string)$row['original_name'], PATHINFO_EXTENSION));
+        $officeDocs[] = [
+            'id'           => $fid,
+            'name'         => (string)$row['original_name'],
+            'ext'          => $ext,
+            'editor_type'  => $edType,
+            'folder'       => (string)$row['folder_path'],
+            'group_folder' => (string)($row['group_folder_name'] ?? ''),
+            'size'         => formatBytes((int)$row['file_size']),
+            'date'         => date('d.m.Y H:i', strtotime((string)$row['upload_date']) ?: time()),
+            'owner'        => (string)$row['owner_username'],
+            'is_shared'    => false,
+            'can_write'    => true,
+            'live_count'   => $livePresenceCounts[$fid] ?? 0,
+        ];
+    }
+
+    foreach ($rawShared as $row) {
+        $fid = (int)$row['id'];
+        if (isset($seenIds[$fid])) {
+            continue;
+        }
+        $edType = getOfficeEditorType((string)$row['original_name']);
+        if ($edType === null) {
+            continue;
+        }
+        $seenIds[$fid] = true;
+        $ext = strtolower(pathinfo((string)$row['original_name'], PATHINFO_EXTENSION));
+        $officeDocs[] = [
+            'id'           => $fid,
+            'name'         => (string)$row['original_name'],
+            'ext'          => $ext,
+            'editor_type'  => $edType,
+            'folder'       => (string)$row['folder_path'],
+            'group_folder' => '',
+            'size'         => formatBytes((int)$row['file_size']),
+            'date'         => date('d.m.Y H:i', strtotime((string)$row['upload_date']) ?: time()),
+            'owner'        => (string)$row['owner_username'],
+            'is_shared'    => true,
+            'can_write'    => ((int)($row['can_write'] ?? 0) === 1),
+            'live_count'   => $livePresenceCounts[$fid] ?? 0,
+        ];
+    }
+
+    // Eigene Ordner für die Ordner-Vorschlagsliste laden
+    $stmtFolders = $pdo->prepare(
+        "SELECT DISTINCT folder_path FROM files WHERE user_id = :uid AND deleted_at IS NULL AND folder_path <> '' ORDER BY folder_path ASC"
+    );
+    $stmtFolders->execute([':uid' => $userId]);
+    $myFolders = $stmtFolders->fetchAll(PDO::FETCH_COLUMN);
+
+    $countWord   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'word'));
+    $countSheet  = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'sheet'));
+    $countText   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'text'));
+    $countShared = count(array_filter($officeDocs, static fn(array $d): bool => $d['is_shared']));
+
+    $pageTitle = '📝 Office Light – Zentrale & Vorlagen';
+    require_once __DIR__ . '/includes/header.php';
+    ?>
+    <div class="max-w-6xl mx-auto space-y-6">
+        <!-- Kopfbereich -->
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">📝</span>
+                    <span>MiniCloud Office Light</span>
+                </h1>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    Word-Dokumente (<code>.docx</code>), Excel-Tabellen (<code>.xlsx</code> / <code>.csv</code>) und Markdown-Dateien direkt im Browser erstellen, gemeinsam im Team live bearbeiten und verwalten – 100 % lokal auf deinem Server.
+                </p>
+            </div>
+            <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors shrink-0">
+                📁 Zur Dateiverwaltung &rarr;
+            </a>
+        </div>
+
+        <!-- 1. Neues Dokument oder Vorlage starten -->
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✨ Neues Office-Dokument erstellen</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle eine Schnell-Vorlage oder lege direkt ein leeres Word-, Excel- oder Markdown-Dokument an.</p>
+                </div>
+            </div>
+
+            <!-- 6 Schnell-Vorlagen-Kacheln -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                <button type="button" onclick="selectOfficePreset('docx', 'blank', 'Neues_Dokument')"
+                        class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">📘</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300">Leeres Word</div>
+                    <div class="text-[10px] text-slate-500">.docx Textdokument</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('docx', 'letter', 'Anschreiben_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">✉️</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300">Geschäftsbrief</div>
+                    <div class="text-[10px] text-slate-500">.docx Brief-Vorlage</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('docx', 'protocol', 'Protokoll_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">📋</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300">Protokoll</div>
+                    <div class="text-[10px] text-slate-500">.docx Meeting-Notiz</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('xlsx', 'blank', 'Neue_Tabelle')"
+                        class="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">📗</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300">Leere Tabelle</div>
+                    <div class="text-[10px] text-slate-500">.xlsx Kalkulation</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('xlsx', 'budget_xlsx', 'Budgetplan_' + new Date().getFullYear())"
+                        class="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">💶</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300">Budget- &amp; Kassenplan</div>
+                    <div class="text-[10px] text-slate-500">.xlsx mit Formeln</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('xlsx', 'timesheet_xlsx', 'Zeiterfassung_' + new Date().toISOString().slice(0,7))"
+                        class="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">⏱️</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300">Stundenzettel</div>
+                    <div class="text-[10px] text-slate-500">.xlsx Zeiterfassung</div>
+                </button>
+            </div>
+
+            <!-- Erstellungs-Formular -->
+            <form action="office.php" method="post" class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 items-end">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="create_document">
+                <input type="hidden" name="template_key" id="officeHubTemplateKey" value="blank">
+
+                <div class="sm:col-span-3">
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dokumenttyp</label>
+                    <select name="doc_type" id="officeHubDocType" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                        <option value="docx">📘 Word-Dokument (.docx)</option>
+                        <option value="xlsx">📗 Excel-Tabelle (.xlsx)</option>
+                        <option value="csv">📊 CSV-Tabelle (.csv)</option>
+                        <option value="md">📒 Markdown (.md)</option>
+                        <option value="txt">📄 Textdatei (.txt)</option>
+                    </select>
+                </div>
+
+                <div class="sm:col-span-4">
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dateiname</label>
+                    <input type="text" name="doc_name" id="officeHubDocName" required placeholder="z.B. Projektkonzept"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+
+                <div class="sm:col-span-3">
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Ziel-Ordner (optional)</label>
+                    <input type="text" name="folder_path" list="officeHubFoldersList" placeholder="Hauptverzeichnis"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                    <datalist id="officeHubFoldersList">
+                        <?php foreach ($myFolders as $mf): ?>
+                            <option value="<?= e((string)$mf) ?>"></option>
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+
+                <div class="sm:col-span-2">
+                    <button type="submit" class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                        ➕ Jetzt anlegen
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 2. Alle Office-Dokumente (Filter & Live-Suche) -->
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button type="button" data-office-filter="all" onclick="filterOfficeHub('all')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white cursor-pointer">
+                        📂 Alle (<?= count($officeDocs) ?>)
+                    </button>
+                    <button type="button" data-office-filter="word" onclick="filterOfficeHub('word')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        📘 Word (<?= $countWord ?>)
+                    </button>
+                    <button type="button" data-office-filter="sheet" onclick="filterOfficeHub('sheet')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        📗 Tabellen (<?= $countSheet ?>)
+                    </button>
+                    <button type="button" data-office-filter="text" onclick="filterOfficeHub('text')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        📒 Text &amp; MD (<?= $countText ?>)
+                    </button>
+                    <?php if ($countShared > 0): ?>
+                    <button type="button" data-office-filter="shared" onclick="filterOfficeHub('shared')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        👥 Mit mir geteilt (<?= $countShared ?>)
+                    </button>
+                    <?php endif; ?>
+                </div>
+
+                <div class="relative w-full md:w-72">
+                    <span class="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">🔍</span>
+                    <input type="search" id="officeHubSearchInput" oninput="applyOfficeHubFilter()" placeholder="Dokument oder Ordner suchen…"
+                           class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+
+            <?php if (empty($officeDocs)): ?>
+                <div class="p-12 text-center space-y-2">
+                    <div class="text-3xl">📝</div>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Noch keine Office-Dokumente vorhanden</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle oben eine Vorlage aus, um dein erstes Word-, Excel- oder Markdown-Dokument anzulegen.</p>
+                </div>
+            <?php else: ?>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                                <th class="py-3 px-3 sm:px-5">Dokument</th>
+                                <th class="py-3 px-4 hidden md:table-cell">Ordner</th>
+                                <th class="py-3 px-4 hidden sm:table-cell">Größe</th>
+                                <th class="py-3 px-4 hidden lg:table-cell">Zuletzt geändert</th>
+                                <th class="py-3 px-3 sm:px-5 text-right">Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800">
+                            <?php foreach ($officeDocs as $doc): ?>
+                                <?php
+                                $badge = getFileTypeBadge($doc['name'], '');
+                                $searchHay = mb_strtolower($doc['name'] . ' ' . $doc['folder'] . ' ' . $doc['owner'] . ' ' . $doc['ext'], 'UTF-8');
+                                ?>
+                                <tr data-office-doc-row="1"
+                                    data-doc-type="<?= e($doc['editor_type']) ?>"
+                                    data-doc-shared="<?= $doc['is_shared'] ? '1' : '0' ?>"
+                                    data-doc-search="<?= e($searchHay) ?>"
+                                    class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td class="py-3 px-3 sm:px-5 max-w-[165px] sm:max-w-none overflow-hidden">
+                                        <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                                            <span class="inline-flex items-center justify-center w-9 h-8 rounded-lg text-[10px] font-bold <?= e($badge['bg']) ?> <?= e($badge['text']) ?> shrink-0">
+                                                <?= e($badge['label']) ?>
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                    <a href="office.php?id=<?= (int)$doc['id'] ?>"
+                                                       class="font-semibold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[125px] sm:max-w-xs md:max-w-md block">
+                                                        <?= e($doc['name']) ?>
+                                                    </a>
+                                                    <?php if ($doc['live_count'] > 0): ?>
+                                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 animate-pulse">
+                                                            🟢 <?= (int)$doc['live_count'] ?> live
+                                                        </span>
+                                                    <?php endif; ?>
+                                                    <?php if ($doc['is_shared']): ?>
+                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                                            👤 von <?= e($doc['owner']) ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <p class="text-[11px] text-slate-400 sm:hidden truncate max-w-[125px]">
+                                                    <?= e($doc['size']) ?> &bull; <?= e($doc['date']) ?>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-3 px-4 hidden md:table-cell text-xs text-slate-600 dark:text-slate-300">
+                                        <?php if ($doc['group_folder'] !== ''): ?>
+                                            👥 <?= e($doc['group_folder']) ?><?= $doc['folder'] !== '' ? ' / ' . e($doc['folder']) : '' ?>
+                                        <?php elseif ($doc['folder'] !== ''): ?>
+                                            <a href="index.php?folder=<?= rawurlencode($doc['folder']) ?>" class="hover:text-brand-600 hover:underline">📁 <?= e($doc['folder']) ?></a>
+                                        <?php else: ?>
+                                            🏠 Hauptverzeichnis
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="py-3 px-4 hidden sm:table-cell text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                        <?= e($doc['size']) ?>
+                                    </td>
+                                    <td class="py-3 px-4 hidden lg:table-cell text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                        <?= e($doc['date']) ?> Uhr
+                                    </td>
+                                    <td class="py-3 px-3 sm:px-5 text-right whitespace-nowrap">
+                                        <div class="inline-flex items-center justify-end gap-1.5">
+                                            <a href="office.php?id=<?= (int)$doc['id'] ?>"
+                                               class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition-colors">
+                                                <span><?= $doc['can_write'] ? '✏️ Bearbeiten' : '👁️ Öffnen' ?></span>
+                                            </a>
+                                            <a href="download.php?id=<?= (int)$doc['id'] ?>"
+                                               class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs transition-colors"
+                                               title="Herunterladen">
+                                                ⬇️
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </section>
+    </div>
+
+    <script>
+    let currentOfficeFilter = 'all';
+
+    function selectOfficePreset(docType, templateKey, suggestedName) {
+        const typeEl = document.getElementById('officeHubDocType');
+        const tplEl  = document.getElementById('officeHubTemplateKey');
+        const nameEl = document.getElementById('officeHubDocName');
+        if (typeEl) typeEl.value = docType;
+        if (tplEl) tplEl.value = templateKey;
+        if (nameEl) {
+            nameEl.value = suggestedName;
+            nameEl.focus();
+            nameEl.select();
+        }
+    }
+
+    function filterOfficeHub(mode) {
+        currentOfficeFilter = mode;
+        document.querySelectorAll('.office-filter-btn').forEach((btn) => {
+            const act = btn.getAttribute('data-office-filter') === mode;
+            btn.className = act
+                ? 'office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white cursor-pointer'
+                : 'office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer';
+        });
+        applyOfficeHubFilter();
+    }
+
+    function applyOfficeHubFilter() {
+        const q = (document.getElementById('officeHubSearchInput')?.value || '').trim().toLowerCase();
+        document.querySelectorAll('tr[data-office-doc-row="1"]').forEach((tr) => {
+            const dType   = tr.getAttribute('data-doc-type') || '';
+            const dShared = tr.getAttribute('data-doc-shared') === '1';
+            const dSearch = (tr.getAttribute('data-doc-search') || '').toLowerCase();
+
+            let typeMatch = true;
+            if (currentOfficeFilter === 'word') typeMatch = (dType === 'word');
+            else if (currentOfficeFilter === 'sheet') typeMatch = (dType === 'sheet');
+            else if (currentOfficeFilter === 'text') typeMatch = (dType === 'text');
+            else if (currentOfficeFilter === 'shared') typeMatch = dShared;
+
+            const textMatch = q === '' || dSearch.includes(q);
+            tr.classList.toggle('hidden', !(typeMatch && textMatch));
+        });
+    }
+    </script>
+    <?php
+    require_once __DIR__ . '/includes/footer.php';
+    exit;
+}
+
+$access = resolveOfficeFileAccess($pdo, $fileId, $userId, $isAdmin);
 
 if ($access === null) {
     setFlash('error', 'Die gewünschte Datei wurde nicht gefunden oder Sie besitzen keine Leseberechtigung.');
@@ -653,7 +1110,14 @@ require_once __DIR__ . '/includes/header.php';
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors shrink-0"
             title="Zurück zur Dateiliste"
         >
-            &larr; Zurück
+            &larr; Dateien
+        </a>
+        <a
+            href="office.php"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm font-semibold transition-colors shrink-0"
+            title="Zur Office Light Start-Zentrale"
+        >
+            📝 Office-Zentrale
         </a>
 
         <?php

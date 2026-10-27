@@ -719,6 +719,7 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_passwords'              => '1',
         'enable_pdf_tools'              => '1',
         'enable_projects'               => '1',
+        'enable_office'                 => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
