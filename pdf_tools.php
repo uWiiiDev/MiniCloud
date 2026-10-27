@@ -359,6 +359,9 @@ function saveGeneratedPdfToCloud(PDO $pdo, int $userId, string $username, string
 
 $gsBin   = findPdfCliBinary('gs');
 $qpdfBin = findPdfCliBinary('qpdf');
+$hasLocalOcr = is_file(__DIR__ . '/assets/ocr/tesseract.min.js')
+    && is_file(__DIR__ . '/assets/ocr/worker.min.js')
+    && is_file(__DIR__ . '/assets/ocr/deu.traineddata.gz');
 
 // ============================================================================
 // POST-Aktionen verarbeiten
@@ -1079,6 +1082,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             @rmdir($tmpDir);
         }
     }
+
+    // ------------------------------------------------------------------------
+    // 6. 🔎 Erkannten OCR-Text in der Cloud (als .txt / .html) oder als Notiz speichern
+    // ------------------------------------------------------------------------
+    if ($action === 'save_ocr_result') {
+        $ocrText  = trim((string)($_POST['ocr_text'] ?? ''));
+        $saveMode = (string)($_POST['ocr_save_mode'] ?? 'txt');
+        if ($ocrText === '') {
+            setFlash('error', 'Es ist noch kein erkannter OCR-Text zum Speichern vorhanden.');
+            header('Location: pdf_tools.php#tab-ocr');
+            exit;
+        }
+
+        $baseTitle = $outputName !== '' ? preg_replace('/\.(txt|html|pdf|md)$/i', '', $outputName) : ('OCR_Scan_' . date('Y-m-d_H-i'));
+
+        if ($saveMode === 'note') {
+            ensureNotesTableExists($pdo);
+            $stmtNote = $pdo->prepare(
+                'INSERT INTO notes (user_id, title, content, color, is_pinned) VALUES (:uid, :title, :content, :color, 0)'
+            );
+            $stmtNote->execute([
+                ':uid'     => $userId,
+                ':title'   => mb_substr('🔎 ' . $baseTitle, 0, 190),
+                ':content' => $ocrText,
+                ':color'   => 'amber',
+            ]);
+            setFlash('success', sprintf('📝 Erkannter OCR-Text wurde als Cloud-Notiz „🔎 %s“ gespeichert!', $baseTitle));
+            header('Location: notes.php');
+            exit;
+        }
+
+        // Als Datei (.txt oder Office-Light .html) im gewählten Cloud-Ordner speichern
+        $isHtmlDoc = ($saveMode === 'html');
+        $ext       = $isHtmlDoc ? '.html' : '.txt';
+        $mime      = $isHtmlDoc ? 'text/html' : 'text/plain';
+        $cleanName = sanitizeOriginalFilename($baseTitle . $ext);
+
+        if ($isHtmlDoc) {
+            $escapedTitle = htmlspecialchars($baseTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedBody  = nl2br(htmlspecialchars($ocrText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+            $fileBytes    = "<!DOCTYPE html>\n<html lang=\"de\">\n<head><meta charset=\"UTF-8\"><title>{$escapedTitle}</title></head>\n<body>\n<h1>{$escapedTitle}</h1>\n<p>{$escapedBody}</p>\n</body>\n</html>";
+        } else {
+            $fileBytes = $ocrText;
+        }
+
+        $fileSize = strlen($fileBytes);
+        $quota    = checkStorageQuota($pdo, $userId, $fileSize);
+        if (!$quota['allowed']) {
+            setFlash('error', (string)$quota['message']);
+            header('Location: pdf_tools.php#tab-ocr');
+            exit;
+        }
+
+        ensureUploadDirReady();
+        $storedName = sprintf('mc_%s_%s.bin', uniqid('', true), bin2hex(random_bytes(8)));
+        $destPath   = UPLOAD_DIR . $storedName;
+
+        if (@file_put_contents($destPath, $fileBytes) === false) {
+            setFlash('error', 'OCR-Textdatei konnte nicht im Upload-Verzeichnis gespeichert werden.');
+            header('Location: pdf_tools.php#tab-ocr');
+            exit;
+        }
+        @chmod($destPath, 0640);
+
+        if ($targetFolder !== '') {
+            registerFolderHierarchy($pdo, $userId, $targetFolder);
+        }
+
+        $stmtIns = $pdo->prepare(
+            'INSERT INTO files (user_id, filename, original_name, folder_path, file_size, mime_type)
+             VALUES (:uid, :fn, :orig, :folder, :sz, :mime)'
+        );
+        $stmtIns->execute([
+            ':uid'    => $userId,
+            ':fn'     => $storedName,
+            ':orig'   => $cleanName,
+            ':folder' => $targetFolder,
+            ':sz'     => $fileSize,
+            ':mime'   => $mime,
+        ]);
+
+        logAuditEvent($pdo, 'ocr_text_save', sprintf('OCR-Text gespeichert (%s, %s) in „/%s“', $cleanName, formatBytes($fileSize), $targetFolder), $userId, $username);
+        setFlash('success', sprintf('🔎 Erkannter OCR-Text wurde als „%s“ im Ordner „/%s“ gespeichert!', $cleanName, $targetFolder !== '' ? $targetFolder : 'Hauptverzeichnis'));
+        header('Location: pdf_tools.php#tab-ocr');
+        exit;
+    }
 }
 
 // Eigene PDF-Dateien und Bilddateien aus der Cloud für die Auswahl laden
@@ -1176,6 +1265,12 @@ require_once __DIR__ . '/includes/header.php';
                 class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
             ✏️ 5. PDF bearbeiten, ausfüllen &amp; schwärzen
         </button>
+        <?php if ($hasLocalOcr): ?>
+        <button type="button" data-pdf-tab-btn="tab-ocr" onclick="switchPdfTab('tab-ocr')"
+                class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
+            🔎 6. OCR-Texterkennung (Lokal)
+        </button>
+        <?php endif; ?>
     </div>
 
     <!-- =================================================================== -->
@@ -1663,6 +1758,182 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </form>
     </section>
+
+    <?php if ($hasLocalOcr): ?>
+    <!-- =================================================================== -->
+    <!-- REITER 6: LOKALE OCR-TEXTERKENNUNG (100 % OFFLINE / STRATO-FÄHIG)   -->
+    <!-- =================================================================== -->
+    <section id="tab-ocr" data-pdf-tab-panel="tab-ocr" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>🔎 Lokale OCR-Texterkennung (Scans &amp; PDFs in editierbaren Text umwandeln)</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">100 % Lokal &bull; Intranet- &amp; Strato-fähig</span>
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Erkennt gedruckten deutschen und englischen Text aus Fotos, Kamera-Scans oder PDF-Seiten komplett lokal über die auf deinem MiniCloud-Server hinterlegte WebAssembly-Engine (<code>/assets/ocr/</code>) – ohne Internetverbindung und ohne externe Cloud-Dienste.
+                </p>
+            </div>
+        </div>
+
+        <!-- Schritt 1: Quelle & Sprache wählen -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- A) Kamera / Bild vom Gerät -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div class="text-xs font-bold text-slate-800 dark:text-slate-200">1a. 📷 Kamera-Scan oder Bilddatei vom Gerät</div>
+                <input type="file" id="ocrCameraInput" accept="image/*" capture="environment" onchange="loadOcrImageFromFileInput(this)" class="hidden">
+                <input type="file" id="ocrFileInput" accept="image/*" onchange="loadOcrImageFromFileInput(this)" class="hidden">
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="document.getElementById('ocrCameraInput').click()"
+                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer">
+                        📷 Kamera
+                    </button>
+                    <button type="button" onclick="document.getElementById('ocrFileInput').click()"
+                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs cursor-pointer">
+                        🖼️ Bild wählen
+                    </button>
+                </div>
+                <p class="text-[11px] text-slate-500">Funktioniert auf jedem Webspace (auch Strato) ohne Server-Zusatzpakete.</p>
+            </div>
+
+            <!-- B) Bestehendes Bild aus der Cloud -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1b. 🖼️ Oder Bild aus deiner Cloud wählen</label>
+                <select id="ocrCloudImageSelect" onchange="if(this.value) loadOcrFromCloudImage(this.value, this.options[this.selectedIndex].text)"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    <option value="">– Cloud-Bild auswählen –</option>
+                    <?php foreach ($myImages as $imgItem): ?>
+                        <option value="<?= (int)$imgItem['id'] ?>">
+                            🖼️ <?= e((string)$imgItem['original_name']) ?> (<?= e(formatBytes((int)$imgItem['file_size'])) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if ($gsBin !== null): ?>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-200 pt-1">1c. 📄 Oder PDF aus deiner Cloud wählen</label>
+                    <select id="ocrCloudPdfSelect" onchange="if(this.value) loadOcrFromCloudPdf(this.value)"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                        <option value="">– Cloud-PDF auswählen –</option>
+                        <?php foreach ($myPdfs as $pdfItem): ?>
+                            <option value="<?= (int)$pdfItem['id'] ?>">
+                                📄 <?= e((string)$pdfItem['original_name']) ?> (<?= e(formatBytes((int)$pdfItem['file_size'])) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php endif; ?>
+            </div>
+
+            <!-- C) OCR-Einstellungen & Start -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">2. 🌐 Dokumentensprache (lokal installiert)</label>
+                    <select id="ocrLangSelect" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                        <option value="deu" selected>🇩🇪 Deutsch (deu)</option>
+                        <?php if (is_file(__DIR__ . '/assets/ocr/eng.traineddata.gz')): ?>
+                            <option value="deu+eng">🇩🇪 + 🇬🇧 Deutsch &amp; Englisch (deu+eng)</option>
+                            <option value="eng">🇬🇧 Englisch (eng)</option>
+                        <?php endif; ?>
+                    </select>
+                </div>
+                <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="ocrPreprocessBw" checked class="rounded border-slate-300 text-brand-600">
+                    <span>🖨️ <strong>Kontrast-Schärfung</strong> (ideal für abfotografierte Briefe &amp; Belege)</span>
+                </label>
+                <button type="button" id="btnStartOcr" onclick="runLocalOcrNow()"
+                        class="w-full px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                    🔎 Texterkennung (OCR) jetzt starten
+                </button>
+            </div>
+        </div>
+
+        <!-- Fortschrittsbalken -->
+        <div id="ocrProgressBox" class="hidden p-4 rounded-2xl bg-brand-50/70 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 space-y-2">
+            <div class="flex items-center justify-between text-xs font-bold text-brand-800 dark:text-brand-200">
+                <span id="ocrStatusLabel">Initialisiere lokale OCR-Engine…</span>
+                <span id="ocrPercentLabel">0 %</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                <div id="ocrProgressBar" class="h-full bg-brand-600 transition-all duration-200" style="width: 0%;"></div>
+            </div>
+        </div>
+
+        <!-- Vorschau + Erkannter Text nebeneinander -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <!-- Linke Spalte: Bild-/Seitenvorschau -->
+            <div class="lg:col-span-5 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-700 dark:text-slate-200" id="ocrPreviewTitle">👁️ Dokumenten-Vorschau</span>
+                    <div id="ocrPdfPageNav" class="hidden items-center gap-1 text-xs">
+                        <button type="button" onclick="stepOcrPdfPage(-1)" class="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold cursor-pointer">&larr;</button>
+                        <span id="ocrPdfPageIndicator" class="px-1.5 font-semibold">1 / 1</span>
+                        <button type="button" onclick="stepOcrPdfPage(1)" class="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold cursor-pointer">&rarr;</button>
+                        <button type="button" onclick="runLocalOcrAllPdfPages()" class="ml-1 px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px] font-bold cursor-pointer" title="Alle Seiten dieses PDFs nacheinander per OCR auslesen">Alle Seiten</button>
+                    </div>
+                </div>
+                <div class="min-h-[220px] max-h-[420px] overflow-auto rounded-xl bg-slate-200/70 dark:bg-slate-950/60 flex items-center justify-center p-2">
+                    <canvas id="ocrPreviewCanvas" class="hidden max-w-full h-auto rounded shadow-xs bg-white"></canvas>
+                    <p id="ocrPreviewEmptyHint" class="text-xs text-slate-400 italic text-center py-12 px-4">
+                        Noch kein Bild oder PDF ausgewählt. Wähle oben ein Foto, einen Kamera-Scan oder ein Cloud-Dokument aus.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Rechte Spalte: Erkannter Text & Speichern -->
+            <form action="pdf_tools.php" method="post" class="lg:col-span-7 space-y-3">
+                <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+                <input type="hidden" name="action" value="save_ocr_result">
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <label for="ocrResultTextarea" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                        📝 Erkannter Text (direkt bearbeitbar)
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <span id="ocrWordCountBadge" class="text-[11px] text-slate-500">0 Wörter</span>
+                        <button type="button" onclick="copyOcrTextToClipboard()"
+                                class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                            📋 Text kopieren
+                        </button>
+                    </div>
+                </div>
+
+                <textarea
+                    name="ocr_text"
+                    id="ocrResultTextarea"
+                    rows="11"
+                    oninput="updateOcrWordCount()"
+                    placeholder="Hier erscheint nach dem Start der OCR-Texterkennung der erkannte Text aus deinem Dokument…"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-500"
+                ></textarea>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Speichern als</label>
+                        <select name="ocr_save_mode" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                            <option value="txt">📄 Textdatei (.txt) in Cloud</option>
+                            <option value="html">📝 Office-Light-Dokument (.html)</option>
+                            <option value="note">📌 Direkt als Cloud-Notiz</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Titel / Dateiname</label>
+                        <input type="text" name="output_name" id="ocrOutputNameInput" placeholder="z.B. Rechnung_Scan"
+                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Ziel-Ordner in der Cloud</label>
+                        <input type="text" name="target_folder" id="ocrTargetFolderInput" value="Scans"
+                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-1">
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                        💾 Erkannten Text jetzt speichern
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+    <?php endif; ?>
 </div>
 
 <!-- MODAL: TEXT EINGEBEN / BEARBEITEN -->
@@ -2591,9 +2862,302 @@ function renderMergePreviewStrip() {
     });
 }
 
+// ============================================================================
+// 6. 🔎 LOKALE OCR-TEXTERKENNUNG (100 % OFFLINE VIA /assets/ocr/)
+// ============================================================================
+let ocrSourceImageObj = null;
+let ocrPdfPagesData   = []; // [{ page, width, height, dataUri }]
+let ocrCurrentPdfIdx  = 0;
+let ocrScriptLoaded   = false;
+
+function ensureLocalTesseractLoaded() {
+    if (window.Tesseract) {
+        return Promise.resolve();
+    }
+    if (ocrScriptLoaded) {
+        return new Promise((resolve) => {
+            const check = setInterval(() => {
+                if (window.Tesseract) {
+                    clearInterval(check);
+                    resolve();
+                }
+            }, 80);
+        });
+    }
+    ocrScriptLoaded = true;
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'assets/ocr/tesseract.min.js';
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Lokale OCR-Bibliothek (assets/ocr/tesseract.min.js) konnte nicht geladen werden.'));
+        document.head.appendChild(s);
+    });
+}
+
+function drawOcrSourceToCanvas(imgEl) {
+    const canvas = document.getElementById('ocrPreviewCanvas');
+    const emptyHint = document.getElementById('ocrPreviewEmptyHint');
+    if (!canvas || !imgEl) return;
+
+    const maxDim = 2200;
+    let w = imgEl.naturalWidth || imgEl.width || 800;
+    let h = imgEl.naturalHeight || imgEl.height || 1000;
+    if (w > maxDim || h > maxDim) {
+        const scale = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+    }
+
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(imgEl, 0, 0, w, h);
+
+    const bwPre = document.getElementById('ocrPreprocessBw');
+    if (bwPre && bwPre.checked) {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+            const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            // Sanfte S-Kurve zur Kontrastverstärkung für gedruckte Schrift
+            let val = (lum - 128) * 1.45 + 135;
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+            d[i] = d[i + 1] = d[i + 2] = val;
+        }
+        ctx.putImageData(imgData, 0, 0);
+    }
+
+    canvas.classList.remove('hidden');
+    if (emptyHint) emptyHint.classList.add('hidden');
+}
+
+document.getElementById('ocrPreprocessBw')?.addEventListener('change', () => {
+    if (ocrSourceImageObj) {
+        drawOcrSourceToCanvas(ocrSourceImageObj);
+    }
+});
+
+function loadOcrImageFromDataUri(dataUri, labelName) {
+    const img = new Image();
+    img.onload = () => {
+        ocrSourceImageObj = img;
+        drawOcrSourceToCanvas(img);
+        const titleEl = document.getElementById('ocrPreviewTitle');
+        if (titleEl && labelName) {
+            titleEl.textContent = '👁️ ' + labelName;
+        }
+        const outInp = document.getElementById('ocrOutputNameInput');
+        if (outInp && labelName && !outInp.value) {
+            outInp.value = labelName.replace(/\.[a-z0-9]+$/i, '') + '_OCR';
+        }
+    };
+    img.src = dataUri;
+}
+
+function loadOcrImageFromFileInput(inputEl) {
+    if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
+    const f = inputEl.files[0];
+    ocrPdfPagesData = [];
+    document.getElementById('ocrPdfPageNav')?.classList.add('hidden');
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        loadOcrImageFromDataUri(ev.target.result, f.name);
+    };
+    reader.readAsDataURL(f);
+}
+
+function loadOcrFromCloudImage(fileId, labelText) {
+    if (!fileId) return;
+    ocrPdfPagesData = [];
+    document.getElementById('ocrPdfPageNav')?.classList.add('hidden');
+    const cleanName = (labelText || '').replace(/^🖼️\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+    loadOcrImageFromDataUri('download.php?id=' + encodeURIComponent(fileId) + '&inline=1', cleanName || ('Cloud_Bild_' + fileId));
+}
+
+async function loadOcrFromCloudPdf(pdfId) {
+    if (!pdfId) return;
+    setOcrProgress(true, 'Rendere PDF-Seiten für die OCR-Vorschau…', 10);
+    try {
+        const fd = new FormData();
+        fd.append('csrf_token', PDF_CSRF_TOKEN);
+        fd.append('action', 'render_redact_preview');
+        fd.append('source_pdf_id', pdfId);
+
+        const resp = await fetch('pdf_tools.php', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (!data || !data.ok || !Array.isArray(data.pages) || data.pages.length === 0) {
+            alert((data && data.error) ? data.error : 'PDF-Seiten konnten nicht geladen werden.');
+            setOcrProgress(false, '', 0);
+            return;
+        }
+
+        ocrPdfPagesData = data.pages;
+        ocrCurrentPdfIdx = 0;
+        const nav = document.getElementById('ocrPdfPageNav');
+        if (nav) {
+            nav.classList.remove('hidden');
+            nav.classList.add('flex');
+        }
+        const outInp = document.getElementById('ocrOutputNameInput');
+        if (outInp && data.suggestedName) {
+            outInp.value = data.suggestedName.replace(/_geschwaerzt\.pdf$/i, '_OCR');
+        }
+        showOcrPdfPage(0);
+        setOcrProgress(false, '', 0);
+    } catch (e) {
+        alert('Fehler beim Laden des PDFs: ' + e.message);
+        setOcrProgress(false, '', 0);
+    }
+}
+
+function showOcrPdfPage(idx) {
+    if (!ocrPdfPagesData.length) return;
+    ocrCurrentPdfIdx = Math.max(0, Math.min(ocrPdfPagesData.length - 1, idx));
+    const p = ocrPdfPagesData[ocrCurrentPdfIdx];
+    const ind = document.getElementById('ocrPdfPageIndicator');
+    if (ind) {
+        ind.textContent = `${ocrCurrentPdfIdx + 1} / ${ocrPdfPagesData.length}`;
+    }
+    loadOcrImageFromDataUri(p.dataUri, `PDF Seite ${ocrCurrentPdfIdx + 1} von ${ocrPdfPagesData.length}`);
+}
+
+function stepOcrPdfPage(delta) {
+    showOcrPdfPage(ocrCurrentPdfIdx + delta);
+}
+
+function setOcrProgress(visible, label, pct) {
+    const box = document.getElementById('ocrProgressBox');
+    const lbl = document.getElementById('ocrStatusLabel');
+    const pctEl = document.getElementById('ocrPercentLabel');
+    const bar = document.getElementById('ocrProgressBar');
+    if (!box) return;
+    box.classList.toggle('hidden', !visible);
+    if (lbl && label) lbl.textContent = label;
+    const cleanPct = Math.max(0, Math.min(100, Math.round(pct || 0)));
+    if (pctEl) pctEl.textContent = cleanPct + ' %';
+    if (bar) bar.style.width = cleanPct + '%';
+}
+
+async function createLocalOcrWorker(lang) {
+    await ensureLocalTesseractLoaded();
+    const ocrBaseUrl = new URL('assets/ocr', window.location.href).href;
+    return await window.Tesseract.createWorker(lang, 1, {
+        workerPath: ocrBaseUrl + '/worker.min.js',
+        corePath: ocrBaseUrl,
+        langPath: ocrBaseUrl,
+        workerBlobURL: false,
+        logger: (m) => {
+            if (m && typeof m.progress === 'number') {
+                const statusMap = {
+                    'loading tesseract core': 'Lade lokale WebAssembly-OCR-Engine…',
+                    'initializing tesseract': 'Initialisiere OCR-Engine…',
+                    'loading language traineddata': 'Lade lokales Sprachmodell (' + lang + ')…',
+                    'initializing api': 'Starte Texterkennungs-API…',
+                    'recognizing text': 'Erkenne Text im Dokument…'
+                };
+                const deLabel = statusMap[m.status] || ('OCR: ' + (m.status || 'Verarbeite…'));
+                setOcrProgress(true, deLabel, m.progress * 100);
+            }
+        }
+    });
+}
+
+async function runLocalOcrNow() {
+    const canvas = document.getElementById('ocrPreviewCanvas');
+    if (!canvas || canvas.classList.contains('hidden')) {
+        alert('Bitte wähle zuerst ein Foto, einen Kamera-Scan oder ein Cloud-Dokument aus.');
+        return;
+    }
+
+    const btn = document.getElementById('btnStartOcr');
+    const lang = document.getElementById('ocrLangSelect')?.value || 'deu';
+    const outArea = document.getElementById('ocrResultTextarea');
+
+    if (btn) btn.disabled = true;
+    setOcrProgress(true, 'Lade lokale OCR-Engine aus /assets/ocr/…', 5);
+
+    try {
+        const worker = await createLocalOcrWorker(lang);
+        const { data: { text } } = await worker.recognize(canvas);
+        await worker.terminate();
+
+        if (outArea) {
+            outArea.value = (text || '').trim();
+            updateOcrWordCount();
+        }
+        setOcrProgress(true, '✅ Texterkennung abgeschlossen!', 100);
+        setTimeout(() => setOcrProgress(false, '', 0), 2500);
+    } catch (err) {
+        alert('Fehler bei der lokalen OCR-Texterkennung: ' + (err && err.message ? err.message : String(err)));
+        setOcrProgress(false, '', 0);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function runLocalOcrAllPdfPages() {
+    if (!ocrPdfPagesData.length) return;
+    const btn = document.getElementById('btnStartOcr');
+    const lang = document.getElementById('ocrLangSelect')?.value || 'deu';
+    const outArea = document.getElementById('ocrResultTextarea');
+
+    if (btn) btn.disabled = true;
+    setOcrProgress(true, 'Starte mehrseitige PDF-Texterkennung…', 5);
+
+    try {
+        const worker = await createLocalOcrWorker(lang);
+        const collected = [];
+
+        for (let i = 0; i < ocrPdfPagesData.length; i++) {
+            showOcrPdfPage(i);
+            await new Promise((r) => setTimeout(r, 120));
+            const canvas = document.getElementById('ocrPreviewCanvas');
+            setOcrProgress(true, `Erkenne Seite ${i + 1} von ${ocrPdfPagesData.length}…`, Math.round(((i) / ocrPdfPagesData.length) * 100));
+            const { data: { text } } = await worker.recognize(canvas);
+            collected.push(`--- Seite ${i + 1} ---\n` + (text || '').trim());
+        }
+
+        await worker.terminate();
+        if (outArea) {
+            outArea.value = collected.join('\n\n');
+            updateOcrWordCount();
+        }
+        setOcrProgress(true, `✅ Alle ${ocrPdfPagesData.length} Seiten erfolgreich erkannt!`, 100);
+        setTimeout(() => setOcrProgress(false, '', 0), 2500);
+    } catch (err) {
+        alert('Fehler bei der mehrseitigen OCR-Erkennung: ' + (err && err.message ? err.message : String(err)));
+        setOcrProgress(false, '', 0);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function updateOcrWordCount() {
+    const outArea = document.getElementById('ocrResultTextarea');
+    const badge = document.getElementById('ocrWordCountBadge');
+    if (!outArea || !badge) return;
+    const txt = (outArea.value || '').trim();
+    const words = txt === '' ? 0 : txt.split(/\s+/).length;
+    badge.textContent = `${words} ${words === 1 ? 'Wort' : 'Wörter'} · ${txt.length} Zeichen`;
+}
+
+function copyOcrTextToClipboard() {
+    const outArea = document.getElementById('ocrResultTextarea');
+    if (!outArea || !outArea.value) return;
+    navigator.clipboard.writeText(outArea.value).then(() => {
+        alert('📋 Erkannter Text wurde in die Zwischenablage kopiert!');
+    }).catch(() => {
+        outArea.select();
+        document.execCommand('copy');
+    });
+}
+
 if (window.location.hash) {
     const h = window.location.hash.replace('#', '');
-    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress', 'tab-redact'].includes(h)) {
+    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress', 'tab-redact', 'tab-ocr'].includes(h)) {
         switchPdfTab(h);
     }
 }
