@@ -211,19 +211,19 @@ require_once __DIR__ . '/includes/header.php';
                         $daysLeft = (int)$tf['days_left'];
                         ?>
                         <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                            <td class="py-3.5 px-3 sm:px-6">
-                                <div class="flex items-center gap-2.5 sm:gap-3">
-                                    <span class="inline-flex items-center justify-center w-9 sm:w-10 h-8 rounded-lg text-[10px] font-bold <?= e($badge['bg']) ?> <?= e($badge['text']) ?> shrink-0">
+                            <td class="py-3.5 px-2.5 sm:px-6 max-w-[155px] sm:max-w-none overflow-hidden">
+                                <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+                                    <span class="inline-flex items-center justify-center w-8 sm:w-10 h-7 sm:h-8 rounded-lg text-[9px] sm:text-[10px] font-bold <?= e($badge['bg']) ?> <?= e($badge['text']) ?> shrink-0">
                                         <?= e($badge['label']) ?>
                                     </span>
-                                    <div class="min-w-0">
-                                        <p class="font-medium text-slate-900 dark:text-white truncate max-w-[165px] sm:max-w-md">
+                                    <div class="min-w-0 flex-1">
+                                        <p class="font-medium text-slate-900 dark:text-white truncate max-w-[120px] sm:max-w-md">
                                             <?= e((string)$tf['original_name']) ?>
                                         </p>
-                                        <p class="text-[11px] text-slate-400">
+                                        <p class="text-[11px] text-slate-400 truncate max-w-[120px] sm:max-w-none">
                                             Gelöscht am <?= e($delDate) ?> Uhr
                                         </p>
-                                        <p class="sm:hidden text-[11px] font-medium mt-0.5 <?= $daysLeft <= 5 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400' ?>">
+                                        <p class="sm:hidden text-[11px] font-medium mt-0.5 truncate max-w-[120px] <?= $daysLeft <= 5 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400' ?>">
                                             <?= e(formatBytes((int)$tf['file_size'])) ?> • Noch <?= $daysLeft ?> <?= $daysLeft === 1 ? 'Tag' : 'Tage' ?>
                                         </p>
                                     </div>

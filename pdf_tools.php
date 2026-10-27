@@ -524,7 +524,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cmd = array_merge([$qpdfBin, '--empty', '--pages'], $inputPaths, ['--', $outTmp]);
                 $code = runSafeProcess($cmd, $errOut);
             } else {
-                $cmd = array_merge([$gsBin, '-dBATCH', '-dNOPAUSE', '-dSAFER', '-q', '-sDEVICE=pdfwrite', '-sOutputFile=' . $outTmp], $inputPaths);
+                // Für Ghostscript unter striktem AppArmor (/etc/apparmor.d/gs) Eingabedateien in /tmp bereitstellen
+                $gsInputs = [];
+                foreach ($inputPaths as $pIdx => $inP) {
+                    $tmpIn = tempnam(sys_get_temp_dir(), 'mc_gs_in_' . $pIdx . '_') . '.pdf';
+                    if (@copy($inP, $tmpIn)) {
+                        $tempFilesToClean[] = $tmpIn;
+                        $gsInputs[] = $tmpIn;
+                    }
+                }
+                $cmd = array_merge([$gsBin, '-dBATCH', '-dNOPAUSE', '-dSAFER', '-q', '-sDEVICE=pdfwrite', '-sOutputFile=' . $outTmp], $gsInputs);
                 $code = runSafeProcess($cmd, $errOut);
             }
 
@@ -682,7 +691,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $outTmp = tempnam(sys_get_temp_dir(), 'mc_pdf_cmp_') . '.pdf';
+        $inTmp  = tempnam(sys_get_temp_dir(), 'mc_pdf_cmp_in_') . '.pdf';
         try {
+            @copy($srcPath, $inTmp);
             $errOut = null;
             $cmd = [
                 $gsBin,
@@ -694,7 +705,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 '-dCompatibilityLevel=1.4',
                 '-dPDFSETTINGS=/' . $quality,
                 '-sOutputFile=' . $outTmp,
-                $srcPath,
+                $inTmp,
             ];
             $code = runSafeProcess($cmd, $errOut);
 
@@ -734,6 +745,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (is_file($outTmp)) {
                 @unlink($outTmp);
             }
+            if (is_file($inTmp)) {
+                @unlink($inTmp);
+            }
         }
     }
 
@@ -766,6 +780,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         try {
+            // Eingabe-PDF in $tmpDir kopieren, damit Ubuntu AppArmor (/etc/apparmor.d/gs) den Lesezugriff erlaubt
+            $tmpInputPdf = $tmpDir . '/input.pdf';
+            if (!@copy($srcPath, $tmpInputPdf)) {
+                echo json_encode(['ok' => false, 'error' => 'Temporäre PDF-Kopie konnte nicht angelegt werden.']);
+                exit;
+            }
+
             $errOut = null;
             $cmd = [
                 $gsBin,
@@ -779,7 +800,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 '-dFirstPage=1',
                 '-dLastPage=25',
                 '-sOutputFile=' . $tmpDir . '/page_%03d.jpg',
-                $srcPath,
+                $tmpInputPdf,
             ];
             $code = runSafeProcess($cmd, $errOut);
             $pageFiles = glob($tmpDir . '/page_*.jpg') ?: [];
@@ -862,6 +883,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         try {
+            $tmpInputPdf = $tmpDir . '/input.pdf';
+            if (!@copy($srcPath, $tmpInputPdf)) {
+                setFlash('error', 'Temporäre PDF-Kopie konnte nicht angelegt werden.');
+                header('Location: pdf_tools.php#tab-redact');
+                exit;
+            }
+
             $errOut = null;
             // Seiten mit scharfen 200 DPI rastern, damit sämtliche Textlayer unter Schwärzungen/Überschreibungen aufgelöst werden
             $cmd = [
@@ -876,7 +904,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 '-dFirstPage=1',
                 '-dLastPage=50',
                 '-sOutputFile=' . $tmpDir . '/page_%03d.jpg',
-                $srcPath,
+                $tmpInputPdf,
             ];
             $code = runSafeProcess($cmd, $errOut);
             $pageFiles = glob($tmpDir . '/page_*.jpg') ?: [];
