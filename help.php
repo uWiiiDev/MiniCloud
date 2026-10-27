@@ -1278,13 +1278,14 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
         </section>
 
-        <!-- 4c. Aufgaben & Kanban-Board + Notizwand -->
+        <!-- 4c. Aufgaben, Projektmanagement & Kanban-Board + Notizwand -->
         <section id="aufgaben-notizen" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">📋</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Aufgaben, Projekt-Boards (Kanban) &amp; Notizwand</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Projektmanagement, Kanban-Boards &amp; Notizwand</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>🚀 Projektmanagement &amp; Projekt-Zentrale (<a href="projects.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Projekte</a>):</strong> Planen und steuern Sie Projekte mit Projektkürzel, Zeitraum, Status-Ampel, <strong>Meilensteinen &amp; visuellem Gantt-Zeitstrahl</strong>, integrierter <strong>Live-Stoppuhr &amp; Zeiterfassung</strong>, Kosten-/Budgetkontrolle, chronologischem <strong>Projekt-Tagebuch</strong> sowie druckfertigem Projektstatus-Bericht. Jedes Projekt lässt sich direkt mit einem Kanban-Board und einem Gruppenordner verknüpfen sowie komplett mit Benutzern, Gruppen oder per externem Kunden-Link teilen.</li>
                 <li><strong>📋 Aufgaben &amp; Multi-Projekt-Kanban-Boards (<a href="tasks.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Aufgaben</a>):</strong> Legen Sie über <em>„🗂️ + Neues Projekt-Board“</em> beliebig viele eigene Boards für unterschiedliche Projekte (mit eigenem Symbol, Farbschema und Beschreibung) an und wechseln Sie oben per Reiter-Leiste zwischen <em>🌐 Alle Aufgaben</em>, dem <em>🏠 Standard-Board</em> und Ihren Projekt-Boards.</li>
                 <li><strong>🤝 Ganzes Kanban-Board auf einmal teilen:</strong> Über den Button <em>„🤝 Ganzes Board teilen / Bearbeiten“</em> geben Sie ein komplettes Projekt-Board mit 1 Klick für einen Cloud-Benutzer, eine ganze Benutzergruppe oder über einen öffentlichen Teilen-Link (wahlweise <em>Nur Lesen</em> oder <em>Mitarbeit erlaubt</em>) frei. Alle enthaltenen und neu angelegten Karten im Projekt-Board sind sofort für das gesamte Team sichtbar und per Drag &amp; Drop zwischen <em>📌 Offen</em>, <em>⏳ In Arbeit</em> und <em>✅ Erledigt</em> verschiebbar.</li>
                 <li><strong>📌 Notizwand &amp; Pinboard (<a href="notes.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Notizen</a>):</strong> Erstellen Sie farbige digitale Haftnotizen (Gelb, Blau, Grün, Rosa, Violett, Neutral), pinnen Sie wichtige Zettel oben an, filtern Sie nach <code>#Schlagworten</code> und exportieren Sie jede Notiz per Klick auf <strong>☁️ .md</strong> direkt als Markdown-Datei in Ihren Cloud-Ordner <code>Notizen</code>.</li>

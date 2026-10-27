@@ -577,3 +577,73 @@ CREATE TABLE IF NOT EXISTS `office_collab_deltas` (
     CONSTRAINT `fk_ocd_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_ocd_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 27. Tabellen für das leichtgewichtige Projektmanagement-Modul (projects.php)
+CREATE TABLE IF NOT EXISTS `projects` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `code` VARCHAR(24) NOT NULL DEFAULT '',
+    `title` VARCHAR(180) NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `icon` VARCHAR(16) NOT NULL DEFAULT '🚀',
+    `color` VARCHAR(24) NOT NULL DEFAULT 'brand',
+    `status` VARCHAR(24) NOT NULL DEFAULT 'active' COMMENT 'planning, active, on_hold, completed, archived',
+    `start_date` DATE DEFAULT NULL,
+    `end_date` DATE DEFAULT NULL,
+    `budget_hours` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    `budget_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `kanban_board_id` INT UNSIGNED DEFAULT NULL,
+    `group_folder_id` INT UNSIGNED DEFAULT NULL,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `share_token` VARCHAR(64) DEFAULT NULL,
+    `share_mode` VARCHAR(16) NOT NULL DEFAULT 'disabled' COMMENT 'disabled, read, write',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_proj_token` (`share_token`),
+    KEY `idx_proj_user` (`user_id`, `status`),
+    KEY `idx_proj_shared_user` (`shared_user_id`),
+    KEY `idx_proj_group` (`group_id`),
+    CONSTRAINT `fk_proj_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_proj_board` FOREIGN KEY (`kanban_board_id`) REFERENCES `kanban_boards` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_proj_gfolder` FOREIGN KEY (`group_folder_id`) REFERENCES `group_folders` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_proj_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_proj_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `project_milestones` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(200) NOT NULL,
+    `description` VARCHAR(500) NOT NULL DEFAULT '',
+    `start_date` DATE DEFAULT NULL,
+    `due_date` DATE DEFAULT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'open' COMMENT 'open, in_progress, done',
+    `assigned_user_id` INT UNSIGNED DEFAULT NULL,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_pm_project` (`project_id`, `due_date`),
+    CONSTRAINT `fk_pm_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pm_assigned` FOREIGN KEY (`assigned_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `project_entries` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `project_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `entry_type` VARCHAR(20) NOT NULL DEFAULT 'time' COMMENT 'time, expense, log',
+    `entry_date` DATE NOT NULL,
+    `title` VARCHAR(255) NOT NULL,
+    `notes` TEXT DEFAULT NULL,
+    `hours` DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+    `cost_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `milestone_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_pe_project` (`project_id`, `entry_date`),
+    CONSTRAINT `fk_pe_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pe_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pe_milestone` FOREIGN KEY (`milestone_id`) REFERENCES `project_milestones` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

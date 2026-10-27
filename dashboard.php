@@ -234,6 +234,31 @@ if (($appSettings['enable_menti'] ?? '1') === '1') {
     }
 }
 
+// 6b. Aktive Projekte (projects.php)
+$activeProjects = [];
+if (($appSettings['enable_projects'] ?? '1') === '1') {
+    try {
+        $stmtPrj = $pdo->prepare("
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM project_milestones pm WHERE pm.project_id = p.id) AS ms_total,
+                   (SELECT COUNT(*) FROM project_milestones pm WHERE pm.project_id = p.id AND pm.status = 'done') AS ms_done
+            FROM projects p
+            WHERE p.status IN ('planning', 'active', 'on_hold')
+              AND (
+                  p.user_id = :u1
+                  OR p.shared_user_id = :u2
+                  OR (p.group_id IS NOT NULL AND p.group_id IN (SELECT group_id FROM group_members WHERE user_id = :u3))
+              )
+            ORDER BY CASE WHEN p.end_date IS NULL THEN 1 ELSE 0 END, p.end_date ASC, p.updated_at DESC
+            LIMIT 5
+        ");
+        $stmtPrj->execute([':u1' => $userId, ':u2' => $userId, ':u3' => $userId]);
+        $activeProjects = $stmtPrj->fetchAll();
+    } catch (Throwable) {
+        $activeProjects = [];
+    }
+}
+
 // 7. Zuletzt hochgeladene Dateien
 $recentFiles = [];
 try {
@@ -273,6 +298,9 @@ if (($appSettings['enable_contacts'] ?? '1') === '1') {
 }
 if (($appSettings['enable_tasks'] ?? '1') === '1') {
     $availableDashWidgets['tasks'] = ['icon' => '✅', 'label' => 'Offene Aufgaben'];
+}
+if (($appSettings['enable_projects'] ?? '1') === '1') {
+    $availableDashWidgets['projects'] = ['icon' => '🚀', 'label' => 'Aktive Projekte'];
 }
 if (($appSettings['enable_polls'] ?? '1') === '1') {
     $availableDashWidgets['polls'] = ['icon' => '📊', 'label' => 'Aktive Abstimmungen'];
@@ -609,6 +637,53 @@ require_once __DIR__ . '/includes/header.php';
                                 🖥️ Live
                             </a>
                         </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+        <?php endif; ?>
+
+        <?php if (($appSettings['enable_projects'] ?? '1') === '1'): ?>
+        <!-- KACHEL 6b: AKTIVE PROJEKTE -->
+        <section data-dash-widget="projects" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">🚀 Aktive Projekte</h2>
+                <div class="flex items-center gap-2">
+                    <a href="projects.php" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Projekt-Zentrale →</a>
+                    <button type="button" onclick="toggleDashWidget('projects', event)" data-dash-star="projects" class="text-sm hover:scale-125 transition-transform cursor-pointer" title="Im Cockpit ein-/ausblenden">⭐</button>
+                </div>
+            </div>
+
+            <?php if (empty($activeProjects)): ?>
+                <p class="text-xs text-slate-500 dark:text-slate-400 py-2">Noch kein aktives Projekt angelegt.</p>
+                <a href="projects.php" class="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-xl bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 text-xs font-bold hover:bg-brand-100">
+                    ➕ Neues Projekt starten
+                </a>
+            <?php else: ?>
+                <div class="space-y-2.5">
+                    <?php foreach ($activeProjects as $ap):
+                        $msTotal = (int)($ap['ms_total'] ?? 0);
+                        $msDone  = (int)($ap['ms_done'] ?? 0);
+                        $pct     = $msTotal > 0 ? (int)round(($msDone / $msTotal) * 100) : 0;
+                        $endStr  = (string)($ap['end_date'] ?? '');
+                    ?>
+                        <a href="projects.php?id=<?= (int)$ap['id'] ?>" class="block p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-brand-50/40 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/70 transition-colors">
+                            <div class="flex items-center justify-between gap-2 mb-1.5">
+                                <span class="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    <?= e((string)($ap['icon'] ?? '🚀')) ?> <?= e((string)$ap['title']) ?>
+                                </span>
+                                <span class="text-[11px] font-bold text-brand-600 dark:text-brand-400 shrink-0"><?= $pct ?>%</span>
+                            </div>
+                            <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-1.5">
+                                <div class="h-full bg-brand-600 rounded-full" style="width: <?= $pct ?>%"></div>
+                            </div>
+                            <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                <span>🏁 <?= $msDone ?>/<?= $msTotal ?> Meilensteine</span>
+                                <?php if ($endStr !== ''): ?>
+                                    <span>📅 Ziel: <?= date('d.m.Y', strtotime($endStr)) ?></span>
+                                <?php endif; ?>
+                            </div>
+                        </a>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
