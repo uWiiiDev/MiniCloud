@@ -296,10 +296,34 @@ CREATE TABLE IF NOT EXISTS `file_comments` (
     CONSTRAINT `fk_fc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 19. Tabelle für Aufgaben & Kanban-Board (tasks.php)
+-- 19. Tabellen für Projekt-Boards, Aufgaben & Kanban-Board (tasks.php)
+CREATE TABLE IF NOT EXISTS `kanban_boards` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `description` VARCHAR(500) NOT NULL DEFAULT '',
+    `icon` VARCHAR(16) NOT NULL DEFAULT '📋',
+    `color` VARCHAR(24) NOT NULL DEFAULT 'brand',
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `share_token` VARCHAR(64) DEFAULT NULL,
+    `share_mode` VARCHAR(16) NOT NULL DEFAULT 'disabled' COMMENT 'disabled, read, write',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_kb_token` (`share_token`),
+    KEY `idx_kb_user` (`user_id`),
+    KEY `idx_kb_shared_user` (`shared_user_id`),
+    KEY `idx_kb_group` (`group_id`),
+    CONSTRAINT `fk_kb_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_kb_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_kb_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `tasks` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id` INT UNSIGNED NOT NULL,
+    `board_id` INT UNSIGNED DEFAULT NULL,
     `title` VARCHAR(255) NOT NULL,
     `description` TEXT DEFAULT NULL,
     `status` VARCHAR(20) NOT NULL DEFAULT 'todo' COMMENT 'todo, in_progress, done',
@@ -313,9 +337,11 @@ CREATE TABLE IF NOT EXISTS `tasks` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_tasks_user` (`user_id`),
+    KEY `idx_tasks_board` (`board_id`),
     KEY `idx_tasks_shared_user` (`shared_user_id`),
     KEY `idx_tasks_group` (`group_id`),
     CONSTRAINT `fk_tasks_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_tasks_board` FOREIGN KEY (`board_id`) REFERENCES `kanban_boards` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_tasks_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_tasks_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_tasks_file` FOREIGN KEY (`attached_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL

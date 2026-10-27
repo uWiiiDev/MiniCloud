@@ -34,8 +34,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compl
     if (verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
         $taskId = (int)($_POST['task_id'] ?? 0);
         if ($taskId > 0) {
-            $pdo->prepare("UPDATE tasks SET status = 'done' WHERE id = :id AND (user_id = :uid1 OR shared_user_id = :uid2)")
-                ->execute([':id' => $taskId, ':uid1' => $userId, ':uid2' => $userId]);
+            $pdo->prepare(
+                "UPDATE tasks t
+                 LEFT JOIN kanban_boards kb ON kb.id = t.board_id
+                 SET t.status = 'done'
+                 WHERE t.id = :id
+                   AND (
+                       t.user_id = :u1
+                       OR t.shared_user_id = :u2
+                       OR (t.group_id IS NOT NULL AND t.group_id IN (SELECT group_id FROM group_members WHERE user_id = :u3))
+                       OR kb.user_id = :u4
+                       OR kb.shared_user_id = :u5
+                       OR (kb.group_id IS NOT NULL AND kb.group_id IN (SELECT group_id FROM group_members WHERE user_id = :u6))
+                   )"
+            )->execute([
+                ':id' => $taskId,
+                ':u1' => $userId,
+                ':u2' => $userId,
+                ':u3' => $userId,
+                ':u4' => $userId,
+                ':u5' => $userId,
+                ':u6' => $userId,
+            ]);
             setFlash('success', 'Aufgabe als erledigt markiert! ✅');
         }
     }
@@ -111,24 +131,35 @@ if (($appSettings['enable_contacts'] ?? '1') === '1') {
     }
 }
 
-// 3. Offene Aufgaben (todo & in_progress)
+// 3. Offene Aufgaben (todo & in_progress) inkl. Aufgaben aus geteilten Projekt-Boards
 $openTasks = [];
 if (($appSettings['enable_tasks'] ?? '1') === '1') {
     try {
-        $sqlTasks = "SELECT * FROM tasks WHERE status <> 'done' AND (user_id = :uid1 OR shared_user_id = :uid2";
-        $tParams  = [':uid1' => $userId, ':uid2' => $userId];
-        if (!empty($groupIds)) {
-            $phs = [];
-            foreach ($groupIds as $i => $gid) {
-                $ph = ':tg_' . $i;
-                $phs[] = $ph;
-                $tParams[$ph] = $gid;
-            }
-            $sqlTasks .= ' OR group_id IN (' . implode(',', $phs) . ')';
-        }
-        $sqlTasks .= ") ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date ASC, FIELD(priority, 'high', 'medium', 'low') LIMIT 8";
+        $sqlTasks = "
+            SELECT t.*, kb.title AS board_title, kb.icon AS board_icon
+            FROM tasks t
+            LEFT JOIN kanban_boards kb ON kb.id = t.board_id
+            WHERE t.status <> 'done'
+              AND (
+                  t.user_id = :u1
+                  OR t.shared_user_id = :u2
+                  OR (t.group_id IS NOT NULL AND t.group_id IN (SELECT group_id FROM group_members WHERE user_id = :u3))
+                  OR kb.user_id = :u4
+                  OR kb.shared_user_id = :u5
+                  OR (kb.group_id IS NOT NULL AND kb.group_id IN (SELECT group_id FROM group_members WHERE user_id = :u6))
+              )
+            ORDER BY CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END, t.due_date ASC, FIELD(t.priority, 'urgent', 'high', 'medium', 'low')
+            LIMIT 8
+        ";
         $stmtT = $pdo->prepare($sqlTasks);
-        $stmtT->execute($tParams);
+        $stmtT->execute([
+            ':u1' => $userId,
+            ':u2' => $userId,
+            ':u3' => $userId,
+            ':u4' => $userId,
+            ':u5' => $userId,
+            ':u6' => $userId,
+        ]);
         $openTasks = $stmtT->fetchAll();
     } catch (Throwable) {
         $openTasks = [];
