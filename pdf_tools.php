@@ -822,7 +822,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ------------------------------------------------------------------------
-    // 5b. ⬛ PDF unwiderruflich schwärzen (Pixel-Redaction ohne Rest-Textlayer)
+    // 5b. ✏️/⬛ PDF bearbeiten, Text einfügen/ändern/löschen, unterschreiben & schwärzen
     // ------------------------------------------------------------------------
     if ($action === 'apply_redactions') {
         $sourceId       = (int)($_POST['source_pdf_id'] ?? 0);
@@ -837,7 +837,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $srcRow = $stmtF->fetch();
 
         if (!$srcRow || $gsBin === null) {
-            setFlash('error', 'Bitte wähle eine gültige PDF-Datei zum Schwärzen aus.');
+            setFlash('error', 'Bitte wähle eine gültige PDF-Datei zum Bearbeiten aus.');
             header('Location: pdf_tools.php#tab-redact');
             exit;
         }
@@ -851,19 +851,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($outputName === '') {
             $baseOrig = preg_replace('/\.pdf$/i', '', (string)$srcRow['original_name']) ?: 'Dokument';
-            $outputName = $baseOrig . '_geschwaerzt.pdf';
+            $outputName = $baseOrig . '_bearbeitet.pdf';
         }
 
         $tmpDir = sys_get_temp_dir() . '/mc_redact_apply_' . bin2hex(random_bytes(8));
         if (!@mkdir($tmpDir, 0700, true)) {
-            setFlash('error', 'Temporäres Verzeichnis für die Schwärzung konnte nicht angelegt werden.');
+            setFlash('error', 'Temporäres Verzeichnis für die PDF-Bearbeitung konnte nicht angelegt werden.');
             header('Location: pdf_tools.php#tab-redact');
             exit;
         }
 
         try {
             $errOut = null;
-            // Seiten mit scharfen 200 DPI rastern, damit sämtliche Textlayer vor dem Schwärzen aufgelöst werden
+            // Seiten mit scharfen 200 DPI rastern, damit sämtliche Textlayer unter Schwärzungen/Überschreibungen aufgelöst werden
             $cmd = [
                 $gsBin,
                 '-dBATCH',
@@ -871,7 +871,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 '-dSAFER',
                 '-q',
                 '-sDEVICE=jpeg',
-                '-dJPEGQ=90',
+                '-dJPEGQ=92',
                 '-r200',
                 '-dFirstPage=1',
                 '-dLastPage=50',
@@ -883,13 +883,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             sort($pageFiles, SORT_NATURAL);
 
             if ($code !== 0 || empty($pageFiles)) {
-                setFlash('error', 'PDF-Seiten konnten für die Schwärzung nicht verarbeitet werden.');
+                setFlash('error', 'PDF-Seiten konnten für die Bearbeitung nicht verarbeitet werden.');
                 header('Location: pdf_tools.php#tab-redact');
                 exit;
             }
 
+            $fontPaths = [
+                'sans' => '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                'bold' => '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                'mono' => '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+            ];
+
             $finalPages = [];
-            $totalBoxesApplied = 0;
+            $totalEditsApplied = 0;
 
             foreach ($pageFiles as $idx => $pFile) {
                 $pageNum = (string)($idx + 1);
@@ -901,38 +907,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($im === false) {
                     continue;
                 }
+                imagealphablending($im, true);
                 $w = imagesx($im);
                 $h = imagesy($im);
 
                 if (!empty($boxes)) {
                     $colBlack = imagecolorallocate($im, 0, 0, 0);
                     $colWhite = imagecolorallocate($im, 255, 255, 255);
+                    $colBlue  = imagecolorallocate($im, 29, 78, 216);
+                    $colRed   = imagecolorallocate($im, 185, 28, 28);
 
                     foreach ($boxes as $b) {
                         if (!is_array($b)) {
                             continue;
                         }
+                        $itemType = (string)($b['type'] ?? 'redact');
                         $nx = max(0.0, min(1.0, (float)($b['x'] ?? 0.0)));
                         $ny = max(0.0, min(1.0, (float)($b['y'] ?? 0.0)));
                         $nw = max(0.0, min(1.0 - $nx, (float)($b['w'] ?? 0.0)));
                         $nh = max(0.0, min(1.0 - $ny, (float)($b['h'] ?? 0.0)));
-                        if ($nw <= 0.001 || $nh <= 0.001) {
-                            continue;
-                        }
 
                         $x1 = (int)floor($nx * $w);
                         $y1 = (int)floor($ny * $h);
                         $x2 = (int)ceil(($nx + $nw) * $w);
                         $y2 = (int)ceil(($ny + $nh) * $h);
-                        $fillCol = (($b['color'] ?? 'black') === 'white') ? $colWhite : $colBlack;
 
-                        imagefilledrectangle($im, $x1, $y1, $x2, $y2, $fillCol);
-                        $totalBoxesApplied++;
+                        // 1. Hintergrund-Rechteck zeichnen (bei Schwärzung, Deckweiß/Löschen oder Text-Überschreiben)
+                        $bgMode = (string)($b['color'] ?? 'black');
+                        if ($itemType === 'redact' || $bgMode === 'black' || $bgMode === 'white') {
+                            if ($x2 > $x1 && $y2 > $y1 && $bgMode !== 'transparent') {
+                                $fillCol = ($bgMode === 'white') ? $colWhite : $colBlack;
+                                imagefilledrectangle($im, $x1, $y1, $x2, $y2, $fillCol);
+                                $totalEditsApplied++;
+                            }
+                        }
+
+                        // 2. Freihand-Unterschrift (PNG Data-URI) einzeichnen
+                        if ($itemType === 'signature' && !empty($b['sigDataUri'])) {
+                            $sigUri = (string)$b['sigDataUri'];
+                            if (str_starts_with($sigUri, 'data:image/png;base64,')) {
+                                $pngBin = base64_decode(substr($sigUri, 22), true);
+                                if (is_string($pngBin) && $pngBin !== '') {
+                                    $sigIm = @imagecreatefromstring($pngBin);
+                                    if ($sigIm !== false) {
+                                        $sw = imagesx($sigIm);
+                                        $sh = imagesy($sigIm);
+                                        $dstW = max(20, $x2 - $x1);
+                                        $dstH = max(12, $y2 - $y1);
+                                        imagecopyresampled($im, $sigIm, $x1, $y1, 0, 0, $dstW, $dstH, $sw, $sh);
+                                        imagedestroy($sigIm);
+                                        $totalEditsApplied++;
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
+                        // 3. Text einzeichnen (für "Text hinzufügen" & "Text ändern/überschreiben")
+                        $textVal = trim((string)($b['text'] ?? ''));
+                        if ($textVal !== '') {
+                            $textColKey = (string)($b['textColor'] ?? 'black');
+                            $textCol = $colBlack;
+                            if ($textColKey === 'blue') {
+                                $textCol = $colBlue;
+                            } elseif ($textColKey === 'red') {
+                                $textCol = $colRed;
+                            } elseif ($textColKey === 'white') {
+                                $textCol = $colWhite;
+                            }
+
+                            $fontKey  = (string)($b['fontStyle'] ?? 'sans');
+                            $fontFile = $fontPaths[$fontKey] ?? $fontPaths['sans'];
+                            // Relative Schriftgröße (bezogen auf Seitenhöhe, Standard ~0.016)
+                            $relSize  = max(0.008, min(0.08, (float)($b['fontSizeRel'] ?? 0.016)));
+                            $ptSize   = max(8.0, $relSize * $h * 0.76);
+                            $lineStep = (int)round($ptSize * 1.42);
+
+                            $lines = preg_split('/\r\n|\r|\n/', $textVal) ?: [$textVal];
+                            $curY  = $y1 + (int)round($ptSize * 1.12) + 4;
+                            $padX  = $x1 + 6;
+
+                            if (function_exists('imagettftext') && is_file($fontFile)) {
+                                foreach ($lines as $ln) {
+                                    imagettftext($im, $ptSize, 0.0, $padX, $curY, $textCol, $fontFile, $ln);
+                                    $curY += $lineStep;
+                                }
+                            } else {
+                                foreach ($lines as $ln) {
+                                    imagestring($im, 5, $padX, $curY - 14, $ln, $textCol);
+                                    $curY += 18;
+                                }
+                            }
+                            $totalEditsApplied++;
+                        }
                     }
                 }
 
                 ob_start();
-                imagejpeg($im, null, 88);
+                imagejpeg($im, null, 90);
                 $jpegBytes = (string)ob_get_clean();
                 imagedestroy($im);
 
@@ -946,12 +1018,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (empty($finalPages)) {
-                setFlash('error', 'Geschwärztes PDF konnte nicht erzeugt werden.');
+                setFlash('error', 'Bearbeitetes PDF konnte nicht erzeugt werden.');
                 header('Location: pdf_tools.php#tab-redact');
                 exit;
             }
 
-            // Neues PDF ohne alten Textlayer zusammenbauen
+            // Neues PDF zusammenbauen
             $pdfBytes = buildNativePdfFromJpegPages($finalPages, 'original');
             $saved = saveGeneratedPdfToCloud($pdo, $userId, $username, $pdfBytes, $outputName, $targetFolder);
 
@@ -964,9 +1036,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setFlash(
                 'success',
                 sprintf(
-                    '⬛ PDF „%s“ (%d Schwärzungen physisch eingebrannt, kein auslesbarer Resttext) wurde im Ordner „/%s“ gespeichert!',
+                    '✅ PDF „%s“ (%d Bearbeitungen/Schwärzungen fest eingebrannt) wurde im Ordner „/%s“ gespeichert!',
                     $saved['filename'],
-                    $totalBoxesApplied,
+                    $totalEditsApplied,
                     $saved['folder']
                 )
             );
@@ -1074,7 +1146,7 @@ require_once __DIR__ . '/includes/header.php';
         </button>
         <button type="button" data-pdf-tab-btn="tab-redact" onclick="switchPdfTab('tab-redact')"
                 class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
-            ⬛ 5. PDF schwärzen (DSGVO-Sicher)
+            ✏️ 5. PDF bearbeiten, ausfüllen &amp; schwärzen
         </button>
     </div>
 
@@ -1401,18 +1473,18 @@ require_once __DIR__ . '/includes/header.php';
     </section>
 
     <!-- =================================================================== -->
-    <!-- REITER 5: PDF UNWIDERRUFLICH SCHWÄRZEN (DSGVO-REDACTION)            -->
+    <!-- REITER 5: PDF-EDITOR (TEXT EINFÜGEN/ÄNDERN/LÖSCHEN, UNTERSCHRIFT & SCHWÄRZEN) -->
     <!-- =================================================================== -->
     <section id="tab-redact" data-pdf-tab-panel="tab-redact" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
         <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">⬛ PDF unwiderruflich schwärzen (DSGVO-konforme Pixel-Schwärzung)</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✏️ Interaktiver PDF-Editor: Text hinzufügen, ändern, löschen, unterschreiben &amp; schwärzen</h2>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                    Ziehe mit der Maus oder dem Finger schwarze (oder weiße) Balken über sensible Textstellen wie IBANs, Gehälter, Adressen oder Namen. Beim Speichern werden die Balken <strong>fest in die Seitenpixel eingebrannt</strong> und der darunterliegende Text-Layer restlos entfernt – ein nachträgliches Herauslesen per Copy &amp; Paste ist unmöglich!
+                    Fülle Formulare aus (<strong>🔤 Text hinzufügen</strong>), überschreibe bestehenden Text (<strong>✏️ Text ändern</strong>), entferne Stellen per <strong>🧹 Deckweiß</strong>, setze deine <strong>✍️ Freihand-Unterschrift</strong> oder schwärze vertrauliche Daten <strong>⬛ DSGVO-sicher</strong>. Alle Änderungen lassen sich frei auf der Seite verschieben und werden beim Speichern fest in das neue PDF eingebrannt!
                 </p>
             </div>
             <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold shrink-0">
-                🛡️ Echte Pixel-Schwärzung (Kein Rest-Textlayer)
+                🛡️ Echte Pixel-Einbrennung (200 DPI)
             </span>
         </div>
 
@@ -1421,7 +1493,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="sm:col-span-8">
                 <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">1. PDF-Datei aus deiner Cloud auswählen</label>
                 <select id="redactPdfSelect" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
-                    <option value="">– Bitte PDF zum Schwärzen auswählen –</option>
+                    <option value="">– Bitte PDF zum Bearbeiten auswählen –</option>
                     <?php foreach ($myPdfs as $pdf): ?>
                         <option value="<?= (int)$pdf['id'] ?>">📄 <?= e((string)$pdf['original_name']) ?> (<?= e(formatBytes((int)$pdf['file_size'])) ?>)</option>
                     <?php endforeach; ?>
@@ -1430,56 +1502,114 @@ require_once __DIR__ . '/includes/header.php';
             <div class="sm:col-span-4">
                 <button type="button" id="btnLoadRedactPreview" onclick="loadRedactPdfPreview()"
                         class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
-                    🔍 Seiten zum Schwärzen laden
+                    🔍 PDF-Seiten im Editor öffnen
                 </button>
             </div>
         </div>
 
         <div id="redactLoadingBox" class="hidden p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-center text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-            ⏳ PDF-Seiten werden für die Schwärzung aufbereitet...
+            ⏳ PDF-Seiten werden für den Editor aufbereitet...
         </div>
 
-        <!-- Schritt 2: Interaktiver Schwärzungs-Arbeitsbereich -->
+        <!-- Schritt 2: Interaktiver PDF-Editor-Arbeitsbereich -->
         <form id="redactApplyForm" action="pdf_tools.php" method="post" class="hidden space-y-5" onsubmit="return prepareRedactionSubmit()">
             <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
             <input type="hidden" name="action" value="apply_redactions">
             <input type="hidden" name="source_pdf_id" id="redactFormSourceId" value="">
             <input type="hidden" name="redactions_json" id="redactFormJson" value="{}">
 
-            <!-- Werkzeugleiste für Schwärzungs-Balken -->
-            <div class="sticky top-16 z-30 p-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border border-slate-300 dark:border-slate-700 shadow-md flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Stift-Farbe:</span>
-                    <button type="button" id="btnRedactColorBlack" onclick="setRedactColor('black')"
-                            class="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold ring-2 ring-brand-500 cursor-pointer">
-                        ⬛ Schwarz (Standard)
-                    </button>
-                    <button type="button" id="btnRedactColorWhite" onclick="setRedactColor('white')"
-                            class="px-3 py-1.5 rounded-xl bg-white text-slate-800 border border-slate-300 text-xs font-bold cursor-pointer">
-                        ⬜ Deckweiß
-                    </button>
+            <!-- Obere Werkzeugleiste des PDF-Editors -->
+            <div class="sticky top-16 z-30 p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border border-slate-300 dark:border-slate-700 shadow-md space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-300 mr-1">Werkzeug:</span>
 
-                    <span class="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1"></span>
+                        <button type="button" data-editor-tool="add_text" onclick="setPdfEditorTool('add_text')"
+                                class="px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold ring-2 ring-brand-500 cursor-pointer">
+                            🔤 Text hinzufügen
+                        </button>
 
-                    <button type="button" onclick="undoLastRedactionBox()"
-                            class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer">
-                        ↩️ Letzten Balken rückgängig
-                    </button>
-                    <button type="button" onclick="clearAllRedactionBoxes()"
-                            class="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-semibold cursor-pointer">
-                        🗑️ Alle Balken löschen
-                    </button>
+                        <button type="button" data-editor-tool="replace_text" onclick="setPdfEditorTool('replace_text')"
+                                class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            ✏️ Text ändern (Überschreiben)
+                        </button>
+
+                        <button type="button" data-editor-tool="erase" onclick="setPdfEditorTool('erase')"
+                                class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            🧹 Text löschen (Deckweiß)
+                        </button>
+
+                        <button type="button" data-editor-tool="redact" onclick="setPdfEditorTool('redact')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer">
+                            ⬛ Schwärzen (DSGVO)
+                        </button>
+
+                        <button type="button" onclick="openSignaturePadModal()"
+                                class="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700 text-xs font-bold cursor-pointer">
+                            ✍️ Unterschrift einfügen
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="undoLastRedactionBox()"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
+                                title="Letzte Aktion rückgängig">
+                            ↩️ Rückgängig
+                        </button>
+                        <button type="button" onclick="clearAllRedactionBoxes()"
+                                class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-semibold cursor-pointer"
+                                title="Alle Elemente auf allen Seiten entfernen">
+                            🗑️ Alles leeren
+                        </button>
+                        <span id="redactBoxCounter" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200">
+                            0 Elemente
+                        </span>
+                    </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <span id="redactBoxCounter" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200">
-                        0 Balken markiert
-                    </span>
+                <!-- Zusatz-Leiste für Schriftgröße, Schriftart, Farbe & Schnell-Stempel -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800 text-xs">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <label class="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                            <span>Größe:</span>
+                            <select id="pdfEditorFontSize" class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
+                                <option value="0.012">Klein (10pt)</option>
+                                <option value="0.016" selected>Normal (12pt)</option>
+                                <option value="0.022">Groß (16pt)</option>
+                                <option value="0.030">Überschrift (22pt)</option>
+                            </select>
+                        </label>
+
+                        <label class="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                            <span>Schrift:</span>
+                            <select id="pdfEditorFontStyle" class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
+                                <option value="sans" selected>Standard (Sans)</option>
+                                <option value="bold">Fett (Bold)</option>
+                                <option value="mono">Schreibmaschine (Mono)</option>
+                            </select>
+                        </label>
+
+                        <label class="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                            <span>Textfarbe:</span>
+                            <select id="pdfEditorTextColor" class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
+                                <option value="black" selected>⚫ Schwarz</option>
+                                <option value="blue">🔵 Dunkelblau (Füller)</option>
+                                <option value="red">🔴 Rot</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-[11px] font-semibold text-slate-500">Schnell-Stempel:</span>
+                        <button type="button" onclick="insertQuickStamp('✓')" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-bold cursor-pointer" title="Häkchen für Ankreuzfelder">✓ Häkchen</button>
+                        <button type="button" onclick="insertQuickStamp('✗')" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-bold cursor-pointer" title="Kreuz für Ankreuzfelder">✗ Kreuz</button>
+                        <button type="button" onclick="insertQuickStamp('<?= date('d.m.Y') ?>')" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-semibold cursor-pointer">📅 <?= date('d.m.Y') ?></button>
+                    </div>
                 </div>
             </div>
 
-            <p class="text-xs text-slate-500 dark:text-slate-400">
-                💡 <strong>Bedienung:</strong> Ziehe mit gedrückter Maustaste (oder mit dem Finger auf dem Touchscreen) einfach einen Rahmen über den zu schwärzenden Text. Ein Klick auf das rote <strong>&times;</strong> an einem Balken entfernt ihn wieder.
+            <p id="pdfEditorHintText" class="text-xs text-slate-600 dark:text-slate-300 bg-brand-50/70 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 px-3.5 py-2 rounded-xl">
+                💡 <strong>🔤 Modus „Text hinzufügen“:</strong> Klicke oder ziehe an die gewünschte Stelle auf der PDF-Seite, um neuen Text einzutragen. Du kannst eingefügte Elemente jederzeit mit der Maus / dem Finger verschieben oder per <strong>✏️</strong> nachträglich ändern!
             </p>
 
             <!-- Seiten-Container -->
@@ -1493,13 +1623,13 @@ require_once __DIR__ . '/includes/header.php';
                            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dateiname des geschwärzten PDFs</label>
-                    <input type="text" name="output_name" id="redactOutputName" placeholder="Dokument_geschwaerzt.pdf"
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dateiname des bearbeiteten PDFs</label>
+                    <input type="text" name="output_name" id="redactOutputName" placeholder="Dokument_bearbeitet.pdf"
                            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
                 </div>
                 <div>
-                    <button type="submit" class="w-full px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-brand-600 hover:bg-black dark:hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer">
-                        ⬛ Unwiderruflich schwärzen &amp; speichern
+                    <button type="submit" class="w-full px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer">
+                        💾 PDF-Änderungen anwenden &amp; speichern
                     </button>
                 </div>
             </div>
@@ -1507,11 +1637,88 @@ require_once __DIR__ . '/includes/header.php';
     </section>
 </div>
 
+<!-- MODAL: TEXT EINGEBEN / BEARBEITEN -->
+<div id="pdfTextEditModal" class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h3 id="pdfTextModalTitle" class="text-base font-bold text-slate-900 dark:text-white">🔤 Text in PDF einfügen</h3>
+            <button type="button" onclick="closePdfTextModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer">✕</button>
+        </div>
+        <div class="p-5 space-y-3.5 text-xs sm:text-sm">
+            <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Text (ein- oder mehrzeilig)</label>
+                <textarea id="pdfTextModalInput" rows="3" placeholder="Gewünschten Text hier eingeben..." class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Schriftgröße</label>
+                    <select id="pdfTextModalSize" class="w-full px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                        <option value="0.012">Klein</option>
+                        <option value="0.016">Normal</option>
+                        <option value="0.022">Groß</option>
+                        <option value="0.030">Sehr groß</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Stil</label>
+                    <select id="pdfTextModalStyle" class="w-full px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                        <option value="sans">Standard</option>
+                        <option value="bold">Fett</option>
+                        <option value="mono">Mono</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Farbe</label>
+                    <select id="pdfTextModalColor" class="w-full px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                        <option value="black">⚫ Schwarz</option>
+                        <option value="blue">🔵 Blau</option>
+                        <option value="red">🔴 Rot</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="pdfTextModalWhiteBg" class="rounded border-slate-300 text-brand-600">
+                    <span>⬜ Weißer Hintergrund (überdeckt vorhandenen Text darunter komplett)</span>
+                </label>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="closePdfTextModal()" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">Abbrechen</button>
+                <button type="button" onclick="savePdfTextModal()" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold cursor-pointer">Übernehmen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: FREIHAND-UNTERSCHRIFT ZEICHNEN -->
+<div id="pdfSignatureModal" class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">✍️ Freihand-Unterschrift zeichnen</h3>
+            <button type="button" onclick="closeSignaturePadModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer">✕</button>
+        </div>
+        <div class="p-5 space-y-3 text-xs sm:text-sm">
+            <p class="text-xs text-slate-500">Unterschreibe hier mit der Maus oder dem Finger – anschließend kannst du die Unterschrift frei auf der PDF-Seite verschieben:</p>
+            <div class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white overflow-hidden">
+                <canvas id="sigPadCanvas" width="380" height="140" class="w-full h-[140px] block cursor-crosshair" style="touch-action:none;"></canvas>
+            </div>
+            <div class="flex items-center justify-between pt-2">
+                <button type="button" onclick="clearSigPadCanvas()" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">🧹 Feld leeren</button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeSignaturePadModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">Abbrechen</button>
+                    <button type="button" onclick="insertSignatureFromPad()" class="px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold cursor-pointer">✍️ Auf PDF setzen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const PDF_CSRF_TOKEN = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-let currentRedactColor = 'black';
-let redactionsByPage   = {}; // { "1": [{x, y, w, h, color}], ... }
-let redactionHistory   = []; // [{page, index}]
+let currentEditorTool  = 'add_text'; // 'add_text' | 'replace_text' | 'erase' | 'redact'
+let redactionsByPage   = {}; // { "1": [{type, x, y, w, h, color, text, fontSizeRel, fontStyle, textColor, sigDataUri}], ... }
+let redactionHistory   = [];
+let activeTextEditMeta = null; // { pageNum, idx, isNew, draftBox }
 
 function switchPdfTab(tabId) {
     document.querySelectorAll('[data-pdf-tab-panel]').forEach(p => {
@@ -1525,15 +1732,34 @@ function switchPdfTab(tabId) {
     });
 }
 
-function setRedactColor(col) {
-    currentRedactColor = (col === 'white') ? 'white' : 'black';
-    const bBlack = document.getElementById('btnRedactColorBlack');
-    const bWhite = document.getElementById('btnRedactColorWhite');
-    if (bBlack && bWhite) {
-        bBlack.classList.toggle('ring-2', currentRedactColor === 'black');
-        bBlack.classList.toggle('ring-brand-500', currentRedactColor === 'black');
-        bWhite.classList.toggle('ring-2', currentRedactColor === 'white');
-        bWhite.classList.toggle('ring-brand-500', currentRedactColor === 'white');
+function setPdfEditorTool(tool) {
+    currentEditorTool = tool;
+    document.querySelectorAll('[data-editor-tool]').forEach(btn => {
+        const isAct = btn.getAttribute('data-editor-tool') === tool;
+        btn.classList.toggle('ring-2', isAct);
+        btn.classList.toggle('ring-brand-500', isAct);
+        if (btn.getAttribute('data-editor-tool') !== 'redact') {
+            if (isAct) {
+                btn.classList.add('bg-brand-600', 'text-white');
+                btn.classList.remove('bg-white', 'dark:bg-slate-800', 'text-slate-800', 'dark:text-slate-100');
+            } else {
+                btn.classList.remove('bg-brand-600', 'text-white');
+                btn.classList.add('bg-white', 'dark:bg-slate-800', 'text-slate-800', 'dark:text-slate-100');
+            }
+        }
+    });
+
+    const hintEl = document.getElementById('pdfEditorHintText');
+    if (hintEl) {
+        if (tool === 'add_text') {
+            hintEl.innerHTML = '💡 <strong>🔤 Modus „Text hinzufügen“:</strong> Klicke oder ziehe an die gewünschte Stelle auf der PDF-Seite, um neuen Text (z. B. zum Ausfüllen von Formularen) einzutragen.';
+        } else if (tool === 'replace_text') {
+            hintEl.innerHTML = '💡 <strong>✏️ Modus „Text ändern (Überschreiben)“:</strong> Ziehe einen Rahmen direkt über das alte Wort oder Datum – der alte Text wird weiß überdeckt und durch deinen neuen Text ersetzt!';
+        } else if (tool === 'erase') {
+            hintEl.innerHTML = '💡 <strong>🧹 Modus „Text löschen (Deckweiß)“:</strong> Ziehe einen Rahmen über Text oder Elemente, die weiß überdeckt und restlos gelöscht werden sollen.';
+        } else {
+            hintEl.innerHTML = '💡 <strong>⬛ Modus „Schwärzen (DSGVO)“:</strong> Ziehe schwarze Balken über vertrauliche Daten. Beim Speichern wird der Text darunter physisch aus dem PDF entfernt.';
+        }
     }
 }
 
@@ -1544,7 +1770,7 @@ function updateRedactCounter() {
     });
     const el = document.getElementById('redactBoxCounter');
     if (el) {
-        el.textContent = `${total} ${total === 1 ? 'Balken' : 'Balken'} markiert`;
+        el.textContent = `${total} ${total === 1 ? 'Element' : 'Elemente'}`;
     }
 }
 
@@ -1583,7 +1809,8 @@ async function loadRedactPdfPreview() {
         updateRedactCounter();
 
         document.getElementById('redactFormSourceId').value = String(pdfId);
-        document.getElementById('redactOutputName').value   = data.suggestedName || 'Dokument_geschwaerzt.pdf';
+        const suggested = (data.suggestedName || 'Dokument.pdf').replace(/_geschwaerzt\.pdf$/i, '_bearbeitet.pdf');
+        document.getElementById('redactOutputName').value   = suggested;
         document.getElementById('redactTargetFolder').value = data.folder || 'Scans';
 
         container.innerHTML = '';
@@ -1596,7 +1823,7 @@ async function loadRedactPdfPreview() {
 
             const header = document.createElement('div');
             header.className = 'flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 max-w-3xl mx-auto';
-            header.innerHTML = `<span>📄 Seite ${pageNum}</span><span class="text-[11px] font-normal text-slate-400">Mit Maus oder Finger Balken über Text ziehen</span>`;
+            header.innerHTML = `<span>📄 Seite ${pageNum}</span><span class="text-[11px] font-normal text-slate-400">Klicken/Ziehen zum Einfügen · Elemente per Drag &amp; Drop verschiebbar</span>`;
 
             const stage = document.createElement('div');
             stage.className = 'relative max-w-3xl mx-auto bg-white shadow-md rounded-lg overflow-hidden select-none cursor-crosshair border border-slate-300 dark:border-slate-700';
@@ -1645,7 +1872,7 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
     };
 
     const onStart = (clientX, clientY, target) => {
-        if (target && target.closest('[data-redact-del]')) return;
+        if (target && target.closest('[data-editor-item]')) return;
         isDrawing = true;
         const pt = getRelCoords(clientX, clientY);
         startX = pt.x;
@@ -1653,8 +1880,15 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
 
         draftBoxEl = document.createElement('div');
         draftBoxEl.className = 'absolute pointer-events-none border-2 border-brand-500';
-        draftBoxEl.style.backgroundColor = currentRedactColor === 'white' ? '#ffffff' : '#000000';
-        draftBoxEl.style.opacity = '0.88';
+        if (currentEditorTool === 'redact') {
+            draftBoxEl.style.backgroundColor = '#000000';
+            draftBoxEl.style.opacity = '0.85';
+        } else if (currentEditorTool === 'erase' || currentEditorTool === 'replace_text') {
+            draftBoxEl.style.backgroundColor = '#ffffff';
+            draftBoxEl.style.opacity = '0.92';
+        } else {
+            draftBoxEl.style.backgroundColor = 'rgba(37, 99, 235, 0.08)';
+        }
         overlay.appendChild(draftBoxEl);
     };
 
@@ -1679,17 +1913,54 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
             draftBoxEl = null;
         }
         const pt = getRelCoords(clientX, clientY);
-        const x = Math.min(startX, pt.x);
-        const y = Math.min(startY, pt.y);
-        const w = Math.abs(pt.x - startX);
-        const h = Math.abs(pt.y - startY);
-
-        if (w < 0.008 || h < 0.005) return;
+        let x = Math.min(startX, pt.x);
+        let y = Math.min(startY, pt.y);
+        let w = Math.abs(pt.x - startX);
+        let h = Math.abs(pt.y - startY);
 
         if (!Array.isArray(redactionsByPage[pageNum])) {
             redactionsByPage[pageNum] = [];
         }
-        redactionsByPage[pageNum].push({ x, y, w, h, color: currentRedactColor });
+
+        // Im Modus "Text hinzufügen" reicht auch ein einfacher Klick ohne Ziehen
+        if (currentEditorTool === 'add_text' || currentEditorTool === 'replace_text') {
+            if (w < 0.03) w = 0.24;
+            if (h < 0.015) h = 0.035;
+            if (x + w > 0.98) x = Math.max(0, 0.98 - w);
+
+            const defaultSize  = parseFloat(document.getElementById('pdfEditorFontSize')?.value || '0.016');
+            const defaultStyle = document.getElementById('pdfEditorFontStyle')?.value || 'sans';
+            const defaultColor = document.getElementById('pdfEditorTextColor')?.value || 'black';
+
+            openPdfTextModal({
+                pageNum,
+                idx: -1,
+                item: {
+                    type: currentEditorTool,
+                    x,
+                    y,
+                    w,
+                    h,
+                    color: currentEditorTool === 'replace_text' ? 'white' : 'transparent',
+                    text: '',
+                    fontSizeRel: defaultSize,
+                    fontStyle: defaultStyle,
+                    textColor: defaultColor
+                }
+            });
+            return;
+        }
+
+        if (w < 0.008 || h < 0.005) return;
+
+        redactionsByPage[pageNum].push({
+            type: 'redact',
+            x,
+            y,
+            w,
+            h,
+            color: currentEditorTool === 'erase' ? 'white' : 'black'
+        });
         redactionHistory.push(pageNum);
         renderPageRedactionBoxes(pageNum);
         updateRedactCounter();
@@ -1697,6 +1968,7 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
 
     stage.addEventListener('mousedown', e => {
         if (e.button !== 0) return;
+        if (e.target && e.target.closest('[data-editor-item]')) return;
         e.preventDefault();
         onStart(e.clientX, e.clientY, e.target);
     });
@@ -1709,7 +1981,7 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
 
     stage.addEventListener('touchstart', e => {
         if (e.touches.length !== 1) return;
-        if (e.target && e.target.closest('[data-redact-del]')) return;
+        if (e.target && e.target.closest('[data-editor-item]')) return;
         e.preventDefault();
         const t = e.touches[0];
         onStart(t.clientX, t.clientY, e.target);
@@ -1729,25 +2001,77 @@ function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
 
 function renderPageRedactionBoxes(pageNum) {
     const overlay = document.querySelector(`[data-redact-overlay="${pageNum}"]`);
-    if (!overlay) return;
+    const stage   = document.querySelector(`[data-redact-page="${pageNum}"]`);
+    if (!overlay || !stage) return;
     overlay.innerHTML = '';
     const boxes = redactionsByPage[pageNum] || [];
+    const stageH = Math.max(300, stage.clientHeight || 600);
 
     boxes.forEach((b, idx) => {
         const el = document.createElement('div');
-        el.className = 'absolute group';
+        el.setAttribute('data-editor-item', '1');
+        el.className = 'absolute group cursor-move select-none';
         el.style.left   = (b.x * 100) + '%';
         el.style.top    = (b.y * 100) + '%';
         el.style.width  = (b.w * 100) + '%';
         el.style.height = (b.h * 100) + '%';
-        el.style.backgroundColor = b.color === 'white' ? '#ffffff' : '#000000';
-        el.style.border = b.color === 'white' ? '1px dashed #94a3b8' : '1px solid #000000';
+
+        if (b.color === 'black') {
+            el.style.backgroundColor = '#000000';
+            el.style.border = '1px solid #000000';
+        } else if (b.color === 'white') {
+            el.style.backgroundColor = '#ffffff';
+            el.style.border = '1px dashed #64748b';
+        } else {
+            el.style.backgroundColor = 'transparent';
+            el.style.border = '1px dashed rgba(37, 99, 235, 0.55)';
+        }
+
+        // Inhalt darstellen: Unterschrift oder Text
+        if (b.type === 'signature' && b.sigDataUri) {
+            const sigImg = document.createElement('img');
+            sigImg.src = b.sigDataUri;
+            sigImg.className = 'w-full h-full object-contain pointer-events-none';
+            el.appendChild(sigImg);
+        } else if (b.text) {
+            const txtEl = document.createElement('div');
+            txtEl.className = 'w-full h-full px-1 py-0.5 whitespace-pre-line leading-tight pointer-events-none overflow-visible';
+            const pxFont = Math.max(9, Math.round((b.fontSizeRel || 0.016) * stageH));
+            txtEl.style.fontSize = pxFont + 'px';
+            txtEl.style.fontWeight = (b.fontStyle === 'bold') ? '700' : '500';
+            txtEl.style.fontFamily = (b.fontStyle === 'mono') ? 'monospace' : 'sans-serif';
+            txtEl.style.color = b.textColor === 'blue' ? '#1d4ed8' : (b.textColor === 'red' ? '#b91c1c' : '#000000');
+            txtEl.textContent = b.text;
+            el.appendChild(txtEl);
+
+            el.ondblclick = (ev) => {
+                ev.stopPropagation();
+                openPdfTextModal({ pageNum, idx, item: b });
+            };
+        }
+
+        // Aktions-Buttons oben rechts am Element (Bearbeiten & Löschen)
+        const actionsWrap = document.createElement('div');
+        actionsWrap.className = 'absolute -top-3 -right-2 flex items-center gap-1 z-20';
+
+        if (b.text !== undefined && b.type !== 'signature') {
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.title = 'Text bearbeiten';
+            editBtn.className = 'w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs hover:scale-110 cursor-pointer';
+            editBtn.textContent = '✏️';
+            editBtn.onclick = (ev) => {
+                ev.stopPropagation();
+                openPdfTextModal({ pageNum, idx, item: b });
+            };
+            actionsWrap.appendChild(editBtn);
+        }
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.setAttribute('data-redact-del', '1');
-        delBtn.title = 'Diesen Schwärzungs-Balken entfernen';
-        delBtn.className = ' absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center shadow-xs opacity-90 hover:scale-110 cursor-pointer';
+        delBtn.title = 'Element entfernen';
+        delBtn.className = 'w-5 h-5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center shadow-xs hover:scale-110 cursor-pointer';
         delBtn.innerHTML = '&times;';
         delBtn.onclick = (ev) => {
             ev.stopPropagation();
@@ -1755,10 +2079,273 @@ function renderPageRedactionBoxes(pageNum) {
             renderPageRedactionBoxes(pageNum);
             updateRedactCounter();
         };
+        actionsWrap.appendChild(delBtn);
+        el.appendChild(actionsWrap);
 
-        el.appendChild(delBtn);
+        // Drag & Drop zum freien Verschieben des Elements auf der Seite
+        makeEditorItemDraggable(el, stage, b, pageNum);
+
         overlay.appendChild(el);
     });
+}
+
+function makeEditorItemDraggable(el, stage, itemObj, pageNum) {
+    let dragging = false;
+    let startClientX = 0;
+    let startClientY = 0;
+    let origX = 0;
+    let origY = 0;
+
+    const startDrag = (cx, cy, target) => {
+        if (target && target.closest('button')) return;
+        dragging = true;
+        startClientX = cx;
+        startClientY = cy;
+        origX = itemObj.x;
+        origY = itemObj.y;
+    };
+
+    const moveDrag = (cx, cy) => {
+        if (!dragging) return;
+        const rect = stage.getBoundingClientRect();
+        const dx = (cx - startClientX) / Math.max(1, rect.width);
+        const dy = (cy - startClientY) / Math.max(1, rect.height);
+        itemObj.x = Math.max(0, Math.min(1 - itemObj.w, origX + dx));
+        itemObj.y = Math.max(0, Math.min(1 - itemObj.h, origY + dy));
+        el.style.left = (itemObj.x * 100) + '%';
+        el.style.top  = (itemObj.y * 100) + '%';
+    };
+
+    const endDrag = () => {
+        dragging = false;
+    };
+
+    el.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        startDrag(e.clientX, e.clientY, e.target);
+    });
+    window.addEventListener('mousemove', e => {
+        if (dragging) moveDrag(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', () => {
+        if (dragging) endDrag();
+    });
+
+    el.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return;
+        if (e.target && e.target.closest('button')) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const t = e.touches[0];
+        startDrag(t.clientX, t.clientY, e.target);
+    }, { passive: false });
+    el.addEventListener('touchmove', e => {
+        if (!dragging || e.touches.length !== 1) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const t = e.touches[0];
+        moveDrag(t.clientX, t.clientY);
+    }, { passive: false });
+    el.addEventListener('touchend', () => {
+        if (dragging) endDrag();
+    });
+}
+
+function openPdfTextModal(meta) {
+    activeTextEditMeta = meta;
+    const modal = document.getElementById('pdfTextEditModal');
+    if (!modal) return;
+
+    const item = meta.item;
+    document.getElementById('pdfTextModalTitle').textContent = (item.color === 'white')
+        ? '✏️ Vorhandenen Text weiß überdecken & ersetzen'
+        : '🔤 Text in PDF einfügen';
+    document.getElementById('pdfTextModalInput').value = item.text || '';
+    document.getElementById('pdfTextModalSize').value  = String(item.fontSizeRel || 0.016);
+    document.getElementById('pdfTextModalStyle').value = item.fontStyle || 'sans';
+    document.getElementById('pdfTextModalColor').value = item.textColor || 'black';
+    document.getElementById('pdfTextModalWhiteBg').checked = (item.color === 'white');
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => document.getElementById('pdfTextModalInput')?.focus(), 50);
+}
+
+function closePdfTextModal() {
+    const modal = document.getElementById('pdfTextEditModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    activeTextEditMeta = null;
+}
+
+function savePdfTextModal() {
+    if (!activeTextEditMeta) return;
+    const txt     = document.getElementById('pdfTextModalInput').value;
+    const sizeRel = parseFloat(document.getElementById('pdfTextModalSize').value || '0.016');
+    const style   = document.getElementById('pdfTextModalStyle').value || 'sans';
+    const col     = document.getElementById('pdfTextModalColor').value || 'black';
+    const whiteBg = document.getElementById('pdfTextModalWhiteBg').checked;
+
+    const { pageNum, idx, item } = activeTextEditMeta;
+    if (txt.trim() === '' && !whiteBg) {
+        closePdfTextModal();
+        return;
+    }
+
+    item.text        = txt;
+    item.fontSizeRel = sizeRel;
+    item.fontStyle   = style;
+    item.textColor   = col;
+    item.color       = whiteBg ? 'white' : 'transparent';
+
+    if (!Array.isArray(redactionsByPage[pageNum])) {
+        redactionsByPage[pageNum] = [];
+    }
+    if (idx >= 0 && redactionsByPage[pageNum][idx]) {
+        redactionsByPage[pageNum][idx] = item;
+    } else {
+        redactionsByPage[pageNum].push(item);
+        redactionHistory.push(pageNum);
+    }
+
+    closePdfTextModal();
+    renderPageRedactionBoxes(pageNum);
+    updateRedactCounter();
+}
+
+function insertQuickStamp(stampText) {
+    const pageKeys = Object.keys(redactionsByPage);
+    if (pageKeys.length === 0) {
+        alert('Bitte lade zuerst eine PDF-Datei über „🔍 PDF-Seiten im Editor öffnen“.');
+        return;
+    }
+    const pageNum = pageKeys[0];
+    redactionsByPage[pageNum].push({
+        type: 'add_text',
+        x: 0.12,
+        y: 0.12,
+        w: stampText.length <= 2 ? 0.05 : 0.18,
+        h: 0.035,
+        color: 'transparent',
+        text: stampText,
+        fontSizeRel: parseFloat(document.getElementById('pdfEditorFontSize')?.value || '0.016'),
+        fontStyle: 'bold',
+        textColor: document.getElementById('pdfEditorTextColor')?.value || 'black'
+    });
+    redactionHistory.push(pageNum);
+    renderPageRedactionBoxes(pageNum);
+    updateRedactCounter();
+}
+
+// --- Freihand-Unterschrift Pad ---
+let sigPadInitialized = false;
+let sigPadHasStrokes  = false;
+
+function openSignaturePadModal() {
+    const pageKeys = Object.keys(redactionsByPage);
+    if (pageKeys.length === 0) {
+        alert('Bitte lade zuerst eine PDF-Datei über „🔍 PDF-Seiten im Editor öffnen“.');
+        return;
+    }
+    const modal = document.getElementById('pdfSignatureModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    initSigPadCanvas();
+}
+
+function closeSignaturePadModal() {
+    const modal = document.getElementById('pdfSignatureModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function initSigPadCanvas() {
+    const canvas = document.getElementById('sigPadCanvas');
+    if (!canvas || sigPadInitialized) return;
+    sigPadInitialized = true;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth   = 2.6;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+
+    let drawing = false;
+    const getPos = (cx, cy) => {
+        const r = canvas.getBoundingClientRect();
+        return {
+            x: (cx - r.left) * (canvas.width / Math.max(1, r.width)),
+            y: (cy - r.top) * (canvas.height / Math.max(1, r.height))
+        };
+    };
+
+    canvas.addEventListener('mousedown', e => {
+        drawing = true;
+        sigPadHasStrokes = true;
+        const p = getPos(e.clientX, e.clientY);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+    });
+    window.addEventListener('mousemove', e => {
+        if (!drawing) return;
+        const p = getPos(e.clientX, e.clientY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+    });
+    window.addEventListener('mouseup', () => { drawing = false; });
+
+    canvas.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        drawing = true;
+        sigPadHasStrokes = true;
+        const p = getPos(e.touches[0].clientX, e.touches[0].clientY);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', e => {
+        if (!drawing || e.touches.length !== 1) return;
+        e.preventDefault();
+        const p = getPos(e.touches[0].clientX, e.touches[0].clientY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { drawing = false; });
+}
+
+function clearSigPadCanvas() {
+    const canvas = document.getElementById('sigPadCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    sigPadHasStrokes = false;
+}
+
+function insertSignatureFromPad() {
+    const canvas = document.getElementById('sigPadCanvas');
+    if (!canvas || !sigPadHasStrokes) {
+        alert('Bitte zeichne zuerst deine Unterschrift in das Feld.');
+        return;
+    }
+    const dataUri = canvas.toDataURL('image/png');
+    const pageKeys = Object.keys(redactionsByPage);
+    const pageNum = pageKeys[0] || '1';
+    redactionsByPage[pageNum].push({
+        type: 'signature',
+        x: 0.15,
+        y: 0.75,
+        w: 0.28,
+        h: 0.08,
+        color: 'transparent',
+        sigDataUri: dataUri
+    });
+    redactionHistory.push(pageNum);
+    closeSignaturePadModal();
+    renderPageRedactionBoxes(pageNum);
+    updateRedactCounter();
 }
 
 function undoLastRedactionBox() {
@@ -1788,7 +2375,7 @@ function prepareRedactionSubmit() {
         if (Array.isArray(arr)) total += arr.length;
     });
     if (total === 0) {
-        alert('Bitte ziehe mindestens einen Schwärzungs-Balken auf einer Seite auf, bevor du speicherst.');
+        alert('Bitte füge mindestens einen Text, eine Unterschrift oder eine Schwärzung auf einer Seite hinzu, bevor du speicherst.');
         return false;
     }
     document.getElementById('redactFormJson').value = JSON.stringify(redactionsByPage);
