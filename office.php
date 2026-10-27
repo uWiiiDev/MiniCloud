@@ -365,12 +365,218 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         ':id'   => $fileId,
     ]);
 
+    // Live-Team über den Speichervorgang informieren
+    try {
+        $stmtSaveDelta = $pdo->prepare(
+            'INSERT INTO office_collab_deltas (file_id, user_id, username, delta_type, target_key, payload_json)
+             VALUES (:fid, :uid, :uname, :dtype, :tkey, :payload)'
+        );
+        $stmtSaveDelta->execute([
+            ':fid'     => $fileId,
+            ':uid'     => $userId,
+            ':uname'   => (string)($_SESSION['username'] ?? 'Editor'),
+            ':dtype'   => 'file_saved',
+            ':tkey'    => 'doc',
+            ':payload' => json_encode([
+                'filename'  => $updatedOrigName,
+                'size'      => formatBytes($newSize),
+                'savedAt'   => date('H:i:s'),
+            ], JSON_UNESCAPED_UNICODE),
+        ]);
+    } catch (Throwable) {}
+
     echo json_encode([
         'success'   => true,
         'message'   => 'Gespeichert (' . date('H:i:s') . ' Uhr)',
         'filename'  => $updatedOrigName,
         'size'      => formatBytes($newSize),
         'updatedAt' => date('d.m.Y H:i') . ' Uhr',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ============================================================================
+// B2) POST: LIVE-TEAM CO-EDITING (Stufe 1: Anwesenheit, Absatz-/Zellen-Sperre & Delta-Sync)
+// ============================================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'collab_sync') {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $csrfToken = $_POST['csrf_token'] ?? null;
+    if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Ungültiges CSRF-Token']);
+        exit;
+    }
+
+    $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $access = resolveOfficeFileAccess($pdo, $fileId, $userId, $isAdmin);
+    if ($access === null) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Kein Zugriff auf diese Datei.']);
+        exit;
+    }
+
+    $username = (string)($_SESSION['username'] ?? ('User#' . $userId));
+    $palette  = ['#2563eb', '#059669', '#d97706', '#e11d48', '#7c3aed', '#0891b2', '#ea580c', '#4f46e5'];
+    $userColor = $palette[$userId % count($palette)];
+
+    // Abmelden beim Verlassen der Seite (pagehide / beforeunload)
+    if (isset($_POST['leave']) && $_POST['leave'] === '1') {
+        $pdo->prepare('DELETE FROM office_collab_presence WHERE file_id = :fid AND user_id = :uid')
+            ->execute([':fid' => $fileId, ':uid' => $userId]);
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    // Veraltete Anwesenheiten (> 18 Sek.) und alte Deltas (> 10 Min.) bereinigen
+    $pdo->exec('DELETE FROM office_collab_presence WHERE last_seen < DATE_SUB(NOW(), INTERVAL 18 SECOND)');
+    $pdo->exec('DELETE FROM office_collab_deltas WHERE created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)');
+
+    $focusTarget = mb_substr(trim((string)($_POST['focus_target'] ?? '')), 0, 120);
+    $focusLabel  = mb_substr(trim((string)($_POST['focus_label'] ?? '')), 0, 120);
+    $sinceId     = max(0, (int)($_POST['since_id'] ?? 0));
+
+    // Eigene Anwesenheit & aktuelle Fokus-Position (Zelle / Absatz / Zeile) aktualisieren
+    $stmtPres = $pdo->prepare(
+        'INSERT INTO office_collab_presence (file_id, user_id, username, focus_target, focus_label, color_hex, last_seen)
+         VALUES (:fid, :uid, :uname, :ft, :fl, :col, NOW())
+         ON DUPLICATE KEY UPDATE
+            username = VALUES(username),
+            focus_target = VALUES(focus_target),
+            focus_label = VALUES(focus_label),
+            color_hex = VALUES(color_hex),
+            last_seen = NOW()'
+    );
+    $stmtPres->execute([
+        ':fid'   => $fileId,
+        ':uid'   => $userId,
+        ':uname' => $username,
+        ':ft'    => $focusTarget,
+        ':fl'    => $focusLabel,
+        ':col'   => $userColor,
+    ]);
+
+    // Falls der Client beim erstmaligen Öffnen noch keine Delta-ID kennt (since_id = -1), aktuelle Max-ID liefern
+    if (isset($_POST['init']) && $_POST['init'] === '1') {
+        $stmtMax = $pdo->prepare('SELECT COALESCE(MAX(id), 0) FROM office_collab_deltas WHERE file_id = :fid');
+        $stmtMax->execute([':fid' => $fileId]);
+        $sinceId = (int)$stmtMax->fetchColumn();
+    }
+
+    // Ausgehende Änderungen (Deltas) des Benutzers prüfen & speichern (Stufe 1 Konfliktsperre)
+    $lockedConflicts = [];
+    if ($access['can_write'] && !empty($_POST['deltas_json'])) {
+        $incomingDeltas = json_decode((string)$_POST['deltas_json'], true);
+        if (is_array($incomingDeltas)) {
+            $stmtCheckLock = $pdo->prepare(
+                'SELECT username FROM office_collab_presence
+                 WHERE file_id = :fid AND user_id != :uid AND focus_target = :ft
+                   AND focus_target != "" AND last_seen >= DATE_SUB(NOW(), INTERVAL 12 SECOND)
+                 LIMIT 1'
+            );
+            $stmtInsDelta = $pdo->prepare(
+                'INSERT INTO office_collab_deltas (file_id, user_id, username, delta_type, target_key, payload_json)
+                 VALUES (:fid, :uid, :uname, :dtype, :tkey, :payload)'
+            );
+
+            foreach (array_slice($incomingDeltas, 0, 40) as $d) {
+                if (!is_array($d)) {
+                    continue;
+                }
+                $dType   = preg_replace('/[^a-z_]/', '', (string)($d['type'] ?? ''));
+                $tKey    = mb_substr(trim((string)($d['target'] ?? '')), 0, 120);
+                $payload = $d['payload'] ?? null;
+
+                if (!in_array($dType, ['sheet_cell', 'sheet_full', 'word_block', 'word_full', 'text_full'], true) || $payload === null) {
+                    continue;
+                }
+
+                // Konfliktprüfung für Einzel-Zelle oder Einzel-Absatz: Ist genau dieses Element gerade von jemand anderem fokussiert?
+                if (in_array($dType, ['sheet_cell', 'word_block'], true) && $tKey !== '') {
+                    $stmtCheckLock->execute([':fid' => $fileId, ':uid' => $userId, ':ft' => $tKey]);
+                    $lockedByUser = $stmtCheckLock->fetchColumn();
+                    if ($lockedByUser !== false) {
+                        $lockedConflicts[] = [
+                            'target' => $tKey,
+                            'lockedBy' => (string)$lockedByUser,
+                        ];
+                        continue;
+                    }
+                }
+
+                $payloadStr = is_string($payload) ? $payload : json_encode($payload, JSON_UNESCAPED_UNICODE);
+                if (is_string($payloadStr) && strlen($payloadStr) <= 524288) {
+                    $stmtInsDelta->execute([
+                        ':fid'     => $fileId,
+                        ':uid'     => $userId,
+                        ':uname'   => $username,
+                        ':dtype'   => $dType,
+                        ':tkey'    => $tKey,
+                        ':payload' => $payloadStr,
+                    ]);
+                }
+            }
+        }
+    }
+
+    // Aktive Mitarbeiter im Dokument abrufen
+    $stmtPeers = $pdo->prepare(
+        'SELECT user_id, username, focus_target, focus_label, color_hex
+         FROM office_collab_presence
+         WHERE file_id = :fid AND last_seen >= DATE_SUB(NOW(), INTERVAL 12 SECOND)
+         ORDER BY (user_id = :uid) DESC, username ASC'
+    );
+    $stmtPeers->execute([':fid' => $fileId, ':uid' => $userId]);
+    $collaborators = [];
+    foreach ($stmtPeers->fetchAll() as $pRow) {
+        $collaborators[] = [
+            'userId'      => (int)$pRow['user_id'],
+            'username'    => (string)$pRow['username'],
+            'isMe'        => ((int)$pRow['user_id'] === $userId),
+            'focusTarget' => (string)$pRow['focus_target'],
+            'focusLabel'  => (string)$pRow['focus_label'],
+            'color'       => (string)$pRow['color_hex'],
+        ];
+    }
+
+    // Neue Deltas anderer Benutzer seit $sinceId abrufen
+    $stmtNewDeltas = $pdo->prepare(
+        'SELECT id, user_id, username, delta_type, target_key, payload_json, DATE_FORMAT(created_at, "%H:%i:%s") AS time_str
+         FROM office_collab_deltas
+         WHERE file_id = :fid AND id > :since
+         ORDER BY id ASC
+         LIMIT 150'
+    );
+    $stmtNewDeltas->execute([':fid' => $fileId, ':since' => $sinceId]);
+    $deltasOut = [];
+    $maxDeltaId = $sinceId;
+
+    foreach ($stmtNewDeltas->fetchAll() as $dRow) {
+        $did = (int)$dRow['id'];
+        if ($did > $maxDeltaId) {
+            $maxDeltaId = $did;
+        }
+        // Eigene bereits lokal angewendete Deltas nicht doppelt zurückspielen
+        if ((int)$dRow['user_id'] === $userId) {
+            continue;
+        }
+        $deltasOut[] = [
+            'id'       => $did,
+            'userId'   => (int)$dRow['user_id'],
+            'username' => (string)$dRow['username'],
+            'type'     => (string)$dRow['delta_type'],
+            'target'   => (string)$dRow['target_key'],
+            'payload'  => json_decode((string)$dRow['payload_json'], true) ?? (string)$dRow['payload_json'],
+            'time'     => (string)$dRow['time_str'],
+        ];
+    }
+
+    echo json_encode([
+        'success'       => true,
+        'collaborators' => $collaborators,
+        'deltas'        => $deltasOut,
+        'maxDeltaId'    => $maxDeltaId,
+        'conflicts'     => $lockedConflicts,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -503,6 +709,11 @@ require_once __DIR__ . '/includes/header.php';
         </a>
 
         <?php if ($canEdit && !$isVaultLocked): ?>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none" title="Speichert Änderungen bei Team-Bearbeitung nach wenigen Sekunden automatisch in die Datei">
+                <input type="checkbox" id="chkOfficeAutoSave" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                <span>⚡ Auto-Save</span>
+            </label>
+
             <button
                 type="button"
                 id="btnSaveOffice"
@@ -518,6 +729,28 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php if (!$isVaultLocked): ?>
+<!-- Live-Team-Leiste (Stufe 1: Wer ist im Dokument + Konfliktfreie Absatz-/Zellen-Sperre) -->
+<div id="collabPresenceBar" class="mb-4 px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs">
+    <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/70 font-bold">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="collabCountLabel">Live-Team (1 aktiv)</span>
+        </span>
+        <div id="collabUsersList" class="flex flex-wrap items-center gap-1.5">
+            <span class="text-slate-400 dark:text-slate-500">Verbinde Live-Synchronisation...</span>
+        </div>
+    </div>
+    <div id="collabLockHint" class="text-[11px] text-slate-400 dark:text-slate-500">
+        <?= $editorType === 'sheet'
+            ? '🛡️ Konfliktschutz aktiv: Zellen anderer Bearbeiter werden live markiert &amp; geschützt'
+            : ($editorType === 'word'
+                ? '🛡️ Konfliktschutz aktiv: Absätze anderer Bearbeiter werden beim Tippen live gesperrt &amp; synchronisiert'
+                : '🛡️ Live-Synchronisation für Text-/Markdown-Zeilen aktiv') ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($isVaultLocked): ?>
     <!-- Hinweis bei Tresor-geschützten Dateien -->
@@ -619,6 +852,30 @@ require_once __DIR__ . '/includes/header.php';
         #wordEditorSurface table { width: 100%; border-collapse: collapse; margin: 0.85rem 0; }
         #wordEditorSurface th, #wordEditorSurface td { border: 1px solid #cbd5e1; padding: 0.5rem 0.65rem; text-align: left; min-width: 60px; }
         #wordEditorSurface th { background-color: rgba(148, 163, 184, 0.15); font-weight: 700; }
+        /* Stufe-1 Live-Absatz-Sperre für fremde Bearbeiter */
+        #wordEditorSurface [data-locked-by] {
+            position: relative;
+            border-left: 3px solid var(--peer-color, #e11d48) !important;
+            padding-left: 0.6rem !important;
+            background-color: rgba(244, 63, 94, 0.06);
+            border-radius: 0.375rem;
+            transition: background-color 0.2s;
+        }
+        #wordEditorSurface [data-locked-by]::after {
+            content: "🔒 " attr(data-locked-by) " bearbeitet diesen Absatz";
+            position: absolute;
+            right: 0.35rem;
+            top: -1.15rem;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 9999px;
+            background-color: var(--peer-color, #e11d48);
+            color: #ffffff;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+        }
     </style>
 
 <?php elseif ($editorType === 'sheet'): ?>
@@ -705,12 +962,43 @@ require_once __DIR__ . '/includes/header.php';
 
 <script>
 const OFFICE_FILE_ID     = <?= (int)$file['id'] ?>;
+const OFFICE_USER_ID     = <?= (int)$userId ?>;
 const OFFICE_EDITOR_TYPE = <?= json_encode($editorType, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const OFFICE_CAN_EDIT    = <?= $canEdit && !$isVaultLocked ? 'true' : 'false' ?>;
 const OFFICE_CSRF_TOKEN  = <?= json_encode(getCsrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const OFFICE_FILE_EXT    = <?= json_encode($ext, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
 let hasUnsavedChanges = false;
+let autoSaveTimer     = null;
+let collabPeers       = []; // Aktive andere Benutzer [{userId, username, isMe, focusTarget, focusLabel, color}]
+let collabLastDeltaId = 0;
+let collabOutQueue    = []; // Ausgehende Delta-Pakete [{type, target, payload}]
+let currentFocusTarget = '';
+let currentFocusLabel  = '';
+
+function queueCollabDelta(type, target, payload) {
+    if (!OFFICE_CAN_EDIT) return;
+    // Falls für dasselbe Ziel schon ein ungesendetes Delta in der Queue liegt, ersetzen
+    const idx = collabOutQueue.findIndex(d => d.type === type && d.target === target);
+    if (idx !== -1) {
+        collabOutQueue[idx].payload = payload;
+    } else {
+        collabOutQueue.push({ type, target, payload });
+    }
+}
+
+function scheduleAutoSave() {
+    if (!OFFICE_CAN_EDIT) return;
+    const chk = document.getElementById('chkOfficeAutoSave');
+    if (!chk || !chk.checked) return;
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+        if (hasUnsavedChanges) {
+            saveOfficeDocument(true);
+        }
+    }, 3500);
+}
+
 function markDirty() {
     if (!OFFICE_CAN_EDIT) return;
     hasUnsavedChanges = true;
@@ -719,6 +1007,7 @@ function markDirty() {
         statusEl.textContent = '● Ungespeicherte Änderungen';
         statusEl.className = 'font-semibold text-amber-600 dark:text-amber-400';
     }
+    scheduleAutoSave();
 }
 
 window.addEventListener('beforeunload', (e) => {
@@ -744,10 +1033,132 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================================================
-// 1. WORD LIGHT FUNKTIONEN
+// 1. WORD LIGHT FUNKTIONEN (inkl. Stufe-1 Absatz-Sperre & Live-Absatz-Sync)
 // ============================================================================
 const wordSurface = document.getElementById('wordEditorSurface');
+let wordBlockCounter = 0;
+let wordInputDebounce = null;
+let lastKnownBlockCount = 0;
+
+function ensureWordBlockIds() {
+    if (!wordSurface) return;
+    // Falls das Dokument noch gar keine Block-Kinder hat, in <p> einbetten
+    if (wordSurface.children.length === 0) {
+        const txt = wordSurface.innerHTML.trim();
+        wordSurface.innerHTML = `<p data-block-id="b0">${txt || '<br>'}</p>`;
+    }
+    Array.from(wordSurface.children).forEach((el, idx) => {
+        if (!el.getAttribute('data-block-id')) {
+            wordBlockCounter++;
+            el.setAttribute('data-block-id', 'b_' + OFFICE_USER_ID + '_' + Date.now() + '_' + wordBlockCounter + '_' + idx);
+        }
+    });
+}
+
+function getCleanWordHtml() {
+    if (!wordSurface) return '<p></p>';
+    const clone = wordSurface.cloneNode(true);
+    clone.querySelectorAll('[data-block-id], [data-locked-by], [contenteditable]').forEach(el => {
+        el.removeAttribute('data-block-id');
+        el.removeAttribute('data-locked-by');
+        el.removeAttribute('contenteditable');
+        el.style.removeProperty('--peer-color');
+    });
+    return clone.innerHTML;
+}
+
+function getActiveWordBlockElement() {
+    if (!wordSurface) return null;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.anchorNode;
+    if (!node) return null;
+    if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentElement;
+    }
+    while (node && node !== wordSurface && node.parentElement !== wordSurface) {
+        node = node.parentElement;
+    }
+    if (node && node.parentElement === wordSurface) {
+        return node;
+    }
+    return null;
+}
+
+function updateWordFocusTarget() {
+    if (!wordSurface) return;
+    ensureWordBlockIds();
+    const blk = getActiveWordBlockElement();
+    if (blk) {
+        const bid = blk.getAttribute('data-block-id') || '';
+        const idx = Array.from(wordSurface.children).indexOf(blk);
+        currentFocusTarget = bid ? ('block:' + bid) : '';
+        currentFocusLabel  = 'Absatz #' + (idx + 1);
+    }
+}
+
+function applyWordPeerLocks() {
+    if (!wordSurface) return;
+    ensureWordBlockIds();
+    const lockMap = {};
+    collabPeers.forEach(p => {
+        if (!p.isMe && p.focusTarget && p.focusTarget.startsWith('block:')) {
+            const bid = p.focusTarget.substring(6);
+            lockMap[bid] = p;
+        }
+    });
+
+    Array.from(wordSurface.children).forEach(el => {
+        const bid = el.getAttribute('data-block-id') || '';
+        const peer = lockMap[bid];
+        if (peer) {
+            el.setAttribute('data-locked-by', peer.username);
+            el.style.setProperty('--peer-color', peer.color || '#e11d48');
+            if (OFFICE_CAN_EDIT) {
+                el.setAttribute('contenteditable', 'false');
+            }
+        } else {
+            if (el.hasAttribute('data-locked-by')) {
+                el.removeAttribute('data-locked-by');
+                el.style.removeProperty('--peer-color');
+                if (OFFICE_CAN_EDIT) {
+                    el.removeAttribute('contenteditable');
+                }
+            }
+        }
+    });
+}
+
+function broadcastWordChange(forceFull = false) {
+    if (!wordSurface || !OFFICE_CAN_EDIT) return;
+    ensureWordBlockIds();
+    const currentCount = wordSurface.children.length;
+    const blk = getActiveWordBlockElement();
+
+    if (forceFull || currentCount !== lastKnownBlockCount || !blk) {
+        lastKnownBlockCount = currentCount;
+        const blocksPayload = Array.from(wordSurface.children).map(el => ({
+            id: el.getAttribute('data-block-id'),
+            tag: el.tagName,
+            html: el.innerHTML
+        }));
+        queueCollabDelta('word_full', 'doc', blocksPayload);
+    } else {
+        const bid = blk.getAttribute('data-block-id');
+        if (bid && !blk.hasAttribute('data-locked-by')) {
+            queueCollabDelta('word_block', 'block:' + bid, {
+                id: bid,
+                tag: blk.tagName,
+                html: blk.innerHTML
+            });
+        }
+    }
+}
+
 if (wordSurface) {
+    ensureWordBlockIds();
+    lastKnownBlockCount = wordSurface.children.length;
+
     const updateWordStats = () => {
         const text = (wordSurface.innerText || '').trim();
         const words = text === '' ? 0 : text.split(/\s+/).length;
@@ -760,7 +1171,12 @@ if (wordSurface) {
     wordSurface.addEventListener('input', () => {
         markDirty();
         updateWordStats();
+        updateWordFocusTarget();
+        if (wordInputDebounce) clearTimeout(wordInputDebounce);
+        wordInputDebounce = setTimeout(() => broadcastWordChange(false), 250);
     });
+    wordSurface.addEventListener('keyup', updateWordFocusTarget);
+    wordSurface.addEventListener('mouseup', updateWordFocusTarget);
     updateWordStats();
 }
 
@@ -769,6 +1185,7 @@ function execWordCmd(cmd, val = null) {
     wordSurface.focus();
     document.execCommand(cmd, false, val);
     markDirty();
+    broadcastWordChange(false);
 }
 
 function applyWordBlock(tag) {
@@ -776,6 +1193,7 @@ function applyWordBlock(tag) {
     wordSurface.focus();
     document.execCommand('formatBlock', false, '<' + tag + '>');
     markDirty();
+    broadcastWordChange(true);
 }
 
 function insertWordTable() {
@@ -969,7 +1387,17 @@ function renderSpreadsheet() {
     headHtml += '</tr>';
     thead.innerHTML = headHtml;
 
-    // 2. Zeilen & Zellen
+    // 2. Zeilen & Zellen (inkl. Live-Team-Zellenmarkierung & Sperrschutz)
+    const peerCellMap = {};
+    collabPeers.forEach(p => {
+        if (!p.isMe && p.focusTarget && p.focusTarget.startsWith(`S${activeSheetIdx}:`)) {
+            const parts = p.focusTarget.split(':');
+            if (parts.length === 3) {
+                peerCellMap[`${parts[1]}:${parts[2]}`] = p;
+            }
+        }
+    });
+
     let bodyHtml = '';
     for (let r = 0; r < rowCount; r++) {
         const isSelectedRow = (r === activeRow);
@@ -981,15 +1409,21 @@ function renderSpreadsheet() {
             const isNumeric = !isNaN(parseFloat(displayVal)) && isFinite(displayVal);
             const isSelected = (r === activeRow && c === activeCol);
             const isHeaderRow = (r === 0 && rawVal !== '');
+            const peerOnCell = peerCellMap[`${r}:${c}`] || null;
+            const peerStyle = peerOnCell ? `box-shadow: inset 0 0 0 2px ${peerOnCell.color}; background-color: ${peerOnCell.color}14;` : '';
+            const peerBadge = peerOnCell
+                ? `<span style="background:${peerOnCell.color};" class="absolute -top-2.5 right-0 px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs pointer-events-none z-20">🔒 ${escapeSheetHtml(peerOnCell.username)}</span>`
+                : '';
 
             bodyHtml += `<td
                 data-r="${r}"
                 data-c="${c}"
                 onclick="selectSheetCell(${r}, ${c})"
                 ondblclick="startInlineCellEdit(${r}, ${c})"
-                class="border border-slate-200 dark:border-slate-800 px-2 py-1 h-7 whitespace-nowrap cursor-cell transition-colors ${isSelected ? 'ring-2 ring-brand-500 bg-brand-50/40 dark:bg-brand-950/40 z-10 relative' : ''} ${isHeaderRow ? 'font-bold bg-slate-50/80 dark:bg-slate-800/40' : ''} ${isNumeric ? 'text-right font-mono' : 'text-left'} ${isFormula ? 'text-emerald-700 dark:text-emerald-300 font-semibold' : 'text-slate-800 dark:text-slate-200'}"
-                title="${isFormula ? 'Formel: ' + rawVal.replace(/"/g, '&quot;') : ''}"
-            >${escapeSheetHtml(displayVal)}</td>`;
+                style="${peerStyle}"
+                class="relative border border-slate-200 dark:border-slate-800 px-2 py-1 h-7 whitespace-nowrap cursor-cell transition-colors ${isSelected ? 'ring-2 ring-brand-500 bg-brand-50/40 dark:bg-brand-950/40 z-10' : ''} ${isHeaderRow ? 'font-bold bg-slate-50/80 dark:bg-slate-800/40' : ''} ${isNumeric ? 'text-right font-mono' : 'text-left'} ${isFormula ? 'text-emerald-700 dark:text-emerald-300 font-semibold' : 'text-slate-800 dark:text-slate-200'}"
+                title="${peerOnCell ? ('Wird gerade von ' + escapeSheetHtml(peerOnCell.username) + ' bearbeitet') : (isFormula ? 'Formel: ' + rawVal.replace(/"/g, '&quot;') : '')}"
+            >${escapeSheetHtml(displayVal)}${peerBadge}</td>`;
         }
         bodyHtml += '</tr>';
     }
@@ -1007,12 +1441,20 @@ function escapeSheetHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+function getPeerLockingCurrentCell(sheetIdx, r, c) {
+    const target = `S${sheetIdx}:${r}:${c}`;
+    return collabPeers.find(p => !p.isMe && p.focusTarget === target) || null;
+}
+
 function selectSheetCell(r, c) {
     activeRow = r;
     activeCol = c;
+    const sheetName = sheetsState[activeSheetIdx]?.name || `Tabelle${activeSheetIdx + 1}`;
+    currentFocusTarget = `S${activeSheetIdx}:${r}:${c}`;
+    currentFocusLabel  = `${sheetName} · ${colIdxToName(c)}${r + 1}`;
     renderSpreadsheet();
     const formulaInput = document.getElementById('formulaInputBar');
-    if (formulaInput && OFFICE_CAN_EDIT) {
+    if (formulaInput && OFFICE_CAN_EDIT && !formulaInput.readOnly) {
         formulaInput.focus();
     }
 }
@@ -1021,7 +1463,7 @@ function startInlineCellEdit(r, c) {
     if (!OFFICE_CAN_EDIT) return;
     selectSheetCell(r, c);
     const formulaInput = document.getElementById('formulaInputBar');
-    if (formulaInput) {
+    if (formulaInput && !formulaInput.readOnly) {
         formulaInput.focus();
         formulaInput.select();
     }
@@ -1032,18 +1474,45 @@ function updateFormulaBar() {
     const input = document.getElementById('formulaInputBar');
     if (!badge || !input) return;
 
-    badge.textContent = `${colIdxToName(activeCol)}${activeRow + 1}`;
+    const cellRef = `${colIdxToName(activeCol)}${activeRow + 1}`;
+    badge.textContent = cellRef;
     const rawVal = String(sheetsState[activeSheetIdx]?.rows?.[activeRow]?.[activeCol] ?? '');
-    input.value = rawVal;
+
+    const lockingPeer = getPeerLockingCurrentCell(activeSheetIdx, activeRow, activeCol);
+    if (lockingPeer) {
+        input.readOnly = true;
+        input.value = rawVal;
+        input.placeholder = `🔒 Zelle ${cellRef} wird gerade von ${lockingPeer.username} bearbeitet...`;
+        input.classList.add('bg-rose-50', 'dark:bg-rose-950/40', 'border-rose-400');
+    } else {
+        input.readOnly = !OFFICE_CAN_EDIT;
+        if (document.activeElement !== input) {
+            input.value = rawVal;
+        }
+        input.placeholder = 'Wert oder Formel eingeben (z.B. =SUMME(A1:A10), =MITTELWERT(B1:B5), =A1*B1)...';
+        input.classList.remove('bg-rose-50', 'dark:bg-rose-950/40', 'border-rose-400');
+    }
 }
 
 const formulaBarEl = document.getElementById('formulaInputBar');
 if (formulaBarEl) {
     formulaBarEl.addEventListener('input', () => {
-        if (!OFFICE_CAN_EDIT) return;
+        if (!OFFICE_CAN_EDIT || formulaBarEl.readOnly) return;
         if (!sheetsState[activeSheetIdx].rows[activeRow]) return;
-        sheetsState[activeSheetIdx].rows[activeRow][activeCol] = formulaBarEl.value;
+        const lockedBy = getPeerLockingCurrentCell(activeSheetIdx, activeRow, activeCol);
+        if (lockedBy) {
+            updateFormulaBar();
+            return;
+        }
+        const val = formulaBarEl.value;
+        sheetsState[activeSheetIdx].rows[activeRow][activeCol] = val;
         markDirty();
+        queueCollabDelta('sheet_cell', `S${activeSheetIdx}:${activeRow}:${activeCol}`, {
+            sheetIdx: activeSheetIdx,
+            r: activeRow,
+            c: activeCol,
+            val: val
+        });
     });
     formulaBarEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1064,10 +1533,16 @@ if (formulaBarEl) {
 }
 
 function insertFormulaTemplate(tpl) {
-    if (!OFFICE_CAN_EDIT || !formulaBarEl) return;
+    if (!OFFICE_CAN_EDIT || !formulaBarEl || formulaBarEl.readOnly) return;
     sheetsState[activeSheetIdx].rows[activeRow][activeCol] = tpl;
     formulaBarEl.value = tpl;
     markDirty();
+    queueCollabDelta('sheet_cell', `S${activeSheetIdx}:${activeRow}:${activeCol}`, {
+        sheetIdx: activeSheetIdx,
+        r: activeRow,
+        c: activeCol,
+        val: tpl
+    });
     formulaBarEl.focus();
 }
 
@@ -1077,6 +1552,7 @@ function sheetAddRow() {
     const cols = sheet.rows[0] ? sheet.rows[0].length : 8;
     sheet.rows.push(Array(cols).fill(''));
     markDirty();
+    queueCollabDelta('sheet_full', 'sheets', sheetsState);
     renderSpreadsheet();
 }
 
@@ -1087,6 +1563,7 @@ function sheetDeleteLastRow() {
     sheet.rows.pop();
     if (activeRow >= sheet.rows.length) activeRow = sheet.rows.length - 1;
     markDirty();
+    queueCollabDelta('sheet_full', 'sheets', sheetsState);
     renderSpreadsheet();
 }
 
@@ -1095,6 +1572,7 @@ function sheetAddCol() {
     const sheet = sheetsState[activeSheetIdx];
     sheet.rows.forEach(row => row.push(''));
     markDirty();
+    queueCollabDelta('sheet_full', 'sheets', sheetsState);
     renderSpreadsheet();
 }
 
@@ -1105,6 +1583,7 @@ function sheetDeleteLastCol() {
     sheet.rows.forEach(row => row.pop());
     if (activeCol >= sheet.rows[0].length) activeCol = sheet.rows[0].length - 1;
     markDirty();
+    queueCollabDelta('sheet_full', 'sheets', sheetsState);
     renderSpreadsheet();
 }
 
@@ -1187,13 +1666,26 @@ function exportActiveSheetCsv() {
 }
 
 if (OFFICE_EDITOR_TYPE === 'sheet') {
+    currentFocusTarget = 'S0:0:0';
+    currentFocusLabel  = (sheetsState[0]?.name || 'Tabelle1') + ' · A1';
     renderSpreadsheet();
 }
 
 // ============================================================================
-// 3. TEXT-EDITOR FUNKTIONEN
+// 3. TEXT-EDITOR FUNKTIONEN (inkl. Zeilen-Fokus & Live-Sync)
 // ============================================================================
 const plainTextEl = document.getElementById('plainTextEditor');
+let plainInputDebounce = null;
+let plainLastTypedAt   = 0;
+
+function updatePlainFocusLine() {
+    if (!plainTextEl) return;
+    const pos = plainTextEl.selectionStart || 0;
+    const lineNum = (plainTextEl.value.substring(0, pos).split(/\r\n|\r|\n/).length) || 1;
+    currentFocusTarget = 'line:' + lineNum;
+    currentFocusLabel  = 'Zeile ' + lineNum;
+}
+
 if (plainTextEl) {
     const updatePlainStats = () => {
         const val = plainTextEl.value || '';
@@ -1202,22 +1694,30 @@ if (plainTextEl) {
         if (stats) stats.textContent = `${lines} Zeilen • ${val.length} Zeichen`;
     };
     plainTextEl.addEventListener('input', () => {
+        plainLastTypedAt = Date.now();
         markDirty();
         updatePlainStats();
+        updatePlainFocusLine();
+        if (plainInputDebounce) clearTimeout(plainInputDebounce);
+        plainInputDebounce = setTimeout(() => {
+            queueCollabDelta('text_full', 'text', plainTextEl.value);
+        }, 300);
     });
+    plainTextEl.addEventListener('keyup', updatePlainFocusLine);
+    plainTextEl.addEventListener('mouseup', updatePlainFocusLine);
     updatePlainStats();
 }
 
 // ============================================================================
 // 4. SPEICHERN IN DER CLOUD (AJAX POST)
 // ============================================================================
-async function saveOfficeDocument() {
+async function saveOfficeDocument(isSilentAutoSave = false) {
     if (!OFFICE_CAN_EDIT) return;
     const btn = document.getElementById('btnSaveOffice');
     const statusEl = document.getElementById('officeStatusText');
-    if (btn) btn.disabled = true;
+    if (btn && !isSilentAutoSave) btn.disabled = true;
     if (statusEl) {
-        statusEl.textContent = '⏳ Wird gespeichert...';
+        statusEl.textContent = isSilentAutoSave ? '⚡ Auto-Save...' : '⏳ Wird gespeichert...';
         statusEl.className = 'font-semibold text-brand-600 dark:text-brand-400';
     }
 
@@ -1230,7 +1730,7 @@ async function saveOfficeDocument() {
     }
 
     if (OFFICE_EDITOR_TYPE === 'word' && wordSurface) {
-        formData.append('html_content', wordSurface.innerHTML);
+        formData.append('html_content', getCleanWordHtml());
     } else if (OFFICE_EDITOR_TYPE === 'sheet') {
         formData.append('sheets_json', JSON.stringify(sheetsState));
     } else if (plainTextEl) {
@@ -1254,7 +1754,9 @@ async function saveOfficeDocument() {
                 statusEl.textContent = '⚠️ ' + (data.message || 'Fehler beim Speichern');
                 statusEl.className = 'font-semibold text-red-600 dark:text-red-400';
             }
-            alert(data.message || 'Fehler beim Speichern.');
+            if (!isSilentAutoSave) {
+                alert(data.message || 'Fehler beim Speichern.');
+            }
         }
     } catch (err) {
         if (statusEl) {
@@ -1264,6 +1766,205 @@ async function saveOfficeDocument() {
     } finally {
         if (btn) btn.disabled = false;
     }
+}
+
+// ============================================================================
+// 5. LIVE-TEAM-ENGINE (Stufe 1: Anwesenheit, Absatz-/Zellen-Sperre & Delta-Polling)
+// ============================================================================
+let collabSyncInFlight = false;
+let collabInitialized  = false;
+
+function renderCollabPresenceBar() {
+    const countEl = document.getElementById('collabCountLabel');
+    const listEl  = document.getElementById('collabUsersList');
+    if (!countEl || !listEl) return;
+
+    const total = collabPeers.length || 1;
+    countEl.textContent = total === 1 ? 'Live-Team (Du allein im Dokument)' : `Live-Team (${total} Personen gleichzeitig aktiv)`;
+
+    let html = '';
+    collabPeers.forEach(p => {
+        const posBadge = p.focusLabel ? `<span class="opacity-85 font-normal">· ${escapeSheetHtml(p.focusLabel)}</span>` : '';
+        html += `<span style="border-color:${p.color}; background-color:${p.color}15; color:${p.color};" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-bold">
+            <span style="background-color:${p.color};" class="w-2 h-2 rounded-full"></span>
+            <span>${escapeSheetHtml(p.username)}${p.isMe ? ' (Du)' : ''}</span>
+            ${posBadge}
+        </span>`;
+    });
+    listEl.innerHTML = html;
+}
+
+function sanitizeWordPeerHtml(rawHtml) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = String(rawHtml || '');
+    const allowedTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SPAN', 'FONT', 'BR', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SUB', 'SUP']);
+    tpl.content.querySelectorAll('*').forEach(el => {
+        if (!allowedTags.has(el.tagName)) {
+            el.replaceWith(...Array.from(el.childNodes));
+            return;
+        }
+        Array.from(el.attributes).forEach(attr => {
+            const name = attr.name.toLowerCase();
+            const val  = String(attr.value || '').toLowerCase();
+            if (name.startsWith('on') || val.includes('javascript:') || val.includes('expression(') || !['style', 'color', 'align', 'colspan', 'rowspan'].includes(name)) {
+                el.removeAttribute(attr.name);
+            }
+        });
+    });
+    return tpl.innerHTML;
+}
+
+function applyIncomingDeltas(deltas) {
+    if (!Array.isArray(deltas) || deltas.length === 0) return;
+    let sheetNeedsRender = false;
+
+    deltas.forEach(d => {
+        if (d.type === 'file_saved' && d.payload) {
+            const statusEl = document.getElementById('officeStatusText');
+            if (statusEl && !hasUnsavedChanges) {
+                statusEl.textContent = `✓ Gespeichert von ${d.username} (${d.payload.savedAt || d.time} Uhr) • ${d.payload.size || ''}`;
+                statusEl.className = 'font-semibold text-emerald-600 dark:text-emerald-400';
+            }
+            return;
+        }
+
+        if (OFFICE_EDITOR_TYPE === 'sheet') {
+            if (d.type === 'sheet_cell' && d.payload) {
+                const { sheetIdx, r, c, val } = d.payload;
+                if (sheetsState[sheetIdx] && sheetsState[sheetIdx].rows && sheetsState[sheetIdx].rows[r]) {
+                    sheetsState[sheetIdx].rows[r][c] = val;
+                    sheetNeedsRender = true;
+                }
+            } else if (d.type === 'sheet_full' && Array.isArray(d.payload)) {
+                sheetsState = d.payload;
+                sheetNeedsRender = true;
+            }
+        } else if (OFFICE_EDITOR_TYPE === 'word' && wordSurface) {
+            ensureWordBlockIds();
+            if (d.type === 'word_block' && d.payload && d.payload.id) {
+                const targetEl = wordSurface.querySelector(`[data-block-id="${CSS.escape(d.payload.id)}"]`);
+                const myActiveBlk = getActiveWordBlockElement();
+                // Nur aktualisieren, wenn der eigene Cursor nicht gerade mitten in diesem Absatz tippt
+                if (targetEl && targetEl !== myActiveBlk) {
+                    targetEl.innerHTML = sanitizeWordPeerHtml(d.payload.html || '');
+                }
+            } else if (d.type === 'word_full' && Array.isArray(d.payload)) {
+                const myActiveBlk = getActiveWordBlockElement();
+                const myActiveId  = myActiveBlk ? myActiveBlk.getAttribute('data-block-id') : null;
+                const existingMap = {};
+                Array.from(wordSurface.children).forEach(el => {
+                    const bid = el.getAttribute('data-block-id');
+                    if (bid) existingMap[bid] = el;
+                });
+
+                d.payload.forEach((bInfo, idx) => {
+                    if (!bInfo || !bInfo.id) return;
+                    let el = existingMap[bInfo.id];
+                    if (!el) {
+                        const safeTag = ['P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'TABLE'].includes(String(bInfo.tag).toUpperCase())
+                            ? String(bInfo.tag).toUpperCase()
+                            : 'P';
+                        el = document.createElement(safeTag);
+                        el.setAttribute('data-block-id', String(bInfo.id).replace(/[^a-zA-Z0-9_-]/g, ''));
+                        el.innerHTML = sanitizeWordPeerHtml(bInfo.html || '');
+                        if (idx < wordSurface.children.length) {
+                            wordSurface.insertBefore(el, wordSurface.children[idx]);
+                        } else {
+                            wordSurface.appendChild(el);
+                        }
+                    } else if (bInfo.id !== myActiveId) {
+                        el.innerHTML = sanitizeWordPeerHtml(bInfo.html || '');
+                    }
+                });
+                lastKnownBlockCount = wordSurface.children.length;
+            }
+        } else if (plainTextEl && d.type === 'text_full' && typeof d.payload === 'string') {
+            // Nur übernehmen, wenn man nicht gerade in den letzten 1,2 Sekunden selbst getippt hat
+            if (Date.now() - plainLastTypedAt > 1200) {
+                const prevStart = plainTextEl.selectionStart;
+                const prevEnd   = plainTextEl.selectionEnd;
+                plainTextEl.value = d.payload;
+                plainTextEl.setSelectionRange(prevStart, prevEnd);
+            }
+        }
+    });
+
+    if (sheetNeedsRender) {
+        renderSpreadsheet();
+    }
+    if (OFFICE_EDITOR_TYPE === 'word') {
+        applyWordPeerLocks();
+    }
+}
+
+async function runCollabSyncTick() {
+    if (collabSyncInFlight) return;
+    const bar = document.getElementById('collabPresenceBar');
+    if (!bar) return;
+
+    collabSyncInFlight = true;
+    const batch = collabOutQueue.splice(0, collabOutQueue.length);
+
+    const fd = new FormData();
+    fd.append('action', 'collab_sync');
+    fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+    fd.append('file_id', String(OFFICE_FILE_ID));
+    fd.append('focus_target', currentFocusTarget);
+    fd.append('focus_label', currentFocusLabel);
+    fd.append('since_id', String(collabLastDeltaId));
+    if (!collabInitialized) {
+        fd.append('init', '1');
+    }
+    if (batch.length > 0) {
+        fd.append('deltas_json', JSON.stringify(batch));
+    }
+
+    try {
+        const resp = await fetch('office.php', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data && data.success) {
+            collabInitialized = true;
+            if (typeof data.maxDeltaId === 'number' && data.maxDeltaId > collabLastDeltaId) {
+                collabLastDeltaId = data.maxDeltaId;
+            }
+            const prevPeersJson = JSON.stringify(collabPeers);
+            collabPeers = Array.isArray(data.collaborators) ? data.collaborators : [];
+            renderCollabPresenceBar();
+
+            if (Array.isArray(data.deltas) && data.deltas.length > 0) {
+                applyIncomingDeltas(data.deltas);
+            } else if (JSON.stringify(collabPeers) !== prevPeersJson) {
+                if (OFFICE_EDITOR_TYPE === 'sheet') {
+                    renderSpreadsheet();
+                } else if (OFFICE_EDITOR_TYPE === 'word') {
+                    applyWordPeerLocks();
+                }
+            }
+        }
+    } catch (e) {
+        // Bei kurzem Verbindungsabbruch ungesendete Deltas wieder vorne einreihen
+        if (batch.length > 0) {
+            collabOutQueue.unshift(...batch);
+        }
+    } finally {
+        collabSyncInFlight = false;
+    }
+}
+
+window.addEventListener('pagehide', () => {
+    try {
+        const fd = new FormData();
+        fd.append('action', 'collab_sync');
+        fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+        fd.append('file_id', String(OFFICE_FILE_ID));
+        fd.append('leave', '1');
+        navigator.sendBeacon('office.php', fd);
+    } catch (e) {}
+});
+
+if (document.getElementById('collabPresenceBar')) {
+    runCollabSyncTick();
+    setInterval(runCollabSyncTick, 1500);
 }
 </script>
 

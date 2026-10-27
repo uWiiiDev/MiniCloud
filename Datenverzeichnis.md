@@ -167,6 +167,7 @@ Speichern bis zu 5 frühere Dateistände („Zeitreise“) bei Änderungen in Of
 | :--- | :--- | :--- | :--- |
 | `file_versions` | `id`, `file_id`, `user_id`, `stored_name`, `file_size`, `mime_type`, `version_note`, `created_at` | `PRIMARY KEY (id)`, `FK -> files(id) ON DELETE CASCADE` | Physischer Versions-Snapshot in `uploads/`; automatische Rotation ab 5 Versionen |
 | `file_comments` | `id`, `file_id`, `user_id`, `comment_text`, `created_at` | `PRIMARY KEY (id)`, `FK -> files(id) ON DELETE CASCADE` | Kommentare und Notizen direkt an einer Datei |
+| `office_collab_presence` & `office_collab_deltas` | `file_id, user_id, username, focus_target, focus_label, color_hex, last_seen` / `id, file_id, user_id, username, delta_type, target_key, payload_json, created_at` | `PRIMARY KEY (file_id, user_id)` / `PRIMARY KEY (id)`, `FK -> files(id) ON DELETE CASCADE` | Kurzlebige Echtzeit-Anwesenheits- und Änderungsdaten für die konfliktfreie Live-Team-Zusammenarbeit (Stufe 1: Zellen- & Absatz-Sperre) in `office.php` (automatische Bereinigung nach 18 Sek. bzw. 10 Min.) |
 
 ---
 

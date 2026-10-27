@@ -746,6 +746,40 @@ function ensureSchemaUpdated(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    // Live-Team-Zusammenarbeit (Stufe 1: Anwesenheit, Absatz-/Zellen-Sperre & Delta-Sync in office.php)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `office_collab_presence` (
+            `file_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `username` VARCHAR(64) NOT NULL,
+            `focus_target` VARCHAR(120) NOT NULL DEFAULT '',
+            `focus_label` VARCHAR(120) NOT NULL DEFAULT '',
+            `color_hex` VARCHAR(16) NOT NULL DEFAULT '#3b82f6',
+            `last_seen` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`file_id`, `user_id`),
+            KEY `idx_ocp_file_seen` (`file_id`, `last_seen`),
+            CONSTRAINT `fk_ocp_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_ocp_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `office_collab_deltas` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `file_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `username` VARCHAR(64) NOT NULL,
+            `delta_type` VARCHAR(32) NOT NULL,
+            `target_key` VARCHAR(120) NOT NULL DEFAULT '',
+            `payload_json` MEDIUMTEXT NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_ocd_file_id` (`file_id`, `id`),
+            CONSTRAINT `fk_ocd_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_ocd_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();
     if ($adminCount === 0) {
