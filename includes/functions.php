@@ -7,6 +7,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
 
+if (!defined('MAX_FILE_SIZE')) {
+    define('MAX_FILE_SIZE', 1024 * 1024 * 1024); // 1 GB maximale Einzeldateigröße
+}
+
 /**
  * XSS-sicheres Escaping für HTML-Ausgaben.
  */

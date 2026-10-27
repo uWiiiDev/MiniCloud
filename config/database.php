@@ -17,6 +17,7 @@ define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'minicloud_secret');
 
 // Speicherplatz- & Papierkorb-Konfiguration
 define('DEFAULT_STORAGE_QUOTA', 100 * 1024 * 1024); // 100 MB pro Benutzer (Standard)
+define('MAX_FILE_SIZE', 1024 * 1024 * 1024);        // 1 GB maximale Einzeldateigröße
 define('TRASH_RETENTION_DAYS', 30);                 // 30 Tage Aufbewahrung im Mülleimer
 define('UPLOAD_DIR', dirname(__DIR__) . '/uploads/');
 
