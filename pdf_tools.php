@@ -1099,17 +1099,48 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                         📷 Seiten mit Kamera aufnehmen oder Bilder vom Gerät wählen
                     </div>
+
+                    <!-- Verstecktes Kamera-Input (ohne "multiple" + mit capture="environment", damit Android/iOS sofort die Rückkamera öffnet) -->
+                    <input
+                        type="file"
+                        id="scanCameraInput"
+                        accept="image/*"
+                        capture="environment"
+                        onchange="previewSelectedScanImages(this, true)"
+                        class="hidden"
+                    >
+
+                    <!-- Haupt-Input für das Formular (wird per DataTransfer mit allen Kamera- & Galerie-Bildern befüllt) -->
                     <input
                         type="file"
                         name="scan_images[]"
                         id="scanImagesInput"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/*"
                         multiple
-                        onchange="previewSelectedScanImages(this)"
-                        class="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-brand-600 file:text-white hover:file:bg-brand-700 cursor-pointer"
+                        onchange="previewSelectedScanImages(this, false)"
+                        class="hidden"
                     >
+
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button
+                            type="button"
+                            onclick="document.getElementById('scanCameraInput').click()"
+                            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer"
+                        >
+                            <span>📸 Kamera starten (Seite abfotografieren)</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onclick="document.getElementById('scanImagesInput').click()"
+                            class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                        >
+                            <span>🖼️ Aus Galerie / Dateien wählen</span>
+                        </button>
+                    </div>
+
                     <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                        💡 Auf dem Smartphone öffnet sich auf Wunsch direkt die Kamera. Du kannst auch mehrere Fotos gleichzeitig markieren.
+                        💡 Tipp: Drücke für jede Dokumentenseite einfach erneut auf <strong>„📸 Kamera starten“</strong> – alle abfotografierten Seiten werden unten nacheinander gesammelt!
                     </p>
                     <div id="scanPreviewStrip" class="hidden pt-2 flex flex-wrap gap-2"></div>
                 </div>
@@ -1776,13 +1807,26 @@ function syncInputFiles(inputId, fileListArray) {
     input.files = dt.files;
 }
 
-function previewSelectedScanImages(input) {
+function previewSelectedScanImages(input, isCameraCapture = false) {
     if (input && input.files && input.files.length > 0) {
         Array.from(input.files).forEach(f => {
             if (accumulatedScanFiles.length < 40) {
-                accumulatedScanFiles.push(f);
+                let fileToStore = f;
+                if (isCameraCapture && typeof File !== 'undefined') {
+                    const extMatch = (f.name || '').match(/\.[a-zA-Z0-9]+$/);
+                    const ext = extMatch ? extMatch[0] : '.jpg';
+                    const pageNo = accumulatedScanFiles.length + 1;
+                    fileToStore = new File([f], `Kamera_Scan_Seite_${pageNo}${ext}`, {
+                        type: f.type || 'image/jpeg',
+                        lastModified: Date.now()
+                    });
+                }
+                accumulatedScanFiles.push(fileToStore);
             }
         });
+        if (isCameraCapture) {
+            input.value = '';
+        }
         syncInputFiles('scanImagesInput', accumulatedScanFiles);
     }
     renderScanPreviewStrip();
