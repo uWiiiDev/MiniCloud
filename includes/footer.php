@@ -442,6 +442,388 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
         }, 150);
     });
 })();
+
+// Universelle Live-Benutzer- & Gruppensuche für alle Teilen-/Zuweisungs-Dropdowns, Chat & Admin-Benutzertabelle
+(() => {
+    // 1. Admin-Benutzertabelle Live-Filter (admin.php)
+    const adminSearchInput = document.getElementById('adminUserSearchInput');
+    if (adminSearchInput) {
+        const rows = Array.from(document.querySelectorAll('tr[data-admin-user-row="1"]'));
+        const badge = document.getElementById('adminUserCountBadge');
+        const noMatchRow = document.getElementById('adminUserNoMatchRow');
+        const total = rows.length;
+
+        const filterAdminUsers = () => {
+            const q = (adminSearchInput.value || '').trim().toLowerCase();
+            let shown = 0;
+            rows.forEach((tr) => {
+                const hay = (tr.getAttribute('data-user-search') || '').toLowerCase();
+                const match = q === '' || hay.includes(q);
+                tr.classList.toggle('hidden', !match);
+                if (match) shown++;
+            });
+            if (badge) {
+                badge.textContent = q === '' ? String(total) : `${shown} / ${total}`;
+            }
+            if (noMatchRow) {
+                noMatchRow.classList.toggle('hidden', shown > 0 || total === 0);
+            }
+        };
+
+        adminSearchInput.addEventListener('input', filterAdminUsers);
+        adminSearchInput.addEventListener('search', filterAdminUsers);
+    }
+
+    // 2. Alle Benutzer- & Gruppen-Auswahlfelder (<select>) in der gesamten Cloud mit Live-Suche ausstatten
+    const selector = [
+        'select[name="share_target"]',
+        'select[name="target_user_id"]',
+        'select[name="shared_user_id"]',
+        'select[name="assigned_user_id"]',
+        'select[name="member_id"]',
+        '#shareTargetUserId',
+        '#newChatUserSelect',
+        'select[data-user-searchable="1"]'
+    ].join(', ');
+
+    const nativeValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+
+    const escapeHtml = (str) => {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    };
+
+    const highlightMatch = (text, query) => {
+        if (!query) return escapeHtml(text);
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return escapeHtml(text);
+        const before = text.slice(0, idx);
+        const match = text.slice(idx, idx + query.length);
+        const after = text.slice(idx + query.length);
+        return `${escapeHtml(before)}<mark class="bg-amber-200/90 dark:bg-amber-500/40 text-slate-900 dark:text-white rounded px-0.5 font-bold">${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+    };
+
+    const enhanceUserSelect = (selectEl) => {
+        if (!selectEl || selectEl.dataset.mcUserEnhanced === '1') return;
+
+        // Original-Optionen (inkl. Optgroups) auslesen
+        const allItems = [];
+        Array.from(selectEl.children).forEach((child) => {
+            if (child.tagName === 'OPTGROUP') {
+                const grpLabel = child.getAttribute('label') || '';
+                Array.from(child.children).forEach((opt) => {
+                    if (opt.tagName === 'OPTION') {
+                        allItems.push({
+                            value: opt.value,
+                            label: (opt.textContent || '').trim(),
+                            group: grpLabel,
+                            isPlaceholder: opt.value === '' || opt.value === '0'
+                        });
+                    }
+                });
+            } else if (child.tagName === 'OPTION') {
+                const val = child.value;
+                allItems.push({
+                    value: val,
+                    label: (child.textContent || '').trim(),
+                    group: '',
+                    isPlaceholder: val === '' || val === '0'
+                });
+            }
+        });
+
+        const realItems = allItems.filter((it) => !it.isPlaceholder);
+        if (realItems.length === 0) return;
+
+        selectEl.dataset.mcUserEnhanced = '1';
+
+        // Falls das Elternteil ein flex-row Formular mit sm:items-center ist, auf sm:items-end anpassen
+        const parentForm = selectEl.closest('form');
+        if (parentForm && parentForm.classList.contains('sm:flex-row') && parentForm.classList.contains('sm:items-center')) {
+            parentForm.classList.remove('sm:items-center');
+            parentForm.classList.add('sm:items-end');
+        }
+
+        // Wrapper erstellen
+        const wrapper = document.createElement('div');
+        const isFlex1 = selectEl.classList.contains('flex-1');
+        wrapper.className = `mc-user-picker-wrap relative ${isFlex1 ? 'flex-1 min-w-0' : 'w-full'} space-y-1`;
+        if (isFlex1) {
+            selectEl.classList.remove('flex-1');
+            selectEl.classList.add('w-full');
+        }
+
+        selectEl.parentNode.insertBefore(wrapper, selectEl);
+
+        // Suchleiste oberhalb des Selects
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'relative flex items-center';
+
+        const searchIcon = document.createElement('span');
+        searchIcon.className = 'absolute left-2.5 text-[11px] text-slate-400 pointer-events-none select-none';
+        searchIcon.textContent = '🔍';
+
+        const hasGroups = allItems.some((it) => it.group !== '' || it.value.startsWith('group:'));
+        const searchInput = document.createElement('input');
+        searchInput.type = 'search';
+        searchInput.autocomplete = 'off';
+        searchInput.placeholder = hasGroups
+            ? `Benutzer oder Gruppe suchen (${realItems.length})…`
+            : `Benutzer suchen (${realItems.length})…`;
+        searchInput.className = 'w-full pl-7 pr-16 py-1 rounded-lg bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white dark:focus:bg-slate-800 transition-colors';
+
+        const countBadge = document.createElement('span');
+        countBadge.className = 'absolute right-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200/70 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 pointer-events-none';
+        countBadge.textContent = String(realItems.length);
+
+        searchWrap.appendChild(searchIcon);
+        searchWrap.appendChild(searchInput);
+        searchWrap.appendChild(countBadge);
+
+        // Schwebende Schnell-Auswahlliste (Autocomplete-Popup)
+        const dropdown = document.createElement('div');
+        dropdown.className = 'hidden absolute left-0 right-0 top-7 z-50 max-h-52 overflow-y-auto rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl divide-y divide-slate-100 dark:divide-slate-700/60 text-xs';
+
+        wrapper.appendChild(searchWrap);
+        wrapper.appendChild(dropdown);
+        wrapper.appendChild(selectEl);
+
+        let activeSuggestIndex = -1;
+        let currentVisibleSuggestions = [];
+
+        const rebuildSelectOptions = (query, preserveValue) => {
+            const q = (query || '').trim().toLowerCase();
+            const prevVal = preserveValue !== undefined
+                ? preserveValue
+                : (nativeValueDesc ? nativeValueDesc.get.call(selectEl) : selectEl.value);
+
+            selectEl.innerHTML = '';
+            const groupsMap = new Map();
+            let matchCount = 0;
+            let firstMatchedValue = null;
+            let prevValStillExists = false;
+
+            allItems.forEach((item) => {
+                const hay = `${item.label} ${item.group}`.toLowerCase();
+                const isMatch = item.isPlaceholder || q === '' || hay.includes(q);
+                if (!isMatch) return;
+
+                if (!item.isPlaceholder) {
+                    matchCount++;
+                    if (firstMatchedValue === null) {
+                        firstMatchedValue = item.value;
+                    }
+                }
+                if (item.value === prevVal) {
+                    prevValStillExists = true;
+                }
+
+                const opt = document.createElement('option');
+                opt.value = item.value;
+                opt.textContent = item.label;
+
+                if (item.group !== '') {
+                    let grpEl = groupsMap.get(item.group);
+                    if (!grpEl) {
+                        grpEl = document.createElement('optgroup');
+                        grpEl.label = item.group;
+                        groupsMap.set(item.group, grpEl);
+                        selectEl.appendChild(grpEl);
+                    }
+                    grpEl.appendChild(opt);
+                } else {
+                    selectEl.appendChild(opt);
+                }
+            });
+
+            if (q !== '' && firstMatchedValue !== null) {
+                if (nativeValueDesc) {
+                    nativeValueDesc.set.call(selectEl, firstMatchedValue);
+                } else {
+                    selectEl.value = firstMatchedValue;
+                }
+            } else if (prevValStillExists) {
+                if (nativeValueDesc) {
+                    nativeValueDesc.set.call(selectEl, prevVal);
+                } else {
+                    selectEl.value = prevVal;
+                }
+            }
+
+            countBadge.textContent = q === '' ? String(realItems.length) : `${matchCount}/${realItems.length}`;
+            return matchCount;
+        };
+
+        const renderSuggestions = (query) => {
+            const q = (query || '').trim().toLowerCase();
+            dropdown.innerHTML = '';
+            currentVisibleSuggestions = [];
+            activeSuggestIndex = -1;
+
+            const currentVal = nativeValueDesc ? nativeValueDesc.get.call(selectEl) : selectEl.value;
+
+            allItems.forEach((item) => {
+                const hay = `${item.label} ${item.group}`.toLowerCase();
+                if (!item.isPlaceholder && q !== '' && !hay.includes(q)) return;
+                if (item.isPlaceholder && q !== '') return;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isSelected = item.value === currentVal && !item.isPlaceholder;
+                btn.className = `w-full text-left px-3 py-2 flex items-center justify-between gap-2 hover:bg-brand-50 dark:hover:bg-brand-950/50 transition-colors cursor-pointer ${
+                    isSelected ? 'bg-brand-50/70 dark:bg-brand-950/30 font-bold text-brand-700 dark:text-brand-300' : 'text-slate-800 dark:text-slate-100'
+                }`;
+
+                const leftSpan = document.createElement('span');
+                leftSpan.className = 'truncate';
+                leftSpan.innerHTML = highlightMatch(item.label, q);
+                btn.appendChild(leftSpan);
+
+                if (item.group !== '') {
+                    const grpBadge = document.createElement('span');
+                    grpBadge.className = 'shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300';
+                    grpBadge.textContent = item.group.replace(/^[^\wÄÖÜäöüß]+/, '').trim();
+                    btn.appendChild(grpBadge);
+                }
+
+                btn.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault(); // verhindert Blur vor Klick
+                    selectOptionItem(item.value);
+                });
+
+                dropdown.appendChild(btn);
+                currentVisibleSuggestions.push({ item, btn });
+            });
+
+            if (currentVisibleSuggestions.length === 0) {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'px-3 py-2.5 text-slate-400 italic text-center';
+                emptyDiv.textContent = 'Kein passender Benutzer oder Gruppe gefunden.';
+                dropdown.appendChild(emptyDiv);
+            }
+        };
+
+        const selectOptionItem = (val) => {
+            searchInput.value = '';
+            rebuildSelectOptions('', val);
+            dropdown.classList.add('hidden');
+            if (selectEl.id === 'newChatUserSelect') {
+                filterChatConversations('');
+            }
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const filterChatConversations = (query) => {
+            const q = (query || '').trim().toLowerCase();
+            document.querySelectorAll('a[data-chat-conv-item="1"]').forEach((link) => {
+                const hay = (link.getAttribute('data-chat-conv-search') || '').toLowerCase();
+                link.classList.toggle('hidden', q !== '' && !hay.includes(q));
+            });
+        };
+
+        searchInput.addEventListener('focus', () => {
+            renderSuggestions(searchInput.value);
+            dropdown.classList.remove('hidden');
+        });
+
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value;
+            rebuildSelectOptions(q);
+            renderSuggestions(q);
+            dropdown.classList.remove('hidden');
+            if (selectEl.id === 'newChatUserSelect') {
+                filterChatConversations(q);
+            }
+        });
+
+        searchInput.addEventListener('search', () => {
+            const q = searchInput.value;
+            rebuildSelectOptions(q);
+            renderSuggestions(q);
+            if (selectEl.id === 'newChatUserSelect') {
+                filterChatConversations(q);
+            }
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (dropdown.classList.contains('hidden')) {
+                    renderSuggestions(searchInput.value);
+                    dropdown.classList.remove('hidden');
+                }
+                if (currentVisibleSuggestions.length > 0) {
+                    activeSuggestIndex = (activeSuggestIndex + 1) % currentVisibleSuggestions.length;
+                    updateActiveSuggestionHighlight();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (currentVisibleSuggestions.length > 0) {
+                    activeSuggestIndex = (activeSuggestIndex - 1 + currentVisibleSuggestions.length) % currentVisibleSuggestions.length;
+                    updateActiveSuggestionHighlight();
+                }
+            } else if (e.key === 'Enter') {
+                if (!dropdown.classList.contains('hidden') && currentVisibleSuggestions.length > 0) {
+                    e.preventDefault();
+                    const chosen = activeSuggestIndex >= 0
+                        ? currentVisibleSuggestions[activeSuggestIndex]
+                        : currentVisibleSuggestions.find((s) => !s.item.isPlaceholder) || currentVisibleSuggestions[0];
+                    if (chosen) {
+                        selectOptionItem(chosen.item.value);
+                    }
+                }
+            } else if (e.key === 'Escape') {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        const updateActiveSuggestionHighlight = () => {
+            currentVisibleSuggestions.forEach((entry, idx) => {
+                entry.btn.classList.toggle('ring-2', idx === activeSuggestIndex);
+                entry.btn.classList.toggle('ring-inset', idx === activeSuggestIndex);
+                entry.btn.classList.toggle('ring-brand-500', idx === activeSuggestIndex);
+                if (idx === activeSuggestIndex) {
+                    entry.btn.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        };
+
+        searchInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                dropdown.classList.add('hidden');
+            }, 150);
+        });
+
+        // Wenn programmseitig selectEl.value = '...' gesetzt wird (z. B. beim Öffnen eines Bearbeiten-Modals),
+        // zuerst alle Optionen wiederherstellen, damit jeder gespeicherte Wert zuverlässig selektiert wird.
+        if (nativeValueDesc && nativeValueDesc.get && nativeValueDesc.set) {
+            Object.defineProperty(selectEl, 'value', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    return nativeValueDesc.get.call(this);
+                },
+                set(newVal) {
+                    if (searchInput.value !== '') {
+                        searchInput.value = '';
+                    }
+                    rebuildSelectOptions('', String(newVal ?? ''));
+                    nativeValueDesc.set.call(this, newVal);
+                }
+            });
+        }
+
+        if (parentForm) {
+            parentForm.addEventListener('reset', () => {
+                searchInput.value = '';
+                rebuildSelectOptions('', '');
+            });
+        }
+    };
+
+    document.querySelectorAll(selector).forEach(enhanceUserSelect);
+})();
 </script>
 </body>
 </html>

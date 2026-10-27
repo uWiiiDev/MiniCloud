@@ -1864,8 +1864,23 @@ $localSnapshots  = getLocalAppSnapshots();
 
         <!-- Liste aller Benutzer -->
         <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-            <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <h2 class="text-base font-bold text-slate-900 dark:text-white">Registrierte Cloud-Benutzer (<?= count($allUsers) ?>)</h2>
+            <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-base font-bold text-slate-900 dark:text-white">Registrierte Cloud-Benutzer</h2>
+                    <span id="adminUserCountBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">
+                        <?= count($allUsers) ?>
+                    </span>
+                </div>
+                <div class="relative w-full sm:w-72">
+                    <span class="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">🔍</span>
+                    <input
+                        type="search"
+                        id="adminUserSearchInput"
+                        placeholder="Benutzer, E-Mail, #ID oder Rolle suchen…"
+                        autocomplete="off"
+                        class="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
             </div>
 
             <div class="overflow-x-auto">
@@ -1878,7 +1893,7 @@ $localSnapshots  = getLocalAppSnapshots();
                             <th class="py-3 px-4 text-right">Aktion</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody id="adminUsersTableBody" class="divide-y divide-slate-200 dark:divide-slate-800">
                         <?php foreach ($allUsers as $u): ?>
                             <?php
                             $uId = (int)$u['id'];
@@ -1887,8 +1902,16 @@ $localSnapshots  = getLocalAppSnapshots();
                             $u2faMode = (int)($u['two_factor_enabled'] ?? 0);
                             $uHasTotp = trim((string)($u['totp_secret'] ?? '')) !== '';
                             $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
+                            $uSearchText = mb_strtolower(
+                                (string)$u['username'] . ' ' .
+                                $uEmail . ' #' . $uId . ' ' .
+                                (((int)$u['is_admin'] === 1) ? 'admin administrator' : 'standard') . ' ' .
+                                ($uShareVis ? 'teilen sichtbar' : 'verborgen') . ' ' .
+                                ($u2faMode > 0 ? '2fa totp' : ''),
+                                'UTF-8'
+                            );
                             ?>
-                            <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                            <tr data-admin-user-row="1" data-user-search="<?= e($uSearchText) ?>" class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                                 <td class="py-3 px-4">
                                     <div class="font-semibold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
                                         <span><?= e((string)$u['username']) ?></span>
@@ -1980,6 +2003,11 @@ $localSnapshots  = getLocalAppSnapshots();
                                 </td>
                             </tr>
                         <?php endforeach; ?>
+                        <tr id="adminUserNoMatchRow" class="hidden">
+                            <td colspan="4" class="py-6 px-4 text-center text-xs text-slate-500 dark:text-slate-400 italic">
+                                Kein registrierter Benutzer entspricht Ihrer Suche.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>

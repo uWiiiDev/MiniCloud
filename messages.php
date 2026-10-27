@@ -760,6 +760,8 @@ require_once __DIR__ . '/includes/header.php';
                     ?>
                     <a
                         href="messages.php?channel=<?= $cPid ?>"
+                        data-chat-conv-item="1"
+                        data-chat-conv-search="<?= e(mb_strtolower((string)$conv['username'] . ' ' . (string)$conv['last_text'], 'UTF-8')) ?>"
                         class="flex items-center gap-3 p-3.5 transition-colors <?= $isSelectedConv ? 'bg-brand-50/90 dark:bg-brand-950/40 border-l-4 border-brand-600' : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/50' ?>"
                     >
                         <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-2xs">
