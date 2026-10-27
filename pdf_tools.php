@@ -1832,6 +1832,30 @@ require_once __DIR__ . '/includes/header.php';
                             <option value="deu+eng">🇩🇪 + 🇬🇧 Deutsch &amp; Englisch (deu+eng)</option>
                             <option value="eng">🇬🇧 Englisch (eng)</option>
                         <?php endif; ?>
+                        <?php
+                        $extraOcrLangs = [
+                            'fra' => '🇫🇷 Französisch (fra)',
+                            'spa' => '🇪🇸 Spanisch (spa)',
+                            'ita' => '🇮🇹 Italienisch (ita)',
+                            'nld' => '🇳🇱 Niederländisch (nld)',
+                            'pol' => '🇵🇱 Polnisch (pol)',
+                            'ces' => '🇨🇿 Tschechisch (ces)',
+                            'por' => '🇵🇹 Portugiesisch (por)',
+                            'tur' => '🇹🇷 Türkisch (tur)',
+                            'ukr' => '🇺🇦 Ukrainisch (ukr)',
+                            'frk' => '📜 Deutsche Fraktur / Altdeutsch (frk)',
+                        ];
+                        foreach ($extraOcrLangs as $ocrCode => $ocrLabel):
+                            if (is_file(__DIR__ . '/assets/ocr/' . $ocrCode . '.traineddata.gz')):
+                        ?>
+                            <option value="<?= e($ocrCode) ?>"><?= e($ocrLabel) ?></option>
+                        <?php
+                            endif;
+                        endforeach;
+                        if (is_file(__DIR__ . '/assets/ocr/frk.traineddata.gz') && is_file(__DIR__ . '/assets/ocr/deu.traineddata.gz')):
+                        ?>
+                            <option value="frk+deu">📜 + 🇩🇪 Fraktur &amp; Deutsch kombiniert (frk+deu)</option>
+                        <?php endif; ?>
                     </select>
                 </div>
                 <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">

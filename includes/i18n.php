@@ -2,13 +2,18 @@
 declare(strict_types=1);
 
 /**
- * MiniCloud – Mehrsprachigkeits-Modul (i18n) für 6 Sprachen:
+ * MiniCloud – Mehrsprachigkeits-Modul (i18n) für 11 europäische Sprachen:
  * - de: Deutsch (Standard)
  * - en: English
  * - fr: Français
  * - es: Español
  * - it: Italiano
  * - nl: Nederlands
+ * - pl: Polski
+ * - pt: Português
+ * - cs: Čeština
+ * - tr: Türkçe
+ * - uk: Українська
  */
 
 /**
@@ -25,6 +30,11 @@ function getAllowedLanguages(): array
         'es' => '🇪🇸 Español',
         'it' => '🇮🇹 Italiano',
         'nl' => '🇳🇱 Nederlands',
+        'pl' => '🇵🇱 Polski',
+        'pt' => '🇵🇹 Português',
+        'cs' => '🇨🇿 Čeština',
+        'tr' => '🇹🇷 Türkçe',
+        'uk' => '🇺🇦 Українська',
     ];
 }
 
@@ -3438,6 +3448,104 @@ function getTranslationDictionary(): array
 }
 
 /**
+ * Zusatz-Wörterbuch für weitere europäische Sprachen (Polnisch, Portugiesisch, Tschechisch, Türkisch, Ukrainisch).
+ *
+ * @return array<string, array<string, string>>
+ */
+function getExtraEuropeanDictionary(): array
+{
+    static $extra = null;
+    if (is_array($extra)) {
+        return $extra;
+    }
+
+    $extra = [
+        // --- Navigation & Kopfzeile ---
+        'Theme wählen' => ['pl' => 'Wybierz motyw', 'pt' => 'Escolher tema', 'cs' => 'Vybrat motiv', 'tr' => 'Tema seç', 'uk' => 'Обрати тему'],
+        'Design-Theme wählen' => ['pl' => 'Wybierz motyw wyglądu', 'pt' => 'Escolher tema visual', 'cs' => 'Vybrat vzhled', 'tr' => 'Tasarım teması seç', 'uk' => 'Обрати тему оформлення'],
+        'Sprache wählen' => ['pl' => 'Wybierz język', 'pt' => 'Escolher idioma', 'cs' => 'Vybrat jazyk', 'tr' => 'Dil seçin', 'uk' => 'Обрати мову'],
+        'Wählen Sie Ihre bevorzugte Sprache für die Benutzeroberfläche.' => [
+            'pl' => 'Wybierz preferowany język interfejsu użytkownika.',
+            'pt' => 'Escolha o seu idioma preferido para a interface.',
+            'cs' => 'Vyberte preferovaný jazyk uživatelského rozhraní.',
+            'tr' => 'Kullanıcı arayüzü için tercih ettiğiniz dili seçin.',
+            'uk' => 'Оберіть бажану мову інтерфейсу користувача.',
+        ],
+        'Dateien' => ['pl' => 'Pliki', 'pt' => 'Ficheiros', 'cs' => 'Soubory', 'tr' => 'Dosyalar', 'uk' => 'Файли'],
+        'Meine Dateien' => ['pl' => 'Moje pliki', 'pt' => 'Os meus ficheiros', 'cs' => 'Moje soubory', 'tr' => 'Dosyalarım', 'uk' => 'Мої файли'],
+        'Mein Tag' => ['pl' => 'Mój dzień', 'pt' => 'O meu dia', 'cs' => 'Můj den', 'tr' => 'Günüm', 'uk' => 'Мій день'],
+        'Cockpit' => ['pl' => 'Kokpit', 'pt' => 'Painel', 'cs' => 'Přehled', 'tr' => 'Kokpit', 'uk' => 'Огляд'],
+        'Module' => ['pl' => 'Moduły', 'pt' => 'Módulos', 'cs' => 'Moduly', 'tr' => 'Modüller', 'uk' => 'Модулі'],
+        'Office Light' => ['pl' => 'Office Light', 'pt' => 'Office Light', 'cs' => 'Office Light', 'tr' => 'Office Light', 'uk' => 'Office Light'],
+        'Kalender' => ['pl' => 'Kalendarz', 'pt' => 'Calendário', 'cs' => 'Kalendář', 'tr' => 'Takvim', 'uk' => 'Календар'],
+        'Aufgaben' => ['pl' => 'Zadania', 'pt' => 'Tarefas', 'cs' => 'Úkoly', 'tr' => 'Görevler', 'uk' => 'Завдання'],
+        'Notizen' => ['pl' => 'Notatki', 'pt' => 'Notas', 'cs' => 'Poznámky', 'tr' => 'Notlar', 'uk' => 'Нотатки'],
+        'Kontakte' => ['pl' => 'Kontakty', 'pt' => 'Contactos', 'cs' => 'Kontakty', 'tr' => 'Kişiler', 'uk' => 'Контакти'],
+        'Nachrichten' => ['pl' => 'Wiadomości', 'pt' => 'Mensagens', 'cs' => 'Zprávy', 'tr' => 'Mesajlar', 'uk' => 'Повідомлення'],
+        'PDF & Scan' => ['pl' => 'PDF i skan', 'pt' => 'PDF e digitalização', 'cs' => 'PDF a sken', 'tr' => 'PDF ve Tarama', 'uk' => 'PDF та скан'],
+        'Finanzen' => ['pl' => 'Finanse', 'pt' => 'Finanças', 'cs' => 'Finance', 'tr' => 'Finans', 'uk' => 'Фінанси'],
+        'Pinnwand' => ['pl' => 'Tablica', 'pt' => 'Mural', 'cs' => 'Nástěnka', 'tr' => 'Pano', 'uk' => 'Дошка'],
+        'Favoriten' => ['pl' => 'Ulubione', 'pt' => 'Favoritos', 'cs' => 'Oblíbené', 'tr' => 'Favoriler', 'uk' => 'Обране'],
+        'Papierkorb' => ['pl' => 'Kosz', 'pt' => 'Reciclagem', 'cs' => 'Koš', 'tr' => 'Çöp Kutusu', 'uk' => 'Кошик'],
+        'Einstellungen' => ['pl' => 'Ustawienia', 'pt' => 'Definições', 'cs' => 'Nastavení', 'tr' => 'Ayarlar', 'uk' => 'Налаштування'],
+        'Admin' => ['pl' => 'Admin', 'pt' => 'Admin', 'cs' => 'Admin', 'tr' => 'Yönetim', 'uk' => 'Адмін'],
+        'Hilfe' => ['pl' => 'Pomoc', 'pt' => 'Ajuda', 'cs' => 'Nápověda', 'tr' => 'Yardım', 'uk' => 'Довідка'],
+        'Impressum' => ['pl' => 'Nota prawna', 'pt' => 'Aviso legal', 'cs' => 'Tiráž', 'tr' => 'Künye', 'uk' => 'Правова інформація'],
+        'Abmelden' => ['pl' => 'Wyloguj', 'pt' => 'Terminar sessão', 'cs' => 'Odhlásit se', 'tr' => 'Çıkış yap', 'uk' => 'Вийти'],
+        'Anmelden' => ['pl' => 'Zaloguj się', 'pt' => 'Iniciar sessão', 'cs' => 'Přihlásit se', 'tr' => 'Giriş yap', 'uk' => 'Увійти'],
+        'Jetzt anmelden' => ['pl' => 'Zaloguj się teraz', 'pt' => 'Iniciar sessão agora', 'cs' => 'Přihlásit se nyní', 'tr' => 'Şimdi giriş yap', 'uk' => 'Увійти зараз'],
+        'Benutzername' => ['pl' => 'Nazwa użytkownika', 'pt' => 'Nome de utilizador', 'cs' => 'Uživatelské jméno', 'tr' => 'Kullanıcı adı', 'uk' => 'Ім’я користувача'],
+        'Passwort' => ['pl' => 'Hasło', 'pt' => 'Palavra-passe', 'cs' => 'Heslo', 'tr' => 'Şifre', 'uk' => 'Пароль'],
+
+        // --- Dateimanager & Aktionen ---
+        'Ordner' => ['pl' => 'Folder', 'pt' => 'Pasta', 'cs' => 'Složka', 'tr' => 'Klasör', 'uk' => 'Папка'],
+        'ORDNER' => ['pl' => 'FOLDER', 'pt' => 'PASTA', 'cs' => 'SLOŽKA', 'tr' => 'KLASÖR', 'uk' => 'ПАПКА'],
+        'Ordner anlegen' => ['pl' => 'Utwórz folder', 'pt' => 'Criar pasta', 'cs' => 'Vytvořit složku', 'tr' => 'Klasör oluştur', 'uk' => 'Створити папку'],
+        'Neuen Unterordner anlegen' => ['pl' => 'Utwórz podfolder', 'pt' => 'Criar subpasta', 'cs' => 'Vytvořit podsložku', 'tr' => 'Yeni alt klasör oluştur', 'uk' => 'Створити підпапку'],
+        'Gruppenordner' => ['pl' => 'Foldery grupowe', 'pt' => 'Pastas de grupo', 'cs' => 'Skupinové složky', 'tr' => 'Grup klasörleri', 'uk' => 'Групові папки'],
+        'Für mich freigegeben' => ['pl' => 'Udostępnione dla mnie', 'pt' => 'Partilhados comigo', 'cs' => 'Sdíleno se mnou', 'tr' => 'Benimle paylaşılanlar', 'uk' => 'Надано мені доступ'],
+        'Dateien oder Ordner hierher ziehen' => [
+            'pl' => 'Przeciągnij i upuść pliki lub foldery tutaj',
+            'pt' => 'Arraste ficheiros ou pastas para aqui',
+            'cs' => 'Přetáhněte sem soubory nebo složky',
+            'tr' => 'Dosyaları veya klasörleri buraya sürükleyin',
+            'uk' => 'Перетягніть файли або папки сюди',
+        ],
+        'Meine hochgeladenen Dateien' => [
+            'pl' => 'Moje przesłane pliki',
+            'pt' => 'Os meus ficheiros enviados',
+            'cs' => 'Moje nahrané soubory',
+            'tr' => 'Yüklediğim dosyalar',
+            'uk' => 'Мої завантажені файли',
+        ],
+        'Speicherplatz-Auslastung' => [
+            'pl' => 'Wykorzystanie miejsca',
+            'pt' => 'Utilização de armazenamento',
+            'cs' => 'Využití úložiště',
+            'tr' => 'Depolama kullanımı',
+            'uk' => 'Використання сховища',
+        ],
+        'Aktiver Ordner' => ['pl' => 'Aktywny folder', 'pt' => 'Pasta atual', 'cs' => 'Aktivní složka', 'tr' => 'Etkin klasör', 'uk' => 'Поточна папка'],
+        '🏠 Hauptverzeichnis' => ['pl' => '🏠 Katalog główny', 'pt' => '🏠 Pasta principal', 'cs' => '🏠 Hlavní složka', 'tr' => '🏠 Ana dizin', 'uk' => '🏠 Головна папка'],
+        'Hauptverzeichnis' => ['pl' => 'Katalog główny', 'pt' => 'Pasta principal', 'cs' => 'Hlavní složka', 'tr' => 'Ana dizin', 'uk' => 'Головна папка'],
+        'Suchen' => ['pl' => 'Szukaj', 'pt' => 'Pesquisar', 'cs' => 'Hledat', 'tr' => 'Ara', 'uk' => 'Пошук'],
+        'Dateien durchsuchen...' => ['pl' => 'Szukaj plików...', 'pt' => 'Pesquisar ficheiros...', 'cs' => 'Hledat soubory...', 'tr' => 'Dosyalarda ara...', 'uk' => 'Пошук файлів...'],
+        'Name' => ['pl' => 'Nazwa', 'pt' => 'Nome', 'cs' => 'Název', 'tr' => 'Ad', 'uk' => 'Назва'],
+        'Aktion' => ['pl' => 'Akcja', 'pt' => 'Ação', 'cs' => 'Akce', 'tr' => 'İşlem', 'uk' => 'Дія'],
+        'Öffnen' => ['pl' => 'Otwórz', 'pt' => 'Abrir', 'cs' => 'Otevřít', 'tr' => 'Aç', 'uk' => 'Відкрити'],
+        'Schließen' => ['pl' => 'Zamknij', 'pt' => 'Fechar', 'cs' => 'Zavřít', 'tr' => 'Kapat', 'uk' => 'Закрити'],
+        'Speichern' => ['pl' => 'Zapisz', 'pt' => 'Guardar', 'cs' => 'Uložit', 'tr' => 'Kaydet', 'uk' => 'Зберегти'],
+        'Abbrechen' => ['pl' => 'Anuluj', 'pt' => 'Cancelar', 'cs' => 'Zrušit', 'tr' => 'İptal', 'uk' => 'Скасувати'],
+        'Löschen' => ['pl' => 'Usuń', 'pt' => 'Eliminar', 'cs' => 'Smazat', 'tr' => 'Sil', 'uk' => 'Видалити'],
+        'Herunterladen' => ['pl' => 'Pobierz', 'pt' => 'Transferir', 'cs' => 'Stáhnout', 'tr' => 'İndir', 'uk' => 'Завантажити'],
+        'Erstellen' => ['pl' => 'Utwórz', 'pt' => 'Criar', 'cs' => 'Vytvořit', 'tr' => 'Oluştur', 'uk' => 'Створити'],
+        '+ Erstellen' => ['pl' => '+ Utwórz', 'pt' => '+ Criar', 'cs' => '+ Vytvořit', 'tr' => '+ Oluştur', 'uk' => '+ Створити'],
+    ];
+
+    return $extra;
+}
+
+/**
  * Übersetzt einen einzelnen Textknoten oder Attributwert in die Zielsprache.
  */
 function translateTextSegment(string $text, string $lang): string
@@ -3463,6 +3571,16 @@ function translateTextSegment(string $text, string $lang): string
 
     if (isset($dict[$decodedCore][$lang])) {
         return $lead . htmlspecialchars($dict[$decodedCore][$lang], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
+    }
+
+    $extraDict = getExtraEuropeanDictionary();
+    if (isset($extraDict[$decodedCore][$lang])) {
+        return $lead . htmlspecialchars($extraDict[$decodedCore][$lang], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
+    }
+
+    // Für die erweiterten europäischen Sprachen (pl, pt, cs, tr, uk) auf Englisch zurückfallen, falls kein Direkt-Eintrag existiert
+    if (in_array($lang, ['pl', 'pt', 'cs', 'tr', 'uk'], true) && isset($dict[$decodedCore]['en'])) {
+        return $lead . htmlspecialchars($dict[$decodedCore]['en'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
     }
 
     // Dynamische Muster (Zahlen, Dateigrößen, Benutzernamen, Daten)
@@ -3684,8 +3802,9 @@ function translateTextSegment(string $text, string $lang): string
     ];
 
     foreach ($patterns as $regex => $langs) {
-        if (isset($langs[$lang]) && preg_match($regex, $decodedCore)) {
-            $replaced = preg_replace($regex, $langs[$lang], $decodedCore);
+        $targetPattern = $langs[$lang] ?? (in_array($lang, ['pl', 'pt', 'cs', 'tr', 'uk'], true) ? ($langs['en'] ?? null) : null);
+        if ($targetPattern !== null && preg_match($regex, $decodedCore)) {
+            $replaced = preg_replace($regex, $targetPattern, $decodedCore);
             if (is_string($replaced)) {
                 return $lead . htmlspecialchars($replaced, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
             }
@@ -3701,9 +3820,8 @@ function translateTextSegment(string $text, string $lang): string
             'nl' => "Juridische kennisgeving overeenkomstig § 5 DDG & art. 2, lid 2, onder c) AVG\n\nDeze webapplicatie is een zuiver particulier, niet-commercieel systeem dat uitsluitend voor persoonlijke en familiale doeleinden binnen een besloten gebruikersgroep wordt beheerd.\n\n1. Geen colofonplicht (§ 5 lid 1 DDG)\nEr is geen sprake van een commerciële, betaalde of journalistieke dienst. Openbare zelfregistratie is uitgeschakeld.\n\n2. Gegevensbescherming & Huishoudelijke uitzondering (Art. 2, lid 2, onder c) AVG)\nHet gebruik vindt uitsluitend plaats in de privésfeer en familiekring. Er worden geen analyse-, reclame- of trackingdiensten gebruikt en er worden geen gegevens doorgegeven aan derden of externe servers (CDN’s).\n\n3. Technisch contact\nVoor technische vragen kunt u per e-mail contact opnemen met de beheerder.",
             'it' => "Note legali ai sensi del § 5 DDG e dell’art. 2, par. 2, lett. c) del GDPR\n\nQuesta applicazione web è un sistema strettamente privato e non commerciale, gestito esclusivamente per scopi personali e familiari all’interno di una cerchia ristretta di utenti.\n\n1. Nessun obbligo di colophon commerciale (§ 5 comma 1 DDG)\nNon si tratta di un servizio commerciale, a pagamento o giornalistico. L’autoregistrazione pubblica è disattivata.\n\n2. Protezione dei dati ed Esenzione domestica (Art. 2, par. 2, lett. c) del GDPR)\nL’utilizzo avviene esclusivamente in ambito privato e familiare. Non vengono utilizzati servizi di analisi, pubblicità o tracciamento e nessun dato viene trasmesso a terzi o server esterni (CDN).\n\n3. Contatto tecnico\nPer richieste tecniche è possibile contattare l’amministratore via e-mail.",
         ];
-        if (isset($imprintTranslations[$lang])) {
-            return $lead . htmlspecialchars($imprintTranslations[$lang], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
-        }
+        $imprintTarget = $imprintTranslations[$lang] ?? $imprintTranslations['en'];
+        return $lead . htmlspecialchars($imprintTarget, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $trail;
     }
 
     return $text;
