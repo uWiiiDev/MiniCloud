@@ -2199,11 +2199,11 @@ function generateStoredFileName(string $ext = ''): string
 }
 
 /**
- * Alias für extractSanitizedFolderPath().
+ * Alias für sanitizeFolderPathInput().
  */
 function sanitizeFolderPath(string $path): string
 {
-    return extractSanitizedFolderPath($path);
+    return sanitizeFolderPathInput($path);
 }
 
 /**

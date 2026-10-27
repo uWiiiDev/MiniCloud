@@ -824,6 +824,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             $showAllFolders,
             $currentFolder,
             $searchQuery,
+            $onlyFavorites,
             $sortBy,
             $sortDir
         ): string {

@@ -106,16 +106,16 @@ $userId = (int)$userRow['id'];
  */
 function splitWebdavPath(string $relPath): array
 {
-    $clean = sanitizeFolderPath($relPath);
-    if ($clean === '') {
+    $trimmed = trim(str_replace('\\', '/', $relPath), '/');
+    if ($trimmed === '') {
         return ['', ''];
     }
-    $pos = strrpos($clean, '/');
+    $pos = strrpos($trimmed, '/');
     if ($pos === false) {
-        return ['', sanitizeFileName($clean)];
+        return ['', sanitizeFileName($trimmed)];
     }
-    $folder = sanitizeFolderPath(substr($clean, 0, $pos));
-    $name   = sanitizeFileName(substr($clean, $pos + 1));
+    $folder = sanitizeFolderPath(substr($trimmed, 0, $pos));
+    $name   = sanitizeFileName(substr($trimmed, $pos + 1));
     return [$folder, $name];
 }
 
