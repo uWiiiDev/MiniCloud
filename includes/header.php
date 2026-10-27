@@ -477,17 +477,18 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 
                     <div
                         id="appLauncherMenu"
-                        class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full sm:mt-2 w-[calc(100vw-1rem)] max-w-[330px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 z-50"
+                        class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full sm:mt-2 w-[calc(100vw-1rem)] max-w-[350px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 z-50"
                     >
                         <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-200/80 dark:border-slate-800">
                             <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🧩 Cloud-Module</span>
-                            <span class="text-[11px] text-slate-400 dark:text-slate-500">⭐ = Oben anheften</span>
+                            <span class="text-[11px] text-slate-400 dark:text-slate-500">⠿ Ziehen · ⭐ Anheften</span>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-2">
+                        <div id="appLauncherGrid" class="grid grid-cols-2 gap-2">
                             <!-- Dateien -->
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="index.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="files" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="index.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📁</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Dateien</span>
                                 </a>
@@ -495,8 +496,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             </div>
 
                             <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="calendar.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="calendar" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="calendar.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📅</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kalender</span>
                                 </a>
@@ -505,8 +507,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="messages.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="chat" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="messages.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">💬</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Chat</span>
                                     <?php if ($headerUnreadChat > 0): ?>
@@ -518,8 +521,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="tasks.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="tasks" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="tasks.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📋</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Aufgaben</span>
                                 </a>
@@ -528,8 +532,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="notes.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="notes" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="notes.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📌</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Notizen</span>
                                 </a>
@@ -538,8 +543,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="contacts.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="contacts" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="contacts.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📇</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kontakte</span>
                                 </a>
@@ -548,8 +554,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_dashboard'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="dashboard.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="dashboard" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="dashboard.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">🏠</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Mein Tag</span>
                                 </a>
@@ -558,8 +565,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_polls'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="polls.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="polls" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="polls.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">📊</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Umfragen</span>
                                 </a>
@@ -568,8 +576,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_menti'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="menti.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="menti" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="menti.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">🎤</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Mentimeter</span>
                                 </a>
@@ -578,8 +587,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             <?php endif; ?>
 
                             <?php if (($appSettings['enable_passwords'] ?? '1') === '1'): ?>
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="passwords.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="passwords" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="passwords.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">🔐</span>
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Schlüsselbund</span>
                                 </a>
@@ -587,16 +597,24 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             </div>
                             <?php endif; ?>
 
-                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
-                                <a href="trash.php" class="flex items-center gap-2 min-w-0 flex-1">
+                            <div data-launcher-item="trash" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="trash.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
                                     <span class="text-lg">🗑️</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Papierkorb (30 Tage)</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Papierkorb</span>
                                     <?php if ($trashCountBadge > 0): ?>
                                         <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= $trashCountBadge ?></span>
                                     <?php endif; ?>
                                 </a>
                                 <button type="button" data-nav-star="trash" onclick="toggleHeaderNavFavorite('trash', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
                             </div>
+                        </div>
+
+                        <div class="mt-2.5 pt-2 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+                            <span>Tipp: Auch oben in der Leiste ziehbar!</span>
+                            <button type="button" onclick="resetHeaderNavAndOrder(event)" class="text-brand-600 dark:text-brand-400 font-semibold hover:underline cursor-pointer">
+                                🔄 Standard
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -682,7 +700,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                 <script>
                 (function() {
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
+                    const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
+                    const defaultOrder  = ['files', 'calendar', 'chat', 'tasks', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'trash'];
 
                     function getPinnedNav() {
                         try {
@@ -695,17 +715,184 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         return defaultPinned.slice();
                     }
 
+                    function savePinnedNav(list) {
+                        try {
+                            localStorage.setItem(storageKey, JSON.stringify(list));
+                        } catch (e) {}
+                    }
+
+                    function getLauncherOrder() {
+                        try {
+                            const raw = localStorage.getItem(orderKey);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                            }
+                        } catch (e) {}
+                        return defaultOrder.slice();
+                    }
+
+                    function saveLauncherOrder(list) {
+                        try {
+                            localStorage.setItem(orderKey, JSON.stringify(list));
+                        } catch (e) {}
+                    }
+
                     function applyPinnedNav() {
                         const pinned = getPinnedNav();
+                        const navBar = document.getElementById('headerPinnedNav');
+
+                        // 1. Sichtbarkeit & Sterne aktualisieren
                         document.querySelectorAll('[data-nav-item]').forEach(el => {
                             const key = el.getAttribute('data-nav-item');
+                            el.setAttribute('draggable', 'true');
+                            el.classList.add('cursor-grab', 'active:cursor-grabbing');
                             el.style.display = pinned.includes(key) ? '' : 'none';
                         });
+
+                        // 2. Reihenfolge in der oberen Kopfleiste exakt gemäß pinned-Array sortieren
+                        if (navBar) {
+                            pinned.forEach(key => {
+                                const el = navBar.querySelector(`[data-nav-item="${key}"]`);
+                                if (el) {
+                                    navBar.appendChild(el);
+                                }
+                            });
+                        }
+
                         document.querySelectorAll('[data-nav-star]').forEach(btn => {
                             const key = btn.getAttribute('data-nav-star');
                             const isFav = pinned.includes(key);
                             btn.textContent = isFav ? '⭐' : '☆';
                             btn.title = isFav ? 'Aus Kopfzeile lösen' : 'Oben in Kopfzeile anheften';
+                        });
+                    }
+
+                    function applyLauncherOrder() {
+                        const order = getLauncherOrder();
+                        const grid = document.getElementById('appLauncherGrid');
+                        if (!grid) return;
+                        order.forEach(key => {
+                            const item = grid.querySelector(`[data-launcher-item="${key}"]`);
+                            if (item) {
+                                grid.appendChild(item);
+                            }
+                        });
+                    }
+
+                    // Drag & Drop für die angepinnten Buttons in der oberen Kopfleiste (#headerPinnedNav)
+                    function initPinnedNavDragAndDrop() {
+                        const navBar = document.getElementById('headerPinnedNav');
+                        if (!navBar) return;
+                        let draggedNavKey = null;
+
+                        navBar.addEventListener('dragstart', function(e) {
+                            const item = e.target.closest('[data-nav-item]');
+                            if (!item) return;
+                            draggedNavKey = item.getAttribute('data-nav-item');
+                            item.classList.add('opacity-50');
+                            if (e.dataTransfer) {
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', draggedNavKey);
+                            }
+                        });
+
+                        navBar.addEventListener('dragend', function(e) {
+                            const item = e.target.closest('[data-nav-item]');
+                            if (item) item.classList.remove('opacity-50');
+                            navBar.querySelectorAll('[data-nav-item]').forEach(el => {
+                                el.classList.remove('ring-2', 'ring-brand-500');
+                            });
+                            draggedNavKey = null;
+                        });
+
+                        navBar.addEventListener('dragover', function(e) {
+                            if (!draggedNavKey) return;
+                            const overItem = e.target.closest('[data-nav-item]');
+                            if (!overItem) return;
+                            e.preventDefault();
+                            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                            navBar.querySelectorAll('[data-nav-item]').forEach(el => {
+                                el.classList.toggle('ring-2', el === overItem);
+                                el.classList.toggle('ring-brand-500', el === overItem);
+                            });
+                        });
+
+                        navBar.addEventListener('drop', function(e) {
+                            if (!draggedNavKey) return;
+                            const targetItem = e.target.closest('[data-nav-item]');
+                            if (!targetItem) return;
+                            e.preventDefault();
+                            const targetKey = targetItem.getAttribute('data-nav-item');
+                            if (!targetKey || targetKey === draggedNavKey) return;
+
+                            const pinned = getPinnedNav();
+                            const fromIdx = pinned.indexOf(draggedNavKey);
+                            const toIdx   = pinned.indexOf(targetKey);
+                            if (fromIdx === -1 || toIdx === -1) return;
+
+                            pinned.splice(fromIdx, 1);
+                            pinned.splice(toIdx, 0, draggedNavKey);
+                            savePinnedNav(pinned);
+                            applyPinnedNav();
+                        });
+                    }
+
+                    // Drag & Drop für die Modul-Kacheln im ⊞ Module-Menü (#appLauncherGrid)
+                    function initLauncherGridDragAndDrop() {
+                        const grid = document.getElementById('appLauncherGrid');
+                        if (!grid) return;
+                        let draggedLaunchKey = null;
+
+                        grid.addEventListener('dragstart', function(e) {
+                            const card = e.target.closest('[data-launcher-item]');
+                            if (!card) return;
+                            draggedLaunchKey = card.getAttribute('data-launcher-item');
+                            card.classList.add('opacity-50');
+                            if (e.dataTransfer) {
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', draggedLaunchKey);
+                            }
+                        });
+
+                        grid.addEventListener('dragend', function(e) {
+                            const card = e.target.closest('[data-launcher-item]');
+                            if (card) card.classList.remove('opacity-50');
+                            grid.querySelectorAll('[data-launcher-item]').forEach(el => {
+                                el.classList.remove('ring-2', 'ring-brand-500');
+                            });
+                            draggedLaunchKey = null;
+                        });
+
+                        grid.addEventListener('dragover', function(e) {
+                            if (!draggedLaunchKey) return;
+                            const overCard = e.target.closest('[data-launcher-item]');
+                            if (!overCard) return;
+                            e.preventDefault();
+                            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                            grid.querySelectorAll('[data-launcher-item]').forEach(el => {
+                                el.classList.toggle('ring-2', el === overCard);
+                                el.classList.toggle('ring-brand-500', el === overCard);
+                            });
+                        });
+
+                        grid.addEventListener('drop', function(e) {
+                            if (!draggedLaunchKey) return;
+                            const targetCard = e.target.closest('[data-launcher-item]');
+                            if (!targetCard) return;
+                            e.preventDefault();
+                            const targetKey = targetCard.getAttribute('data-launcher-item');
+                            if (!targetKey || targetKey === draggedLaunchKey) return;
+
+                            const currentCards = Array.from(grid.querySelectorAll('[data-launcher-item]')).map(el => el.getAttribute('data-launcher-item'));
+                            const fromIdx = currentCards.indexOf(draggedLaunchKey);
+                            const toIdx   = currentCards.indexOf(targetKey);
+                            if (fromIdx === -1 || toIdx === -1) return;
+
+                            currentCards.splice(fromIdx, 1);
+                            currentCards.splice(toIdx, 0, draggedLaunchKey);
+                            saveLauncherOrder(currentCards);
+                            applyLauncherOrder();
                         });
                     }
 
@@ -721,9 +908,18 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         } else {
                             pinned.push(key);
                         }
-                        try {
-                            localStorage.setItem(storageKey, JSON.stringify(pinned));
-                        } catch (e) {}
+                        savePinnedNav(pinned);
+                        applyPinnedNav();
+                    };
+
+                    window.resetHeaderNavAndOrder = function(ev) {
+                        if (ev) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                        }
+                        savePinnedNav(defaultPinned.slice());
+                        saveLauncherOrder(defaultOrder.slice());
+                        applyLauncherOrder();
                         applyPinnedNav();
                     };
 
@@ -756,7 +952,10 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         }
                     });
 
+                    applyLauncherOrder();
                     applyPinnedNav();
+                    initPinnedNavDragAndDrop();
+                    initLauncherGridDragAndDrop();
                 })();
                 </script>
             <?php else: ?>
