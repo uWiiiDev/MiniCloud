@@ -221,6 +221,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
         header('Location: settings.php');
         exit;
     }
+
+    if ($action === 'create_app_password') {
+        $label = trim((string)($_POST['app_label'] ?? ''));
+        if ($label === '') {
+            $label = 'Gerät vom ' . date('d.m.Y');
+        }
+        $label = mb_substr($label, 0, 120);
+
+        $part1 = bin2hex(random_bytes(2));
+        $part2 = bin2hex(random_bytes(2));
+        $part3 = bin2hex(random_bytes(2));
+        $part4 = bin2hex(random_bytes(2));
+        $plainToken = sprintf('mc-%s-%s-%s-%s', $part1, $part2, $part3, $part4);
+        $prefix     = 'mc-' . $part1;
+        $hash       = password_hash($plainToken, PASSWORD_BCRYPT, ['cost' => 11]);
+
+        $stmtInsApp = $pdo->prepare(
+            'INSERT INTO app_passwords (user_id, label, token_prefix, password_hash)
+             VALUES (:uid, :lbl, :pfx, :hash)'
+        );
+        $stmtInsApp->execute([
+            ':uid'  => (int)$userRow['id'],
+            ':lbl'  => $label,
+            ':pfx'  => $prefix,
+            ':hash' => $hash,
+        ]);
+
+        $_SESSION['new_app_password_plain'] = $plainToken;
+        $_SESSION['new_app_password_label'] = $label;
+
+        logAuditEvent($pdo, 'app_password_created', 'App-Passwort erstellt: ' . $label, (int)$userRow['id'], (string)$userRow['username']);
+        setFlash('success', 'Neues App-Passwort für „' . $label . '“ wurde erzeugt. Bitte jetzt kopieren!');
+        header('Location: settings.php#app-passwords');
+        exit;
+    }
+
+    if ($action === 'revoke_app_password') {
+        $appId = (int)($_POST['app_password_id'] ?? 0);
+        if ($appId > 0) {
+            $pdo->prepare('DELETE FROM app_passwords WHERE id = :id AND user_id = :uid')
+                ->execute([':id' => $appId, ':uid' => (int)$userRow['id']]);
+            logAuditEvent($pdo, 'app_password_revoked', 'App-Passwort widerrufen (ID ' . $appId . ')', (int)$userRow['id'], (string)$userRow['username']);
+            setFlash('success', 'Das App-Passwort wurde widerrufen.');
+        }
+        header('Location: settings.php#app-passwords');
+        exit;
+    }
+}
+
+$newAppPasswordPlain = $_SESSION['new_app_password_plain'] ?? null;
+$newAppPasswordLabel = $_SESSION['new_app_password_label'] ?? null;
+unset($_SESSION['new_app_password_plain'], $_SESSION['new_app_password_label']);
+
+$userAppPasswords = [];
+try {
+    $stmtListApps = $pdo->prepare('SELECT * FROM app_passwords WHERE user_id = :uid ORDER BY created_at DESC');
+    $stmtListApps->execute([':uid' => (int)$userRow['id']]);
+    $userAppPasswords = $stmtListApps->fetchAll();
+} catch (Throwable) {
+    $userAppPasswords = [];
 }
 
 $pageTitle = 'Einstellungen';
@@ -955,6 +1015,111 @@ $themeGroups = [
             </div>
         </section>
         <?php endif; ?>
+
+        <!-- SEPARATE APP-PASSWÖRTER FÜR WEBDAV, CARDDAV & CALDAV -->
+        <section id="app-passwords" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔑 App-Passwörter für Geräte (WebDAV, CardDAV &amp; CalDAV)</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Erzeuge eigene Geräte-Passwörter (z. B. für deinen Debian-PC, das iPhone-Adressbuch, den Kalender oder Thunderbird), damit du dein Hauptpasswort auf keinem Endgerät hinterlegen musst. Einzelne Geräte lassen sich jederzeit mit einem Klick widerrufen.
+                    </p>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 shrink-0">
+                    <?= count($userAppPasswords) ?> aktiv
+                </span>
+            </div>
+
+            <?php if (!empty($newAppPasswordPlain)): ?>
+                <div class="mb-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700">
+                    <div class="text-xs font-bold text-emerald-900 dark:text-emerald-200 mb-1">
+                        ✅ Neues App-Passwort für „<?= e((string)$newAppPasswordLabel) ?>“ erstellt (wird aus Sicherheitsgründen nur jetzt einmalig im Klartext angezeigt!):
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2">
+                        <input
+                            type="text"
+                            id="newAppPwField"
+                            readonly
+                            value="<?= e((string)$newAppPasswordPlain) ?>"
+                            class="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-400 dark:border-emerald-600 text-sm font-mono font-bold text-emerald-900 dark:text-emerald-200"
+                        >
+                        <button
+                            type="button"
+                            onclick="navigator.clipboard.writeText(document.getElementById('newAppPwField').value); this.textContent='✅ Kopiert!'; setTimeout(()=>this.textContent='📋 App-Passwort kopieren', 2000);"
+                            class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-xs cursor-pointer shrink-0"
+                        >
+                            📋 App-Passwort kopieren
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-emerald-800 dark:text-emerald-300 mt-2">
+                        Verwende auf dem Gerät als Benutzernamen <code><?= e((string)$userRow['username']) ?></code> und füge als Passwort diesen Schlüssel ein.
+                    </p>
+                </div>
+            <?php endif; ?>
+
+            <form action="settings.php" method="post" class="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5 mb-4">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="create_app_password">
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Geräte- oder App-Bezeichnung</label>
+                    <input
+                        type="text"
+                        name="app_label"
+                        required
+                        maxlength="120"
+                        placeholder="z. B. Debian-PC WebDAV, iPhone Kontakte & Kalender, Thunderbird Büro…"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+                <button
+                    type="submit"
+                    class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                    ➕ App-Passwort erzeugen
+                </button>
+            </form>
+
+            <?php if (!empty($userAppPasswords)): ?>
+                <div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                    <?php foreach ($userAppPasswords as $ap): ?>
+                        <div class="p-3 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                            <div>
+                                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>🔑 <?= e((string)$ap['label']) ?></span>
+                                    <code class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[11px]"><?= e((string)$ap['token_prefix']) ?>-••••-••••-••••</code>
+                                </div>
+                                <div class="text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Erstellt am <?= e(formatDateTime((string)$ap['created_at'])) ?>
+                                    <?php if (!empty($ap['last_used_at'])): ?>
+                                        · Zuletzt genutzt: <strong><?= e(formatDateTime((string)$ap['last_used_at'])) ?></strong>
+                                        <?php if (!empty($ap['last_used_service'])): ?>
+                                            (<?= e((string)$ap['last_used_service']) ?>)
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        · <em>Noch nicht verwendet</em>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <form action="settings.php" method="post" onsubmit="return confirm('Dieses App-Passwort wirklich widerrufen? Das zugehörige Gerät verliert sofort den Zugriff.');">
+                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                <input type="hidden" name="action" value="revoke_app_password">
+                                <input type="hidden" name="app_password_id" value="<?= (int)$ap['id'] ?>">
+                                <button
+                                    type="submit"
+                                    class="px-3 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                                >
+                                    🗑️ Widerrufen
+                                </button>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <p class="text-xs text-slate-500 dark:text-slate-400 italic">
+                    Noch keine separaten App-Passwörter angelegt.
+                </p>
+            <?php endif; ?>
+        </section>
     <?php endif; ?>
 </div>
 

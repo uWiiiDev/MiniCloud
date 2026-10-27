@@ -87,11 +87,9 @@ if (isLoginRateLimited($pdo, $clientIp)) {
     exit;
 }
 
-$stmtUser = $pdo->prepare("SELECT `id`, `username`, `password_hash` FROM `users` WHERE `username` = :u LIMIT 1");
-$stmtUser->execute([':u' => trim($authUser)]);
-$userRow = $stmtUser->fetch();
+$userRow = verifyDavBasicAuth($pdo, trim($authUser), (string)$authPass, 'WebDAV');
 
-if (!$userRow || !password_verify((string)$authPass, (string)$userRow['password_hash'])) {
+if (!$userRow) {
     recordLoginFailure($pdo, $clientIp, trim($authUser));
     header('WWW-Authenticate: Basic realm="uWiiiMiniCloud WebDAV"');
     http_response_code(401);

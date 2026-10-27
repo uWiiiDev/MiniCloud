@@ -1221,14 +1221,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 11b. Module & Funktionen (Kalender, Chat, Aufgaben, Notizen, Kontakte, WebDAV) aktualisieren ---
+    // --- 11b. Module & Funktionen aktualisieren ---
     if ($action === 'update_modules_settings') {
-        $enableCalendar = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
-        $enableChat     = isset($_POST['enable_chat']) && $_POST['enable_chat'] === '1' ? '1' : '0';
-        $enableTasks    = isset($_POST['enable_tasks']) && $_POST['enable_tasks'] === '1' ? '1' : '0';
-        $enableNotes    = isset($_POST['enable_notes']) && $_POST['enable_notes'] === '1' ? '1' : '0';
-        $enableContacts = isset($_POST['enable_contacts']) && $_POST['enable_contacts'] === '1' ? '1' : '0';
-        $enableWebdav   = isset($_POST['enable_webdav']) && $_POST['enable_webdav'] === '1' ? '1' : '0';
+        $enableCalendar  = isset($_POST['enable_calendar']) && $_POST['enable_calendar'] === '1' ? '1' : '0';
+        $enableChat      = isset($_POST['enable_chat']) && $_POST['enable_chat'] === '1' ? '1' : '0';
+        $enableTasks     = isset($_POST['enable_tasks']) && $_POST['enable_tasks'] === '1' ? '1' : '0';
+        $enableNotes     = isset($_POST['enable_notes']) && $_POST['enable_notes'] === '1' ? '1' : '0';
+        $enableContacts  = isset($_POST['enable_contacts']) && $_POST['enable_contacts'] === '1' ? '1' : '0';
+        $enableWebdav    = isset($_POST['enable_webdav']) && $_POST['enable_webdav'] === '1' ? '1' : '0';
+        $enableDashboard = isset($_POST['enable_dashboard']) && $_POST['enable_dashboard'] === '1' ? '1' : '0';
+        $enablePolls     = isset($_POST['enable_polls']) && $_POST['enable_polls'] === '1' ? '1' : '0';
+        $enablePasswords = isset($_POST['enable_passwords']) && $_POST['enable_passwords'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1236,8 +1239,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_notes', $enableNotes);
         saveAppSetting($pdo, 'enable_contacts', $enableContacts);
         saveAppSetting($pdo, 'enable_webdav', $enableWebdav);
+        saveAppSetting($pdo, 'enable_dashboard', $enableDashboard);
+        saveAppSetting($pdo, 'enable_polls', $enablePolls);
+        saveAppSetting($pdo, 'enable_passwords', $enablePasswords);
 
-        setFlash('success', 'Modul-Einstellungen (Kalender, Chat, Aufgaben, Notizen, Kontakte & WebDAV) wurden erfolgreich gespeichert.');
+        setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
         exit;
     }
@@ -2214,6 +2220,114 @@ $localSnapshots  = getLocalAppSnapshots();
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="settings.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 📡 Verbindungs-URL in Einstellungen anzeigen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 7: Persönliches Tages-Cockpit (Mein Tag) -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🏠 Tages-Cockpit („Mein Tag“)
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_dashboard'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_dashboard'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_dashboard"
+                                value="1"
+                                <?= ($currentSettings['enable_dashboard'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Tages-Cockpit (<code>dashboard.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Zentrale Übersichtsseite mit anstehenden Terminen, Geburtstagen, fälligen Aufgaben, aktiven Abstimmungen, angepinnten Notizen und neuesten Dateien.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_dashboard'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="dashboard.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🏠 Tages-Cockpit öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 8: Terminfinder & Umfragen -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📊 Terminfinder &amp; Umfragen
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_polls'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_polls'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_polls"
+                                value="1"
+                                <?= ($currentSettings['enable_polls'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Terminfinder &amp; Umfragen (<code>polls.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Doodle-Alternative für Termin- und Entscheidungs-Abstimmungen (intern für Gruppen sowie per öffentlichem Link für Gäste) inkl. 1-Klick-Kalenderübernahme.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_polls'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="polls.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📊 Umfragen öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 9: Passwort-Manager & Schlüsselbund -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🔐 Passwort-Manager &amp; Schlüsselbund
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_passwords'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_passwords'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_passwords"
+                                value="1"
+                                <?= ($currentSettings['enable_passwords'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Passwort-Manager (<code>passwords.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    AES-256-GCM verschlüsselter Passwort-Tresor für Webseiten-Logins, WLAN, Server, Lizenzen und PINs inkl. Passwort-Generator und Gruppen-Sharing.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_passwords'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="passwords.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🔐 Schlüsselbund öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

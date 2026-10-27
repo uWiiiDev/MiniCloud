@@ -1289,21 +1289,30 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
         </section>
 
-        <!-- 4d. Adressbuch / Kontakte & WebDAV-Netzlaufwerk -->
+        <!-- 4d. Adressbuch / Kontakte & WebDAV/CalDAV-Netzlaufwerk -->
         <section id="kontakte-webdav" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3">
             <div class="flex items-center gap-2.5">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-bold">📇</span>
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adressbuch (CardDAV &amp; vCard-Abo) &amp; WebDAV-Netzlaufwerk</h2>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adressbuch (CardDAV), Kalender (CalDAV), WebDAV &amp; App-Passwörter</h2>
             </div>
             <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
-                <li><strong>📇 Adressbuch &amp; Kontakte (<a href="contacts.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kontakte</a>):</strong> Pflegen Sie persönliche oder im Team geteilte Kontakte inkl. Favoriten-Stern, Firma, Telefon/Mobil, E-Mail, Adresse und Geburtstag. Importieren und exportieren Sie Kontakte jederzeit im <strong>vCard-Standardformat (<code>.vcf</code>)</strong>. Hinterlegte Geburtstage (<code>🎂</code>) erscheinen automatisch als jährliche Ganztagstermine im <a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kalender</a>!</li>
-                <li><strong>📡 Kontakte abonnieren &amp; synchronisieren (CardDAV &amp; <code>.vcf</code>-Feed):</strong> Über den Button <strong>„📡 Abo &amp; CardDAV“</strong> im Adressbuch stehen Ihnen zwei Wege zur Verfügung:
-                    <ul class="list-disc pl-5 mt-1 space-y-1">
-                        <li><strong>📱 2-Wege-Synchronisation per CardDAV (<code>carddav.php</code>):</strong> Binden Sie Ihr Adressbuch nativ in iPhone/iPad (iOS), macOS Kontakte, Mozilla Thunderbird oder Android (<em>DAVx⁵</em>) ein – Änderungen werden in beide Richtungen synchronisiert.</li>
-                        <li><strong>🔗 Persönlicher <code>.vcf</code>-Abo-Link &amp; QR-Code:</strong> Analog zum Kalender-Abo können Sie einen geheimen Token-Link (<code>contacts.php?vcf_token=...</code>) samt lokalem QR-Code erzeugen.</li>
-                    </ul>
-                </li>
+                <li><strong>📇 Adressbuch &amp; Kontakte (<a href="contacts.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kontakte</a>):</strong> Pflegen Sie persönliche oder im Team geteilte Kontakte inkl. Favoriten-Stern, Firma, Telefon/Mobil, E-Mail, Adresse und Geburtstag. Importieren und exportieren Sie Kontakte jederzeit im <strong>vCard-Standardformat (<code>.vcf</code>)</strong>. Hinterlegte Geburtstage (<code>🎂</code>) erscheinen automatisch im <a href="calendar.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Kalender</a> und im <a href="dashboard.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Mein-Tag-Cockpit</a>!</li>
+                <li><strong>📡 2-Wege-Synchronisation per CardDAV (<code>carddav.php</code>) &amp; CalDAV (<code>caldav.php</code>):</strong> Binden Sie Ihr Adressbuch und Ihren Kalender nativ in iPhone/iPad (iOS), macOS, Mozilla Thunderbird oder Android (<em>DAVx⁵</em>) ein – Änderungen werden in beide Richtungen synchronisiert.</li>
                 <li><strong>📡 WebDAV-Netzlaufwerk (<a href="settings.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen</a>):</strong> Über den integrierten Endpunkt <code>webdav.php</code> binden Sie Ihre Cloud ohne Zusatzsoftware als echtes Netzlaufwerk im Windows Explorer, macOS Finder, unter Linux oder auf dem Smartphone ein.</li>
+                <li><strong>🔑 Separate App-Passwörter für Geräte (<a href="settings.php#app-passwords" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Einstellungen &rarr; App-Passwörter</a>):</strong> Erzeugen Sie für jedes Endgerät (z. B. <em>„iPhone CalDAV“</em>, <em>„Linux Laptop WebDAV“</em>) ein eigenes App-Passwort (<code>mc-xxxx-xxxx-xxxx-xxxx</code>), sehen Sie den Zeitpunkt der letzten Nutzung und widerrufen Sie einzelne Geräte bei Verlust mit 1 Klick, ohne Ihr Hauptpasswort preiszugeben.</li>
+            </ul>
+        </section>
+
+        <!-- 4e. Mein Tag (Dashboard), Terminfinder/Umfragen & Schlüsselbund -->
+        <section id="cockpit-umfragen-passwoerter" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-3 md:col-span-2">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-bold">🏠</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">„Mein Tag“-Cockpit, 📊 Terminfinder &amp; Umfragen sowie 🔐 Passwort-Schlüsselbund</h2>
+            </div>
+            <ul class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-5 leading-relaxed">
+                <li><strong>🏠 Persönliches Tages-Cockpit (<a href="dashboard.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Mein Tag</a>):</strong> Zeigt auf einen Blick Ihre heutigen und kommenden Kalendertermine (14 Tage), anstehende Geburtstage aus dem Adressbuch (inkl. Altersberechnung), offene und überfällige Aufgaben (direkt per 1-Klick abhakbar), laufende Termin-Umfragen, angepinnte Haftnotizen, ungelesene Chat-Nachrichten und zuletzt bearbeitete Dateien.</li>
+                <li><strong>📊 Terminfinder &amp; Abstimmungen (<a href="polls.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Umfragen</a>):</strong> Datenschutzfreundliche „Doodle“-Alternative für Termin-Umfragen (<em>Datum + Uhrzeit</em>) oder freie Auswahl-Abstimmungen mit 3 Stimmoptionen (<code>✅ Ja</code>, <code>🤔 Unter Vorbehalt</code>, <code>❌ Nein</code>). Teilen Sie Umfragen intern mit Cloud-Benutzern/Gruppen oder verschicken Sie den <strong>öffentlichen Gäste-Abstimmungslink</strong> (<code>polls.php?token=...</code>), über den auch externe Gäste ohne eigenes Konto abstimmen können. Die Option mit der höchsten Punktzahl (<code>🏆</code>) lässt sich per <strong>1-Klick direkt als Termin in den Kalender übernehmen</strong>!</li>
+                <li><strong>🔐 Passwort-Manager &amp; Schlüsselbund (<a href="passwords.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Schlüsselbund</a>):</strong> Speichern Sie Zugangsdaten, WLAN-Schlüssel, Server-Logins, Software-Lizenzen und PINs serverseitig <strong>AES-256-GCM-verschlüsselt</strong> in Ihrer eigenen Cloud. Mit integriertem Passwort-Generator, 1-Klick-Kopieren von Benutzername/Passwort, Passwort-Alterswarnung (&gt; 180 Tage) und optionaler Team-/Gruppen-Freigabe.</li>
             </ul>
         </section>
     </div>
@@ -1507,6 +1516,18 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4"><code>title, status, priority, checklist_json</code> / <code>title, content, color, tags, is_pinned</code> / <code>first_name, last_name, email, phone, birthday, vcard_uid</code></td>
                         <td class="py-3 px-4">Aufgaben &amp; Kanban-Board, farbige Haftnotizen (Pinboard) sowie persönliches/geteiltes Adressbuch (inkl. CardDAV-Server <code>carddav.php</code>, <code>.vcf</code>-Abo-Feed, vCard Import/Export &amp; Geburtstags-Synchronisation in den Kalender)</td>
                         <td class="py-3 px-4">Bis zur manuellen Löschung durch den Eigentümer oder Löschung des Benutzerkontos</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">polls, poll_options &amp; poll_votes</td>
+                        <td class="py-3 px-4"><code>title, poll_type, public_token, is_closed</code> / <code>label_text, option_date, option_time</code> / <code>voter_user_id, voter_name, vote_value</code></td>
+                        <td class="py-3 px-4">Terminfinder &amp; Abstimmungen (interne Benutzer/Gruppen sowie optionaler öffentlicher Gäste-Abstimmungslink <code>public_token</code>)</td>
+                        <td class="py-3 px-4">Bis zur Löschung der Umfrage durch den Ersteller oder Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">passwords &amp; app_passwords</td>
+                        <td class="py-3 px-4"><code>title, category, username_enc, password_enc, notes_enc</code> / <code>label, password_hash, token_prefix, last_used_at, last_used_service</code></td>
+                        <td class="py-3 px-4">AES-256-GCM-verschlüsselter Passwort-Schlüsselbund sowie separate, pro Gerät widerrufbare App-Passwörter (BCRYPT-Hash) für WebDAV, CardDAV &amp; CalDAV</td>
+                        <td class="py-3 px-4">Bis zum Widerruf / Löschen durch den Benutzer oder Kontolöschung</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">audit_logs</td>

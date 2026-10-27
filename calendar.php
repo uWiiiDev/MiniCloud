@@ -1816,6 +1816,35 @@ require_once __DIR__ . '/includes/header.php';
                         </button>
                     </form>
                 <?php endif; ?>
+
+                <?php
+                $caldavServerUrl = getBaseUrl() . '/caldav.php/';
+                $caldavDirectUrl = getBaseUrl() . '/caldav.php/calendars/' . rawurlencode((string)($_SESSION['username'] ?? '')) . '/default/';
+                ?>
+                <div class="pt-3 mt-2 border-t border-slate-200/70 dark:border-slate-700/70 space-y-1.5">
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                        <strong>🔄 2-Wege-CalDAV-Synchronisation (Termine auf iPhone/macOS/Thunderbird/Android anlegen &amp; bearbeiten):</strong>
+                    </p>
+                    <div class="flex items-center gap-1.5">
+                        <input
+                            type="text"
+                            readonly
+                            id="caldavServerUrlInput"
+                            value="<?= e($caldavServerUrl) ?>"
+                            class="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
+                        >
+                        <button
+                            type="button"
+                            onclick="navigator.clipboard.writeText(document.getElementById('caldavServerUrlInput').value); this.textContent='✓';"
+                            class="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
+                            title="CalDAV-Server-URL kopieren"
+                        >📋</button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400">
+                        Direkte Kalender-URL (für Thunderbird / GNOME Kalender): <code class="select-all"><?= e($caldavDirectUrl) ?></code><br>
+                        Anmeldung mit Benutzername <code><?= e((string)($_SESSION['username'] ?? '')) ?></code> &amp; deinem Passwort (oder einem <a href="settings.php#app-passwords" class="text-brand-600 dark:text-brand-400 underline">App-Passwort</a>).
+                    </p>
+                </div>
             </div>
         </div>
     </div>

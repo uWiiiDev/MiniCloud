@@ -1,8 +1,8 @@
 # IT-Sicherheitskonzept – MiniCloud
 
-**Dokumentversion:** 1.9  
-**Stand:** 26.10.2026  
-**System:** MiniCloud – Leichtgewichtige, selbstgehostete Cloud-Plattform mit Office Light, Kalender, Messenger, Aufgaben/Kanban, Notizwand, Adressbuch (CardDAV) & WebDAV (PHP 8.2+ / MySQL & MariaDB)
+**Dokumentversion:** 2.0  
+**Stand:** 27.10.2026  
+**System:** MiniCloud – Leichtgewichtige, selbstgehostete Cloud-Plattform mit „Mein Tag“-Cockpit, Office Light, Kalender (CalDAV), Messenger, Aufgaben/Kanban, Notizwand, Adressbuch (CardDAV), Terminfinder/Umfragen, AES-256-Passwort-Schlüsselbund, App-Passwörtern & WebDAV (PHP 8.2+ / MySQL & MariaDB)
 
 ---
 
@@ -54,10 +54,11 @@ Dieses IT-Sicherheitskonzept beschreibt die technischen und organisatorischen Ma
 
 ### 3.4 Dateisystem-, Upload-, ZIP-Entpack-, Office-Light-, WebDAV/CardDAV- & Tresor-Sicherheit (`upload.php`, `share.php`, `folder_action.php`, `office.php`, `webdav.php`, `carddav.php`, `vault_action.php`, `download.php`)
 - **Pseudonymisierte `.bin`-Speicherung & automatische `.htaccess`-Sperre (`ensureUploadDirReady`):** Dateien werden als `mc_<uniqid>_<hex16>.bin` mit Modus `0640` abgelegt. Die zentrale Hilfsfunktion `ensureUploadDirReady()` stellt bei jedem Upload (`upload.php`, `share.php`, `notes.php`, `webdav.php`) sicher, dass `uploads/.htaccess` (`Require all denied`) und `uploads/index.php` (HTTP 403) vorhanden sind und jeden direkten Webzugriff blockieren.
-- **Abgesicherte WebDAV- & CardDAV-Schnittstellen (`webdav.php`, `carddav.php`):**
-  - Sowohl `webdav.php` als auch `carddav.php` authentifizieren Clients über HTTP Basic Auth gegen die BCRYPT-Passworthashes der Datenbank und sind vollständig in den IP-basierten Brute-Force-Schutz (`isLoginRateLimited` / `recordLoginFailure`, max. 5 Fehlversuche pro 5 Minuten) eingebunden.
+- **Abgesicherte WebDAV-, CardDAV- & CalDAV-Schnittstellen (`webdav.php`, `carddav.php`, `caldav.php`) sowie App-Passwörter (`app_passwords`):**
+  - `webdav.php`, `carddav.php` und `caldav.php` authentifizieren Clients über `verifyDavBasicAuth()` sowohl gegen das Hauptpasswort als auch gegen gerätespezifische **App-Passwörter (`mc-xxxx-xxxx-xxxx-xxxx`)**, die als BCRYPT-Hashes (Cost 12) in `app_passwords` gespeichert werden und pro Gerät einzeln widerrufbar sind. Alle DAV-Endpunkte sind vollständig in den IP-basierten Brute-Force-Schutz (`isLoginRateLimited` / `recordLoginFailure`, max. 5 Fehlversuche pro 5 Minuten) eingebunden.
   - Bei WebDAV-`PUT`- und `COPY`-Operationen werden Dateigrößen (`MAX_FILE_SIZE`, HTTP `413`) sowie das persönliche Speicherkontingent (HTTP `507 Insufficient Storage`) strikt geprüft; beim Überschreiben bestehender Dateien wird automatisch ein Versions-Snapshot (`createFileVersionSnapshot`) angelegt.
-  - Bei CardDAV-`REPORT`- und `PUT`-Anfragen ist die maximale Request-Payload auf 512 KB begrenzt, beim `.vcf`-Dateiimport in `contacts.php` auf 5 MB bzw. max. 2.000 Kontakte pro Importvorgang. `DELETE`-Operationen in CardDAV sind strikt auf den Eigentümer (`user_id`) beschränkt.
+  - Bei CardDAV- und CalDAV-`REPORT`- und `PUT`-Anfragen ist die maximale Request-Payload auf 512 KB begrenzt, beim `.vcf`-Dateiimport in `contacts.php` auf 5 MB bzw. max. 2.000 Kontakte pro Importvorgang. `DELETE`-Operationen in CardDAV sind strikt auf den Eigentümer (`user_id`) beschränkt; in CalDAV werden Eigentümerschaft und 3-stufige Kalender-Bearbeitungs-/Löschrechte (`can_edit`, `can_delete`) geprüft.
+- **AES-256-GCM Passwort-Schlüsselbund (`passwords.php`, `encryptPasswordEntry` / `decryptPasswordEntry`):** Sämtliche im Schlüsselbund hinterlegten Benutzernamen (`username_enc`), Passwörter (`password_enc`) und Notizen (`notes_enc`) werden vor dem Speichern in der Datenbank mittels **AES-256-GCM** (96-Bit-IV + 128-Bit-Auth-Tag) verschlüsselt.
 - **Abgesicherte ZIP-Inspektion & Server-Entpackung (`folder_action.php`):** Beim Inspizieren und Entpacken von `.zip`-Archiven im Browser werden sämtliche Archiv-Pfade strikt über `extractSanitizedFolderPath()` und `sanitizeOriginalFilename()` gegen Path-Traversal (`..` / Zip-Slip) bereinigt, auf maximal 500 Dateien pro Entpackvorgang begrenzt und vorab gegen das freie Speicherkontingent des jeweiligen Ordner-Eigentümers geprüft (Schutz vor ZIP-Bomben). Jede entpackte Datei erhält ebenfalls einen pseudonymisierten `.bin`-Dateinamen (`0640`).
 - **Lokale Dokumentenverarbeitung in MiniCloud Office Light (`office.php`, `includes/office_functions.php`):** Das Erstellen und Bearbeiten von Word- (`.docx`), Excel- (`.xlsx`), CSV- und Textdateien erfolgt **100 % lokal auf dem eigenen Server** ohne externe Cloud-Dienste (kein Microsoft 365 / Google Docs). Beim Parsen der OpenXML-Strukturen (`DOMDocument::loadXML`) ist `LIBXML_NONET` aktiv, um XML-External-Entity-Angriffe (XXE) auszuschließen. Vor dem Speichern prüft `resolveOfficeFileAccess()` serverseitig Eigentümerschaft bzw. 3-stufige Schreibberechtigungen (`can_write = 1`) sowie das Speicherkontingent.
 - **AES-256-GCM Zero-Knowledge-Tresor (`vault_action.php`):** Schlüsselableitung mittels `hash_pbkdf2('sha256', $password, $salt, 100000, 32, true)`, authentifizierte Verschlüsselung via `openssl_encrypt(..., 'aes-256-gcm', ...)` mit 96-Bit-IV und 128-Bit-Authentication-Tag. Das Passwort wird niemals gespeichert.

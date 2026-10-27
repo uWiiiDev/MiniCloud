@@ -375,3 +375,95 @@ CREATE TABLE IF NOT EXISTS `contacts` (
     CONSTRAINT `fk_contacts_shared_user` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_contacts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 22. Tabellen für Terminfinder & Umfragen (polls.php)
+CREATE TABLE IF NOT EXISTS `polls` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(255) NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `location` VARCHAR(190) DEFAULT NULL,
+    `poll_type` VARCHAR(20) NOT NULL DEFAULT 'date',
+    `allow_maybe` TINYINT(1) NOT NULL DEFAULT 1,
+    `is_closed` TINYINT(1) NOT NULL DEFAULT 0,
+    `share_token` VARCHAR(64) NOT NULL,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_polls_token` (`share_token`),
+    KEY `idx_polls_user` (`user_id`),
+    KEY `idx_polls_shared` (`shared_user_id`),
+    KEY `idx_polls_group` (`group_id`),
+    CONSTRAINT `fk_polls_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_polls_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_polls_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `poll_options` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `poll_id` INT UNSIGNED NOT NULL,
+    `option_label` VARCHAR(255) NOT NULL,
+    `start_at` DATETIME DEFAULT NULL,
+    `end_at` DATETIME DEFAULT NULL,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_po_poll` (`poll_id`, `sort_order`),
+    CONSTRAINT `fk_po_poll` FOREIGN KEY (`poll_id`) REFERENCES `polls` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `poll_votes` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `poll_id` INT UNSIGNED NOT NULL,
+    `option_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED DEFAULT NULL,
+    `voter_name` VARCHAR(100) NOT NULL,
+    `vote_value` VARCHAR(16) NOT NULL DEFAULT 'yes',
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_pv_poll` (`poll_id`, `option_id`),
+    KEY `idx_pv_voter` (`poll_id`, `voter_name`),
+    CONSTRAINT `fk_pv_poll` FOREIGN KEY (`poll_id`) REFERENCES `polls` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pv_option` FOREIGN KEY (`option_id`) REFERENCES `poll_options` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 23. Tabelle für Passwort-Manager & Schlüsselbund (passwords.php)
+CREATE TABLE IF NOT EXISTS `passwords` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(190) NOT NULL,
+    `category` VARCHAR(80) NOT NULL DEFAULT 'Allgemein',
+    `username_login` VARCHAR(190) NOT NULL DEFAULT '',
+    `password_encrypted` TEXT NOT NULL,
+    `website_url` VARCHAR(255) NOT NULL DEFAULT '',
+    `notes_encrypted` TEXT DEFAULT NULL,
+    `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `password_changed_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_pw_user` (`user_id`, `category`),
+    KEY `idx_pw_shared` (`shared_user_id`),
+    KEY `idx_pw_group` (`group_id`),
+    CONSTRAINT `fk_pw_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pw_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_pw_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 24. Tabelle für separate Geräte- & App-Passwörter (WebDAV, CardDAV, CalDAV)
+CREATE TABLE IF NOT EXISTS `app_passwords` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `label` VARCHAR(120) NOT NULL,
+    `token_prefix` VARCHAR(16) NOT NULL,
+    `password_hash` VARCHAR(255) NOT NULL,
+    `last_used_at` DATETIME DEFAULT NULL,
+    `last_used_service` VARCHAR(40) DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ap_user` (`user_id`),
+    CONSTRAINT `fk_ap_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -714,6 +714,9 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_notes'                  => '1',
         'enable_contacts'               => '1',
         'enable_webdav'                 => '1',
+        'enable_polls'                  => '1',
+        'enable_passwords'              => '1',
+        'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
@@ -2509,10 +2512,365 @@ function ensureFolderHierarchyExist(PDO $pdo, int $userId, string $folderPath): 
     registerFolderHierarchy($pdo, $userId, $folderPath);
 }
 
+function formatDateTime(string $dateStr): string
+{
+    $ts = strtotime($dateStr);
+    if ($ts === false) {
+        return $dateStr;
+    }
+    return date('d.m.Y H:i', $ts);
+}
+
 function formatDate(string $dateStr): string
 {
     return formatDateTime($dateStr);
 }
+
+/**
+ * Prüft HTTP-Basic-Auth-Zugangsdaten für WebDAV, CardDAV und CalDAV.
+ * Unterstützt sowohl separate App-Passwörter (app_passwords) als auch das reguläre Benutzerpasswort.
+ *
+ * @return array{id: int, username: string}|null
+ */
+function verifyDavBasicAuth(PDO $pdo, string $username, string $password, string $serviceName = 'WebDAV'): ?array
+{
+    $cleanUser = trim($username);
+    if ($cleanUser === '' || $password === '') {
+        return null;
+    }
+
+    $stmtUser = $pdo->prepare("SELECT `id`, `username`, `password_hash` FROM `users` WHERE `username` = :u LIMIT 1");
+    $stmtUser->execute([':u' => $cleanUser]);
+    $userRow = $stmtUser->fetch();
+
+    if (!$userRow) {
+        // Timing-Schutz
+        password_verify($password, '$2y$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW');
+        return null;
+    }
+
+    $uid = (int)$userRow['id'];
+
+    // 1. Zuerst prüfen, ob ein App-Passwort für diesen Benutzer passt
+    try {
+        $stmtApps = $pdo->prepare("SELECT `id`, `password_hash` FROM `app_passwords` WHERE `user_id` = :uid");
+        $stmtApps->execute([':uid' => $uid]);
+        foreach ($stmtApps->fetchAll() as $appRow) {
+            if (password_verify($password, (string)$appRow['password_hash'])) {
+                $pdo->prepare("UPDATE `app_passwords` SET `last_used_at` = NOW(), `last_used_service` = :srv WHERE `id` = :id")
+                    ->execute([':srv' => mb_substr($serviceName, 0, 40), ':id' => (int)$appRow['id']]);
+                return [
+                    'id'       => $uid,
+                    'username' => (string)$userRow['username'],
+                ];
+            }
+        }
+    } catch (Throwable) {
+        // Falls Tabelle noch nicht existiert, auf normales Passwort zurückfallen
+    }
+
+    // 2. Reguläres Kontopasswort prüfen
+    if (password_verify($password, (string)$userRow['password_hash'])) {
+        return [
+            'id'       => $uid,
+            'username' => (string)$userRow['username'],
+        ];
+    }
+
+    return null;
+}
+
+/**
+ * Liefert den internen 256-Bit-Schlüssel für die Datenbank-Verschlüsselung des Passwort-Managers.
+ */
+function getPasswordVaultKey(): string
+{
+    return hash_hmac('sha256', 'minicloud-password-vault-aes256gcm-v1', DB_PASS . '|' . DB_NAME . '|' . DB_USER, true);
+}
+
+/**
+ * Verschlüsselt einen Klartext-Eintrag für den Passwort-Manager mit AES-256-GCM.
+ */
+function encryptPasswordEntry(string $plain): string
+{
+    if ($plain === '') {
+        return '';
+    }
+    $key = getPasswordVaultKey();
+    $iv  = random_bytes(12);
+    $tag = '';
+    $cipher = openssl_encrypt($plain, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16);
+    if ($cipher === false) {
+        return '';
+    }
+    return 'v1:' . base64_encode($iv . $tag . $cipher);
+}
+
+/**
+ * Entschlüsselt einen mit encryptPasswordEntry() gespeicherten Passwort-Manager-Eintrag.
+ */
+function decryptPasswordEntry(string $encoded): string
+{
+    if ($encoded === '' || !str_starts_with($encoded, 'v1:')) {
+        return '';
+    }
+    $raw = base64_decode(substr($encoded, 3), true);
+    if ($raw === false || strlen($raw) < 28) {
+        return '';
+    }
+    $iv     = substr($raw, 0, 12);
+    $tag    = substr($raw, 12, 16);
+    $cipher = substr($raw, 28);
+    $plain  = openssl_decrypt($cipher, 'aes-256-gcm', getPasswordVaultKey(), OPENSSL_RAW_DATA, $iv, $tag);
+    return $plain !== false ? $plain : '';
+}
+
+/**
+ * Escaping für iCalendar (.ics) Textfelder nach RFC 5545.
+ */
+function icsEscapeText(string $text): string
+{
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $text = str_replace(['\\', ';', ',', "\n"], ['\\\\', '\;', '\,', '\n'], $text);
+    return $text;
+}
+
+/**
+ * Erzeugt ein einzelnes VCALENDAR/VEVENT-Dokument (.ics) für CalDAV.
+ *
+ * @param array<string, mixed> $ev
+ */
+function buildSingleIcsVevent(array $ev, string $calName = 'uWiiiMiniCloud Kalender'): string
+{
+    $id  = (int)($ev['id'] ?? 0);
+    $uid = !empty($ev['ical_uid'])
+        ? (string)$ev['ical_uid']
+        : ('minicloud-event-' . $id . '@minicloud');
+
+    $startTs = strtotime((string)($ev['start_at'] ?? 'now')) ?: time();
+    $endTs   = strtotime((string)($ev['end_at'] ?? 'now')) ?: ($startTs + 3600);
+    $allDay  = (int)($ev['all_day'] ?? 0) === 1;
+    $updTs   = !empty($ev['updated_at']) ? (strtotime((string)$ev['updated_at']) ?: time()) : time();
+
+    $lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//uWiiiMiniCloud//CalDAV 1.0//DE',
+        'CALSCALE:GREGORIAN',
+        'X-WR-CALNAME:' . icsEscapeText($calName),
+        'BEGIN:VEVENT',
+        'UID:' . icsEscapeText($uid),
+        'DTSTAMP:' . gmdate('Ymd\THis\Z', $updTs),
+        'LAST-MODIFIED:' . gmdate('Ymd\THis\Z', $updTs),
+    ];
+
+    if ($allDay) {
+        $lines[] = 'DTSTART;VALUE=DATE:' . date('Ymd', $startTs);
+        $endDayTs = max($startTs, $endTs) + 86400;
+        $lines[] = 'DTEND;VALUE=DATE:' . date('Ymd', $endDayTs);
+    } else {
+        $lines[] = 'DTSTART:' . date('Ymd\THis', $startTs);
+        $lines[] = 'DTEND:' . date('Ymd\THis', max($startTs, $endTs));
+    }
+
+    $rec = (string)($ev['recurrence'] ?? 'none');
+    if ($rec === 'daily') {
+        $lines[] = 'RRULE:FREQ=DAILY';
+    } elseif ($rec === 'weekly') {
+        $lines[] = 'RRULE:FREQ=WEEKLY';
+    } elseif ($rec === 'monthly') {
+        $lines[] = 'RRULE:FREQ=MONTHLY';
+    } elseif ($rec === 'yearly') {
+        $lines[] = 'RRULE:FREQ=YEARLY';
+    }
+
+    $lines[] = 'SUMMARY:' . icsEscapeText((string)($ev['title'] ?? 'Termin'));
+    if (trim((string)($ev['location'] ?? '')) !== '') {
+        $lines[] = 'LOCATION:' . icsEscapeText((string)$ev['location']);
+    }
+    if (trim((string)($ev['description'] ?? '')) !== '') {
+        $lines[] = 'DESCRIPTION:' . icsEscapeText((string)$ev['description']);
+    }
+
+    $lines[] = 'END:VEVENT';
+    $lines[] = 'END:VCALENDAR';
+
+    return implode("\r\n", $lines) . "\r\n";
+}
+
+/**
+ * Parst den Inhalt einer .ics-Datei (oder eines CalDAV PUT-Requests) in Termin-Arrays.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function parseIcsContentToEvents(string $rawIcs): array
+{
+    $unfolded = preg_replace("/\r\n[ \t]|\n[ \t]/", '', $rawIcs) ?? $rawIcs;
+    $lines    = preg_split("/\r\n|\n|\r/", $unfolded) ?: [];
+
+    $events  = [];
+    $current = null;
+
+    $unescape = static function (string $val): string {
+        return trim(str_replace(['\n', '\N', '\,', '\;', '\\\\'], ["\n", "\n", ',', ';', '\\'], $val));
+    };
+
+    $parseIcsDate = static function (string $keyPart, string $valPart): array {
+        $val = trim($valPart);
+        $isAllDay = (stripos($keyPart, 'VALUE=DATE') !== false && stripos($keyPart, 'VALUE=DATE-TIME') === false)
+            || preg_match('/^\d{8}$/', $val) === 1;
+
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $val, $m)) {
+            return [
+                'datetime' => sprintf('%s-%s-%s 00:00:00', $m[1], $m[2], $m[3]),
+                'all_day'  => 1,
+            ];
+        }
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/', $val, $m)) {
+            $iso = sprintf('%s-%s-%s %s:%s:%s', $m[1], $m[2], $m[3], $m[4], $m[5], $m[6]);
+            if (!empty($m[7])) {
+                $dt = DateTime::createFromFormat('Y-m-d H:i:s', $iso, new DateTimeZone('UTC'));
+                if ($dt !== false) {
+                    $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                    $iso = $dt->format('Y-m-d H:i:s');
+                }
+            }
+            return [
+                'datetime' => $iso,
+                'all_day'  => $isAllDay ? 1 : 0,
+            ];
+        }
+        $ts = strtotime($val);
+        return [
+            'datetime' => date('Y-m-d H:i:s', $ts ?: time()),
+            'all_day'  => $isAllDay ? 1 : 0,
+        ];
+    };
+
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if ($trimmed === '') {
+            continue;
+        }
+        if (strcasecmp($trimmed, 'BEGIN:VEVENT') === 0) {
+            $current = [
+                'ical_uid'    => '',
+                'title'       => 'Termin',
+                'description' => '',
+                'location'    => '',
+                'start_at'    => date('Y-m-d H:00:00'),
+                'end_at'      => date('Y-m-d H:00:00', time() + 3600),
+                'all_day'     => 0,
+                'recurrence'  => 'none',
+                'has_end'     => false,
+            ];
+            continue;
+        }
+        if (strcasecmp($trimmed, 'END:VEVENT') === 0) {
+            if ($current !== null) {
+                if (!$current['has_end']) {
+                    if ($current['all_day'] === 1) {
+                        $current['end_at'] = substr($current['start_at'], 0, 10) . ' 23:59:59';
+                    } else {
+                        $current['end_at'] = date('Y-m-d H:i:s', (strtotime($current['start_at']) ?: time()) + 3600);
+                    }
+                }
+                unset($current['has_end']);
+                $events[] = $current;
+            }
+            $current = null;
+            continue;
+        }
+        if ($current === null || !str_contains($trimmed, ':')) {
+            continue;
+        }
+
+        [$propRaw, $valRaw] = explode(':', $trimmed, 2);
+        $propName = strtoupper(explode(';', $propRaw)[0]);
+
+        if ($propName === 'UID') {
+            $current['ical_uid'] = mb_substr($unescape($valRaw), 0, 190);
+        } elseif ($propName === 'SUMMARY') {
+            $s = $unescape($valRaw);
+            if ($s !== '') {
+                $current['title'] = mb_substr($s, 0, 190);
+            }
+        } elseif ($propName === 'DESCRIPTION') {
+            $current['description'] = $unescape($valRaw);
+        } elseif ($propName === 'LOCATION') {
+            $current['location'] = mb_substr($unescape($valRaw), 0, 190);
+        } elseif ($propName === 'DTSTART') {
+            $parsed = $parseIcsDate($propRaw, $valRaw);
+            $current['start_at'] = $parsed['datetime'];
+            $current['all_day']  = $parsed['all_day'];
+        } elseif ($propName === 'DTEND') {
+            $parsed = $parseIcsDate($propRaw, $valRaw);
+            $endDt  = $parsed['datetime'];
+            if ($parsed['all_day'] === 1) {
+                // In iCalendar ist DTEND bei Ganztagsterminen exklusiv (-1 Tag)
+                $endTs = strtotime(substr($endDt, 0, 10) . ' 00:00:00');
+                $startTs = strtotime(substr($current['start_at'], 0, 10) . ' 00:00:00');
+                if ($endTs !== false && $startTs !== false && $endTs > $startTs) {
+                    $endDt = date('Y-m-d', $endTs - 86400) . ' 23:59:59';
+                } else {
+                    $endDt = substr($current['start_at'], 0, 10) . ' 23:59:59';
+                }
+            }
+            $current['end_at']  = $endDt;
+            $current['has_end'] = true;
+        } elseif ($propName === 'RRULE') {
+            if (stripos($valRaw, 'FREQ=DAILY') !== false) {
+                $current['recurrence'] = 'daily';
+            } elseif (stripos($valRaw, 'FREQ=WEEKLY') !== false) {
+                $current['recurrence'] = 'weekly';
+            } elseif (stripos($valRaw, 'FREQ=MONTHLY') !== false) {
+                $current['recurrence'] = 'monthly';
+            } elseif (stripos($valRaw, 'FREQ=YEARLY') !== false) {
+                $current['recurrence'] = 'yearly';
+            }
+        }
+    }
+
+    return $events;
+}
+
+/**
+ * Lädt alle für einen Benutzer über CalDAV sichtbaren Kalendertermine (eigene, geteilte & Gruppen-Termine).
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function getAccessibleCalendarEventsForDav(PDO $pdo, int $userId): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT ce.*
+         FROM `calendar_events` ce
+         WHERE ce.`user_id` = :uid1
+            OR ce.`shared_user_id` = :uid2
+            OR (ce.`group_id` IS NOT NULL AND EXISTS (
+                SELECT 1 FROM `group_members` gm WHERE gm.`group_id` = ce.`group_id` AND gm.`user_id` = :uid3
+            ))
+            OR (ce.`is_private` = 0 AND EXISTS (
+                SELECT 1 FROM `calendar_shares` cs
+                WHERE cs.`owner_user_id` = ce.`user_id`
+                  AND (
+                      cs.`target_user_id` = :uid4
+                      OR (cs.`target_group_id` IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM `group_members` gm2 WHERE gm2.`group_id` = cs.`target_group_id` AND gm2.`user_id` = :uid5
+                      ))
+                  )
+            ))
+         ORDER BY ce.`start_at` ASC"
+    );
+    $stmt->execute([
+        ':uid1' => $userId,
+        ':uid2' => $userId,
+        ':uid3' => $userId,
+        ':uid4' => $userId,
+        ':uid5' => $userId,
+    ]);
+    return $stmt->fetchAll();
+}
+
 
 
 

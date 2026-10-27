@@ -1,14 +1,14 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 1.9  
-**Stand:** 26.10.2026  
+**Dokumentversion:** 2.0  
+**Stand:** 27.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
 ---
 
 ## 1. Übersicht der Datenbestände
 
-MiniCloud speichert strukturierte Anwendungs-, Berechtigungs-, Kalender-, Chat-, Aufgaben-, Notiz-, Kontakt- und Metadaten in einer relationalen MySQL-/MariaDB-Datenbank (**21 Tabellen**) sowie die eigentlichen Dateiinhalte in pseudonymisierter Binärform im lokalen Verzeichnis **`uploads/`**.
+MiniCloud speichert strukturierte Anwendungs-, Berechtigungs-, Kalender-, Chat-, Aufgaben-, Notiz-, Kontakt-, Umfrage-, Schlüsselbund-, App-Passwort- und Metadaten in einer relationalen MySQL-/MariaDB-Datenbank (**26 Tabellen**) sowie die eigentlichen Dateiinhalte in pseudonymisierter Binärform im lokalen Verzeichnis **`uploads/`**.
 
 ---
 
@@ -178,7 +178,10 @@ Speichern Kanban-Aufgaben, farbige Haftnotizen und Kontakte.
 | `tasks` | `id`, `user_id`, `title`, `description`, `status` (`todo`, `in_progress`, `done`), `priority`, `due_date`, `checklist_json`, `attached_file_id`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Aufgaben & Kanban-Board inkl. interaktiver Unteraufgaben-Checkliste, Dateianhang und Teilen |
 | `notes` | `id`, `user_id`, `title`, `content`, `color`, `tags`, `is_pinned`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Farbige Haftnotizen (Pinboard) mit `#Tags`, Anpinnen und 1-Klick-Export als `.md` in die Cloud |
 | `contacts` | `id`, `user_id`, `first_name`, `last_name`, `organization`, `role_title`, `email`, `phone`, `mobile`, `street`, `postal_code`, `city`, `country`, `website`, `birthday`, `notes`, `is_favorite`, `vcard_uid`, `shared_user_id`, `group_id`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Persönliche und geteilte Kontakte inkl. CardDAV-Synchronisation (`carddav.php`), `.vcf`-Abo-Feed, vCard Import/Export und automatischer Geburtstagsanzeige im Kalender |
-| `login_attempts` | `id`, `ip_address`, `username`, `attempted_at` | `PRIMARY KEY (id)`, `KEY (ip_address, attempted_at)` | Temporäre Brute-Force-Sperrtabelle (max. 5 Fehlversuche pro 5 Minuten für Login, WebDAV & CardDAV; automatische Bereinigung nach 15 Minuten) |
+| `polls`, `poll_options` & `poll_votes` | `id`, `user_id`, `title`, `poll_type`, `public_token`, `is_closed`, `shared_user_id`, `group_id` / `poll_id`, `label_text`, `option_date`, `option_time` / `poll_id`, `option_id`, `voter_user_id`, `voter_name`, `vote_value` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE`, `FK -> polls(id) ON DELETE CASCADE` | Terminfinder & Abstimmungen (`polls.php`) mit interner Freigabe, öffentlichem Gäste-Abstimmungslink (`public_token`) und 1-Klick-Übernahme des Gewinner-Termins in `calendar_events` |
+| `passwords` | `id`, `user_id`, `title`, `category`, `website_url`, `username_enc`, `password_enc`, `notes_enc`, `is_favorite`, `shared_user_id`, `group_id`, `password_changed_at`, `created_at`, `updated_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Serverseitig AES-256-GCM-verschlüsselter Passwort-Schlüsselbund (`passwords.php`) für Logins, WLAN, Server, Lizenzen und PINs |
+| `app_passwords` | `id`, `user_id`, `label`, `password_hash`, `token_prefix`, `last_used_at`, `last_used_service`, `created_at` | `PRIMARY KEY (id)`, `FK -> users(id) ON DELETE CASCADE` | Separate, pro Gerät erzeugbare und einzeln widerrufbare App-Passwörter (BCRYPT Cost 12) für WebDAV (`webdav.php`), CardDAV (`carddav.php`) und CalDAV (`caldav.php`) |
+| `login_attempts` | `id`, `ip_address`, `username`, `attempted_at` | `PRIMARY KEY (id)`, `KEY (ip_address, attempted_at)` | Temporäre Brute-Force-Sperrtabelle (max. 5 Fehlversuche pro 5 Minuten für Login, WebDAV, CardDAV & CalDAV; automatische Bereinigung nach 15 Minuten) |
 
 ---
 
