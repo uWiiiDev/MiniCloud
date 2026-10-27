@@ -416,6 +416,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_menti'] ?? '1') === '1'): ?>
+                        <a
+                            href="menti.php"
+                            data-nav-item="menti"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Live-Mentimeter &amp; Interaktive Präsentationen"
+                        >
+                            <span>🎤</span>
+                            <span class="hidden md:inline">Mentimeter</span>
+                        </a>
+                    <?php endif; ?>
+
                     <?php if (($appSettings['enable_passwords'] ?? '1') === '1'): ?>
                         <a
                             href="passwords.php"
@@ -551,6 +564,16 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Umfragen</span>
                                 </a>
                                 <button type="button" data-nav-star="polls" onclick="toggleHeaderNavFavorite('polls', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (($appSettings['enable_menti'] ?? '1') === '1'): ?>
+                            <div class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                                <a href="menti.php" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="text-lg">🎤</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Mentimeter</span>
+                                </a>
+                                <button type="button" data-nav-star="menti" onclick="toggleHeaderNavFavorite('menti', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
                             </div>
                             <?php endif; ?>
 

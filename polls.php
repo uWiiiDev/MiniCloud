@@ -405,12 +405,18 @@ require_once __DIR__ . '/includes/header.php';
         </div>
 
         <?php if (isLoggedIn()): ?>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <?php if ($publicToken !== ''): ?>
                     <a href="polls.php" class="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 transition-colors">
                         ← Alle Umfragen
                     </a>
                 <?php endif; ?>
+                <a
+                    href="menti.php"
+                    class="px-3.5 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold text-xs sm:text-sm transition-colors"
+                >
+                    🎤 Live-Mentimeter (Wortwolke &amp; Quiz)
+                </a>
                 <button
                     type="button"
                     onclick="document.getElementById('createPollModal').classList.remove('hidden')"

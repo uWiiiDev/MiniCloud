@@ -686,6 +686,66 @@ function ensureSchemaUpdated(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    // Live-Mentimeter / Interaktive Präsentationen (menti_sessions, menti_slides, menti_responses)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `menti_sessions` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(200) NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            `pin_code` VARCHAR(12) NOT NULL,
+            `public_token` VARCHAR(64) NOT NULL,
+            `active_slide_id` INT UNSIGNED DEFAULT NULL,
+            `show_results` TINYINT(1) NOT NULL DEFAULT 1,
+            `voting_locked` TINYINT(1) NOT NULL DEFAULT 0,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `idx_menti_pin` (`pin_code`),
+            UNIQUE KEY `idx_menti_token` (`public_token`),
+            KEY `idx_menti_user` (`user_id`),
+            CONSTRAINT `fk_menti_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `menti_slides` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `session_id` INT UNSIGNED NOT NULL,
+            `slide_order` INT UNSIGNED NOT NULL DEFAULT 0,
+            `slide_type` VARCHAR(24) NOT NULL DEFAULT 'choice',
+            `question` VARCHAR(300) NOT NULL,
+            `subtitle` VARCHAR(300) DEFAULT NULL,
+            `options_json` MEDIUMTEXT DEFAULT NULL,
+            `correct_option` INT DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_mslide_session` (`session_id`, `slide_order`),
+            CONSTRAINT `fk_mslide_session` FOREIGN KEY (`session_id`) REFERENCES `menti_sessions` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `menti_responses` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `session_id` INT UNSIGNED NOT NULL,
+            `slide_id` INT UNSIGNED NOT NULL,
+            `participant_token` VARCHAR(64) NOT NULL,
+            `participant_name` VARCHAR(80) DEFAULT NULL,
+            `answer_value` TEXT NOT NULL,
+            `points` INT NOT NULL DEFAULT 0,
+            `upvotes` INT UNSIGNED NOT NULL DEFAULT 0,
+            `upvoted_by_json` MEDIUMTEXT DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_mresp_slide` (`slide_id`),
+            KEY `idx_mresp_session` (`session_id`),
+            KEY `idx_mresp_participant` (`slide_id`, `participant_token`),
+            CONSTRAINT `fk_mresp_session` FOREIGN KEY (`session_id`) REFERENCES `menti_sessions` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_mresp_slide` FOREIGN KEY (`slide_id`) REFERENCES `menti_slides` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();
     if ($adminCount === 0) {

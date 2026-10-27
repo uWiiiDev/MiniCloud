@@ -1231,6 +1231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableWebdav    = isset($_POST['enable_webdav']) && $_POST['enable_webdav'] === '1' ? '1' : '0';
         $enableDashboard = isset($_POST['enable_dashboard']) && $_POST['enable_dashboard'] === '1' ? '1' : '0';
         $enablePolls     = isset($_POST['enable_polls']) && $_POST['enable_polls'] === '1' ? '1' : '0';
+        $enableMenti     = isset($_POST['enable_menti']) && $_POST['enable_menti'] === '1' ? '1' : '0';
         $enablePasswords = isset($_POST['enable_passwords']) && $_POST['enable_passwords'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
@@ -1241,6 +1242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_webdav', $enableWebdav);
         saveAppSetting($pdo, 'enable_dashboard', $enableDashboard);
         saveAppSetting($pdo, 'enable_polls', $enablePolls);
+        saveAppSetting($pdo, 'enable_menti', $enableMenti);
         saveAppSetting($pdo, 'enable_passwords', $enablePasswords);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
@@ -1992,15 +1994,31 @@ $localSnapshots  = getLocalAppSnapshots();
                     🧩
                 </span>
                 <div>
-                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cloud-Module &amp; Zusatzfunktionen</h2>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cloud-Module &amp; Zusatzfunktionen (10 Module)</h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Aktivieren oder deaktivieren Sie optionale Funktionsmodule der Cloud global für alle Benutzer.
+                        Aktivieren oder deaktivieren Sie einzelne Funktionsmodule der Cloud global für alle Benutzer (inkl. Kopfzeilen-Menü und Cockpit).
                     </p>
                 </div>
             </div>
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    onclick="document.querySelectorAll('#modulesAdminForm input[type=checkbox]').forEach(cb => cb.checked = true)"
+                    class="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                    ☑️ Alle aktivieren
+                </button>
+                <button
+                    type="button"
+                    onclick="document.querySelectorAll('#modulesAdminForm input[type=checkbox]').forEach(cb => cb.checked = false)"
+                    class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                    ☐ Alle abwählen
+                </button>
+            </div>
         </div>
 
-        <form action="admin.php" method="post" class="space-y-5">
+        <form id="modulesAdminForm" action="admin.php" method="post" class="space-y-5">
             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
             <input type="hidden" name="action" value="update_modules_settings">
 
@@ -2328,6 +2346,42 @@ $localSnapshots  = getLocalAppSnapshots();
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="passwords.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🔐 Schlüsselbund öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 10: Live-Mentimeter & Interaktive Präsentationen -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🎤 Live-Mentimeter &amp; Publikums-Voting
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_menti'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_menti'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_menti"
+                                value="1"
+                                <?= ($currentSettings['enable_menti'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Live-Mentimeter (<code>menti.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Interaktive Präsentationen mit Wortwolken, Live-Balken, Skalen, Q&amp;A (Upvoting) und Live-Quiz per lokalem QR-Code &amp; 6-stelligem PIN.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_menti'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="menti.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🎤 Live-Mentimeter öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

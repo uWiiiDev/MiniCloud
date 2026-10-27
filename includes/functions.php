@@ -715,6 +715,7 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_contacts'               => '1',
         'enable_webdav'                 => '1',
         'enable_polls'                  => '1',
+        'enable_menti'                  => '1',
         'enable_passwords'              => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
