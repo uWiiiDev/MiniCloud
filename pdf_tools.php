@@ -736,6 +736,249 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    // ------------------------------------------------------------------------
+    // 5a. 🔍 AJAX: PDF-Seiten für die interaktive Schwärzungs-Vorschau rendern
+    // ------------------------------------------------------------------------
+    if ($action === 'render_redact_preview') {
+        header('Content-Type: application/json; charset=utf-8');
+        $sourceId = (int)($_POST['source_pdf_id'] ?? 0);
+
+        $stmtF = $pdo->prepare("SELECT * FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0 AND mime_type = 'application/pdf' LIMIT 1");
+        $stmtF->execute([':id' => $sourceId, ':uid' => $userId]);
+        $srcRow = $stmtF->fetch();
+
+        if (!$srcRow || $gsBin === null) {
+            echo json_encode(['ok' => false, 'error' => 'PDF-Datei nicht gefunden oder Ghostscript nicht verfügbar.']);
+            exit;
+        }
+
+        $srcPath = UPLOAD_DIR . basename((string)$srcRow['filename']);
+        if (!is_file($srcPath)) {
+            echo json_encode(['ok' => false, 'error' => 'Quell-PDF auf dem Server nicht gefunden.']);
+            exit;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/mc_redact_prev_' . bin2hex(random_bytes(8));
+        if (!@mkdir($tmpDir, 0700, true)) {
+            echo json_encode(['ok' => false, 'error' => 'Temporäres Arbeitsverzeichnis konnte nicht erstellt werden.']);
+            exit;
+        }
+
+        try {
+            $errOut = null;
+            $cmd = [
+                $gsBin,
+                '-dBATCH',
+                '-dNOPAUSE',
+                '-dSAFER',
+                '-q',
+                '-sDEVICE=jpeg',
+                '-dJPEGQ=82',
+                '-r120',
+                '-dFirstPage=1',
+                '-dLastPage=25',
+                '-sOutputFile=' . $tmpDir . '/page_%03d.jpg',
+                $srcPath,
+            ];
+            $code = runSafeProcess($cmd, $errOut);
+            $pageFiles = glob($tmpDir . '/page_*.jpg') ?: [];
+            sort($pageFiles, SORT_NATURAL);
+
+            if ($code !== 0 || empty($pageFiles)) {
+                echo json_encode(['ok' => false, 'error' => 'PDF-Seiten konnten nicht als Vorschau gerendert werden.']);
+                exit;
+            }
+
+            $pagesOut = [];
+            foreach ($pageFiles as $idx => $pFile) {
+                $sz = @getimagesize($pFile);
+                $raw = @file_get_contents($pFile);
+                if ($raw === false || !is_array($sz)) {
+                    continue;
+                }
+                $pagesOut[] = [
+                    'page'    => $idx + 1,
+                    'width'   => (int)$sz[0],
+                    'height'  => (int)$sz[1],
+                    'dataUri' => 'data:image/jpeg;base64,' . base64_encode($raw),
+                ];
+            }
+
+            $baseOrig = preg_replace('/\.pdf$/i', '', (string)$srcRow['original_name']) ?: 'Dokument';
+            echo json_encode([
+                'ok'            => true,
+                'pages'         => $pagesOut,
+                'suggestedName' => $baseOrig . '_geschwaerzt.pdf',
+                'folder'        => (string)$srcRow['folder_path'] !== '' ? (string)$srcRow['folder_path'] : 'Scans',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        } finally {
+            foreach (glob($tmpDir . '/*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // 5b. ⬛ PDF unwiderruflich schwärzen (Pixel-Redaction ohne Rest-Textlayer)
+    // ------------------------------------------------------------------------
+    if ($action === 'apply_redactions') {
+        $sourceId       = (int)($_POST['source_pdf_id'] ?? 0);
+        $redactionsJson = (string)($_POST['redactions_json'] ?? '{}');
+        $redactionsMap  = json_decode($redactionsJson, true);
+        if (!is_array($redactionsMap)) {
+            $redactionsMap = [];
+        }
+
+        $stmtF = $pdo->prepare("SELECT * FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0 AND mime_type = 'application/pdf' LIMIT 1");
+        $stmtF->execute([':id' => $sourceId, ':uid' => $userId]);
+        $srcRow = $stmtF->fetch();
+
+        if (!$srcRow || $gsBin === null) {
+            setFlash('error', 'Bitte wähle eine gültige PDF-Datei zum Schwärzen aus.');
+            header('Location: pdf_tools.php#tab-redact');
+            exit;
+        }
+
+        $srcPath = UPLOAD_DIR . basename((string)$srcRow['filename']);
+        if (!is_file($srcPath)) {
+            setFlash('error', 'Quell-PDF wurde auf dem Server nicht gefunden.');
+            header('Location: pdf_tools.php#tab-redact');
+            exit;
+        }
+
+        if ($outputName === '') {
+            $baseOrig = preg_replace('/\.pdf$/i', '', (string)$srcRow['original_name']) ?: 'Dokument';
+            $outputName = $baseOrig . '_geschwaerzt.pdf';
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/mc_redact_apply_' . bin2hex(random_bytes(8));
+        if (!@mkdir($tmpDir, 0700, true)) {
+            setFlash('error', 'Temporäres Verzeichnis für die Schwärzung konnte nicht angelegt werden.');
+            header('Location: pdf_tools.php#tab-redact');
+            exit;
+        }
+
+        try {
+            $errOut = null;
+            // Seiten mit scharfen 200 DPI rastern, damit sämtliche Textlayer vor dem Schwärzen aufgelöst werden
+            $cmd = [
+                $gsBin,
+                '-dBATCH',
+                '-dNOPAUSE',
+                '-dSAFER',
+                '-q',
+                '-sDEVICE=jpeg',
+                '-dJPEGQ=90',
+                '-r200',
+                '-dFirstPage=1',
+                '-dLastPage=50',
+                '-sOutputFile=' . $tmpDir . '/page_%03d.jpg',
+                $srcPath,
+            ];
+            $code = runSafeProcess($cmd, $errOut);
+            $pageFiles = glob($tmpDir . '/page_*.jpg') ?: [];
+            sort($pageFiles, SORT_NATURAL);
+
+            if ($code !== 0 || empty($pageFiles)) {
+                setFlash('error', 'PDF-Seiten konnten für die Schwärzung nicht verarbeitet werden.');
+                header('Location: pdf_tools.php#tab-redact');
+                exit;
+            }
+
+            $finalPages = [];
+            $totalBoxesApplied = 0;
+
+            foreach ($pageFiles as $idx => $pFile) {
+                $pageNum = (string)($idx + 1);
+                $boxes = isset($redactionsMap[$pageNum]) && is_array($redactionsMap[$pageNum])
+                    ? $redactionsMap[$pageNum]
+                    : [];
+
+                $im = @imagecreatefromjpeg($pFile);
+                if ($im === false) {
+                    continue;
+                }
+                $w = imagesx($im);
+                $h = imagesy($im);
+
+                if (!empty($boxes)) {
+                    $colBlack = imagecolorallocate($im, 0, 0, 0);
+                    $colWhite = imagecolorallocate($im, 255, 255, 255);
+
+                    foreach ($boxes as $b) {
+                        if (!is_array($b)) {
+                            continue;
+                        }
+                        $nx = max(0.0, min(1.0, (float)($b['x'] ?? 0.0)));
+                        $ny = max(0.0, min(1.0, (float)($b['y'] ?? 0.0)));
+                        $nw = max(0.0, min(1.0 - $nx, (float)($b['w'] ?? 0.0)));
+                        $nh = max(0.0, min(1.0 - $ny, (float)($b['h'] ?? 0.0)));
+                        if ($nw <= 0.001 || $nh <= 0.001) {
+                            continue;
+                        }
+
+                        $x1 = (int)floor($nx * $w);
+                        $y1 = (int)floor($ny * $h);
+                        $x2 = (int)ceil(($nx + $nw) * $w);
+                        $y2 = (int)ceil(($ny + $nh) * $h);
+                        $fillCol = (($b['color'] ?? 'black') === 'white') ? $colWhite : $colBlack;
+
+                        imagefilledrectangle($im, $x1, $y1, $x2, $y2, $fillCol);
+                        $totalBoxesApplied++;
+                    }
+                }
+
+                ob_start();
+                imagejpeg($im, null, 88);
+                $jpegBytes = (string)ob_get_clean();
+                imagedestroy($im);
+
+                if ($jpegBytes !== '') {
+                    $finalPages[] = [
+                        'jpeg_bytes' => $jpegBytes,
+                        'width'      => $w,
+                        'height'     => $h,
+                    ];
+                }
+            }
+
+            if (empty($finalPages)) {
+                setFlash('error', 'Geschwärztes PDF konnte nicht erzeugt werden.');
+                header('Location: pdf_tools.php#tab-redact');
+                exit;
+            }
+
+            // Neues PDF ohne alten Textlayer zusammenbauen
+            $pdfBytes = buildNativePdfFromJpegPages($finalPages, 'original');
+            $saved = saveGeneratedPdfToCloud($pdo, $userId, $username, $pdfBytes, $outputName, $targetFolder);
+
+            if (!$saved['ok']) {
+                setFlash('error', (string)$saved['error']);
+                header('Location: pdf_tools.php#tab-redact');
+                exit;
+            }
+
+            setFlash(
+                'success',
+                sprintf(
+                    '⬛ PDF „%s“ (%d Schwärzungen physisch eingebrannt, kein auslesbarer Resttext) wurde im Ordner „/%s“ gespeichert!',
+                    $saved['filename'],
+                    $totalBoxesApplied,
+                    $saved['folder']
+                )
+            );
+            header('Location: pdf_tools.php?created=' . (int)$saved['file_id'] . '#tab-redact');
+            exit;
+        } finally {
+            foreach (glob($tmpDir . '/*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
+    }
 }
 
 // Eigene PDF-Dateien und Bilddateien aus der Cloud für die Auswahl laden
@@ -828,6 +1071,10 @@ require_once __DIR__ . '/includes/header.php';
         <button type="button" data-pdf-tab-btn="tab-compress" onclick="switchPdfTab('tab-compress')"
                 class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
             🗜️ 4. PDF komprimieren
+        </button>
+        <button type="button" data-pdf-tab-btn="tab-redact" onclick="switchPdfTab('tab-redact')"
+                class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
+            ⬛ 5. PDF schwärzen (DSGVO-Sicher)
         </button>
     </div>
 
@@ -1116,9 +1363,120 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </form>
     </section>
+
+    <!-- =================================================================== -->
+    <!-- REITER 5: PDF UNWIDERRUFLICH SCHWÄRZEN (DSGVO-REDACTION)            -->
+    <!-- =================================================================== -->
+    <section id="tab-redact" data-pdf-tab-panel="tab-redact" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">⬛ PDF unwiderruflich schwärzen (DSGVO-konforme Pixel-Schwärzung)</h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Ziehe mit der Maus oder dem Finger schwarze (oder weiße) Balken über sensible Textstellen wie IBANs, Gehälter, Adressen oder Namen. Beim Speichern werden die Balken <strong>fest in die Seitenpixel eingebrannt</strong> und der darunterliegende Text-Layer restlos entfernt – ein nachträgliches Herauslesen per Copy &amp; Paste ist unmöglich!
+                </p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold shrink-0">
+                🛡️ Echte Pixel-Schwärzung (Kein Rest-Textlayer)
+            </span>
+        </div>
+
+        <!-- Schritt 1: PDF auswählen & Vorschau laden -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <div class="sm:col-span-8">
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">1. PDF-Datei aus deiner Cloud auswählen</label>
+                <select id="redactPdfSelect" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                    <option value="">– Bitte PDF zum Schwärzen auswählen –</option>
+                    <?php foreach ($myPdfs as $pdf): ?>
+                        <option value="<?= (int)$pdf['id'] ?>">📄 <?= e((string)$pdf['original_name']) ?> (<?= e(formatBytes((int)$pdf['file_size'])) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="sm:col-span-4">
+                <button type="button" id="btnLoadRedactPreview" onclick="loadRedactPdfPreview()"
+                        class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                    🔍 Seiten zum Schwärzen laden
+                </button>
+            </div>
+        </div>
+
+        <div id="redactLoadingBox" class="hidden p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-center text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+            ⏳ PDF-Seiten werden für die Schwärzung aufbereitet...
+        </div>
+
+        <!-- Schritt 2: Interaktiver Schwärzungs-Arbeitsbereich -->
+        <form id="redactApplyForm" action="pdf_tools.php" method="post" class="hidden space-y-5" onsubmit="return prepareRedactionSubmit()">
+            <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+            <input type="hidden" name="action" value="apply_redactions">
+            <input type="hidden" name="source_pdf_id" id="redactFormSourceId" value="">
+            <input type="hidden" name="redactions_json" id="redactFormJson" value="{}">
+
+            <!-- Werkzeugleiste für Schwärzungs-Balken -->
+            <div class="sticky top-16 z-30 p-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border border-slate-300 dark:border-slate-700 shadow-md flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Stift-Farbe:</span>
+                    <button type="button" id="btnRedactColorBlack" onclick="setRedactColor('black')"
+                            class="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold ring-2 ring-brand-500 cursor-pointer">
+                        ⬛ Schwarz (Standard)
+                    </button>
+                    <button type="button" id="btnRedactColorWhite" onclick="setRedactColor('white')"
+                            class="px-3 py-1.5 rounded-xl bg-white text-slate-800 border border-slate-300 text-xs font-bold cursor-pointer">
+                        ⬜ Deckweiß
+                    </button>
+
+                    <span class="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1"></span>
+
+                    <button type="button" onclick="undoLastRedactionBox()"
+                            class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer">
+                        ↩️ Letzten Balken rückgängig
+                    </button>
+                    <button type="button" onclick="clearAllRedactionBoxes()"
+                            class="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-semibold cursor-pointer">
+                        🗑️ Alle Balken löschen
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <span id="redactBoxCounter" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200">
+                        0 Balken markiert
+                    </span>
+                </div>
+            </div>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+                💡 <strong>Bedienung:</strong> Ziehe mit gedrückter Maustaste (oder mit dem Finger auf dem Touchscreen) einfach einen Rahmen über den zu schwärzenden Text. Ein Klick auf das rote <strong>&times;</strong> an einem Balken entfernt ihn wieder.
+            </p>
+
+            <!-- Seiten-Container -->
+            <div id="redactPagesContainer" class="space-y-6 bg-slate-100 dark:bg-slate-950 p-3 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 max-h-[75vh] overflow-y-auto"></div>
+
+            <!-- Zielordner, Dateiname & Speichern -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end pt-2">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zielordner in der Cloud</label>
+                    <input type="text" name="target_folder" id="redactTargetFolder" value="Scans"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dateiname des geschwärzten PDFs</label>
+                    <input type="text" name="output_name" id="redactOutputName" placeholder="Dokument_geschwaerzt.pdf"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <button type="submit" class="w-full px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-brand-600 hover:bg-black dark:hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer">
+                        ⬛ Unwiderruflich schwärzen &amp; speichern
+                    </button>
+                </div>
+            </div>
+        </form>
+    </section>
 </div>
 
 <script>
+const PDF_CSRF_TOKEN = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+let currentRedactColor = 'black';
+let redactionsByPage   = {}; // { "1": [{x, y, w, h, color}], ... }
+let redactionHistory   = []; // [{page, index}]
+
 function switchPdfTab(tabId) {
     document.querySelectorAll('[data-pdf-tab-panel]').forEach(p => {
         p.classList.toggle('hidden', p.getAttribute('data-pdf-tab-panel') !== tabId);
@@ -1129,6 +1487,276 @@ function switchPdfTab(tabId) {
             ? 'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-brand-600 text-white'
             : 'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800';
     });
+}
+
+function setRedactColor(col) {
+    currentRedactColor = (col === 'white') ? 'white' : 'black';
+    const bBlack = document.getElementById('btnRedactColorBlack');
+    const bWhite = document.getElementById('btnRedactColorWhite');
+    if (bBlack && bWhite) {
+        bBlack.classList.toggle('ring-2', currentRedactColor === 'black');
+        bBlack.classList.toggle('ring-brand-500', currentRedactColor === 'black');
+        bWhite.classList.toggle('ring-2', currentRedactColor === 'white');
+        bWhite.classList.toggle('ring-brand-500', currentRedactColor === 'white');
+    }
+}
+
+function updateRedactCounter() {
+    let total = 0;
+    Object.values(redactionsByPage).forEach(arr => {
+        if (Array.isArray(arr)) total += arr.length;
+    });
+    const el = document.getElementById('redactBoxCounter');
+    if (el) {
+        el.textContent = `${total} ${total === 1 ? 'Balken' : 'Balken'} markiert`;
+    }
+}
+
+async function loadRedactPdfPreview() {
+    const sel = document.getElementById('redactPdfSelect');
+    const pdfId = sel ? parseInt(sel.value, 10) : 0;
+    if (!pdfId) {
+        alert('Bitte wähle zuerst eine PDF-Datei aus deiner Cloud aus.');
+        return;
+    }
+
+    const loadingBox = document.getElementById('redactLoadingBox');
+    const formEl     = document.getElementById('redactApplyForm');
+    const container  = document.getElementById('redactPagesContainer');
+    const btn        = document.getElementById('btnLoadRedactPreview');
+
+    if (loadingBox) loadingBox.classList.remove('hidden');
+    if (formEl) formEl.classList.add('hidden');
+    if (btn) btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('csrf_token', PDF_CSRF_TOKEN);
+    fd.append('action', 'render_redact_preview');
+    fd.append('source_pdf_id', String(pdfId));
+
+    try {
+        const resp = await fetch('pdf_tools.php', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (!data || !data.ok || !Array.isArray(data.pages)) {
+            alert(data?.error || 'PDF-Vorschau konnte nicht geladen werden.');
+            return;
+        }
+
+        redactionsByPage = {};
+        redactionHistory = [];
+        updateRedactCounter();
+
+        document.getElementById('redactFormSourceId').value = String(pdfId);
+        document.getElementById('redactOutputName').value   = data.suggestedName || 'Dokument_geschwaerzt.pdf';
+        document.getElementById('redactTargetFolder').value = data.folder || 'Scans';
+
+        container.innerHTML = '';
+        data.pages.forEach(p => {
+            const pageNum = String(p.page);
+            redactionsByPage[pageNum] = [];
+
+            const wrap = document.createElement('div');
+            wrap.className = 'space-y-2';
+
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 max-w-3xl mx-auto';
+            header.innerHTML = `<span>📄 Seite ${pageNum}</span><span class="text-[11px] font-normal text-slate-400">Mit Maus oder Finger Balken über Text ziehen</span>`;
+
+            const stage = document.createElement('div');
+            stage.className = 'relative max-w-3xl mx-auto bg-white shadow-md rounded-lg overflow-hidden select-none cursor-crosshair border border-slate-300 dark:border-slate-700';
+            stage.style.touchAction = 'none';
+            stage.setAttribute('data-redact-page', pageNum);
+
+            const img = document.createElement('img');
+            img.src = p.dataUri;
+            img.alt = 'Seite ' + pageNum;
+            img.draggable = false;
+            img.className = 'w-full h-auto block pointer-events-none select-none';
+
+            const overlay = document.createElement('div');
+            overlay.className = 'absolute inset-0';
+            overlay.setAttribute('data-redact-overlay', pageNum);
+
+            stage.appendChild(img);
+            stage.appendChild(overlay);
+            wrap.appendChild(header);
+            wrap.appendChild(stage);
+            container.appendChild(wrap);
+
+            attachRedactionDrawingHandlers(stage, overlay, pageNum);
+        });
+
+        if (formEl) formEl.classList.remove('hidden');
+    } catch (e) {
+        alert('Netzwerkfehler beim Laden der PDF-Seiten.');
+    } finally {
+        if (loadingBox) loadingBox.classList.add('hidden');
+        if (btn) btn.disabled = false;
+    }
+}
+
+function attachRedactionDrawingHandlers(stage, overlay, pageNum) {
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let draftBoxEl = null;
+
+    const getRelCoords = (clientX, clientY) => {
+        const rect = stage.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+        const y = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
+        return { x, y };
+    };
+
+    const onStart = (clientX, clientY, target) => {
+        if (target && target.closest('[data-redact-del]')) return;
+        isDrawing = true;
+        const pt = getRelCoords(clientX, clientY);
+        startX = pt.x;
+        startY = pt.y;
+
+        draftBoxEl = document.createElement('div');
+        draftBoxEl.className = 'absolute pointer-events-none border-2 border-brand-500';
+        draftBoxEl.style.backgroundColor = currentRedactColor === 'white' ? '#ffffff' : '#000000';
+        draftBoxEl.style.opacity = '0.88';
+        overlay.appendChild(draftBoxEl);
+    };
+
+    const onMove = (clientX, clientY) => {
+        if (!isDrawing || !draftBoxEl) return;
+        const pt = getRelCoords(clientX, clientY);
+        const x = Math.min(startX, pt.x);
+        const y = Math.min(startY, pt.y);
+        const w = Math.abs(pt.x - startX);
+        const h = Math.abs(pt.y - startY);
+        draftBoxEl.style.left   = (x * 100) + '%';
+        draftBoxEl.style.top    = (y * 100) + '%';
+        draftBoxEl.style.width  = (w * 100) + '%';
+        draftBoxEl.style.height = (h * 100) + '%';
+    };
+
+    const onEnd = (clientX, clientY) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        if (draftBoxEl) {
+            draftBoxEl.remove();
+            draftBoxEl = null;
+        }
+        const pt = getRelCoords(clientX, clientY);
+        const x = Math.min(startX, pt.x);
+        const y = Math.min(startY, pt.y);
+        const w = Math.abs(pt.x - startX);
+        const h = Math.abs(pt.y - startY);
+
+        if (w < 0.008 || h < 0.005) return;
+
+        if (!Array.isArray(redactionsByPage[pageNum])) {
+            redactionsByPage[pageNum] = [];
+        }
+        redactionsByPage[pageNum].push({ x, y, w, h, color: currentRedactColor });
+        redactionHistory.push(pageNum);
+        renderPageRedactionBoxes(pageNum);
+        updateRedactCounter();
+    };
+
+    stage.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        onStart(e.clientX, e.clientY, e.target);
+    });
+    window.addEventListener('mousemove', e => {
+        if (isDrawing) onMove(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', e => {
+        if (isDrawing) onEnd(e.clientX, e.clientY);
+    });
+
+    stage.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return;
+        if (e.target && e.target.closest('[data-redact-del]')) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        onStart(t.clientX, t.clientY, e.target);
+    }, { passive: false });
+    stage.addEventListener('touchmove', e => {
+        if (!isDrawing || e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        onMove(t.clientX, t.clientY);
+    }, { passive: false });
+    stage.addEventListener('touchend', e => {
+        if (!isDrawing) return;
+        const t = e.changedTouches[0];
+        if (t) onEnd(t.clientX, t.clientY);
+    });
+}
+
+function renderPageRedactionBoxes(pageNum) {
+    const overlay = document.querySelector(`[data-redact-overlay="${pageNum}"]`);
+    if (!overlay) return;
+    overlay.innerHTML = '';
+    const boxes = redactionsByPage[pageNum] || [];
+
+    boxes.forEach((b, idx) => {
+        const el = document.createElement('div');
+        el.className = 'absolute group';
+        el.style.left   = (b.x * 100) + '%';
+        el.style.top    = (b.y * 100) + '%';
+        el.style.width  = (b.w * 100) + '%';
+        el.style.height = (b.h * 100) + '%';
+        el.style.backgroundColor = b.color === 'white' ? '#ffffff' : '#000000';
+        el.style.border = b.color === 'white' ? '1px dashed #94a3b8' : '1px solid #000000';
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.setAttribute('data-redact-del', '1');
+        delBtn.title = 'Diesen Schwärzungs-Balken entfernen';
+        delBtn.className = ' absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center shadow-xs opacity-90 hover:scale-110 cursor-pointer';
+        delBtn.innerHTML = '&times;';
+        delBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            redactionsByPage[pageNum].splice(idx, 1);
+            renderPageRedactionBoxes(pageNum);
+            updateRedactCounter();
+        };
+
+        el.appendChild(delBtn);
+        overlay.appendChild(el);
+    });
+}
+
+function undoLastRedactionBox() {
+    while (redactionHistory.length > 0) {
+        const pageNum = redactionHistory.pop();
+        if (Array.isArray(redactionsByPage[pageNum]) && redactionsByPage[pageNum].length > 0) {
+            redactionsByPage[pageNum].pop();
+            renderPageRedactionBoxes(pageNum);
+            updateRedactCounter();
+            return;
+        }
+    }
+}
+
+function clearAllRedactionBoxes() {
+    Object.keys(redactionsByPage).forEach(pageNum => {
+        redactionsByPage[pageNum] = [];
+        renderPageRedactionBoxes(pageNum);
+    });
+    redactionHistory = [];
+    updateRedactCounter();
+}
+
+function prepareRedactionSubmit() {
+    let total = 0;
+    Object.values(redactionsByPage).forEach(arr => {
+        if (Array.isArray(arr)) total += arr.length;
+    });
+    if (total === 0) {
+        alert('Bitte ziehe mindestens einen Schwärzungs-Balken auf einer Seite auf, bevor du speicherst.');
+        return false;
+    }
+    document.getElementById('redactFormJson').value = JSON.stringify(redactionsByPage);
+    return true;
 }
 
 function previewSelectedScanImages(input) {
@@ -1150,7 +1778,7 @@ function previewSelectedScanImages(input) {
 
 if (window.location.hash) {
     const h = window.location.hash.replace('#', '');
-    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress'].includes(h)) {
+    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress', 'tab-redact'].includes(h)) {
         switchPdfTab(h);
     }
 }
