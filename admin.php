@@ -1233,6 +1233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enablePolls     = isset($_POST['enable_polls']) && $_POST['enable_polls'] === '1' ? '1' : '0';
         $enableMenti     = isset($_POST['enable_menti']) && $_POST['enable_menti'] === '1' ? '1' : '0';
         $enablePasswords = isset($_POST['enable_passwords']) && $_POST['enable_passwords'] === '1' ? '1' : '0';
+        $enablePdfTools  = isset($_POST['enable_pdf_tools']) && $_POST['enable_pdf_tools'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1244,6 +1245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_polls', $enablePolls);
         saveAppSetting($pdo, 'enable_menti', $enableMenti);
         saveAppSetting($pdo, 'enable_passwords', $enablePasswords);
+        saveAppSetting($pdo, 'enable_pdf_tools', $enablePdfTools);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -2382,6 +2384,42 @@ $localSnapshots  = getLocalAppSnapshots();
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="menti.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🎤 Live-Mentimeter öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 11: PDF-Werkzeugkasten & Dokumenten-Scanner -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📄 PDF-Werkzeugkasten &amp; Scanner
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_pdf_tools'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_pdf_tools'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_pdf_tools"
+                                value="1"
+                                <?= ($currentSettings['enable_pdf_tools'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>PDF &amp; Dokumenten-Scanner (<code>pdf_tools.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Kamera-/Foto-zu-PDF-Scanner mit S/W-Dokumentenfilter sowie PDFs zusammenfügen (Merge), Seiten extrahieren (Split) und komprimieren.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_pdf_tools'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="pdf_tools.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📄 PDF &amp; Scan öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

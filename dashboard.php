@@ -362,6 +362,11 @@ require_once __DIR__ . '/includes/header.php';
                     🔐 Schlüsselbund
                 </a>
             <?php endif; ?>
+            <?php if (($appSettings['enable_pdf_tools'] ?? '1') === '1'): ?>
+                <a href="pdf_tools.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
+                    📄 PDF &amp; Scan
+                </a>
+            <?php endif; ?>
             <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
                 <a href="messages.php" class="px-3 py-2 rounded-xl <?= $unreadChat > 0 ? 'bg-rose-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200' ?> hover:bg-brand-600 hover:text-white text-xs font-semibold transition-colors">
                     💬 Nachrichten <?= $unreadChat > 0 ? '(' . $unreadChat . ' neu)' : '' ?>

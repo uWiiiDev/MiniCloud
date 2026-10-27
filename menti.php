@@ -346,6 +346,12 @@ function buildMentiLiveState(PDO $pdo, array $session, string $participantToken)
 if (isset($_GET['pin'])) {
     $rawPin = preg_replace('/\D+/', '', (string)$_GET['pin']) ?? '';
     if ($rawPin !== '') {
+        $clientIp = getClientIp();
+        if (isLoginRateLimited($pdo, $clientIp)) {
+            setFlash('error', 'Zu viele fehlgeschlagene PIN-Versuche. Bitte warte 5 Minuten.');
+            header('Location: menti.php');
+            exit;
+        }
         $stmtPin = $pdo->prepare("SELECT `public_token` FROM `menti_sessions` WHERE `pin_code` = :pin LIMIT 1");
         $stmtPin->execute([':pin' => $rawPin]);
         $foundToken = $stmtPin->fetchColumn();
@@ -353,6 +359,7 @@ if (isset($_GET['pin'])) {
             header('Location: menti.php?join=' . urlencode((string)$foundToken));
             exit;
         }
+        recordLoginFailure($pdo, $clientIp, 'menti_pin');
         setFlash('error', 'Unter dem PIN-Code „' . formatMentiPin($rawPin) . '“ wurde keine aktive Live-Präsentation gefunden.');
         header('Location: menti.php');
         exit;
@@ -426,14 +433,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['participant_action'])
     if ($pAction === 'submit_vote') {
         $slideType = (string)$slide['slide_type'];
 
-        // Bei allen Typen außer Q&A und Offene Antworten nur 1 Einreichung pro Teilnehmer & Folie
-        if (!in_array($slideType, ['qa', 'open'], true)) {
-            $stmtChk = $pdo->prepare("SELECT `id` FROM `menti_responses` WHERE `slide_id` = :slid AND `participant_token` = :ptok LIMIT 1");
-            $stmtChk->execute([':slid' => $slideId, ':ptok' => $participantToken]);
-            if ($stmtChk->fetchColumn() !== false) {
-                echo json_encode(['ok' => false, 'error' => 'Du hast für diese Folie bereits abgestimmt.']);
-                exit;
-            }
+        // Bei allen Typen außer Q&A und Offene Antworten nur 1 Einreichung pro Teilnehmer & Folie;
+        // bei Q&A und Offenen Antworten max. 10 Beiträge pro Teilnehmer & Folie (DoS-/Spam-Schutz)
+        $stmtChk = $pdo->prepare("SELECT COUNT(*) FROM `menti_responses` WHERE `slide_id` = :slid AND `participant_token` = :ptok");
+        $stmtChk->execute([':slid' => $slideId, ':ptok' => $participantToken]);
+        $mySlideRespCount = (int)$stmtChk->fetchColumn();
+
+        if (!in_array($slideType, ['qa', 'open'], true) && $mySlideRespCount >= 1) {
+            echo json_encode(['ok' => false, 'error' => 'Du hast für diese Folie bereits abgestimmt.']);
+            exit;
+        }
+        if (in_array($slideType, ['qa', 'open'], true) && $mySlideRespCount >= 10) {
+            echo json_encode(['ok' => false, 'error' => 'Maximal 10 Beiträge pro Teilnehmer auf dieser Folie erreicht.']);
+            exit;
         }
 
         $answerVal = '';

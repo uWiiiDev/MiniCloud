@@ -16,7 +16,7 @@
    - **🖼️ Foto-Galerie / Kachel-Ansicht, ⭐ Favoriten & 🔎 Globale Suche:** Nahtloser Wechsel zwischen Tabellenansicht (`📋 Liste`) und Kachel-Ansicht (`🖼️ Kacheln`) mit Live-Bild-Thumbnails, Anheften wichtiger Dateien per Stern (`⭐ Favoriten`) sowie ordnerübergreifende Volltextsuche über alle Unterordner hinweg.
    - **☑️ Mehrfachauswahl (Sammel-/Batch-Aktionen):** Mehrere Dateien gleichzeitig per Checkbox auswählen und über die schwebende Aktionsleiste gemeinsam als `.zip` herunterladen, verschieben/kopieren oder in den Papierkorb legen.
    - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio, Text-/Codedateien und ZIP-Archive (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
-   - **⭐ Flexibel anheftbare Favoriten-Icons in Kopfzeile & Dateiliste:** Sowohl im neuen **`⊞ Module`-App-Launcher** der Kopfzeile als auch im **`⋯`-Datei-Aktionsmenü** (auch per **Rechtsklick** auf jede Zeile erreichbar) kann jedes Modul bzw. jede Datei-Aktion per Klick auf **`⭐` / `☆`** individuell nach außen gelegt oder wieder ins Menü aufgeräumt werden.
+   - **⭐ Flexibel anheftbare & frei verschiebbare Favoriten-Icons in Kopfzeile & Dateiliste:** Sowohl im **`⊞ Module`-App-Launcher** der Kopfzeile als auch im **`⋯`-Datei-Aktionsmenü** (auch per **Rechtsklick** auf jede Zeile erreichbar) kann jedes Modul bzw. jede Datei-Aktion per Klick auf **`⭐` / `☆`** individuell nach außen gelegt oder wieder ins Menü aufgeräumt werden. Zudem lassen sich die Module sowohl im `⊞ Module`-Menü als auch oben in der Kopfleiste per **Drag & Drop (`⠿`)** frei anordnen.
    - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
 2. **Öffentliche Freigabelinks, 📱 Lokaler QR-Code, 🔥 Selbstzerstörung („Burn after reading“), 📥 Digitaler Briefkasten & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
    - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz, Ablaufdatum, **🔥 Download-Limit / Selbstzerstörung** (Link löscht sich z. B. nach `1×`, `3×`, `5×` oder `10×` Downloads automatisch selbst) sowie **📱 100 % lokal generierter SVG-QR-Code** zum direkten Scannen mit dem Smartphone.
@@ -30,10 +30,11 @@
 4. **Integrierter Messenger, 🎙️ Sprachnachrichten, 📋 `Strg+V`-Screenshots, 📎 Dateianhänge & System-Benachrichtigungen (`messages.php`)**
    - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern, direkte **🎙️ Sprachnachrichten-Aufnahme** über das Mikrofon (inkl. Inline-Audio-Player in der Sprechblase), sofortiges Einfügen von Screenshots per **`Strg+V`**, Versand von **📎 Datei- und Bildanhängen** sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
    - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones (mit ausgeblendetem Footer und dynamischer Anpassung an die Bildschirmtastatur) sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
-5. **🏠 „Mein Tag“-Cockpit, 📊 Terminfinder & Umfragen, 🔐 Passwort-Schlüsselbund, 📋 Aufgaben/Kanban, 📌 Notizwand, 📇 Adressbuch (CardDAV) & 📡 WebDAV (`dashboard.php`, `polls.php`, `passwords.php`, `tasks.php`, `notes.php`, `contacts.php`, `carddav.php`, `webdav.php`)**
-   - **🏠 Persönliches Tages-Cockpit (`dashboard.php`):** Zeigt auf einen Blick heutige und kommende Termine (14 Tage), anstehende Geburtstage aus dem Adressbuch (inkl. Altersberechnung), offene Aufgaben (mit 1-Klick-Abhaken), aktive Umfragen, angepinnte Notizen, ungelesene Chat-Nachrichten und zuletzt bearbeitete Dateien.
+5. **🏠 „Mein Tag“-Cockpit (⭐), 📊 Terminfinder & Umfragen, 🎤 Live-Mentimeter, 📄 PDF & Dokumenten-Scanner, 🔐 Passwort-Schlüsselbund, 📋 Aufgaben/Kanban, 📌 Notizwand, 📇 Adressbuch (CardDAV) & 📡 WebDAV (`dashboard.php`, `polls.php`, `menti.php`, `pdf_tools.php`, `passwords.php`, `tasks.php`, `notes.php`, `contacts.php`, `carddav.php`, `webdav.php`)**
+   - **🏠 Persönliches Tages-Cockpit (`dashboard.php`) mit ⭐ Sternchen-Auswahl:** Zeigt auf einen Blick heutige und kommende Termine (14 Tage), anstehende Geburtstage aus dem Adressbuch (inkl. Altersberechnung), offene Aufgaben (mit 1-Klick-Abhaken), aktive Umfragen, Live-Mentimeter, angepinnte Notizen und zuletzt bearbeitete Dateien – jede Kachel lässt sich per **`⭐` / `☆`** individuell ein- und ausblenden.
    - **📊 Terminfinder & Abstimmungen (`polls.php`):** Selbstgehostete „Doodle“-Alternative für Termin-Umfragen und Abstimmungen (`✅ Ja`, `🤔 Unter Vorbehalt`, `❌ Nein`) – intern im Team oder per **öffentlichem Gäste-Link (`polls.php?token=...`)** ohne Konto-Pflicht, inklusive **1-Klick-Übernahme des Gewinner-Termins (`🏆`) direkt in den Kalender**.
    - **🎤 Live-Mentimeter & Interaktive Präsentationen (`menti.php`):** Selbstgehostetes Echtzeit-Publikums-Voting per **lokalem SVG-QR-Code & 6-stelligem PIN-Code** (ohne Teilnehmer-Limit & ohne Konto-Pflicht) mit **☁️ Wortwolke (Word Cloud)**, **📊 Live-Balkendiagramm**, **🎚️ Skala (1–10)**, **💬 Offenen Antworten**, **🙋 Q&A mit 👍 Upvoting**, **🏆 Live-Quiz samt Bestenliste** und automatischer Folien-Synchronisation auf allen Smartphones.
+   - **📄 PDF-Werkzeugkasten & Dokumenten-Scanner (`pdf_tools.php`):** 100 % lokaler **Kamera-/Foto-zu-PDF-Scanner** mit optionalem **S/W-Dokumentenfilter (Hoher Kontrast)** sowie **🔗 PDFs zusammenfügen (Merge)**, **✂️ Seiten extrahieren (Split)** und **🗜️ PDF komprimieren** direkt im eigenen Cloud-Speicher ohne externe Online-Dienste.
    - **🔐 Passwort-Manager / Schlüsselbund (`passwords.php`):** AES-256-GCM-verschlüsselter Tresor für Logins, WLAN-Passwörter, Server-Zugänge, Lizenzen und PINs – inkl. Passwort-Generator, 1-Klick-Kopieren, Passwort-Alterswarnung (> 180 Tage) und Team-/Gruppen-Freigabe.
    - **📋 Aufgaben & Kanban-Board (`tasks.php`):** 3-Spalten-Projektboard (*📌 Offen*, *⏳ In Arbeit*, *✅ Erledigt*) mit HTML5 Drag & Drop, Prioritäten, Fälligkeitsdaten, interaktiven Unteraufgaben-Checklisten, Cloud-Dateianhängen und Teilen mit Benutzern oder Gruppen.
    - **📌 Notizwand / Pinboard (`notes.php`):** Farbige digitale Haftnotizen mit Anpinnen, `#Tags`, Live-Suche, Teilen im Team und 1-Klick-Export als Markdown-Datei (`.md`) direkt in den Cloud-Ordner `Notizen`.
@@ -230,13 +231,19 @@ MiniCloud/
 │   ├── .htaccess             # Verhindert direkten Web-Zugriff & Skriptausführung auf Apache
 │   └── index.php             # 403-Fallback-Schutz
 ├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Office-Light-Start, Vorschau-Modal, Tresor, Freigaben)
+├── dashboard.php             # Persönliches Tages-Cockpit „Mein Tag“ mit per ⭐ ein-/ausblendbaren Kacheln
 ├── office.php                # MiniCloud Office Light (Online-Editor für Word .docx, Excel .xlsx, .csv, .txt & .md)
 ├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
+├── caldav.php                # Nativer CalDAV-Server (RFC 4791) für 2-Wege-Kalender-Synchronisation (iOS, macOS, Thunderbird, DAVx⁵)
 ├── messages.php              # Integrierter Messenger (1:1-Chat, Sprachnachrichten, Admin-Rundnachrichten, Mobil-Ansicht)
 ├── tasks.php                 # Aufgaben & Kanban-Board (Drag & Drop, Prioritäten, Checklisten, Dateianhänge, Teilen)
 ├── notes.php                 # Digitale Haftnotizwand / Pinboard (Farben, #Tags, Anpinnen, .md-Cloud-Export)
 ├── contacts.php              # Adressbuch & Kontakte (vCard Import/Export, .vcf-Abo mit QR-Code, Kalender-Geburtstage)
 ├── carddav.php               # Nativer CardDAV-Server (RFC 6352) für 2-Wege-Sync mit iOS, macOS, Thunderbird & Android
+├── polls.php                 # Terminfinder & Abstimmungen (interne & öffentliche Umfragen inkl. 1-Klick-Kalenderübernahme)
+├── menti.php                 # Live-Mentimeter & Publikums-Voting (Wortwolke, Live-Balken, Skala, Q&A, Quiz per QR & PIN)
+├── passwords.php             # AES-256-GCM-verschlüsselter Passwort-Manager & Schlüsselbund inkl. Passwort-Generator
+├── pdf_tools.php             # PDF-Werkzeugkasten & Dokumenten-Scanner (Kamera/Foto -> PDF mit S/W-Filter, Merge, Split, Kompression)
 ├── webdav.php                # Nativer WebDAV-Server zum Einbinden als Netzlaufwerk (Windows, macOS, Linux, Mobil)
 ├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, 2FA per E-Mail & Google Auth)
 ├── trash.php                 # Papierkorb mit 30 Tagen Aufbewahrungsfrist

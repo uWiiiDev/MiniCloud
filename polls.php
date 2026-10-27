@@ -103,8 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Bisherige Stimmen dieses Teilnehmers für diese Umfrage ersetzen
         if ($userId > 0) {
-            $pdo->prepare('DELETE FROM poll_votes WHERE poll_id = :pid AND (user_id = :uid OR LOWER(voter_name) = LOWER(:vname))')
-                ->execute([':pid' => $pollId, ':uid' => $userId, ':vname' => $voterName]);
+            $voterName = $username;
+            $pdo->prepare('DELETE FROM poll_votes WHERE poll_id = :pid AND user_id = :uid')
+                ->execute([':pid' => $pollId, ':uid' => $userId]);
         } else {
             $pdo->prepare('DELETE FROM poll_votes WHERE poll_id = :pid AND user_id IS NULL AND LOWER(voter_name) = LOWER(:vname)')
                 ->execute([':pid' => $pollId, ':vname' => $voterName]);
@@ -153,9 +154,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sharedUserId = null;
         $groupId      = null;
         if (str_starts_with($shareTarget, 'user:')) {
-            $sharedUserId = max(0, (int)substr($shareTarget, 5)) ?: null;
+            $candidateUid = max(0, (int)substr($shareTarget, 5));
+            if ($candidateUid > 0) {
+                $stmtVis = $pdo->prepare('SELECT id FROM users WHERE id = :id AND allow_user_sharing = 1 LIMIT 1');
+                $stmtVis->execute([':id' => $candidateUid]);
+                if ($stmtVis->fetchColumn() !== false) {
+                    $sharedUserId = $candidateUid;
+                }
+            }
         } elseif (str_starts_with($shareTarget, 'group:')) {
-            $groupId = max(0, (int)substr($shareTarget, 6)) ?: null;
+            $candidateGid = max(0, (int)substr($shareTarget, 6));
+            if ($candidateGid > 0) {
+                if (isAdmin()) {
+                    $groupId = $candidateGid;
+                } else {
+                    $stmtGm = $pdo->prepare('SELECT 1 FROM group_members WHERE group_id = :gid AND user_id = :uid LIMIT 1');
+                    $stmtGm->execute([':gid' => $candidateGid, ':uid' => $userId]);
+                    if ($stmtGm->fetchColumn() !== false) {
+                        $groupId = $candidateGid;
+                    }
+                }
+            }
         }
 
         $optionsToInsert = [];
