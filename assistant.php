@@ -80,11 +80,11 @@ function detectAssistantLanguage(string $question, string $fallbackLang = 'de'):
         'fr' => [' comment ', ' quel ', ' quelle ', ' quels ', ' mes ', ' mon ', ' espace ', ' stockage ', ' tâche:', ' tache:', ' chercher ', ' rechercher ', ' fichier ', ' dossier ', ' rendez-vous ', ' bonjour ', ' salut '],
         'es' => [' cómo ', ' como ', ' qué ', ' que ', ' cuál ', ' cuales ', ' mis ', ' almacenamiento ', ' espacio ', ' tarea:', ' nota:', ' buscar ', ' busca ', ' archivo ', ' archivos ', ' carpeta ', ' hola ', ' citas '],
         'it' => [' come ', ' quale ', ' quali ', ' mio ', ' miei ', ' mie ', ' spazio ', ' archiviazione ', ' compito:', ' cerca ', ' trova ', ' cartella ', ' ciao ', ' appuntamenti '],
-        'nl' => [' hoe ', ' wat ', ' welke ', ' mijn ', ' opslag ', ' opslagruimte ', ' vrij ', ' taak:', ' notitie:', ' zoek ', ' bestand ', ' bestanden ', ' map ', ' afspraken ', ' hallo '],
-        'pl' => [' jak ', ' co ', ' jakie ', ' moje ', ' miejsce ', ' pamięć ', ' pamiec ', ' zadanie:', ' notatka:', ' szukaj ', ' znajdź ', ' znajdz ', ' plik ', ' pliki ', ' katalog ', ' cześć ', ' czesc '],
-        'pt' => [' como ', ' qual ', ' quais ', ' meu ', ' meus ', ' minha ', ' minhas ', ' armazenamento ', ' espaço ', ' espaco ', ' tarefa:', ' procurar ', ' ficheiro ', ' arquivo ', ' pasta ', ' olá ', ' ola '],
-        'cs' => [' jak ', ' co ', ' jaké ', ' jake ', ' moje ', ' můj ', ' muj ', ' úložiště ', ' uloziste ', ' místo ', ' misto ', ' úkol:', ' ukol:', ' poznámka:', ' poznamka:', ' hledat ', ' najít ', ' soubor ', ' složka ', ' ahoj '],
-        'tr' => [' nasıl ', ' nasil ', ' ne ', ' hangi ', ' benim ', ' depolama ', ' alan ', ' görev:', ' gorev:', ' not:', ' ara ', ' bul ', ' dosya ', ' klasör ', ' klasor ', ' merhaba ', ' selam '],
+        'nl' => [' hoe ', 'hoeveel ', ' wat ', ' welke ', ' mijn ', ' opslag ', ' opslagruimte ', ' vrij ', ' taak:', ' notitie:', ' zoek ', ' bestand ', ' bestanden ', ' map ', ' afspraken ', ' hallo '],
+        'pl' => [' jak ', ' co ', ' jakie ', ' ile ', ' mam ', ' jeszcze ', ' wolnego ', ' miejsca', ' moje ', ' miejsce ', ' pamięć ', ' pamiec ', ' zadanie:', ' notatka:', ' szukaj ', ' znajdź ', ' znajdz ', ' plik ', ' pliki ', ' katalog ', ' cześć ', ' czesc ', ' czy '],
+        'pt' => [' como ', ' qual ', ' quais ', ' quanto ', ' meu ', ' meus ', ' minha ', ' minhas ', ' armazenamento ', ' espaço ', ' espaco ', ' tarefa:', ' procurar ', ' ficheiro ', ' arquivo ', ' pasta ', ' olá ', ' ola '],
+        'cs' => [' jak ', ' co ', ' jaké ', ' jake ', ' kolik ', ' které ', ' ktere ', ' moje ', ' můj ', ' muj ', ' úložiště ', ' uloziste ', ' místo ', ' misto ', ' úkol:', ' ukol:', ' poznámka:', ' poznamka:', ' hledat ', ' najít ', ' soubor ', ' složka ', ' ahoj '],
+        'tr' => [' nasıl ', ' nasil ', ' ne ', ' kadar ', ' hangi ', ' benim ', ' depolama ', ' alan ', ' alanım ', ' görev:', ' gorev:', ' not:', ' ara ', ' bul ', ' dosya ', ' klasör ', ' klasor ', ' merhaba ', ' selam '],
     ];
 
     $scores = [];
