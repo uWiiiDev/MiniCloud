@@ -153,16 +153,14 @@ function getAvailableVoiceRooms(PDO $pdo, int $userId, bool $isAdmin): array
 {
     $rooms = [];
 
-    // 1. Offener Cloud-Treffpunkt (nur für Admins oder Benutzer mit aktivierter Teilen-Sichtbarkeit)
-    if ($isAdmin || canUserShareWithOthers($pdo, $userId)) {
-        $rooms['lobby_all'] = [
-            'key'      => 'lobby_all',
-            'title'    => 'Cloud-Treffpunkt',
-            'subtitle' => 'Offener Sprachraum für alle Mitglieder',
-            'icon'     => '🌐',
-            'category' => 'lobby',
-        ];
-    }
+    // 1. Offener Cloud-Treffpunkt (für alle angemeldeten Cloud-Mitglieder)
+    $rooms['lobby_all'] = [
+        'key'      => 'lobby_all',
+        'title'    => 'Cloud-Treffpunkt',
+        'subtitle' => 'Offener Sprachraum für alle Mitglieder',
+        'icon'     => '🌐',
+        'category' => 'lobby',
+    ];
 
     // 2. Sprachräume für Benutzergruppen
     try {
