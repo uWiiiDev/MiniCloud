@@ -75,6 +75,9 @@ function isLoggedIn(): bool
                 $_SESSION['flash_duration']   = $flashSec;
                 $_SESSION['chat_notify_mode'] = $chatNotifyMode;
                 $_SESSION['last_activity']    = time();
+                if (function_exists('recordModuleUsage')) {
+                    recordModuleUsage($pdo);
+                }
             } else {
                 // Benutzer wurde gelöscht
                 $_SESSION = [];

@@ -1256,6 +1256,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // --- 11b-2. Modul-Nutzungsstatistik zurücksetzen ---
+    if ($action === 'reset_module_stats') {
+        resetModuleUsageStatistics($pdo);
+        logAuditEvent($pdo, 'admin_Action', 'Modul-Nutzungsstatistik zurückgesetzt');
+        setFlash('success', 'Die Modul-Nutzungsstatistik wurde auf 0 zurückgesetzt.');
+        header('Location: admin.php#tab-modules');
+        exit;
+    }
+
     // --- 11c. Darstellung, Logo & Impressum (Branding) aktualisieren ---
     if ($action === 'update_branding_only') {
         $newTitle    = mb_substr(trim((string)($_POST['app_title'] ?? '')), 0, 80);
@@ -2018,9 +2027,244 @@ $localSnapshots  = getLocalAppSnapshots();
 </div>
 
 <!-- ======================================================================= -->
-<!-- TAB 2: MODULE & FUNKTIONEN (Kalender & Chat)                            -->
+<!-- TAB 2: MODULE & FUNKTIONEN (inkl. Modul-Nutzungsstatistik)              -->
 <!-- ======================================================================= -->
+<?php
+$moduleUsageStats = getModuleUsageStatistics($pdo, $currentSettings);
+$modTotals        = $moduleUsageStats['totals'];
+$modTop           = $moduleUsageStats['top_module'];
+$modLatest        = $moduleUsageStats['latest_module'];
+$modList          = $moduleUsageStats['modules'];
+$enabledModCount  = 0;
+foreach ($modList as $mItem) {
+    if ($mItem['enabled']) {
+        $enabledModCount++;
+    }
+}
+?>
 <div id="tab-modules" data-admin-tab-panel="tab-modules" class="hidden space-y-6 mb-10">
+    <!-- 1. MODUL-NUTZUNGSSTATISTIK & BELIEBTHEIT -->
+    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-lg">
+                    📊
+                </span>
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Modul-Nutzungsstatistik &amp; Beliebtheit</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        DSGVO-konforme, anonymisierte Auswertung, wie oft welche Cloud-Module aufgerufen werden – inklusive aktuellem Datenbestand je Modul.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Zeitraum-Umschalter -->
+                <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700" role="group">
+                    <button type="button" onclick="switchModuleStatRange('today')" data-mod-range-btn="today"
+                            class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300">
+                        Heute (<?= (int)$modTotals['today'] ?>)
+                    </button>
+                    <button type="button" onclick="switchModuleStatRange('7d')" data-mod-range-btn="7d"
+                            class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300">
+                        7 Tage (<?= (int)$modTotals['d7'] ?>)
+                    </button>
+                    <button type="button" onclick="switchModuleStatRange('30d')" data-mod-range-btn="30d"
+                            class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300">
+                        30 Tage (<?= (int)$modTotals['d30'] ?>)
+                    </button>
+                    <button type="button" onclick="switchModuleStatRange('total')" data-mod-range-btn="total"
+                            class="px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-brand-600 text-white shadow-xs">
+                        Gesamt (<?= (int)$modTotals['total'] ?>)
+                    </button>
+                </div>
+
+                <?php if ($modTotals['total'] > 0): ?>
+                    <form action="admin.php" method="post" onsubmit="return confirm('Möchten Sie die gesammelte Modul-Nutzungsstatistik wirklich auf 0 zurücksetzen?');">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="reset_module_stats">
+                        <button type="submit"
+                                class="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70 text-xs font-semibold transition-colors cursor-pointer"
+                                title="Alle Aufrufzähler auf 0 zurücksetzen">
+                            🗑️ Zurücksetzen
+                        </button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- 4 KPI-Kacheln -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">🏆 Beliebtestes Modul</p>
+                <?php if ($modTop !== null): ?>
+                    <p class="text-sm font-bold text-slate-900 dark:text-white mt-1 truncate">
+                        <?= e($modTop['icon'] . ' ' . $modTop['label']) ?>
+                    </p>
+                    <p class="text-[11px] text-brand-600 dark:text-brand-400 font-semibold mt-0.5">
+                        <?= number_format((int)$modTop['hits'], 0, ',', '.') ?> Aufrufe gesamt
+                    </p>
+                <?php else: ?>
+                    <p class="text-sm font-bold text-slate-500 dark:text-slate-400 mt-1">Noch keine Daten</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Zählung läuft ab sofort</p>
+                <?php endif; ?>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">📈 Modul-Aufrufe</p>
+                <p class="text-lg font-extrabold text-slate-900 dark:text-white mt-0.5" id="modStatKpiHits">
+                    <?= number_format((int)$modTotals['total'], 0, ',', '.') ?>
+                </p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400" id="modStatKpiSub">
+                    Heute: <?= (int)$modTotals['today'] ?> · 7 Tage: <?= (int)$modTotals['d7'] ?> · 30 Tage: <?= (int)$modTotals['d30'] ?>
+                </p>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">🕒 Zuletzt genutzt</p>
+                <?php if ($modLatest !== null): ?>
+                    <p class="text-sm font-bold text-slate-900 dark:text-white mt-1 truncate">
+                        <?= e($modLatest['icon'] . ' ' . $modLatest['label']) ?>
+                    </p>
+                    <p class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                        <?= e(formatDateTime((string)$modLatest['last_used_at'])) ?> Uhr
+                    </p>
+                <?php else: ?>
+                    <p class="text-sm font-bold text-slate-500 dark:text-slate-400 mt-1">–</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Noch kein Aufruf protokolliert</p>
+                <?php endif; ?>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">🧩 Aktive Module</p>
+                <p class="text-lg font-extrabold text-slate-900 dark:text-white mt-0.5">
+                    <?= $enabledModCount ?> / <?= count($modList) ?>
+                </p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                    1 Kernmodul + <?= max(0, $enabledModCount - 1) ?> Zusatzmodule aktiv
+                </p>
+            </div>
+        </div>
+
+        <!-- Balkendiagramm & Rangliste aller Module -->
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                    <tr class="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                        <th class="py-2.5 px-3 font-bold w-10">#</th>
+                        <th class="py-2.5 px-3 font-bold">Modul</th>
+                        <th class="py-2.5 px-3 font-bold w-1/3">Nutzungsanteil &amp; Verteilung</th>
+                        <th class="py-2.5 px-3 font-bold text-right">Aufrufe</th>
+                        <th class="py-2.5 px-3 font-bold">Gespeicherter Bestand</th>
+                        <th class="py-2.5 px-3 font-bold text-right">Zuletzt verwendet</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200/70 dark:divide-slate-800" id="moduleStatsTableBody">
+                    <?php $rankIdx = 1; ?>
+                    <?php foreach ($modList as $mKey => $mStat): ?>
+                        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                            data-mod-stat-row="<?= e($mKey) ?>"
+                            data-hits-today="<?= (int)$mStat['hits_today'] ?>"
+                            data-hits-7d="<?= (int)$mStat['hits_7d'] ?>"
+                            data-hits-30d="<?= (int)$mStat['hits_30d'] ?>"
+                            data-hits-total="<?= (int)$mStat['hits_total'] ?>"
+                            data-pct-today="<?= e((string)$mStat['pct_today']) ?>"
+                            data-pct-7d="<?= e((string)$mStat['pct_7d']) ?>"
+                            data-pct-30d="<?= e((string)$mStat['pct_30d']) ?>"
+                            data-pct-total="<?= e((string)$mStat['pct_total']) ?>">
+                            <td class="py-2.5 px-3 font-bold text-slate-400 mod-rank-cell"><?= $rankIdx++ ?>.</td>
+                            <td class="py-2.5 px-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-base"><?= e($mStat['icon']) ?></span>
+                                    <div>
+                                        <a href="<?= e($mStat['url']) ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+                                            <?= e($mStat['label']) ?>
+                                        </a>
+                                        <span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase <?= $mStat['enabled'] ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400' ?>">
+                                            <?= $mStat['key'] === 'files' ? 'Kern' : ($mStat['enabled'] ? 'Aktiv' : 'Aus') ?>
+                                        </span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-2.5 px-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="flex-1 h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                                        <div class="h-full <?= e($mStat['color']) ?> transition-all duration-300 mod-pct-bar"
+                                             style="width: <?= max($mStat['hits_total'] > 0 ? 3 : 0, (float)$mStat['pct_total']) ?>%;"></div>
+                                    </div>
+                                    <span class="w-12 text-right font-semibold text-slate-700 dark:text-slate-300 mod-pct-label">
+                                        <?= number_format((float)$mStat['pct_total'], 1, ',', '.') ?> %
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white mod-hits-label">
+                                <?= number_format((int)$mStat['hits_total'], 0, ',', '.') ?>
+                            </td>
+                            <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                                <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-medium text-[11px]">
+                                    <?= e($mStat['inventory']) ?>
+                                </span>
+                            </td>
+                            <td class="py-2.5 px-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                <?= $mStat['last_used_at'] !== null ? e(formatDateTime($mStat['last_used_at']) . ' Uhr') : '<span class="italic text-slate-400">Noch nie</span>' ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <script>
+    function switchModuleStatRange(rangeKey) {
+        const buttons = document.querySelectorAll('[data-mod-range-btn]');
+        buttons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-mod-range-btn') === rangeKey;
+            btn.className = isActive
+                ? 'px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-brand-600 text-white shadow-xs'
+                : 'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300';
+        });
+
+        const tbody = document.getElementById('moduleStatsTableBody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('[data-mod-stat-row]'));
+
+        rows.sort((a, b) => {
+            const ha = parseInt(a.getAttribute('data-hits-' + rangeKey) || '0', 10);
+            const hb = parseInt(b.getAttribute('data-hits-' + rangeKey) || '0', 10);
+            if (hb !== ha) return hb - ha;
+            const ta = parseInt(a.getAttribute('data-hits-total') || '0', 10);
+            const tb = parseInt(b.getAttribute('data-hits-total') || '0', 10);
+            return tb - ta;
+        });
+
+        let sumHits = 0;
+        rows.forEach((row, idx) => {
+            const hits = parseInt(row.getAttribute('data-hits-' + rangeKey) || '0', 10);
+            const pct = parseFloat(row.getAttribute('data-pct-' + rangeKey) || '0');
+            sumHits += hits;
+
+            const rankCell = row.querySelector('.mod-rank-cell');
+            const bar = row.querySelector('.mod-pct-bar');
+            const pctLbl = row.querySelector('.mod-pct-label');
+            const hitsLbl = row.querySelector('.mod-hits-label');
+
+            if (rankCell) rankCell.textContent = (idx + 1) + '.';
+            if (bar) bar.style.width = (hits > 0 ? Math.max(3, pct) : 0) + '%';
+            if (pctLbl) pctLbl.textContent = pct.toFixed(1).replace('.', ',') + ' %';
+            if (hitsLbl) hitsLbl.textContent = hits.toLocaleString('de-DE');
+
+            tbody.appendChild(row);
+        });
+
+        const kpiHits = document.getElementById('modStatKpiHits');
+        if (kpiHits) {
+            kpiHits.textContent = sumHits.toLocaleString('de-DE');
+        }
+    }
+    </script>
+
+    <!-- 2. CLOUD-MODULE AKTIVIEREN / DEAKTIVIEREN -->
     <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
@@ -2028,7 +2272,7 @@ $localSnapshots  = getLocalAppSnapshots();
                     🧩
                 </span>
                 <div>
-                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cloud-Module &amp; Zusatzfunktionen (10 Module)</h2>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Cloud-Module &amp; Zusatzfunktionen (13 Module)</h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
                         Aktivieren oder deaktivieren Sie einzelne Funktionsmodule der Cloud global für alle Benutzer (inkl. Kopfzeilen-Menü und Cockpit).
                     </p>

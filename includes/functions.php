@@ -2563,6 +2563,7 @@ function verifyDavBasicAuth(PDO $pdo, string $username, string $password, string
             if (password_verify($password, (string)$appRow['password_hash'])) {
                 $pdo->prepare("UPDATE `app_passwords` SET `last_used_at` = NOW(), `last_used_service` = :srv WHERE `id` = :id")
                     ->execute([':srv' => mb_substr($serviceName, 0, 40), ':id' => (int)$appRow['id']]);
+                recordModuleUsage($pdo, 'webdav');
                 return [
                     'id'       => $uid,
                     'username' => (string)$userRow['username'],
@@ -2575,6 +2576,7 @@ function verifyDavBasicAuth(PDO $pdo, string $username, string $password, string
 
     // 2. Reguläres Kontopasswort prüfen
     if (password_verify($password, (string)$userRow['password_hash'])) {
+        recordModuleUsage($pdo, 'webdav');
         return [
             'id'       => $uid,
             'username' => (string)$userRow['username'],
@@ -2874,6 +2876,454 @@ function getAccessibleCalendarEventsForDav(PDO $pdo, int $userId): array
     ]);
     return $stmt->fetchAll();
 }
+
+/**
+ * Stellt sicher, dass die Tabelle `module_usage_stats` für die anonyme, DSGVO-konforme
+ * Modul-Nutzungsstatistik existiert.
+ */
+function ensureModuleUsageSchema(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+    $ensured = true;
+
+    try {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `module_usage_stats` (
+                `module_key` VARCHAR(40) NOT NULL,
+                `stat_date` DATE NOT NULL,
+                `hit_count` INT UNSIGNED NOT NULL DEFAULT 0,
+                `last_used_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`module_key`, `stat_date`),
+                KEY `idx_stat_date` (`stat_date`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    } catch (Throwable) {
+        // Ignorieren falls DB-Rechte eingeschränkt
+    }
+}
+
+/**
+ * Liefert den Katalog aller erfassten Cloud-Module mit Icon, Name, Ziel-URL und Einstellungs-Key.
+ *
+ * @return array<string, array{icon: string, label: string, url: string, setting_key: string|null, color: string}>
+ */
+function getModuleStatsCatalog(): array
+{
+    return [
+        'files' => [
+            'icon'        => '📂',
+            'label'       => 'Datei-Manager & Ordner',
+            'url'         => 'index.php',
+            'setting_key' => null, // Kernmodul (immer aktiv)
+            'color'       => 'bg-blue-600',
+        ],
+        'dashboard' => [
+            'icon'        => '🏠',
+            'label'       => 'Tages-Cockpit („Mein Tag“)',
+            'url'         => 'dashboard.php',
+            'setting_key' => 'enable_dashboard',
+            'color'       => 'bg-amber-500',
+        ],
+        'office' => [
+            'icon'        => '📝',
+            'label'       => 'Office Light (Word, Excel & MD)',
+            'url'         => 'office.php',
+            'setting_key' => 'enable_office',
+            'color'       => 'bg-indigo-600',
+        ],
+        'calendar' => [
+            'icon'        => '📅',
+            'label'       => 'Termin-Kalender',
+            'url'         => 'calendar.php',
+            'setting_key' => 'enable_calendar',
+            'color'       => 'bg-emerald-600',
+        ],
+        'tasks' => [
+            'icon'        => '📋',
+            'label'       => 'Aufgaben & Kanban-Board',
+            'url'         => 'tasks.php',
+            'setting_key' => 'enable_tasks',
+            'color'       => 'bg-cyan-600',
+        ],
+        'notes' => [
+            'icon'        => '📌',
+            'label'       => 'Notizwand & Pinboard',
+            'url'         => 'notes.php',
+            'setting_key' => 'enable_notes',
+            'color'       => 'bg-yellow-500',
+        ],
+        'contacts' => [
+            'icon'        => '📇',
+            'label'       => 'Adressbuch & Kontakte',
+            'url'         => 'contacts.php',
+            'setting_key' => 'enable_contacts',
+            'color'       => 'bg-teal-600',
+        ],
+        'chat' => [
+            'icon'        => '💬',
+            'label'       => 'Messenger & Rundnachrichten',
+            'url'         => 'messages.php',
+            'setting_key' => 'enable_chat',
+            'color'       => 'bg-violet-600',
+        ],
+        'pdf_tools' => [
+            'icon'        => '📄',
+            'label'       => 'PDF-Werkzeugkasten, Scanner & OCR',
+            'url'         => 'pdf_tools.php',
+            'setting_key' => 'enable_pdf_tools',
+            'color'       => 'bg-rose-600',
+        ],
+        'projects' => [
+            'icon'        => '🚀',
+            'label'       => 'Projektmanagement & Gantt',
+            'url'         => 'projects.php',
+            'setting_key' => 'enable_projects',
+            'color'       => 'bg-fuchsia-600',
+        ],
+        'passwords' => [
+            'icon'        => '🔐',
+            'label'       => 'Passwort-Manager & Schlüsselbund',
+            'url'         => 'passwords.php',
+            'setting_key' => 'enable_passwords',
+            'color'       => 'bg-slate-700',
+        ],
+        'polls' => [
+            'icon'        => '📊',
+            'label'       => 'Terminfinder & Umfragen',
+            'url'         => 'polls.php',
+            'setting_key' => 'enable_polls',
+            'color'       => 'bg-orange-500',
+        ],
+        'menti' => [
+            'icon'        => '🎤',
+            'label'       => 'Live-Mentimeter & Voting',
+            'url'         => 'menti.php',
+            'setting_key' => 'enable_menti',
+            'color'       => 'bg-pink-600',
+        ],
+        'webdav' => [
+            'icon'        => '📡',
+            'label'       => 'WebDAV / CalDAV / CardDAV Sync',
+            'url'         => 'settings.php',
+            'setting_key' => 'enable_webdav',
+            'color'       => 'bg-sky-600',
+        ],
+    ];
+}
+
+/**
+ * Erkennt anhand des aktuell aufgerufenen PHP-Skripts den zugehörigen Modul-Schlüssel.
+ */
+function detectCurrentModuleKeyForStats(): ?string
+{
+    $script = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
+
+    // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
+    $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? '');
+    if (in_array($ajaxAction, ['unread_count', 'heartbeat', 'poll_state', 'live_status'], true)) {
+        return null;
+    }
+
+    return match ($script) {
+        'index.php', 'upload.php', 'download.php', 'folder_action.php', 'share_action.php', 'vault_action.php', 'trash.php' => 'files',
+        'dashboard.php' => 'dashboard',
+        'office.php'    => 'office',
+        'calendar.php'  => 'calendar',
+        'tasks.php'     => 'tasks',
+        'notes.php'     => 'notes',
+        'contacts.php'  => 'contacts',
+        'messages.php'  => 'chat',
+        'pdf_tools.php' => 'pdf_tools',
+        'projects.php'  => 'projects',
+        'passwords.php' => 'passwords',
+        'polls.php'     => 'polls',
+        'menti.php'     => 'menti',
+        'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
+        default         => null,
+    };
+}
+
+/**
+ * Erfasst einen Modul-Aufruf in der Statistik-Tabelle `module_usage_stats`.
+ * Besitzt eine intelligente 60-Sekunden-Entprellung pro Sitzung bei bloßem Neuladen derselben Seite,
+ * zählt aber jeden Modulwechsel und jede Formular-Aktion (POST) sofort.
+ */
+function recordModuleUsage(PDO $pdo, ?string $moduleKey = null, bool $forceCount = false): void
+{
+    $mod = $moduleKey ?? detectCurrentModuleKeyForStats();
+    if ($mod === null || $mod === '') {
+        return;
+    }
+
+    $catalog = getModuleStatsCatalog();
+    if (!isset($catalog[$mod])) {
+        return;
+    }
+
+    $isPost = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST';
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $now = time();
+        $lastMod  = (string)($_SESSION['mc_stat_last_mod'] ?? '');
+        $lastTime = (int)($_SESSION['mc_stat_last_ts'][$mod] ?? 0);
+
+        if (!$forceCount && !$isPost && $lastMod === $mod && ($now - $lastTime) < 60) {
+            return;
+        }
+        $_SESSION['mc_stat_last_mod'] = $mod;
+        $_SESSION['mc_stat_last_ts'][$mod] = $now;
+    }
+
+    try {
+        ensureModuleUsageSchema($pdo);
+        $stmt = $pdo->prepare(
+            "INSERT INTO `module_usage_stats` (`module_key`, `stat_date`, `hit_count`, `last_used_at`)
+             VALUES (:mod, CURDATE(), 1, NOW())
+             ON DUPLICATE KEY UPDATE
+                `hit_count` = `hit_count` + 1,
+                `last_used_at` = NOW()"
+        );
+        $stmt->execute([':mod' => $mod]);
+    } catch (Throwable) {
+        // Statistik-Fehler dürfen niemals den Seitenaufbau stören
+    }
+}
+
+/**
+ * Ermittelt die aktuellen Bestandszahlen (gespeicherte Elemente) je Modul.
+ *
+ * @return array<string, string>
+ */
+function getModuleInventorySummary(PDO $pdo): array
+{
+    $summary = [];
+
+    $safeCount = static function (string $sql) use ($pdo): int {
+        try {
+            return (int)$pdo->query($sql)->fetchColumn();
+        } catch (Throwable) {
+            return 0;
+        }
+    };
+
+    $filesCount = $safeCount("SELECT COUNT(*) FROM `files` WHERE `deleted_at` IS NULL");
+    $foldersCount = $safeCount("SELECT COUNT(*) FROM `user_folders`");
+    $summary['files'] = $filesCount . ' ' . ($filesCount === 1 ? 'Datei' : 'Dateien') . ' · ' . $foldersCount . ' Ordner';
+
+    $summary['dashboard'] = 'Persönliche Startansicht';
+
+    $officeCount = $safeCount(
+        "SELECT COUNT(*) FROM `files`
+         WHERE `deleted_at` IS NULL
+           AND LOWER(SUBSTRING_INDEX(`original_name`, '.', -1)) IN ('docx','doc','xlsx','xls','csv','md','txt','html','htm','rtf')"
+    );
+    $summary['office'] = $officeCount . ' Office-' . ($officeCount === 1 ? 'Dokument' : 'Dokumente');
+
+    $calCount = $safeCount("SELECT COUNT(*) FROM `calendar_events`");
+    $summary['calendar'] = $calCount . ' ' . ($calCount === 1 ? 'Termin' : 'Termine');
+
+    $taskCount = $safeCount("SELECT COUNT(*) FROM `tasks`");
+    $summary['tasks'] = $taskCount . ' ' . ($taskCount === 1 ? 'Aufgabe' : 'Aufgaben');
+
+    $noteCount = $safeCount("SELECT COUNT(*) FROM `notes`");
+    $summary['notes'] = $noteCount . ' ' . ($noteCount === 1 ? 'Haftnotiz' : 'Haftnotizen');
+
+    $contactCount = $safeCount("SELECT COUNT(*) FROM `contacts`");
+    $summary['contacts'] = $contactCount . ' ' . ($contactCount === 1 ? 'Kontakt' : 'Kontakte');
+
+    $msgCount = $safeCount("SELECT COUNT(*) FROM `messages`");
+    $summary['chat'] = $msgCount . ' ' . ($msgCount === 1 ? 'Nachricht' : 'Nachrichten');
+
+    $pdfCount = $safeCount(
+        "SELECT COUNT(*) FROM `files`
+         WHERE `deleted_at` IS NULL
+           AND LOWER(SUBSTRING_INDEX(`original_name`, '.', -1)) = 'pdf'"
+    );
+    $summary['pdf_tools'] = $pdfCount . ' PDF-' . ($pdfCount === 1 ? 'Datei' : 'Dateien');
+
+    $projCount = $safeCount("SELECT COUNT(*) FROM `projects`");
+    $summary['projects'] = $projCount . ' ' . ($projCount === 1 ? 'Projekt' : 'Projekte');
+
+    $pwCount = $safeCount("SELECT COUNT(*) FROM `password_entries`");
+    $summary['passwords'] = $pwCount . ' Tresor-' . ($pwCount === 1 ? 'Eintrag' : 'Einträge');
+
+    $pollCount = $safeCount("SELECT COUNT(*) FROM `polls`");
+    $summary['polls'] = $pollCount . ' ' . ($pollCount === 1 ? 'Umfrage' : 'Umfragen');
+
+    $mentiCount = $safeCount("SELECT COUNT(*) FROM `menti_sessions`");
+    $summary['menti'] = $mentiCount . ' Live-' . ($mentiCount === 1 ? 'Präsentation' : 'Präsentationen');
+
+    $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
+    $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
+
+    return $summary;
+}
+
+/**
+ * Lädt die vollständige Modul-Nutzungsstatistik (Heute, 7 Tage, 30 Tage, Gesamt, Letzte Nutzung & Bestand)
+ * für das Admin-Dashboard.
+ *
+ * @param array<string, mixed> $appSettings
+ * @return array{
+ *   modules: array<string, array{
+ *     key: string,
+ *     icon: string,
+ *     label: string,
+ *     url: string,
+ *     enabled: bool,
+ *     color: string,
+ *     hits_today: int,
+ *     hits_7d: int,
+ *     hits_30d: int,
+ *     hits_total: int,
+ *     pct_today: float,
+ *     pct_7d: float,
+ *     pct_30d: float,
+ *     pct_total: float,
+ *     last_used_at: string|null,
+ *     inventory: string
+ *   }>,
+ *   totals: array{today: int, d7: int, d30: int, total: int},
+ *   top_module: array{key: string, icon: string, label: string, hits: int}|null,
+ *   latest_module: array{key: string, icon: string, label: string, last_used_at: string}|null
+ * }
+ */
+function getModuleUsageStatistics(PDO $pdo, array $appSettings = []): array
+{
+    ensureModuleUsageSchema($pdo);
+
+    $catalog   = getModuleStatsCatalog();
+    $inventory = getModuleInventorySummary($pdo);
+
+    $rawStats = [];
+    try {
+        $stmt = $pdo->query(
+            "SELECT
+                `module_key`,
+                SUM(CASE WHEN `stat_date` = CURDATE() THEN `hit_count` ELSE 0 END) AS `hits_today`,
+                SUM(CASE WHEN `stat_date` >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) THEN `hit_count` ELSE 0 END) AS `hits_7d`,
+                SUM(CASE WHEN `stat_date` >= DATE_SUB(CURDATE(), INTERVAL 29 DAY) THEN `hit_count` ELSE 0 END) AS `hits_30d`,
+                SUM(`hit_count`) AS `hits_total`,
+                MAX(`last_used_at`) AS `last_used_at`
+             FROM `module_usage_stats`
+             GROUP BY `module_key`"
+        );
+        foreach ($stmt->fetchAll() as $row) {
+            $rawStats[(string)$row['module_key']] = $row;
+        }
+    } catch (Throwable) {
+        $rawStats = [];
+    }
+
+    $totals = ['today' => 0, 'd7' => 0, 'd30' => 0, 'total' => 0];
+    $modules = [];
+
+    foreach ($catalog as $key => $meta) {
+        $r = $rawStats[$key] ?? null;
+        $hToday = $r ? (int)$r['hits_today'] : 0;
+        $h7d    = $r ? (int)$r['hits_7d'] : 0;
+        $h30d   = $r ? (int)$r['hits_30d'] : 0;
+        $hTotal = $r ? (int)$r['hits_total'] : 0;
+        $lastAt = $r && !empty($r['last_used_at']) ? (string)$r['last_used_at'] : null;
+
+        $totals['today'] += $hToday;
+        $totals['d7']    += $h7d;
+        $totals['d30']   += $h30d;
+        $totals['total'] += $hTotal;
+
+        $settingKey = $meta['setting_key'];
+        $enabled = $settingKey === null || (($appSettings[$settingKey] ?? '1') === '1');
+
+        $modules[$key] = [
+            'key'          => $key,
+            'icon'         => $meta['icon'],
+            'label'        => $meta['label'],
+            'url'          => $meta['url'],
+            'enabled'      => $enabled,
+            'color'        => $meta['color'],
+            'hits_today'   => $hToday,
+            'hits_7d'      => $h7d,
+            'hits_30d'     => $h30d,
+            'hits_total'   => $hTotal,
+            'pct_today'    => 0.0,
+            'pct_7d'       => 0.0,
+            'pct_30d'      => 0.0,
+            'pct_total'    => 0.0,
+            'last_used_at' => $lastAt,
+            'inventory'    => $inventory[$key] ?? '',
+        ];
+    }
+
+    foreach ($modules as $key => &$m) {
+        $m['pct_today'] = $totals['today'] > 0 ? round(($m['hits_today'] / $totals['today']) * 100, 1) : 0.0;
+        $m['pct_7d']    = $totals['d7'] > 0 ? round(($m['hits_7d'] / $totals['d7']) * 100, 1) : 0.0;
+        $m['pct_30d']   = $totals['d30'] > 0 ? round(($m['hits_30d'] / $totals['d30']) * 100, 1) : 0.0;
+        $m['pct_total'] = $totals['total'] > 0 ? round(($m['hits_total'] / $totals['total']) * 100, 1) : 0.0;
+    }
+    unset($m);
+
+    // Nach Gesamtnutzung absteigend sortieren (bei Gleichstand nach 30d, dann Name)
+    uasort($modules, static function (array $a, array $b): int {
+        if ($b['hits_total'] !== $a['hits_total']) {
+            return $b['hits_total'] <=> $a['hits_total'];
+        }
+        if ($b['hits_30d'] !== $a['hits_30d']) {
+            return $b['hits_30d'] <=> $a['hits_30d'];
+        }
+        return strcmp($a['label'], $b['label']);
+    });
+
+    $topModule = null;
+    $latestModule = null;
+    $latestTs = 0;
+
+    foreach ($modules as $m) {
+        if ($topModule === null && $m['hits_total'] > 0) {
+            $topModule = [
+                'key'   => $m['key'],
+                'icon'  => $m['icon'],
+                'label' => $m['label'],
+                'hits'  => $m['hits_total'],
+            ];
+        }
+        if ($m['last_used_at'] !== null) {
+            $ts = strtotime($m['last_used_at']) ?: 0;
+            if ($ts > $latestTs) {
+                $latestTs = $ts;
+                $latestModule = [
+                    'key'          => $m['key'],
+                    'icon'         => $m['icon'],
+                    'label'        => $m['label'],
+                    'last_used_at' => $m['last_used_at'],
+                ];
+            }
+        }
+    }
+
+    return [
+        'modules'       => $modules,
+        'totals'        => $totals,
+        'top_module'    => $topModule,
+        'latest_module' => $latestModule,
+    ];
+}
+
+/**
+ * Setzt die gesammelte Modul-Nutzungsstatistik vollständig zurück.
+ */
+function resetModuleUsageStatistics(PDO $pdo): void
+{
+    try {
+        ensureModuleUsageSchema($pdo);
+        $pdo->exec("TRUNCATE TABLE `module_usage_stats`");
+    } catch (Throwable) {
+        // Ignorieren
+    }
+}
+
 
 
 

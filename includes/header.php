@@ -23,6 +23,7 @@ $isDarkLike = in_array($currentTheme, ['dusk', 'mocha', 'petrol', 'plum', 'dark'
 $headerStorageStats = null;
 $headerBarColor = 'bg-brand-600';
 if (isLoggedIn()) {
+    recordModuleUsage(getDB());
     $headerStorageStats = isset($storageStats) && is_array($storageStats)
         ? $storageStats
         : getUserStorageStats(getDB(), (int)$_SESSION['user_id']);
