@@ -7,11 +7,8 @@ declare(strict_types=1);
  * legt config/db_credentials.php an und initialisiert das Datenbankschema.
  */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/includes/auth.php';
 
 $credFile        = __DIR__ . '/config/db_credentials.php';
 $legacyLocalFile = __DIR__ . '/config/database.local.php';
@@ -57,12 +54,33 @@ function testSetupDatabaseConnection(
         ];
     }
 
+    if (!preg_match('/^[a-zA-Z0-9._-]+$/', $host)) {
+        return [
+            'ok'      => false,
+            'message' => 'Der Datenbank-Host enthält ungültige Zeichen.',
+        ];
+    }
+
     if (!preg_match('/^[a-zA-Z0-9_.-]+$/', $dbName)) {
         return [
             'ok'      => false,
             'message' => 'Der Datenbank-Name enthält ungültige Sonderzeichen.',
         ];
     }
+
+    // Rate-Limiting gegen Brute-Force-Versuche auf unkonfigurierten Instanzen (max. 15 Versuche pro 60 Sek.)
+    $now = time();
+    $_SESSION['setup_attempts'] = array_values(array_filter(
+        (array)($_SESSION['setup_attempts'] ?? []),
+        static fn($ts): bool => is_int($ts) && ($now - $ts) < 60
+    ));
+    if (count($_SESSION['setup_attempts']) >= 15) {
+        return [
+            'ok'      => false,
+            'message' => 'Zu viele Verbindungsversuche in kurzer Zeit. Bitte warten Sie eine Minute.',
+        ];
+    }
+    $_SESSION['setup_attempts'][] = $now;
 
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -216,9 +234,24 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
             /** @var PDO $pdo */
             $pdo = $connResult['pdo'];
 
+            // Prüfen, ob vor der Schema-Initialisierung bereits echte Benutzer in der Datenbank existierten
+            $hadExistingUsersBeforeInit = false;
+            try {
+                $existingCountBefore = (int)$pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
+                if ($existingCountBefore > 0) {
+                    $hadExistingUsersBeforeInit = true;
+                }
+            } catch (Throwable) {
+                $hadExistingUsersBeforeInit = false;
+            }
+
             // 1. Konfigurationsdatei config/db_credentials.php schreiben
             $credContent = "<?php\n"
                 . "declare(strict_types=1);\n\n"
+                . "if (PHP_SAPI !== 'cli' && basename((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {\n"
+                . "    http_response_code(403);\n"
+                . "    exit('Zugriff verweigert.');\n"
+                . "}\n\n"
                 . "/**\n"
                 . " * MiniCloud – Lokale Datenbank-Zugangsdaten\n"
                 . " * Erstellt durch setup.php am " . date('d.m.Y H:i:s') . "\n"
@@ -252,34 +285,15 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                     $adminHash = password_hash($formAdminPass, PASSWORD_BCRYPT, ['cost' => 12]);
                     $emailVal  = $formAdminEmail !== '' ? $formAdminEmail : null;
 
-                    // Prüfen, ob nur der automatisch von ensureSchemaUpdated() erzeugte Standard-'admin' existiert
-                    $totalUsers = (int)$pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
-                    $stmtFindUser = $pdo->prepare("SELECT `id` FROM `users` WHERE `username` = :u LIMIT 1");
-                    $stmtFindUser->execute([':u' => $formAdminUser]);
-                    $existingId = $stmtFindUser->fetchColumn();
-
-                    if ($existingId !== false) {
-                        $stmtUpdAdmin = $pdo->prepare(
-                            "UPDATE `users`
-                             SET `password_hash` = :hash,
-                                 `email` = COALESCE(:email, `email`),
-                                 `is_admin` = 1
-                             WHERE `id` = :id"
-                        );
-                        $stmtUpdAdmin->execute([
-                            ':hash'  => $adminHash,
-                            ':email' => $emailVal,
-                            ':id'    => (int)$existingId,
-                        ]);
-                    } elseif ($totalUsers === 1) {
-                        // Den gerade beim Schema-Init angelegten Standard-'admin' auf den Wunsch-Namen & Wunsch-Passwort umstellen
+                    if (!$hadExistingUsersBeforeInit) {
+                        // Frische Datenbank: Den von ensureSchemaUpdated() erzeugten Standard-'admin' auf Wunsch-Namen & Wunsch-Passwort setzen
                         $stmtUpdDefault = $pdo->prepare(
                             "UPDATE `users`
                              SET `username` = :u,
                                  `email` = :email,
                                  `password_hash` = :hash,
                                  `is_admin` = 1
-                              WHERE `username` = 'admin'
+                             WHERE `username` = 'admin'
                              LIMIT 1"
                         );
                         $stmtUpdDefault->execute([
@@ -288,19 +302,40 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                             ':hash'  => $adminHash,
                         ]);
                     } else {
-                        $stmtInsAdmin = $pdo->prepare(
-                            "INSERT INTO `users` (`username`, `email`, `password_hash`, `is_admin`, `theme`, `storage_quota`)
-                             VALUES (:u, :email, :hash, 1, 'light', :quota)"
-                        );
-                        $stmtInsAdmin->execute([
-                            ':u'     => $formAdminUser,
-                            ':email' => $emailVal,
-                            ':hash'  => $adminHash,
-                            ':quota' => DEFAULT_STORAGE_QUOTA * 5,
-                        ]);
+                        // Bestehende Datenbank verbunden: Nur anlegen, falls der gewünschte Benutzername noch nicht existiert
+                        $stmtFindUser = $pdo->prepare("SELECT `id`, `password_hash` FROM `users` WHERE `username` = :u LIMIT 1");
+                        $stmtFindUser->execute([':u' => $formAdminUser]);
+                        $existingUserRow = $stmtFindUser->fetch();
+
+                        if (!$existingUserRow) {
+                            $stmtInsAdmin = $pdo->prepare(
+                                "INSERT INTO `users` (`username`, `email`, `password_hash`, `is_admin`, `theme`, `storage_quota`)
+                                 VALUES (:u, :email, :hash, 1, 'light', :quota)"
+                            );
+                            $stmtInsAdmin->execute([
+                                ':u'     => $formAdminUser,
+                                ':email' => $emailVal,
+                                ':hash'  => $adminHash,
+                                ':quota' => DEFAULT_STORAGE_QUOTA * 5,
+                            ]);
+                        } elseif (password_verify('Admin1234!', (string)$existingUserRow['password_hash'])) {
+                            // Nur überschreiben, falls noch das unveränderte Werkspasswort 'Admin1234!' gesetzt war
+                            $stmtUpdAdmin = $pdo->prepare(
+                                "UPDATE `users`
+                                 SET `password_hash` = :hash,
+                                     `email` = COALESCE(:email, `email`),
+                                     `is_admin` = 1
+                                 WHERE `id` = :id"
+                            );
+                            $stmtUpdAdmin->execute([
+                                ':hash'  => $adminHash,
+                                ':email' => $emailVal,
+                                ':id'    => (int)$existingUserRow['id'],
+                            ]);
+                        }
                     }
 
-                    unset($_SESSION['setup_csrf_token']);
+                    unset($_SESSION['setup_csrf_token'], $_SESSION['setup_attempts']);
                     $_SESSION['flashes'][] = [
                         'type'    => 'success',
                         'message' => '🎉 Erstinstallation erfolgreich abgeschlossen! Sie können sich jetzt mit Ihrem Administrator-Konto „' . $formAdminUser . '“ anmelden.',
@@ -323,7 +358,8 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Erstinstallation – MiniCloud Setup</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (Lokal eingebunden – 100 % DSGVO-konform ohne externe Serveraufrufe) -->
+    <script src="assets/tailwind.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',

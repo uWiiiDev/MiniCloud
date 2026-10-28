@@ -135,8 +135,16 @@ Edit `/var/www/html/cloud/config/database.php` and set `DB_NAME`, `DB_USER`, and
 #### 5. Nginx Configuration (Protect `uploads/` & Enable `PATH_INFO` for WebDAV/CardDAV/CalDAV)
 If you use **Nginx** instead of Apache, add these two blocks inside your `server { ... }` block:
 ```nginx
-# 1. Block direct web access to uploaded binary files
+# 1. Block direct web access to uploaded binary files, config directory & hidden dotfiles (.git, .env)
 location ^~ /cloud/uploads/ {
+    deny all;
+    return 403;
+}
+location ^~ /cloud/config/ {
+    deny all;
+    return 403;
+}
+location ~ /\.(?!well-known) {
     deny all;
     return 403;
 }

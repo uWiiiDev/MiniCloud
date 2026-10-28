@@ -537,10 +537,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $department = mb_substr(trim((string)($_POST['department'] ?? '')), 0, 120);
         $boardRole  = mb_substr(trim((string)($_POST['board_role'] ?? '')), 0, 120);
         $feeTierId  = !empty($_POST['fee_tier_id']) ? (int)$_POST['fee_tier_id'] : null;
-        $iban       = strtoupper(preg_replace('/\s+/', '', mb_substr(trim((string)($_POST['iban'] ?? '')), 0, 50)) ?? '');
-        $bic        = strtoupper(mb_substr(trim((string)($_POST['bic'] ?? '')), 0, 30));
-        $sepaRef    = mb_substr(trim((string)($_POST['sepa_mandate_ref'] ?? '')), 0, 80);
-        $sepaDate   = !empty($_POST['sepa_signed_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_POST['sepa_signed_date']) ? (string)$_POST['sepa_signed_date'] : null;
+        if ($feeTierId !== null && $feeTierId > 0) {
+            $stmtChkTier = $pdo->prepare('SELECT id FROM club_fee_tiers WHERE id = :tid AND club_id = :cid LIMIT 1');
+            $stmtChkTier->execute([':tid' => $feeTierId, ':cid' => $activeClubId]);
+            if (!$stmtChkTier->fetchColumn()) {
+                $feeTierId = null;
+            }
+        } else {
+            $feeTierId = null;
+        }
+        $iban       = $canWriteFees ? strtoupper(preg_replace('/\s+/', '', mb_substr(trim((string)($_POST['iban'] ?? '')), 0, 50)) ?? '') : '';
+        $bic        = $canWriteFees ? strtoupper(mb_substr(trim((string)($_POST['bic'] ?? '')), 0, 30)) : '';
+        $sepaRef    = $canWriteFees ? mb_substr(trim((string)($_POST['sepa_mandate_ref'] ?? '')), 0, 80) : '';
+        $sepaDate   = ($canWriteFees && !empty($_POST['sepa_signed_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_POST['sepa_signed_date'])) ? (string)$_POST['sepa_signed_date'] : null;
         $notes      = mb_substr(trim((string)($_POST['notes'] ?? '')), 0, 500);
 
         if ($firstName === '' || $lastName === '') {
@@ -1013,6 +1022,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: club.php?club=' . $activeClubId);
             exit;
         }
+        if ($exportType === 'members' && !$canReadMembers) {
+            setFlash('error', 'Keine Berechtigung für den Mitglieder-Export.');
+            header('Location: club.php?club=' . $activeClubId);
+            exit;
+        }
+
+        // Schutz gegen CSV Formula Injection (DDE) in Excel / LibreOffice Calc
+        $safeCsvCell = static function (string $val): string {
+            $clean = str_replace([";", "\r", "\n"], [",", " ", " "], trim($val));
+            if ($clean !== '' && in_array($clean[0], ['=', '@', "\t"], true)) {
+                $clean = "'" . $clean;
+            } elseif (preg_match('/^[+-][^\d\s]/', $clean)) {
+                $clean = "'" . $clean;
+            }
+            return $clean;
+        };
 
         $csvLines = [];
         if ($exportType === 'members') {
@@ -1021,17 +1046,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtEx->execute([':cid' => $activeClubId]);
             foreach ($stmtEx->fetchAll() as $m) {
                 $csvLines[] = implode(';', [
-                    (string)$m['member_no'],
-                    str_replace(';', ',', (string)$m['last_name']),
-                    str_replace(';', ',', (string)$m['first_name']),
-                    (string)$m['status'],
-                    str_replace(';', ',', (string)$m['department']),
-                    str_replace(';', ',', (string)$m['board_role']),
-                    str_replace(';', ',', (string)$m['email']),
-                    str_replace(';', ',', (string)$m['phone']),
-                    str_replace(';', ',', (string)$m['street']),
-                    (string)$m['postal_code'],
-                    str_replace(';', ',', (string)$m['city']),
+                    $safeCsvCell((string)$m['member_no']),
+                    $safeCsvCell((string)$m['last_name']),
+                    $safeCsvCell((string)$m['first_name']),
+                    $safeCsvCell((string)$m['status']),
+                    $safeCsvCell((string)$m['department']),
+                    $safeCsvCell((string)$m['board_role']),
+                    $safeCsvCell((string)$m['email']),
+                    $safeCsvCell((string)$m['phone']),
+                    $safeCsvCell((string)$m['street']),
+                    $safeCsvCell((string)$m['postal_code']),
+                    $safeCsvCell((string)$m['city']),
                     (string)($m['birth_date'] ?? ''),
                     (string)($m['joined_date'] ?? ''),
                 ]);
@@ -1049,18 +1074,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtEx->execute([':cid' => $activeClubId, ':pl' => $selectedYear]);
             foreach ($stmtEx->fetchAll() as $p) {
                 $csvLines[] = implode(';', [
-                    (string)$p['period_label'],
-                    (string)$p['member_no'],
-                    str_replace(';', ',', (string)$p['last_name']),
-                    str_replace(';', ',', (string)$p['first_name']),
+                    $safeCsvCell((string)$p['period_label']),
+                    $safeCsvCell((string)$p['member_no']),
+                    $safeCsvCell((string)$p['last_name']),
+                    $safeCsvCell((string)$p['first_name']),
                     number_format((float)$p['amount'], 2, ',', ''),
-                    $currency,
-                    (string)$p['status'],
+                    $safeCsvCell($currency),
+                    $safeCsvCell((string)$p['status']),
                     (string)($p['paid_date'] ?? ''),
-                    (string)$p['iban'],
-                    (string)$p['bic'],
-                    (string)$p['sepa_mandate_ref'],
-                    str_replace(';', ',', (string)$p['note']),
+                    $safeCsvCell((string)$p['iban']),
+                    $safeCsvCell((string)$p['bic']),
+                    $safeCsvCell((string)$p['sepa_mandate_ref']),
+                    $safeCsvCell((string)$p['note']),
                 ]);
             }
             $origName = 'Beitragsliste_' . $selectedYear . '_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$activeClub['name']) . '.csv';
@@ -1116,6 +1141,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'import_members' && $canWriteMembers) {
         $importSource   = (string)($_POST['import_source'] ?? 'csv'); // 'csv' oder 'contacts'
         $defaultTierId  = !empty($_POST['default_fee_tier_id']) ? (int)$_POST['default_fee_tier_id'] : null;
+        if ($defaultTierId !== null && $defaultTierId > 0) {
+            $stmtChkTier = $pdo->prepare('SELECT id FROM club_fee_tiers WHERE id = :tid AND club_id = :cid LIMIT 1');
+            $stmtChkTier->execute([':tid' => $defaultTierId, ':cid' => $activeClubId]);
+            if (!$stmtChkTier->fetchColumn()) {
+                $defaultTierId = null;
+            }
+        } else {
+            $defaultTierId = null;
+        }
         $defaultDept    = mb_substr(trim((string)($_POST['default_department'] ?? '')), 0, 120);
         $skipDuplicates = isset($_POST['skip_duplicates']) && $_POST['skip_duplicates'] === '1';
 

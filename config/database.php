@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {
+    http_response_code(403);
+    exit('Zugriff verweigert.');
+}
+
 /**
  * MiniCloud - Datenbank- und Systemkonfiguration
  * Kompatibel mit PHP 8.2+ und MySQL / MariaDB (z.B. STRATO Webspace)

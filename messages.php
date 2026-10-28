@@ -153,14 +153,16 @@ function getAvailableVoiceRooms(PDO $pdo, int $userId, bool $isAdmin): array
 {
     $rooms = [];
 
-    // 1. Offener Cloud-Treffpunkt (für alle sichtbaren Benutzer & Admins)
-    $rooms['lobby_all'] = [
-        'key'      => 'lobby_all',
-        'title'    => 'Cloud-Treffpunkt',
-        'subtitle' => 'Offener Sprachraum für alle Mitglieder',
-        'icon'     => '🌐',
-        'category' => 'lobby',
-    ];
+    // 1. Offener Cloud-Treffpunkt (nur für Admins oder Benutzer mit aktivierter Teilen-Sichtbarkeit)
+    if ($isAdmin || canUserShareWithOthers($pdo, $userId)) {
+        $rooms['lobby_all'] = [
+            'key'      => 'lobby_all',
+            'title'    => 'Cloud-Treffpunkt',
+            'subtitle' => 'Offener Sprachraum für alle Mitglieder',
+            'icon'     => '🌐',
+            'category' => 'lobby',
+        ];
+    }
 
     // 2. Sprachräume für Benutzergruppen
     try {
@@ -202,7 +204,7 @@ function getAvailableVoiceRooms(PDO $pdo, int $userId, bool $isAdmin): array
                 'SELECT DISTINCT c.id, c.name
                  FROM `clubs` c
                  LEFT JOIN `club_roles` cr ON cr.club_id = c.id AND cr.user_id = :uid1
-                 WHERE c.owner_id = :uid2 OR cr.id IS NOT NULL
+                 WHERE c.user_id = :uid2 OR cr.id IS NOT NULL
                  ORDER BY c.name ASC'
             );
             $stmtC->execute([':uid1' => $userId, ':uid2' => $userId]);
@@ -460,15 +462,18 @@ if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voic
         if ($roomKey !== '') {
             $pdo->prepare('DELETE FROM `voice_room_peers` WHERE `room_key` = :rk AND `user_id` = :uid')
                 ->execute([':rk' => $roomKey, ':uid' => $userId]);
-            $stmtHang = $pdo->prepare(
-                "INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
-                 VALUES (:rk, :fuid, :fname, 0, 'hangup', '')"
-            );
-            $stmtHang->execute([
-                ':rk'    => $roomKey,
-                ':fuid'  => $userId,
-                ':fname' => $username,
-            ]);
+            $accLeave = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
+            if ($accLeave['allowed']) {
+                $stmtHang = $pdo->prepare(
+                    "INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
+                     VALUES (:rk, :fuid, :fname, 0, 'hangup', '')"
+                );
+                $stmtHang->execute([
+                    ':rk'    => $roomKey,
+                    ':fuid'  => $userId,
+                    ':fname' => $username,
+                ]);
+            }
         } else {
             $pdo->prepare('DELETE FROM `voice_room_peers` WHERE `user_id` = :uid')
                 ->execute([':uid' => $userId]);
@@ -518,7 +523,11 @@ if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voic
             exit;
         }
         $audioDataUri = trim((string)($_POST['audio_data'] ?? ''));
-        if ($audioDataUri === '' || !str_starts_with($audioDataUri, 'data:audio/') || strlen($audioDataUri) > 450000) {
+        if (
+            $audioDataUri === '' ||
+            strlen($audioDataUri) > 450000 ||
+            !preg_match('/^data:audio\/[a-zA-Z0-9.+-]+(;codecs=[a-zA-Z0-9_.,-]+)?;base64,[A-Za-z0-9+\/=\r\n]+$/', $audioDataUri)
+        ) {
             echo json_encode(['success' => false, 'error' => 'Ungültiges oder zu großes Funk-Sprachpaket (max. ~300 KB).']);
             exit;
         }
@@ -543,10 +552,12 @@ if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voic
         $sinceSigId = max(0, (int)($_POST['since_sig_id'] ?? $_GET['since_sig_id'] ?? 0));
         $peers      = [];
         $signals    = [];
+        $activeAllowedRoom = '';
 
         if ($roomKey !== '') {
             $acc = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
             if ($acc['allowed']) {
+                $activeAllowedRoom = $roomKey;
                 $isMuted   = isset($_POST['is_muted']) && $_POST['is_muted'] === '1' ? 1 : 0;
                 $isSpeak   = isset($_POST['is_speaking']) && $_POST['is_speaking'] === '1' ? 1 : 0;
                 $isScreen  = isset($_POST['is_sharing_screen']) && $_POST['is_sharing_screen'] === '1' ? 1 : 0;
@@ -595,9 +606,10 @@ if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voic
             }
         }
 
-        // Aktive Teilnehmerzahlen je Raum für die linke Seitenleiste
+        // Aktive Teilnehmerzahlen nur für Räume ausliefern, auf die der Benutzer Zugriff hat (kein Metadaten-Leak fremder 1:1-Anrufe)
         $roomCounts = [];
         try {
+            $allowedRoomsMap = getAvailableVoiceRooms($pdo, $userId, $isAdmin);
             $stmtCnt = $pdo->query(
                 'SELECT `room_key`, COUNT(*) AS `cnt`
                  FROM `voice_room_peers`
@@ -605,7 +617,10 @@ if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voic
                  GROUP BY `room_key`'
             );
             foreach ($stmtCnt->fetchAll() as $rRow) {
-                $roomCounts[(string)$rRow['room_key']] = (int)$rRow['cnt'];
+                $rkItem = (string)$rRow['room_key'];
+                if (isset($allowedRoomsMap[$rkItem]) || ($activeAllowedRoom !== '' && $rkItem === $activeAllowedRoom)) {
+                    $roomCounts[$rkItem] = (int)$rRow['cnt'];
+                }
             }
         } catch (Throwable) {
         }

@@ -13,6 +13,9 @@ AcceptPathInfo On
     RewriteEngine On
     RewriteCond %{HTTP:Authorization} ^(.*)
     RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+
+    # Zugriff auf versteckte Dateien und Ordner (.git, .env, .gitignore) sperren
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
 </IfModule>
 
 # Verzeichnisauflistung deaktivieren
