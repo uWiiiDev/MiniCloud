@@ -349,12 +349,15 @@ require_once __DIR__ . '/includes/header.php';
 }
 </style>
 
-<div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
     <div>
-        <h1 class="page-title" style="margin:0;">📌 Notizwand &amp; Pinboard</h1>
-        <p class="page-subtitle" style="margin:0.25rem 0 0 0;">Schnelle Ideen, Check-Notizen &amp; geteilte Pinnwand-Zettel – auf Wunsch mit 1 Klick als Markdown-Datei in deine Cloud exportierbar</p>
+        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+            <span class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">📌</span>
+            <span>Notizwand &amp; Pinboard</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Schnelle Ideen, Check-Notizen &amp; geteilte Pinnwand-Zettel – auf Wunsch mit 1 Klick als Markdown-Datei in deine Cloud exportierbar</p>
     </div>
-    <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+    <div class="flex flex-wrap items-center gap-2">
         <input type="search" id="noteSearchInput" class="form-control" placeholder="🔍 Notizen oder #Tags durchsuchen..." style="max-width:260px;" oninput="filterNotesBoard()">
         <button type="button" class="btn btn-primary" onclick="openNoteModal()">➕ Neue Notiz</button>
     </div>

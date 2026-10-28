@@ -750,12 +750,12 @@ if ($fileId <= 0) {
     $pageTitle = '📝 Office Light – Zentrale & Vorlagen';
     require_once __DIR__ . '/includes/header.php';
     ?>
-    <div class="max-w-6xl mx-auto space-y-6">
+    <div class="space-y-6">
         <!-- Kopfbereich -->
         <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">📝</span>
+                    <span class="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 text-2xl shrink-0">📝</span>
                     <span>MiniCloud Office Light</span>
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">

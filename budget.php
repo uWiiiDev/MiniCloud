@@ -687,14 +687,14 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="space-y-6">
     <!-- Kopfbereich: Buch-Auswahl, Monats-Navigation & Aktionen -->
-    <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs p-5">
+    <div class="mc-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs p-5">
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div class="flex flex-wrap items-center gap-3">
-                <div class="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 flex items-center justify-center text-2xl">
+                <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">
                     💰
                 </div>
                 <div>
-                    <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
                         Haushaltsplaner &amp; Finanz-Übersicht
                     </h1>
                     <p class="text-xs text-slate-500 dark:text-slate-400">

@@ -1799,12 +1799,17 @@ $configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uWiiiMiniCl
 $localSnapshots  = getLocalAppSnapshots();
 ?>
 
-<div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-    <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">System-Administration</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-            Benutzer &amp; Registrierung, Cloud-Module, Branding &amp; Impressum, E-Mail-Versand sowie Updates &amp; Server-Status.
-        </p>
+<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">
+            🛡️
+        </div>
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">System-Administration</h1>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Benutzer &amp; Registrierung, Cloud-Module, Branding &amp; Impressum, E-Mail-Versand sowie Updates &amp; Server-Status.
+            </p>
+        </div>
     </div>
     <a href="index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300/80 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors self-start sm:self-auto">
         &larr; Zurück zum Dashboard

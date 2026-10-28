@@ -86,129 +86,189 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         /* --- Gedämpfte, angenehm abgedunkelte helle Themes (kein grelles Weiß) --- */
 
         /* 0. Klassisch Hell (abgedunkelt auf sanftes Schiefergrau) */
+        html.theme-light { --bg-card: #e2e8f0; --border: #b8c4d4; --text: #1e293b; --text-muted: #475569; }
         html.theme-light body { background-color: #cbd5e1 !important; color: #1e293b !important; }
         html.theme-light header,
         html.theme-light footer,
-        html.theme-light .mc-card { background-color: #e2e8f0 !important; border-color: #b8c4d4 !important; }
+        html.theme-light .mc-card,
+        html.theme-light .card,
+        html.theme-light .contact-card,
+        html.theme-light .modal-box,
+        html.theme-light main .bg-white.rounded-2xl { background-color: #e2e8f0 !important; border-color: #b8c4d4 !important; }
         html.theme-light thead tr,
         html.theme-light #dropZone { background-color: #d5deea !important; border-color: #b8c4d4 !important; }
         html.theme-light tbody tr:hover { background-color: #d8e1ed !important; }
-        html.theme-light input:not([type="checkbox"]),
+        html.theme-light input:not([type="checkbox"]):not([type="radio"]),
         html.theme-light select,
         html.theme-light textarea { background-color: #edf2f7 !important; border-color: #b0bfd1 !important; color: #1e293b !important; }
 
         /* 1. Sand / Warmbeige (deutlich abgedunkelt) */
+        html.theme-sand { --bg-card: #dfd4c0; --border: #bba98b; --text: #241e18; --text-muted: #574c3f; }
         html.theme-sand body { background-color: #cfc2ab !important; color: #241e18 !important; }
         html.theme-sand header,
         html.theme-sand footer,
-        html.theme-sand .mc-card { background-color: #dfd4c0 !important; border-color: #bba98b !important; }
+        html.theme-sand .mc-card,
+        html.theme-sand .card,
+        html.theme-sand .contact-card,
+        html.theme-sand .modal-box,
+        html.theme-sand main .bg-white.rounded-2xl { background-color: #dfd4c0 !important; border-color: #bba98b !important; }
         html.theme-sand thead tr,
         html.theme-sand #dropZone { background-color: #d5c8b1 !important; border-color: #bba98b !important; }
         html.theme-sand tbody tr:hover { background-color: #d6c9b2 !important; }
-        html.theme-sand input:not([type="checkbox"]),
+        html.theme-sand input:not([type="checkbox"]):not([type="radio"]),
         html.theme-sand select,
         html.theme-sand textarea { background-color: #e8dfd0 !important; border-color: #b5a283 !important; color: #241e18 !important; }
 
         /* 2. Salbei / Sanftes Naturgrün (deutlich abgedunkelt) */
+        html.theme-sage { --bg-card: #cad9d0; --border: #9ab3a4; --text: #16261e; --text-muted: #3d5649; }
         html.theme-sage body { background-color: #b6c8bd !important; color: #16261e !important; }
         html.theme-sage header,
         html.theme-sage footer,
-        html.theme-sage .mc-card { background-color: #cad9d0 !important; border-color: #9ab3a4 !important; }
+        html.theme-sage .mc-card,
+        html.theme-sage .card,
+        html.theme-sage .contact-card,
+        html.theme-sage .modal-box,
+        html.theme-sage main .bg-white.rounded-2xl { background-color: #cad9d0 !important; border-color: #9ab3a4 !important; }
         html.theme-sage thead tr,
         html.theme-sage #dropZone { background-color: #bfd0c6 !important; border-color: #9ab3a4 !important; }
         html.theme-sage tbody tr:hover { background-color: #c0d1c7 !important; }
-        html.theme-sage input:not([type="checkbox"]),
+        html.theme-sage input:not([type="checkbox"]):not([type="radio"]),
         html.theme-sage select,
         html.theme-sage textarea { background-color: #d5e2da !important; border-color: #93ad9d !important; color: #16261e !important; }
 
         /* 3. Nordisch / Gedämpftes Blaugrau (deutlich abgedunkelt) */
+        html.theme-nordic { --bg-card: #c9d6e4; --border: #9bb0c6; --text: #172232; --text-muted: #41536b; }
         html.theme-nordic body { background-color: #b5c4d4 !important; color: #172232 !important; }
         html.theme-nordic header,
         html.theme-nordic footer,
-        html.theme-nordic .mc-card { background-color: #c9d6e4 !important; border-color: #9bb0c6 !important; }
+        html.theme-nordic .mc-card,
+        html.theme-nordic .card,
+        html.theme-nordic .contact-card,
+        html.theme-nordic .modal-box,
+        html.theme-nordic main .bg-white.rounded-2xl { background-color: #c9d6e4 !important; border-color: #9bb0c6 !important; }
         html.theme-nordic thead tr,
         html.theme-nordic #dropZone { background-color: #beccd9 !important; border-color: #9bb0c6 !important; }
         html.theme-nordic tbody tr:hover { background-color: #bfcedc !important; }
-        html.theme-nordic input:not([type="checkbox"]),
+        html.theme-nordic input:not([type="checkbox"]):not([type="radio"]),
         html.theme-nordic select,
         html.theme-nordic textarea { background-color: #d5e0ec !important; border-color: #93a9c0 !important; color: #172232 !important; }
 
         /* 4. Lavendel / Sanftes Flieder-Grau (deutlich abgedunkelt) */
+        html.theme-lavender { --bg-card: #d4cde3; --border: #ab9fc2; --text: #1f1730; --text-muted: #50436b; }
         html.theme-lavender body { background-color: #c3bad4 !important; color: #1f1730 !important; }
         html.theme-lavender header,
         html.theme-lavender footer,
-        html.theme-lavender .mc-card { background-color: #d4cde3 !important; border-color: #ab9fc2 !important; }
+        html.theme-lavender .mc-card,
+        html.theme-lavender .card,
+        html.theme-lavender .contact-card,
+        html.theme-lavender .modal-box,
+        html.theme-lavender main .bg-white.rounded-2xl { background-color: #d4cde3 !important; border-color: #ab9fc2 !important; }
         html.theme-lavender thead tr,
         html.theme-lavender #dropZone { background-color: #cac2db !important; border-color: #ab9fc2 !important; }
         html.theme-lavender tbody tr:hover { background-color: #cbc3dc !important; }
-        html.theme-lavender input:not([type="checkbox"]),
+        html.theme-lavender input:not([type="checkbox"]):not([type="radio"]),
         html.theme-lavender select,
         html.theme-lavender textarea { background-color: #ded8ea !important; border-color: #a396bc !important; color: #1f1730 !important; }
 
         /* --- Halbdunkle Themes (Angenehme Mittelton-Dunkelheit, kein tiefes Schwarz) --- */
 
         /* 5. Dämmerung / Schiefer-Graublau (Halbdunkel) */
+        html.theme-dusk.dark { --bg-card: #3e4e63; --border: #52647c; --text: #f1f5f9; --text-muted: #cbd5e1; }
         html.theme-dusk.dark body { background-color: #334155 !important; color: #f1f5f9 !important; }
         html.theme-dusk.dark header,
         html.theme-dusk.dark footer,
-        html.theme-dusk.dark .mc-card { background-color: #3e4e63 !important; border-color: #52647c !important; }
+        html.theme-dusk.dark .mc-card,
+        html.theme-dusk.dark .card,
+        html.theme-dusk.dark .contact-card,
+        html.theme-dusk.dark .modal-box,
+        html.theme-dusk.dark main .bg-white.rounded-2xl { background-color: #3e4e63 !important; border-color: #52647c !important; }
         html.theme-dusk.dark thead tr,
         html.theme-dusk.dark #dropZone { background-color: #38475b !important; border-color: #52647c !important; }
         html.theme-dusk.dark tbody tr:hover { background-color: #465870 !important; }
-        html.theme-dusk.dark input:not([type="checkbox"]),
+        html.theme-dusk.dark input:not([type="checkbox"]):not([type="radio"]),
         html.theme-dusk.dark select,
         html.theme-dusk.dark textarea { background-color: #2d3a4b !important; border-color: #566a84 !important; color: #f8fafc !important; }
 
         /* 6. Mokka / Warmes Espresso-Grau (Halbdunkel) */
+        html.theme-mocha.dark { --bg-card: #493f38; --border: #63564c; --text: #f5f0eb; --text-muted: #d6ccc2; }
         html.theme-mocha.dark body { background-color: #3b332d !important; color: #f5f0eb !important; }
         html.theme-mocha.dark header,
         html.theme-mocha.dark footer,
-        html.theme-mocha.dark .mc-card { background-color: #493f38 !important; border-color: #63564c !important; }
+        html.theme-mocha.dark .mc-card,
+        html.theme-mocha.dark .card,
+        html.theme-mocha.dark .contact-card,
+        html.theme-mocha.dark .modal-box,
+        html.theme-mocha.dark main .bg-white.rounded-2xl { background-color: #493f38 !important; border-color: #63564c !important; }
         html.theme-mocha.dark thead tr,
         html.theme-mocha.dark #dropZone { background-color: #423932 !important; border-color: #63564c !important; }
         html.theme-mocha.dark tbody tr:hover { background-color: #52473f !important; }
-        html.theme-mocha.dark input:not([type="checkbox"]),
+        html.theme-mocha.dark input:not([type="checkbox"]):not([type="radio"]),
         html.theme-mocha.dark select,
         html.theme-mocha.dark textarea { background-color: #332c26 !important; border-color: #695b51 !important; color: #faf6f2 !important; }
 
         /* 7. Petrol / Gedämpftes Blaugrün (Halbdunkel) */
+        html.theme-petrol.dark { --bg-card: #2c4c57; --border: #3f6674; --text: #ecfeff; --text-muted: #bae6fd; }
         html.theme-petrol.dark body { background-color: #243e47 !important; color: #ecfeff !important; }
         html.theme-petrol.dark header,
         html.theme-petrol.dark footer,
-        html.theme-petrol.dark .mc-card { background-color: #2c4c57 !important; border-color: #3f6674 !important; }
+        html.theme-petrol.dark .mc-card,
+        html.theme-petrol.dark .card,
+        html.theme-petrol.dark .contact-card,
+        html.theme-petrol.dark .modal-box,
+        html.theme-petrol.dark main .bg-white.rounded-2xl { background-color: #2c4c57 !important; border-color: #3f6674 !important; }
         html.theme-petrol.dark thead tr,
         html.theme-petrol.dark #dropZone { background-color: #28454f !important; border-color: #3f6674 !important; }
         html.theme-petrol.dark tbody tr:hover { background-color: #335763 !important; }
-        html.theme-petrol.dark input:not([type="checkbox"]),
+        html.theme-petrol.dark input:not([type="checkbox"]):not([type="radio"]),
         html.theme-petrol.dark select,
         html.theme-petrol.dark textarea { background-color: #1e353d !important; border-color: #456e7d !important; color: #f0fdfa !important; }
 
         /* 8. Pflaume / Sanftes Violett-Schiefer (Halbdunkel) */
+        html.theme-plum.dark { --bg-card: #463b56; --border: #5e5073; --text: #f5f3ff; --text-muted: #ddd6fe; }
         html.theme-plum.dark body { background-color: #393046 !important; color: #f5f3ff !important; }
         html.theme-plum.dark header,
         html.theme-plum.dark footer,
-        html.theme-plum.dark .mc-card { background-color: #463b56 !important; border-color: #5e5073 !important; }
+        html.theme-plum.dark .mc-card,
+        html.theme-plum.dark .card,
+        html.theme-plum.dark .contact-card,
+        html.theme-plum.dark .modal-box,
+        html.theme-plum.dark main .bg-white.rounded-2xl { background-color: #463b56 !important; border-color: #5e5073 !important; }
         html.theme-plum.dark thead tr,
         html.theme-plum.dark #dropZone { background-color: #3f354e !important; border-color: #5e5073 !important; }
         html.theme-plum.dark tbody tr:hover { background-color: #4f4361 !important; }
-        html.theme-plum.dark input:not([type="checkbox"]),
+        html.theme-plum.dark input:not([type="checkbox"]):not([type="radio"]),
         html.theme-plum.dark select,
         html.theme-plum.dark textarea { background-color: #2f273b !important; border-color: #65567b !important; color: #faf5ff !important; }
 
         /* --- Dunkle Themes (Dark, Ocean, Forest & Obsidian/Mitternacht) --- */
+        html.theme-ocean.dark { --bg-card: #0c2544; --border: #193b66; --text: #e2e8f0; --text-muted: #94a3b8; }
         html.theme-ocean.dark body { background-color: #07192f !important; color: #e2e8f0; }
         html.theme-ocean.dark header,
         html.theme-ocean.dark footer,
-        html.theme-ocean.dark .mc-card { background-color: #0c2544 !important; border-color: #193b66 !important; }
+        html.theme-ocean.dark .mc-card,
+        html.theme-ocean.dark .card,
+        html.theme-ocean.dark .contact-card,
+        html.theme-ocean.dark .modal-box,
+        html.theme-ocean.dark main .bg-white.rounded-2xl { background-color: #0c2544 !important; border-color: #193b66 !important; }
+        html.theme-forest.dark { --bg-card: #0c2e24; --border: #164e3d; --text: #e2e8f0; --text-muted: #94a3b8; }
         html.theme-forest.dark body { background-color: #071f18 !important; color: #e2e8f0; }
         html.theme-forest.dark header,
         html.theme-forest.dark footer,
-        html.theme-forest.dark .mc-card { background-color: #0c2e24 !important; border-color: #164e3d !important; }
+        html.theme-forest.dark .mc-card,
+        html.theme-forest.dark .card,
+        html.theme-forest.dark .contact-card,
+        html.theme-forest.dark .modal-box,
+        html.theme-forest.dark main .bg-white.rounded-2xl { background-color: #0c2e24 !important; border-color: #164e3d !important; }
+        html.theme-obsidian.dark { --bg-card: #16102c; --border: #2e2252; --text: #ede9fe; --text-muted: #a78bfa; }
         html.theme-obsidian.dark body { background-color: #0b0719 !important; color: #ede9fe; }
         html.theme-obsidian.dark header,
         html.theme-obsidian.dark footer,
-        html.theme-obsidian.dark .mc-card { background-color: #16102c !important; border-color: #2e2252 !important; }
-        html.theme-obsidian.dark input:not([type="checkbox"]),
+        html.theme-obsidian.dark .mc-card,
+        html.theme-obsidian.dark .card,
+        html.theme-obsidian.dark .contact-card,
+        html.theme-obsidian.dark .modal-box,
+        html.theme-obsidian.dark main .bg-white.rounded-2xl { background-color: #16102c !important; border-color: #2e2252 !important; }
+        html.theme-obsidian.dark input:not([type="checkbox"]):not([type="radio"]),
         html.theme-obsidian.dark select,
         html.theme-obsidian.dark textarea { background-color: #110c22 !important; border-color: #36285f !important; color: #f5f3ff !important; }
 

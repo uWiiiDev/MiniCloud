@@ -803,10 +803,10 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- KOPFBEREICH -->
-<div class="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
         <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-lg">
+            <span class="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 text-2xl shrink-0">
                 <?= e($activeBoard ? (string)$activeBoard['icon'] : '📋') ?>
             </span>
             <span>Aufgaben &amp; Projekt-Boards</span>

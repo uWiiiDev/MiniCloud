@@ -19,10 +19,10 @@ $pageTitle = 'Hilfe & Dokumentation';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="max-w-6xl mx-auto">
+<div class="space-y-6">
 <?php if ($lang === 'en'): ?>
     <!-- Header (EN) -->
-    <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
                 <svg class="w-6 h-6 text-brand-600 dark:text-brand-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1107,7 +1107,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <?php else: ?>
     <!-- Standard: Deutsch (DE) -->
-    <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
                 <svg class="w-6 h-6 text-brand-600 dark:text-brand-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

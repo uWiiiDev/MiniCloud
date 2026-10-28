@@ -500,14 +500,14 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="space-y-4">
     <!-- Obere Aktions- und Auswahlleiste -->
-    <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs p-4">
+    <div class="mc-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5">
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <!-- Links: Titel & Auswahl der Mind-Map -->
-            <div class="flex flex-wrap items-center gap-2.5">
-                <span class="text-2xl">🧠</span>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">🧠</div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h1 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Mind-Map-Editor</h1>
+                        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Mind-Map-Editor</h1>
                         <span id="saveStatusBadge" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70">
                             ✓ Gespeichert
                         </span>

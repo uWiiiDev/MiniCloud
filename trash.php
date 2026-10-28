@@ -130,17 +130,19 @@ $pageTitle = 'Papierkorb';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-    <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <svg class="w-6 h-6 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-            <span>Papierkorb (<?= count($trashFiles) ?>)</span>
-        </h1>
-        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Gelöschte Dateien werden hier noch <strong><?= (int)TRASH_RETENTION_DAYS ?> Tage</strong> aufbewahrt, bevor sie automatisch endgültig entfernt werden.
-        </p>
+<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">
+            🗑️
+        </div>
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+                <span>Papierkorb (<?= count($trashFiles) ?>)</span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Gelöschte Dateien werden hier noch <strong><?= (int)TRASH_RETENTION_DAYS ?> Tage</strong> aufbewahrt, bevor sie automatisch endgültig entfernt werden.
+            </p>
+        </div>
     </div>
 
     <div class="flex flex-wrap items-center gap-2">

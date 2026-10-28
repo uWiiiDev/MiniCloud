@@ -398,12 +398,15 @@ require_once __DIR__ . '/includes/header.php';
 }
 </style>
 
-<div class="page-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+<div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
     <div>
-        <h1 class="page-title" style="margin:0;">📇 Adressbuch &amp; Kontakte</h1>
-        <p class="page-subtitle" style="margin:0.25rem 0 0 0;">Persönliche &amp; geteilte Kontakte inkl. vCard (<code>.vcf</code>) Import/Export und automatischer Geburtstags-Anzeige im Kalender</p>
+        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+            <span class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">📇</span>
+            <span>Adressbuch &amp; Kontakte</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Persönliche &amp; geteilte Kontakte inkl. vCard (<code>.vcf</code>) Import/Export und automatischer Geburtstags-Anzeige im Kalender</p>
     </div>
-    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+    <div class="flex flex-wrap items-center gap-2">
         <input type="search" id="contactSearchInput" class="form-control" placeholder="🔍 Name, Firma, E-Mail, Ort..." style="max-width:220px;" oninput="filterContacts()">
         <button type="button" class="btn btn-outline" onclick="document.getElementById('contactsSyncModal').style.display='flex'" title="Adressbuch abonnieren (CardDAV &amp; .vcf-Link)">📡 Abo &amp; CardDAV</button>
         <button type="button" class="btn btn-outline" onclick="document.getElementById('vcfImportModal').style.display='flex'">📥 .vcf Import</button>

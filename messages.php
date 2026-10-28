@@ -1153,10 +1153,10 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- Kopfbereich (auf Mobilgeräten bei geöffnetem Chat ausgeblendet für maximale Schreibfläche) -->
-<div id="chatPageTopHeader" class="<?= !$mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
+<div id="chatPageTopHeader" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-xs <?= !$mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
     <div>
         <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-            <span class="w-9 h-9 rounded-xl bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <span class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">
                 💬
             </span>
             <span>Chat &amp; Nachrichten</span>

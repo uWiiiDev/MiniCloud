@@ -2299,16 +2299,16 @@ require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
 ?>
 
-<div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+<div class="space-y-6">
     <!-- KOPFBEREICH -->
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3.5">
-            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-2xl shadow-sm">
+            <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shadow-xs shrink-0">
                 🤖
             </div>
             <div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <h1 class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
                         <?= e($uiPack['header_title']) ?>
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
