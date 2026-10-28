@@ -667,11 +667,14 @@ $csrfToken = getCsrfToken();
     <!-- SPIELAUSWAHL-LEISTE (9 SPIEL-KARTEN) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
         <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
-            <?php $myBest = $myBestByGame[$gKey] ?? 0; ?>
+            <?php
+            $gKeyStr = (string)$gKey;
+            $myBest  = $myBestByGame[$gKeyStr] ?? 0;
+            ?>
             <button type="button"
-                    onclick="selectCloudGame('<?= e($gKey) ?>')"
-                    id="gameTabBtn-<?= e($gKey) ?>"
-                    class="game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 <?= $gKey === '2048' ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400' ?>">
+                    onclick="selectCloudGame('<?= e($gKeyStr) ?>')"
+                    id="gameTabBtn-<?= e($gKeyStr) ?>"
+                    class="game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 <?= $gKeyStr === '2048' ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400' ?>">
                 <div class="flex items-center justify-between gap-1">
                     <span class="text-xl"><?= $gMeta['icon'] ?></span>
                     <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
@@ -680,7 +683,7 @@ $csrfToken = getCsrfToken();
                 </div>
                 <div>
                     <p class="text-xs font-extrabold leading-tight truncate"><?= e($gMeta['title']) ?></p>
-                    <p class="text-[10px] opacity-80 mt-0.5 truncate" id="myBestLabel-<?= e($gKey) ?>">
+                    <p class="text-[10px] opacity-80 mt-0.5 truncate" id="myBestLabel-<?= e($gKeyStr) ?>">
                         <?= $myBest > 0 ? '🏆 ' . number_format($myBest, 0, ',', '.') : 'Noch ohne Wertung' ?>
                     </p>
                 </div>

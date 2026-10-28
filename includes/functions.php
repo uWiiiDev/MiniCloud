@@ -14,7 +14,7 @@ if (!defined('MAX_FILE_SIZE')) {
 /**
  * XSS-sicheres Escaping für HTML-Ausgaben.
  */
-function e(?string $value): string
+function e(string|int|float|null $value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
