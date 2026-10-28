@@ -922,11 +922,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
         @chmod($destPath, 0640);
 
-        $targetFolder = normalizeFolderPath((string)($_POST['target_folder'] ?? 'E-Books'));
+        $rawTargetFolder = trim((string)($_POST['target_folder'] ?? 'E-Books'));
+        $targetFolder    = $rawTargetFolder !== ''
+            ? extractSanitizedFolderPath($rawTargetFolder . '/placeholder')
+            : 'E-Books';
         if ($targetFolder !== '') {
             registerFolderHierarchy($pdo, $userId, $targetFolder, null);
         }
 
+        $origName = sanitizeOriginalFilename($origName);
         $stmtIns = $pdo->prepare(
             "INSERT INTO `files` (`user_id`, `group_folder_id`, `filename`, `original_name`, `folder_path`, `file_size`, `mime_type`, `is_encrypted`)
              VALUES (:uid, NULL, :fn, :orig, :fp, :sz, 'application/epub+zip', 0)"
@@ -940,6 +944,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         ]);
 
         $newId = (int)$pdo->lastInsertId();
+        recordModuleUsage($pdo, 'ebooks', true);
         setFlash('success', 'E-Book „' . $origName . '“ wurde erfolgreich in Ihre Bibliothek aufgenommen.');
         header('Location: ebooks.php?id=' . $newId);
         exit;

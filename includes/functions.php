@@ -487,6 +487,14 @@ function sanitizeFolderPathInput(string $folderInput): string
 }
 
 /**
+ * Alias für sanitizeFolderPathInput().
+ */
+function normalizeFolderPath(string $folderInput): string
+{
+    return sanitizeFolderPathInput($folderInput);
+}
+
+/**
  * Trägt einen Ordnerpfad (inklusive aller übergeordneten Teilpfade) in die Tabelle user_folders ein.
  */
 function registerFolderHierarchy(PDO $pdo, int $userId, string $folderPath, ?int $groupFolderId = null): void
