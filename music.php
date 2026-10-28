@@ -72,6 +72,8 @@ $pdo->exec("
         `cached_artist` VARCHAR(255) DEFAULT NULL,
         `cached_album` VARCHAR(255) DEFAULT NULL,
         `cached_year` VARCHAR(16) DEFAULT NULL,
+        `cached_track_no` INT UNSIGNED NOT NULL DEFAULT 0,
+        `cached_disc_no` INT UNSIGNED NOT NULL DEFAULT 0,
         `cached_duration_sec` INT UNSIGNED NOT NULL DEFAULT 0,
         `has_cover` TINYINT(1) NOT NULL DEFAULT 0,
         `meta_parsed` TINYINT(1) NOT NULL DEFAULT 0,
@@ -82,6 +84,14 @@ $pdo->exec("
         CONSTRAINT `fk_mtm_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
+
+try {
+    $colsMtm = $pdo->query("SHOW COLUMNS FROM `music_track_meta`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('cached_track_no', $colsMtm, true)) {
+        $pdo->exec("ALTER TABLE `music_track_meta` ADD COLUMN `cached_track_no` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `cached_year`");
+        $pdo->exec("ALTER TABLE `music_track_meta` ADD COLUMN `cached_disc_no` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `cached_track_no`");
+    }
+} catch (Throwable) {}
 
 $playlistToken = isset($_GET['playlist_token']) && is_string($_GET['playlist_token']) ? trim($_GET['playlist_token']) : '';
 $isGuestMode   = ($playlistToken !== '' && !isLoggedIn());
@@ -224,6 +234,8 @@ function parseLocalAudioMetadata(string $filePath, bool $extractCoverBytes = fal
         'artist'     => '',
         'album'      => '',
         'year'       => '',
+        'track_no'   => 0,
+        'disc_no'    => 0,
         'duration'   => 0,
         'has_cover'  => 0,
         'cover_mime' => '',
@@ -306,6 +318,16 @@ function parseLocalAudioMetadata(string $filePath, bool $extractCoverBytes = fal
                     if (preg_match('/(\d{4})/', $yr, $m)) {
                         $res['year'] = $m[1];
                     }
+                } elseif ($frameId === 'TRCK' && $res['track_no'] === 0) {
+                    $tr = decodeId3TextFrame($payload);
+                    if (preg_match('/^(\d{1,4})/', trim($tr), $m)) {
+                        $res['track_no'] = (int)$m[1];
+                    }
+                } elseif ($frameId === 'TPOS' && $res['disc_no'] === 0) {
+                    $ds = decodeId3TextFrame($payload);
+                    if (preg_match('/^(\d{1,3})/', trim($ds), $m)) {
+                        $res['disc_no'] = (int)$m[1];
+                    }
                 } elseif ($frameId === 'APIC' && strlen($payload) > 32) {
                     // Eingebettetes Album-Cover (JPEG oder PNG) suchen
                     $jpegPos = strpos($payload, "\xFF\xD8\xFF");
@@ -348,6 +370,10 @@ function parseLocalAudioMetadata(string $filePath, bool $extractCoverBytes = fal
                         $res['year'] = $yr;
                     }
                 }
+                // ID3v1.1 Track-Nummer (Byte 125 == 0, Byte 126 = Track)
+                if ($res['track_no'] === 0 && ord($v1[125]) === 0 && ord($v1[126]) > 0) {
+                    $res['track_no'] = ord($v1[126]);
+                }
             }
         }
     }
@@ -377,6 +403,60 @@ function parseLocalAudioMetadata(string $filePath, bool $extractCoverBytes = fal
 
     fclose($fp);
     return $res;
+}
+
+/**
+ * Erkennt Kapitel-, Track- und CD/Teil-Nummerierungen intelligent aus Dateiname und Ordnerpfad
+ * (z. B. "01 - Kapitel 1.mp3", "Kapitel 12.mp3", "CD2_Track05.mp3", "Teil 3 - 08.mp3").
+ *
+ * @return array{track_no:int,disc_no:int}
+ */
+function extractTrackAndDiscFromFilename(string $originalName, string $folderPath = ''): array
+{
+    $base = pathinfo($originalName, PATHINFO_FILENAME);
+    $discNo  = 0;
+    $trackNo = 0;
+
+    // 1. CD / Disc / Teil im Ordnerpfad oder Dateinamen suchen (z. B. "CD 1", "CD2", "Disc 02", "Teil 3")
+    $combined = $folderPath . ' / ' . $base;
+    if (preg_match('/\b(?:cd|disc|disk|teil|part|buch|band)[\s._-]*0*(\d{1,3})\b/i', $combined, $mDisc)) {
+        $discNo = (int)$mDisc[1];
+    }
+
+    // 2. Kombinationsmuster wie "1-05 Titel" oder "CD1_05" am Anfang des Dateinamens
+    if (preg_match('/^\s*0*(\d{1,2})[-_.]0*(\d{1,4})\b/', $base, $mCombo)) {
+        if ($discNo === 0) {
+            $discNo = (int)$mCombo[1];
+        }
+        $trackNo = (int)$mCombo[2];
+        return ['track_no' => $trackNo, 'disc_no' => $discNo];
+    }
+
+    // 3. Explizites "Kapitel X", "Chapter X", "Track X", "Folge X", "Episode X" im Dateinamen
+    if (preg_match('/\b(?:kapitel|kap|chapter|chap|track|trk|folge|episode|ep|nr|no)[\s._#-]*0*(\d{1,4})\b/i', $base, $mKap)) {
+        $trackNo = (int)$mKap[1];
+        return ['track_no' => $trackNo, 'disc_no' => $discNo];
+    }
+
+    // 4. Führende Nummerierung am Dateianfang (z. B. "01 - ...", "007_...", "12. ...")
+    if (preg_match('/^\s*0*(\d{1,4})(?:\s*[-_.)\]]|\s+)/', $base, $mLead)) {
+        $cand = (int)$mLead[1];
+        // Jahreszahlen wie "2024 - ..." nicht fälschlich als Kapitel werten, außer < 1900
+        if ($cand > 0 && ($cand < 1900 || $cand > 2099)) {
+            $trackNo = $cand;
+            return ['track_no' => $trackNo, 'disc_no' => $discNo];
+        }
+    }
+
+    // 5. Zahl ganz am Ende des Dateinamens (z. B. "Hörbuch Name 04")
+    if (preg_match('/(?:[\s._-#]+|^)0*(\d{1,4})\s*$/', $base, $mTail)) {
+        $cand = (int)$mTail[1];
+        if ($cand > 0 && ($cand < 1900 || $cand > 2099)) {
+            $trackNo = $cand;
+        }
+    }
+
+    return ['track_no' => $trackNo, 'disc_no' => $discNo];
 }
 
 // 1. Eingebettetes Album-Cover ausliefern (?cover_file=...)
@@ -823,6 +903,11 @@ $autoPlayFileId   = isset($_GET['play']) ? (int)$_GET['play'] : 0;
 $viewFilter       = isset($_GET['filter']) && in_array($_GET['filter'], ['all', 'favorites', 'resume', 'albums'], true) ? $_GET['filter'] : 'all';
 $folderFilter     = isset($_GET['folder']) && is_string($_GET['folder']) ? trim($_GET['folder']) : '';
 $searchQuery      = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+$audiobookMode    = (isset($_GET['audiobook']) && $_GET['audiobook'] === '1') || $viewFilter === 'resume';
+$defaultSort      = ($audiobookMode || $folderFilter !== '') ? 'chapter' : 'chapter';
+$sortMode         = isset($_GET['sort']) && in_array($_GET['sort'], ['chapter', 'title_asc', 'artist_album', 'recent'], true)
+    ? $_GET['sort']
+    : $defaultSort;
 
 $playlists      = [];
 $activePlaylist = null;
@@ -881,8 +966,9 @@ $audioFolders  = [];
 if ($userId > 0) {
     $stmtAudio = $pdo->prepare(
         "SELECT f.*, u.username AS owner_name,
-                mtm.is_favorite, mtm.last_position_sec, mtm.play_count,
+                mtm.is_favorite, mtm.last_position_sec, mtm.play_count, mtm.updated_at AS meta_updated_at,
                 mtm.cached_title, mtm.cached_artist, mtm.cached_album, mtm.cached_year,
+                mtm.cached_track_no, mtm.cached_disc_no,
                 mtm.cached_duration_sec, mtm.has_cover, mtm.meta_parsed
          FROM files f
          INNER JOIN users u ON u.id = f.user_id
@@ -916,22 +1002,30 @@ if ($userId > 0) {
 
     $stmtCacheMeta = $pdo->prepare(
         'INSERT INTO music_track_meta
-            (file_id, user_id, cached_title, cached_artist, cached_album, cached_year, cached_duration_sec, has_cover, meta_parsed)
-         VALUES (:fid, :uid, :t, :ar, :al, :yr, :dur, :cov, 1)
+            (file_id, user_id, cached_title, cached_artist, cached_album, cached_year, cached_track_no, cached_disc_no, cached_duration_sec, has_cover, meta_parsed)
+         VALUES (:fid, :uid, :t, :ar, :al, :yr, :trk, :dsc, :dur, :cov, 1)
          ON DUPLICATE KEY UPDATE
             cached_title = :t2, cached_artist = :ar2, cached_album = :al2,
-            cached_year = :yr2, cached_duration_sec = :dur2, has_cover = :cov2, meta_parsed = 1'
+            cached_year = :yr2, cached_track_no = :trk2, cached_disc_no = :dsc2,
+            cached_duration_sec = :dur2, has_cover = :cov2, meta_parsed = 1'
     );
 
     foreach ($rawAudio as $row) {
         $fid = (int)$row['id'];
+        $fnNums = extractTrackAndDiscFromFilename((string)$row['original_name'], (string)($row['folder_path'] ?? ''));
+
         if ((int)($row['meta_parsed'] ?? 0) !== 1) {
             $phys = UPLOAD_DIR . basename((string)$row['filename']);
             $id3  = parseLocalAudioMetadata($phys, false);
+            $trkNo = $id3['track_no'] > 0 ? $id3['track_no'] : $fnNums['track_no'];
+            $dscNo = $id3['disc_no'] > 0 ? $id3['disc_no'] : $fnNums['disc_no'];
+
             $row['cached_title']        = $id3['title'];
             $row['cached_artist']       = $id3['artist'];
             $row['cached_album']        = $id3['album'];
             $row['cached_year']         = $id3['year'];
+            $row['cached_track_no']     = $trkNo;
+            $row['cached_disc_no']      = $dscNo;
             $row['cached_duration_sec'] = $id3['duration'];
             $row['has_cover']           = $id3['has_cover'];
             try {
@@ -942,16 +1036,27 @@ if ($userId > 0) {
                     ':ar'   => $id3['artist'] ?: null,
                     ':al'   => $id3['album'] ?: null,
                     ':yr'   => $id3['year'] ?: null,
+                    ':trk'  => $trkNo,
+                    ':dsc'  => $dscNo,
                     ':dur'  => $id3['duration'],
                     ':cov'  => $id3['has_cover'],
                     ':t2'   => $id3['title'] ?: null,
                     ':ar2'  => $id3['artist'] ?: null,
                     ':al2'  => $id3['album'] ?: null,
                     ':yr2'  => $id3['year'] ?: null,
+                    ':trk2' => $trkNo,
+                    ':dsc2' => $dscNo,
                     ':dur2' => $id3['duration'],
                     ':cov2' => $id3['has_cover'],
                 ]);
             } catch (Throwable) {}
+        } else {
+            if ((int)($row['cached_track_no'] ?? 0) === 0 && $fnNums['track_no'] > 0) {
+                $row['cached_track_no'] = $fnNums['track_no'];
+            }
+            if ((int)($row['cached_disc_no'] ?? 0) === 0 && $fnNums['disc_no'] > 0) {
+                $row['cached_disc_no'] = $fnNums['disc_no'];
+            }
         }
 
         // Falls Dateiname "Interpret - Titel.mp3" enthält und kein ID3-Tag vorliegt, intelligent zerlegen
@@ -1010,10 +1115,13 @@ if ($activePlaylist && !$isPlaylistLocked) {
         } else {
             $phys = UPLOAD_DIR . basename((string)$row['filename']);
             $id3  = parseLocalAudioMetadata($phys, false);
+            $fnNums = extractTrackAndDiscFromFilename((string)$row['original_name'], (string)($row['folder_path'] ?? ''));
             $fallbackBase = pathinfo((string)$row['original_name'], PATHINFO_FILENAME);
             $row['display_title']       = $id3['title'] ?: $fallbackBase;
             $row['display_artist']      = $id3['artist'] ?: (string)$row['owner_name'];
             $row['display_album']       = $id3['album'] ?: (string)$activePlaylist['title'];
+            $row['cached_track_no']     = $id3['track_no'] > 0 ? $id3['track_no'] : $fnNums['track_no'];
+            $row['cached_disc_no']      = $id3['disc_no'] > 0 ? $id3['disc_no'] : $fnNums['disc_no'];
             $row['cached_duration_sec'] = $id3['duration'];
             $row['has_cover']           = $id3['has_cover'];
             $row['folder_label']        = trim((string)($row['folder_path'] ?? ''), '/') ?: 'Hauptverzeichnis (/)';
@@ -1038,6 +1146,90 @@ if ($activePlaylist && !$isPlaylistLocked) {
             }
         }
         $displayedTracks[] = $track;
+    }
+}
+
+// ============================================================================
+// INTELLIGENTE KAPITEL- & TRACK-SORTIERUNG (inkl. Natural Sort für Hörbücher)
+// ============================================================================
+if (!empty($displayedTracks)) {
+    // Im Hörbuch-Modus immer nach Kapitel-/Tracknummer sortieren, sofern nicht explizit anders gewählt
+    $effectiveSort = ($audiobookMode && !isset($_GET['sort'])) ? 'chapter' : $sortMode;
+
+    if ($effectiveSort === 'chapter') {
+        usort($displayedTracks, static function (array $a, array $b): int {
+            // 1. Gleicher Ordner zuerst natürlich gruppieren
+            $cmpFolder = strnatcasecmp((string)($a['folder_label'] ?? ''), (string)($b['folder_label'] ?? ''));
+            if ($cmpFolder !== 0) {
+                return $cmpFolder;
+            }
+            // 2. CD- / Teil-Nummer (1, 2, 3...)
+            $discA = (int)($a['cached_disc_no'] ?? 0);
+            $discB = (int)($b['cached_disc_no'] ?? 0);
+            if ($discA !== $discB) {
+                if ($discA === 0) return 1;
+                if ($discB === 0) return -1;
+                return $discA <=> $discB;
+            }
+            // 3. Kapitel- / Track-Nummer aus ID3 oder Dateiname (1, 2, ..., 10, 11)
+            $trkA = (int)($a['cached_track_no'] ?? 0);
+            $trkB = (int)($b['cached_track_no'] ?? 0);
+            if ($trkA !== $trkB) {
+                if ($trkA === 0) return 1;
+                if ($trkB === 0) return -1;
+                return $trkA <=> $trkB;
+            }
+            // 4. Natürlicher Vergleich des Original-Dateinamens ("Kapitel 2.mp3" vor "Kapitel 10.mp3")
+            $cmpOrig = strnatcasecmp((string)($a['original_name'] ?? ''), (string)($b['original_name'] ?? ''));
+            if ($cmpOrig !== 0) {
+                return $cmpOrig;
+            }
+            return strnatcasecmp((string)($a['display_title'] ?? ''), (string)($b['display_title'] ?? ''));
+        });
+    } elseif ($effectiveSort === 'title_asc') {
+        usort($displayedTracks, static function (array $a, array $b): int {
+            $cmp = strnatcasecmp((string)($a['display_title'] ?? ''), (string)($b['display_title'] ?? ''));
+            return $cmp !== 0 ? $cmp : strnatcasecmp((string)($a['original_name'] ?? ''), (string)($b['original_name'] ?? ''));
+        });
+    } elseif ($effectiveSort === 'artist_album') {
+        usort($displayedTracks, static function (array $a, array $b): int {
+            $cmpAr = strnatcasecmp((string)($a['display_artist'] ?? ''), (string)($b['display_artist'] ?? ''));
+            if ($cmpAr !== 0) return $cmpAr;
+            $cmpAl = strnatcasecmp((string)($a['display_album'] ?? ''), (string)($b['display_album'] ?? ''));
+            if ($cmpAl !== 0) return $cmpAl;
+            $discA = (int)($a['cached_disc_no'] ?? 0);
+            $discB = (int)($b['cached_disc_no'] ?? 0);
+            if ($discA !== $discB) return $discA <=> $discB;
+            $trkA = (int)($a['cached_track_no'] ?? 0);
+            $trkB = (int)($b['cached_track_no'] ?? 0);
+            if ($trkA !== $trkB) return $trkA <=> $trkB;
+            return strnatcasecmp((string)($a['original_name'] ?? ''), (string)($b['original_name'] ?? ''));
+        });
+    } elseif ($effectiveSort === 'recent') {
+        usort($displayedTracks, static function (array $a, array $b): int {
+            $cmp = strcmp((string)($b['upload_date'] ?? ''), (string)($a['upload_date'] ?? ''));
+            return $cmp !== 0 ? $cmp : ((int)$b['id'] <=> (int)$a['id']);
+        });
+    }
+}
+
+// Zuletzt gehörten Track / Kapitel innerhalb der aktuellen Liste ermitteln (für "📖 Hörbuch nahtlos weiterhören")
+$resumeChapterCandidate = null;
+foreach ($displayedTracks as $idx => $t) {
+    $pos = (int)($t['last_position_sec'] ?? 0);
+    if ($pos >= 5) {
+        $upd = (string)($t['meta_updated_at'] ?? '');
+        if ($resumeChapterCandidate === null || strcmp($upd, $resumeChapterCandidate['updated_at']) > 0) {
+            $resumeChapterCandidate = [
+                'index'      => $idx,
+                'chapter_no' => $idx + 1,
+                'total'      => count($displayedTracks),
+                'title'      => (string)$t['display_title'],
+                'folder'     => (string)$t['folder_label'],
+                'pos_sec'    => $pos,
+                'updated_at' => $upd,
+            ];
+        }
     }
 }
 
@@ -1192,9 +1384,14 @@ require_once __DIR__ . '/includes/header.php';
                         </button>
                     </div>
 
-                    <!-- Zusatz-Steuerung: Shuffle, Repeat, Lautstärke -->
-                    <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/10 text-xs">
-                        <div class="flex items-center gap-1.5">
+                    <!-- Zusatz-Steuerung: Hörbuch-Modus, Shuffle, Repeat, Lautstärke -->
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10 text-xs">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" id="btnAudiobookMode" onclick="toggleAudiobookMode()"
+                                    class="px-2.5 py-1.5 rounded-lg <?= $audiobookMode ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-white/10 hover:bg-white/20 text-white font-semibold' ?> transition cursor-pointer"
+                                    title="Hörbuch-Modus: Spielt Kapitel strikt der Reihe nach (1 → 99), deaktiviert Zufallswiedergabe und aktiviert klare Sprachwiedergabe">
+                                📖 Hörbuch <?= $audiobookMode ? 'An' : 'Aus' ?>
+                            </button>
                             <button type="button" id="btnShuffle" onclick="toggleShuffle()"
                                     class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer"
                                     title="Zufallswiedergabe (Shuffle)">
@@ -1210,8 +1407,8 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="flex items-center gap-1.5">
                             <button type="button" id="btnMute" onclick="toggleMute()" class="text-sm cursor-pointer" title="Stummschalten">🔊</button>
                             <input type="range" id="playerVolumeSlider" min="0" max="100" value="90"
-                                   oninput="setAudioVolume(this.value)"
-                                   class="w-20 accent-rose-500 cursor-pointer">
+                                    oninput="setAudioVolume(this.value)"
+                                    class="w-16 accent-rose-500 cursor-pointer">
                         </div>
                     </div>
 
@@ -1382,33 +1579,41 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="mc-card p-4 space-y-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div class="flex flex-wrap items-center gap-1.5">
-                                <a href="music.php?filter=all<?= $folderFilter !== '' ? '&amp;folder=' . urlencode($folderFilter) : '' ?>"
-                                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition <?= $viewFilter === 'all' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' ?>">
+                                <a href="music.php?filter=all<?= $folderFilter !== '' ? '&amp;folder=' . urlencode($folderFilter) : '' ?>&amp;sort=<?= urlencode($sortMode) ?>"
+                                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition <?= ($viewFilter === 'all' && !$audiobookMode) ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' ?>">
                                     🎵 Alle Titel (<?= count($allAudioFiles) ?>)
                                 </a>
-                                <a href="music.php?filter=favorites"
+                                <a href="music.php?filter=all<?= $folderFilter !== '' ? '&amp;folder=' . urlencode($folderFilter) : '' ?>&amp;audiobook=<?= $audiobookMode ? '0' : '1' ?>&amp;sort=chapter"
+                                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition <?= $audiobookMode ? 'bg-amber-500 text-slate-950 shadow-2xs' : 'bg-amber-100/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-200/80' ?>"
+                                   title="Erkennt Kapitel- &amp; Dateinamen-Nummerierungen (01, 02... / Kapitel 1, 2...) und spielt sie garantiert der Reihe nach ab">
+                                    📖 Hörbuch-Modus <?= $audiobookMode ? '✓' : '' ?>
+                                </a>
+                                <a href="music.php?filter=favorites&amp;sort=<?= urlencode($sortMode) ?>"
                                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition <?= $viewFilter === 'favorites' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' ?>">
                                     ❤️ Favoriten (<?= $countFavorites ?>)
                                 </a>
-                                <a href="music.php?filter=resume"
+                                <a href="music.php?filter=resume&amp;audiobook=1&amp;sort=chapter"
                                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition <?= $viewFilter === 'resume' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' ?>">
-                                    🔖 Weiterhören / Hörbücher (<?= $countResume ?>)
+                                    🔖 Weiterhören (<?= $countResume ?>)
                                 </a>
                             </div>
 
                             <?php if (!empty($displayedTracks)): ?>
                                 <button type="button" onclick="playTrackAtIndex(0)"
                                         class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-2xs cursor-pointer">
-                                    ▶️ Alle abspielen
+                                    ▶️ <?= $audiobookMode ? 'Ab Kapitel 1 starten' : 'Alle abspielen' ?>
                                 </button>
                             <?php endif; ?>
                         </div>
 
                         <form method="get" action="music.php" class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800">
                             <input type="hidden" name="filter" value="<?= e($viewFilter) ?>">
-                            <div class="relative flex-1 min-w-[200px]">
+                            <?php if ($audiobookMode): ?>
+                                <input type="hidden" name="audiobook" value="1">
+                            <?php endif; ?>
+                            <div class="relative flex-1 min-w-[180px]">
                                 <input type="text" name="q" value="<?= e($searchQuery) ?>"
-                                       placeholder="🔍 Titel, Interpret, Album oder Dateiname suchen…"
+                                       placeholder="🔍 Titel, Kapitel, Interpret oder Dateiname suchen…"
                                        class="w-full pl-3.5 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm text-slate-800 dark:text-slate-100">
                             </div>
                             <select name="folder" onchange="this.form.submit()"
@@ -1420,8 +1625,15 @@ require_once __DIR__ . '/includes/header.php';
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <select name="sort" onchange="this.form.submit()" title="Sortierreihenfolge der Audiodateien"
+                                    class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                <option value="chapter" <?= $sortMode === 'chapter' ? 'selected' : '' ?>>🔢 Kapitel / Nummerierung (1 → 99)</option>
+                                <option value="title_asc" <?= $sortMode === 'title_asc' ? 'selected' : '' ?>>🔤 Titel / Dateiname (A → Z)</option>
+                                <option value="artist_album" <?= $sortMode === 'artist_album' ? 'selected' : '' ?>>💿 Interpret &amp; Album</option>
+                                <option value="recent" <?= $sortMode === 'recent' ? 'selected' : '' ?>>🕒 Zuletzt hochgeladen</option>
+                            </select>
                             <button type="submit" class="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold cursor-pointer">
-                                Filtern
+                                Anwenden
                             </button>
                             <?php if ($searchQuery !== '' || $folderFilter !== ''): ?>
                                 <a href="music.php?filter=<?= e($viewFilter) ?>" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
@@ -1429,6 +1641,31 @@ require_once __DIR__ . '/includes/header.php';
                                 </a>
                             <?php endif; ?>
                         </form>
+                    </div>
+                <?php endif; ?>
+
+                <!-- 📖 HÖRBUCH-WEITERHÖREN-BANNER (zeigt das zuletzt gehörte Kapitel inkl. Sekunde) -->
+                <?php if ($resumeChapterCandidate !== null): ?>
+                    <div class="mc-card p-3.5 sm:p-4 bg-amber-50/90 dark:bg-amber-950/35 border border-amber-200 dark:border-amber-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center text-xl shrink-0">📖</span>
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                                    Hörbuch-Gedächtnis &bull; Datei <?= (int)$resumeChapterCandidate['chapter_no'] ?> von <?= (int)$resumeChapterCandidate['total'] ?>
+                                </p>
+                                <p class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                                    <?= e((string)$resumeChapterCandidate['title']) ?>
+                                    <span class="font-normal text-slate-500 dark:text-slate-400">
+                                        (bei <?= sprintf('%02d:%02d', intdiv((int)$resumeChapterCandidate['pos_sec'], 60), (int)$resumeChapterCandidate['pos_sec'] % 60) ?> Min.)
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        <button type="button"
+                                onclick="playTrackAtIndexAndResume(<?= (int)$resumeChapterCandidate['index'] ?>, <?= (int)$resumeChapterCandidate['pos_sec'] ?>)"
+                                class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs shrink-0 cursor-pointer">
+                            ▶️ Nahtlos weiterhören
+                        </button>
                     </div>
                 <?php endif; ?>
 
@@ -1451,10 +1688,18 @@ require_once __DIR__ . '/includes/header.php';
                                 $isFav   = (int)($t['is_favorite'] ?? 0) === 1;
                                 $lastPos = (int)($t['last_position_sec'] ?? 0);
                                 $durSec  = (int)($t['cached_duration_sec'] ?? 0);
+                                $trkNo   = (int)($t['cached_track_no'] ?? 0);
+                                $dscNo   = (int)($t['cached_disc_no'] ?? 0);
                                 $hasCov  = (int)($t['has_cover'] ?? 0) === 1;
                                 $tokParam = $playlistToken !== '' ? '&album_token=' . urlencode($playlistToken) : '';
                                 $coverUrl = $hasCov ? ('music.php?cover_file=' . $fid . ($playlistToken !== '' ? '&playlist_token=' . urlencode($playlistToken) : '')) : '';
                                 $durFormatted = $durSec > 0 ? sprintf('%02d:%02d', intdiv($durSec, 60), $durSec % 60) : formatBytes((int)$t['file_size']);
+                                $chapterBadge = '';
+                                if ($trkNo > 0) {
+                                    $chapterBadge = ($dscNo > 0 ? 'CD' . $dscNo . ' · ' : '') . '#' . str_pad((string)$trkNo, 2, '0', STR_PAD_LEFT);
+                                } elseif ($audiobookMode || $sortMode === 'chapter') {
+                                    $chapterBadge = '#' . str_pad((string)($idx + 1), 2, '0', STR_PAD_LEFT);
+                                }
                             ?>
                                 <div id="trackRow_<?= $idx ?>"
                                      data-file-id="<?= $fid ?>"
@@ -1467,7 +1712,7 @@ require_once __DIR__ . '/includes/header.php';
                                             <?php if ($hasCov): ?>
                                                 <img src="<?= e($coverUrl) ?>" alt="" loading="lazy" class="w-full h-full object-cover">
                                             <?php else: ?>
-                                                <span class="text-lg">🎵</span>
+                                                <span class="text-lg"><?= $audiobookMode ? '📖' : '🎵' ?></span>
                                             <?php endif; ?>
                                             <span class="track-play-badge absolute inset-0 bg-black/55 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold transition">
                                                 ▶️
@@ -1476,6 +1721,12 @@ require_once __DIR__ . '/includes/header.php';
 
                                         <div class="min-w-0 flex-1">
                                             <div class="flex items-center gap-2">
+                                                <?php if ($chapterBadge !== ''): ?>
+                                                    <span class="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0"
+                                                          title="Erkannte Kapitel- / Track-Folge">
+                                                        <?= e($chapterBadge) ?>
+                                                    </span>
+                                                <?php endif; ?>
                                                 <p class="track-title-label text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                                                     <?= e((string)$t['display_title']) ?>
                                                 </p>
@@ -1791,6 +2042,7 @@ require_once __DIR__ . '/includes/header.php';
 const MUSIC_CSRF_TOKEN = <?= json_encode(getCsrfToken()) ?>;
 const MUSIC_IS_GUEST   = <?= $isGuestMode ? 'true' : 'false' ?>;
 const MUSIC_AUTOPLAY_ID = <?= (int)$autoPlayFileId ?>;
+let audiobookModeActive = <?= $audiobookMode ? 'true' : 'false' ?>;
 
 const MUSIC_TRACKS = <?= json_encode(array_map(static function (array $t) use ($playlistToken): array {
     $fid = (int)$t['id'];
@@ -1802,6 +2054,8 @@ const MUSIC_TRACKS = <?= json_encode(array_map(static function (array $t) use ($
         'artist'    => (string)$t['display_artist'],
         'album'     => (string)$t['display_album'],
         'folder'    => (string)$t['folder_label'],
+        'trackNo'   => (int)($t['cached_track_no'] ?? 0),
+        'discNo'    => (int)($t['cached_disc_no'] ?? 0),
         'duration'  => (int)($t['cached_duration_sec'] ?? 0),
         'lastPos'   => (int)($t['last_position_sec'] ?? 0),
         'streamUrl' => 'music.php?stream_file=' . $fid . $tok,
@@ -1988,9 +2242,13 @@ function playTrackAtIndex(index, autoStart = true) {
         audioCtx.resume();
     }
 
+    const chapterPrefix = audiobookModeActive
+        ? `📖 Kapitel ${currentTrackIdx + 1}/${MUSIC_TRACKS.length} • `
+        : (track.trackNo > 0 ? `#${String(track.trackNo).padStart(2, '0')} • ` : '');
+
     document.getElementById('playerTitle').textContent       = track.title;
     document.getElementById('playerArtist').textContent      = track.artist;
-    document.getElementById('playerAlbumFolder').textContent = `💿 ${track.album} • 📁 ${track.folder}`;
+    document.getElementById('playerAlbumFolder').textContent = `${chapterPrefix}💿 ${track.album} • 📁 ${track.folder}`;
 
     document.getElementById('miniPlayerTitle').textContent   = track.title;
     document.getElementById('miniPlayerArtist').textContent  = track.artist;
@@ -2039,6 +2297,53 @@ function resumeSavedTrackPosition() {
         if (audioEl.paused) {
             audioEl.play().catch(() => {});
         }
+    }
+}
+
+function playTrackAtIndexAndResume(index, posSec) {
+    playTrackAtIndex(index, true);
+    if (posSec > 0 && audioEl) {
+        const applySeek = () => {
+            audioEl.currentTime = posSec;
+            const rBtn = document.getElementById('btnResumePosition');
+            if (rBtn) rBtn.classList.add('hidden');
+            audioEl.removeEventListener('loadedmetadata', applySeek);
+        };
+        if (audioEl.readyState >= 1) {
+            applySeek();
+        } else {
+            audioEl.addEventListener('loadedmetadata', applySeek);
+        }
+    }
+}
+
+function toggleAudiobookMode() {
+    audiobookModeActive = !audiobookModeActive;
+    const btn = document.getElementById('btnAudiobookMode');
+    if (btn) {
+        btn.textContent = audiobookModeActive ? '📖 Hörbuch An' : '📖 Hörbuch Aus';
+        btn.className = audiobookModeActive
+            ? 'px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold shadow-xs transition cursor-pointer'
+            : 'px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold transition cursor-pointer';
+    }
+    if (audiobookModeActive) {
+        // Im Hörbuch-Modus Shuffle ausschalten, damit Kapitel immer strikt der Reihe nach abgespielt werden
+        if (shuffleEnabled) {
+            toggleShuffle();
+        }
+        // Klang-Profil "Stimme / Hörbuch" vorwählen
+        const eqSel = document.getElementById('eqPresetSelect');
+        if (eqSel) {
+            eqSel.value = 'voice';
+            applyEqualizerPreset('voice');
+        }
+    }
+    if (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx]) {
+        const track = MUSIC_TRACKS[currentTrackIdx];
+        const chapterPrefix = audiobookModeActive
+            ? `📖 Kapitel ${currentTrackIdx + 1}/${MUSIC_TRACKS.length} • `
+            : (track.trackNo > 0 ? `#${String(track.trackNo).padStart(2, '0')} • ` : '');
+        document.getElementById('playerAlbumFolder').textContent = `${chapterPrefix}💿 ${track.album} • 📁 ${track.folder}`;
     }
 }
 
@@ -2096,6 +2401,11 @@ function onSeekSliderCommit(val) {
 }
 
 function toggleShuffle() {
+    if (audiobookModeActive && !shuffleEnabled) {
+        if (!confirm('Der Hörbuch-Modus ist aktiv (Kapitel 1 → 99). Möchtest du trotzdem die Zufallswiedergabe einschalten?')) {
+            return;
+        }
+    }
     shuffleEnabled = !shuffleEnabled;
     const btn = document.getElementById('btnShuffle');
     if (btn) {
@@ -2257,6 +2567,12 @@ document.addEventListener('keydown', (e) => {
         toggleAudioPlay();
     }
 });
+
+// Falls Hörbuch-Modus aktiv ist, Klangprofil "Stimme / Hörbuch" vorwählen
+if (audiobookModeActive) {
+    const eqSel = document.getElementById('eqPresetSelect');
+    if (eqSel) eqSel.value = 'voice';
+}
 
 // Falls ?play=<fileId> übergeben wurde (z.B. aus Dateivorschau), direkt diesen Titel starten!
 if (MUSIC_AUTOPLAY_ID > 0 && MUSIC_TRACKS.length > 0) {
