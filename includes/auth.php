@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {
+    http_response_code(403);
+    exit('Zugriff verweigert.');
+}
+
 /**
  * MiniCloud - Authentifizierungs-, Session-, Rollen- und Sicherheits-Helfer
  */
@@ -20,6 +25,8 @@ if (session_status() === PHP_SESSION_NONE) {
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
 
+    @ini_set('session.use_strict_mode', '1');
+    @ini_set('session.use_only_cookies', '1');
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
@@ -38,7 +45,7 @@ if (!headers_sent()) {
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header("Content-Security-Policy: frame-ancestors 'self'");
-    header('Permissions-Policy: geolocation=(), payment=(), usb=()');
+    header('Permissions-Policy: geolocation=(), microphone=(self), camera=(self), payment=(), usb=()');
 }
 
 /**

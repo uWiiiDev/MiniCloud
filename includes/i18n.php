@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {
+    http_response_code(403);
+    exit('Zugriff verweigert.');
+}
+
 /**
  * MiniCloud – Mehrsprachigkeits-Modul (i18n) für 11 europäische Sprachen:
  * - de: Deutsch (Standard)
