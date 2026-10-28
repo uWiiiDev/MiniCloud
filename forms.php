@@ -199,7 +199,7 @@ if (isset($_GET['export_csv']) && $userId > 0) {
 }
 
 // POST-Aktionen verarbeiten
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $csrfToken = $_POST['csrf_token'] ?? null;
     if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
         setFlash('error', 'Ungültiges Sicherheits-Token (CSRF). Bitte Seite neu laden.');
@@ -430,7 +430,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->prepare(
-                'INSERT INTO files (user_id, folder_path, filename, original_name, filesize, mime_type)
+                'INSERT INTO files (user_id, folder_path, filename, original_name, file_size, mime_type)
                  VALUES (:uid, :fp, :fn, :on, :fs, :mt)'
             )->execute([
                 ':uid' => $userId,

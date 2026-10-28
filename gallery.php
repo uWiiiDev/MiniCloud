@@ -162,13 +162,7 @@ function canViewGalleryImage(PDO $pdo, array $fileRow, int $userId, string $albu
 
     // Gruppenordner-Prüfung
     if (!empty($fileRow['group_folder_id'])) {
-        $stmtGf = $pdo->prepare(
-            'SELECT 1 FROM group_folders gf
-             INNER JOIN group_members gm ON gm.group_id = gf.group_id
-             WHERE gf.id = :gfid AND gm.user_id = :uid LIMIT 1'
-        );
-        $stmtGf->execute([':gfid' => (int)$fileRow['group_folder_id'], ':uid' => $userId]);
-        if ($stmtGf->fetchColumn()) {
+        if (canUserAccessGroupFolder($pdo, $userId, (int)$fileRow['group_folder_id'], false, isAdmin())) {
             return true;
         }
     }
@@ -262,7 +256,7 @@ if (isset($_GET['exif_file'])) {
     $meta = [
         'ok'         => true,
         'name'       => (string)$fileRow['original_name'],
-        'size'       => formatBytes((int)$fileRow['filesize']),
+        'size'       => formatBytes((int)($fileRow['file_size'] ?? 0)),
         'uploaded'   => date('d.m.Y H:i', strtotime((string)$fileRow['upload_date'])),
         'folder'     => (string)($fileRow['folder_path'] ?: '/'),
         'dimensions' => '–',
@@ -323,7 +317,7 @@ if (isset($_GET['exif_file'])) {
 }
 
 // POST-Aktionen verarbeiten
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $csrfToken = $_POST['csrf_token'] ?? null;
     if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
         setFlash('error', 'Ungültiges Sicherheits-Token (CSRF). Bitte Seite neu laden.');
@@ -420,7 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (move_uploaded_file($tmpPath, $destPath)) {
                     $mimeType = (string)($imgInfo['mime'] ?? 'image/jpeg');
                     $stmtInsFile = $pdo->prepare(
-                        'INSERT INTO files (user_id, folder_path, filename, original_name, filesize, mime_type)
+                        'INSERT INTO files (user_id, folder_path, filename, original_name, file_size, mime_type)
                          VALUES (:uid, :fp, :fn, :on, :fs, :mt)'
                     );
                     $stmtInsFile->execute([
@@ -722,13 +716,8 @@ if ($albumToken !== '') {
 $allCloudPhotos = [];
 $photoFolders   = [];
 if ($userId > 0) {
-    $stmtGfIds = $pdo->prepare(
-        'SELECT gf.id FROM group_folders gf
-         INNER JOIN group_members gm ON gm.group_id = gf.group_id
-         WHERE gm.user_id = :uid'
-    );
-    $stmtGfIds->execute([':uid' => $userId]);
-    $accessibleGfIds = array_map('intval', $stmtGfIds->fetchAll(PDO::FETCH_COLUMN));
+    $accGroupFolders = getAccessibleGroupFolders($pdo, $userId, isAdmin());
+    $accessibleGfIds = array_map(static fn($gf) => (int)$gf['id'], $accGroupFolders);
 
     $sqlImg = "SELECT f.*, u.username AS owner_name, gf.name AS group_folder_name
                FROM files f
