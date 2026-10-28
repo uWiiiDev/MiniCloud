@@ -663,7 +663,7 @@ if ($userId > 0) {
     }
 }
 
-$shareableUsers = ($userId > 0 && canUserShare($pdo, $userId)) ? getShareableUsers($pdo, $userId) : [];
+$shareableUsers = $userId > 0 ? getVisibleUsersForUser($pdo, $userId) : [];
 $userGroupsList = $userId > 0 ? getGroupsForUser($pdo, $userId) : [];
 
 $categoryBadges = [
