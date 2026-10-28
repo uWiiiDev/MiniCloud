@@ -741,6 +741,8 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_mindmap'                => '1',
         'enable_budget'                 => '1',
         'enable_club'                   => '1',
+        'enable_gallery'                => '1',
+        'enable_forms'                  => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3079,6 +3081,20 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_club',
             'color'       => 'bg-amber-700',
         ],
+        'gallery' => [
+            'icon'        => '🖼️',
+            'label'       => 'Foto-Alben & Medien-Galerie',
+            'url'         => 'gallery.php',
+            'setting_key' => 'enable_gallery',
+            'color'       => 'bg-pink-600',
+        ],
+        'forms' => [
+            'icon'        => '📝',
+            'label'       => 'Online-Formulare & Veranstaltungs-Anmeldung',
+            'url'         => 'forms.php',
+            'setting_key' => 'enable_forms',
+            'color'       => 'bg-teal-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3122,6 +3138,8 @@ function detectCurrentModuleKeyForStats(): ?string
         'mindmap.php'   => 'mindmap',
         'budget.php'    => 'budget',
         'club.php'      => 'club',
+        'gallery.php'   => 'gallery',
+        'forms.php'     => 'forms',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };

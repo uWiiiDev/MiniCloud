@@ -1222,6 +1222,68 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
         ],
         [
+            'id'       => 'photo_gallery_albums',
+            'title'    => 'Foto-Alben, Medien-Galerie, Diashow & Gäste-Sammelalben',
+            'icon'     => '🖼️',
+            'keywords' => [
+                'galerie', 'foto', 'fotos', 'album', 'alben', 'fotoalbum', 'diashow', 'slideshow', 'exif', 'kameradaten', 'sammelalbum', 'partyfotos', 'bilderwand',
+                'gallery', 'photo', 'photos', 'albums', 'galerie photo', 'galeria', 'galleria', 'fotomuur', 'zdjecia', 'fotogalerie', 'galeri', 'галерея', 'фото',
+            ],
+            'answer'   => "Mit der **🖼️ Foto-Alben & Medien-Galerie** (`gallery.php`) verwaltest und präsentierst du alle Bilder deiner Cloud:\n\n"
+                . "- **🖼️ Chronologische Fotowand & Virtuelle Alben:** Fasse Bilder aus verschiedenen Ordnern in Alben zusammen, **ohne dass die Dateien doppelt Speicherplatz verbrauchen**.\n"
+                . "- **▶️ Vollbild-Lightbox & Diashow:** Starte eine automatische Diashow (3s / 5s / 8s) mit Zoom und Tastatursteuerung (`←` / `→` / `Leertaste`).\n"
+                . "- **📷 Lokaler EXIF-Inspektor:** Zeigt Aufnahmedatum, Kamera-Modell, Blende, Belichtungszeit, ISO und Auflösung direkt im Browser an.\n"
+                . "- **📱 Gäste-Link, QR-Code & Party-/Vereins-Sammelalbum:** Teile ein Album per QR-Code mit Gästen (optional passwortgeschützt) und schalte auf Wunsch den **📸 Gäste-Foto-Upload** frei, damit Gäste auf Festen ihre Schnappschüsse direkt vom Smartphone beisteuern können!",
+            'actions'  => [
+                ['label' => '🖼️ Foto-Galerie öffnen', 'url' => 'gallery.php'],
+            ],
+            'followups' => [
+                $pack['q_storage'],
+                $pack['q_files'] ?? $pack['q_events'],
+            ],
+        ],
+        [
+            'id'       => 'online_forms_registration',
+            'title'    => 'Online-Formulare, Event-Anmeldung, Helferlisten & Mitgliedsanträge',
+            'icon'     => '📝',
+            'keywords' => [
+                'formular', 'formulare', 'anmeldung', 'veranstaltung', 'vereinsfest', 'helferliste', 'mitbringliste', 'schichtplan', 'mitgliedsantrag', 'feedbackbogen', 'fragebogen',
+                'forms', 'registration', 'sign up', 'event form', 'formulaire', 'formulario', 'modulo', 'formulier', 'formularz', 'formular', 'анкета', 'форма',
+            ],
+            'answer'   => "Mit **📝 Online-Formulare & Veranstaltungs-Anmeldung** (`forms.php`) erstellst du im Handumdrehen eigene Anmelde- und Abfragebögen:\n\n"
+                . "- **⚡ 4 Schnellstart-Vorlagen:** *🎉 Vereinsfest-/Event-Anmeldung*, *🤝 Helfer- & Schichtliste*, *🏛️ Online-Mitgliedsantrag* und *💬 Feedback-Bogen*.\n"
+                . "- **📱 Öffentlicher Gäste-Link & QR-Code:** Teilnehmer können ohne eigenes Cloud-Konto per Smartphone-QR-Code teilnehmen. Auf Wunsch mit **Kapazitätslimit (Max. Plätze)** und **Anmeldeschluss**.\n"
+                . "- **📊 CSV-Export & 1-Klick-Vereinsübernahme:** Speichere alle Rückmeldungen mit 1 Klick als CSV-Tabelle im Cloud-Ordner `Formulare/` (für Office Light) oder übernimm eingegangene Mitgliedsanträge direkt per **🏛️ +Mitglied** in die Vereinsverwaltung (`club.php`)!",
+            'actions'  => [
+                ['label' => '📝 Online-Formulare öffnen', 'url' => 'forms.php'],
+                ['label' => '🏛️ Vereinsverwaltung', 'url' => 'club.php'],
+            ],
+            'followups' => [
+                $pack['q_events'],
+                $pack['q_office'],
+            ],
+        ],
+        [
+            'id'       => 'club_management',
+            'title'    => 'Vereinsverwaltung, Mitglieder-Import, Beiträge & Vorstandsrollen',
+            'icon'     => '🏛️',
+            'keywords' => [
+                'verein', 'vereinsverwaltung', 'mitglieder', 'mitgliedsbeitrag', 'kassenwart', 'vorstand', 'arbeitsstunden', 'ehrenamt', 'inventar', 'schluessel', 'mitglieder importieren',
+                'club', 'association', 'members', 'membership fee', 'treasurer',
+            ],
+            'answer'   => "Die **🏛️ Vereinsverwaltung** (`club.php`) bündelt alle Aufgaben für Vereine, Verbände, Sparten und Initiativen:\n\n"
+                . "- **👥 Mitgliederdatei & Multi-Quellen-Import (`📤 Importieren`):** Importiere bestehende Mitglieder per CSV/Excel, vCard (`.vcf`), aus deinen Cloud-Kontakten, aus Cloud-Benutzerkonten oder direkt aus einem Online-Mitgliedsantrag (`forms.php`).\n"
+                . "- **💶 Beitragstarife & Kassenwart-Sync:** Generiere Jahresbeiträge mit 1 Klick und übergebe bezahlte Beiträge direkt an das gekoppelte Haushaltsbuch (`budget.php`).\n"
+                . "- **🛠️ Ehrenamts-Arbeitsstunden, Inventar/Schlüssel & 6 Vorstandsrollen:** Verteile Aufgaben gezielt auf *1. Vorsitzenden, Schriftführer, Kassenwart, Mitgliederwart, Gerätewart* und *Kassenprüfer*.",
+            'actions'  => [
+                ['label' => '🏛️ Vereinsverwaltung öffnen', 'url' => 'club.php'],
+            ],
+            'followups' => [
+                $pack['q_events'],
+                $pack['q_storage'],
+            ],
+        ],
+        [
             'id'       => 'pdf_tools_scan',
             'title'    => 'PDF-Werkzeugkasten & Kamera-Dokumentenscanner',
             'icon'     => '📄',

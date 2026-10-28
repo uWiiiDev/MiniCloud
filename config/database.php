@@ -960,6 +960,88 @@ function ensureSchemaUpdated(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    // Foto-Alben & Medien-Galerie (gallery_albums, gallery_album_items)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `gallery_albums` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(180) NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            `cover_file_id` INT UNSIGNED DEFAULT NULL,
+            `event_date` DATE DEFAULT NULL,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `share_token` VARCHAR(64) DEFAULT NULL,
+            `password_hash` VARCHAR(255) DEFAULT NULL,
+            `allow_guest_upload` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `idx_ga_token` (`share_token`),
+            KEY `idx_ga_user` (`user_id`),
+            KEY `idx_ga_group` (`group_id`),
+            KEY `idx_ga_shared` (`shared_user_id`),
+            CONSTRAINT `fk_ga_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `gallery_album_items` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `album_id` INT UNSIGNED NOT NULL,
+            `file_id` INT UNSIGNED NOT NULL,
+            `caption` VARCHAR(255) NOT NULL DEFAULT '',
+            `added_by_name` VARCHAR(100) NOT NULL DEFAULT '',
+            `sort_order` INT NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `idx_gai_unique` (`album_id`, `file_id`),
+            KEY `idx_gai_file` (`file_id`),
+            CONSTRAINT `fk_gai_album` FOREIGN KEY (`album_id`) REFERENCES `gallery_albums` (`id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_gai_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    // Online-Formulare & Veranstaltungs-Anmeldung (forms, form_submissions)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `forms` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT UNSIGNED NOT NULL,
+            `title` VARCHAR(200) NOT NULL,
+            `description` TEXT DEFAULT NULL,
+            `category` VARCHAR(32) NOT NULL DEFAULT 'event',
+            `fields_json` MEDIUMTEXT NOT NULL,
+            `share_token` VARCHAR(64) NOT NULL,
+            `allow_guests` TINYINT(1) NOT NULL DEFAULT 1,
+            `max_submissions` INT UNSIGNED NOT NULL DEFAULT 0,
+            `closes_at` DATE DEFAULT NULL,
+            `is_closed` TINYINT(1) NOT NULL DEFAULT 0,
+            `shared_user_id` INT UNSIGNED DEFAULT NULL,
+            `group_id` INT UNSIGNED DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `idx_forms_token` (`share_token`),
+            KEY `idx_forms_user` (`user_id`),
+            KEY `idx_forms_group` (`group_id`),
+            CONSTRAINT `fk_forms_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `form_submissions` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `form_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED DEFAULT NULL,
+            `submitter_name` VARCHAR(120) NOT NULL DEFAULT '',
+            `submitter_email` VARCHAR(190) NOT NULL DEFAULT '',
+            `answers_json` MEDIUMTEXT NOT NULL,
+            `imported_to_club` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_fsub_form` (`form_id`, `created_at`),
+            CONSTRAINT `fk_fsub_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Sicherstellen, dass mindestens ein Administrator existiert
     $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM `users` WHERE `is_admin` = 1")->fetchColumn();
     if ($adminCount === 0) {

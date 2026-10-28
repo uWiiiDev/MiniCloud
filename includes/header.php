@@ -621,6 +621,32 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_gallery'] ?? '1') === '1'): ?>
+                        <a
+                            href="gallery.php"
+                            data-nav-item="gallery"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Foto-Alben &amp; Medien-Galerie"
+                        >
+                            <span>🖼️</span>
+                            <span class="hidden md:inline">Galerie</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_forms'] ?? '1') === '1'): ?>
+                        <a
+                            href="forms.php"
+                            data-nav-item="forms"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Online-Formulare &amp; Veranstaltungs-Anmeldung"
+                        >
+                            <span>📝</span>
+                            <span class="hidden md:inline">Formulare</span>
+                        </a>
+                    <?php endif; ?>
+
                     <a
                         href="trash.php"
                         data-nav-item="trash"

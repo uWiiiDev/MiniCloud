@@ -431,6 +431,21 @@ require_once __DIR__ . '/includes/header.php';
                     📄 PDF &amp; Scan
                 </a>
             <?php endif; ?>
+            <?php if (($appSettings['enable_gallery'] ?? '1') === '1'): ?>
+                <a href="gallery.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
+                    🖼️ Foto-Galerie
+                </a>
+            <?php endif; ?>
+            <?php if (($appSettings['enable_forms'] ?? '1') === '1'): ?>
+                <a href="forms.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
+                    📝 Formulare
+                </a>
+            <?php endif; ?>
+            <?php if (($appSettings['enable_club'] ?? '1') === '1'): ?>
+                <a href="club.php" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors">
+                    🏛️ Verein
+                </a>
+            <?php endif; ?>
             <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
                 <a href="messages.php" class="px-3 py-2 rounded-xl <?= $unreadChat > 0 ? 'bg-rose-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200' ?> hover:bg-brand-600 hover:text-white text-xs font-semibold transition-colors">
                     💬 Nachrichten <?= $unreadChat > 0 ? '(' . $unreadChat . ' neu)' : '' ?>

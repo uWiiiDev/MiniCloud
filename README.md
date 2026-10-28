@@ -8,7 +8,7 @@
 
 ---
 
-## ✨ Complete Feature Suite (20 Integrated Modules)
+## ✨ Complete Feature Suite (22 Integrated Modules)
 
 ### 1. 📁 File Manager, AES-256 Vault, ZIP Inspector & Smart Sharing (`index.php`, `vault_action.php`, `share.php`)
 - **Direct Folder Drag & Drop, `Ctrl+V` Clipboard Upload & Action Toolbar:** Drop files or entire folder hierarchies directly onto any subfolder row or onto the page. Paste screenshots straight from your clipboard via `Ctrl+V`.
@@ -52,22 +52,32 @@
 - **📊 Club Statistics & Analytics:** Visual age distribution (7 age brackets + average/min/max age), department sizes, status & fee-tier breakdown, 5-year join/leave balance, and automatic member birthday & jubilee/anniversary lists (5, 10, 25, 40, 50+ years).
 - **📤 Multi-Source Member Import:** Import members via CSV/Excel upload (auto-detects `;`/`,`/tab delimiters, German `Windows-1252` encoding, and `DD.MM.YYYY` dates), direct spreadsheet Copy & Paste (`Ctrl+V`), or 1-click sync from Cloud Contacts (`contacts.php`).
 
-### 10. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
+### 10. 🖼️ Photo Albums & Media Gallery (`gallery.php`)
+- **Chronological Photo Wall & Virtual Albums:** Browse all non-encrypted images across your personal folders and shared group folders, and organize them into virtual albums (`gallery_albums` & `gallery_album_items`) without duplicating physical disk usage.
+- **Fullscreen Lightbox, Auto-Slideshow & Local EXIF Inspector:** View photos in fullscreen with zoom, keyboard navigation, configurable automatic slideshow (3s / 5s / 8s), and 100% local PHP EXIF metadata inspection (date taken, camera model, aperture, exposure time, ISO, focal length, resolution).
+- **📱 Public Guest Links, Local SVG QR Code & Party/Club Collection Albums:** Share albums via QR code (optionally password-protected) and optionally enable **📸 Guest Photo Upload (`allow_guest_upload`)** so event guests can upload photos directly from their smartphones into your shared album.
+
+### 11. 📝 Online Forms, Event Registration & Membership Applications (`forms.php`)
+- **Self-Hosted Form Builder (GDPR-Compliant Google/Microsoft Forms Alternative):** Create custom forms with text, multiline, dropdown, checkbox, number, date, and email fields, optional capacity limits (`max_submissions`), and registration deadlines (`closes_at`).
+- **4 One-Click Starter Templates:** *🎉 Event / Club Festival Registration*, *🤝 Volunteer & Shift Sign-Up List*, *🏛️ Online Club Membership Application*, and *💬 Feedback & Survey Form*.
+- **📱 Guest QR Code Participation, CSV Cloud Export & 1-Click Club Import:** Share forms with external guests via link or locally generated SVG QR code (`forms.php?token=...`), export responses to CSV or directly to your cloud (`Formulare/`), and import submitted membership applications into **Club Management (`club.php`)** with a single click!
+
+### 12. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
 - Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
 
-### 11. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
+### 13. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 100% offline-capable HTML5 games with cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
   - **Solo Classics:** *2048 Cloud*, *Sudoku (4 difficulty levels + pencil notes)*, *Memory*, *Snake Retro*, *Block Fall (Tetris)*, *Minesweeper*, and *Solitaire (Klondike)*.
   - **👥 Live Multiplayer & AI Duels:** *Chess (with full move validation & AI)*, *Connect Four*, *Battleship*, and *Tic-Tac-Toe*.
 
-### 12. 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
+### 14. 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
 - **Polls & Date Finder (`polls.php`):** Self-hosted Doodle alternative with guest voting links and 1-click calendar transfer.
 - **Live Mentimeter (`menti.php`):** Real-time audience voting via QR code & 6-digit PIN (Word Cloud, Bar Chart, Scale, Q&A with Upvoting, Live Quiz Leaderboard).
 - **PDF Toolbox & Document Scanner (`pdf_tools.php`):** Camera/photo-to-PDF scanner with high-contrast B/W filter, PDF Merge, Split, Compression, and **irreversible GDPR Pixel Redaction (`⬛`)**.
 - **Password Keychain (`passwords.php`):** Server-side AES-256-GCM encrypted password vault with password generator, age warnings, and team sharing.
 - **Smart Help Assistant (`assistant.php`):** Instant offline Q&A assistant answering questions about all MiniCloud features in **11 languages**.
 
-### 13. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
+### 15. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
 - **Account Lockout (`🔒 Lock / 🔓 Unlock`):** Immediately lock compromised or inactive user accounts (with an optional lock reason). Locked users are blocked in real time across web sessions, login, password reset, `.ics`/`.vcf` feeds, and WebDAV/CardDAV/CalDAV.
 - **🛡️ Delegated Partial Admin Permissions (`admin_permissions`):** Grant trusted non-admin users granular access to specific admin tabs (*👥 Users & Groups*, *🧩 Modules & Registration*, *🎨 Branding & Imprint*, *✉️ Email & SMTP*, or *🔄 Updates, Backup & System*) without granting full root administrator rights.
 - **1-Click GitHub Updater & Instant Rollback Snapshots:** Update directly from GitHub while preserving `uploads/` and `config/database.php`, with automatic local `.zip` snapshots (`uploads/.system_backups/`) for 1-click rollback.

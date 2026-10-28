@@ -1407,6 +1407,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableMindmap   = isset($_POST['enable_mindmap']) && $_POST['enable_mindmap'] === '1' ? '1' : '0';
         $enableBudget    = isset($_POST['enable_budget']) && $_POST['enable_budget'] === '1' ? '1' : '0';
         $enableClub      = isset($_POST['enable_club']) && $_POST['enable_club'] === '1' ? '1' : '0';
+        $enableGallery   = isset($_POST['enable_gallery']) && $_POST['enable_gallery'] === '1' ? '1' : '0';
+        $enableForms     = isset($_POST['enable_forms']) && $_POST['enable_forms'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1427,6 +1429,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_mindmap', $enableMindmap);
         saveAppSetting($pdo, 'enable_budget', $enableBudget);
         saveAppSetting($pdo, 'enable_club', $enableClub);
+        saveAppSetting($pdo, 'enable_gallery', $enableGallery);
+        saveAppSetting($pdo, 'enable_forms', $enableForms);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -3327,6 +3331,78 @@ foreach ($modList as $mItem) {
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="club.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🏛️ Vereinsverwaltung öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 20: Foto-Alben & Medien-Galerie -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🖼️ Foto-Alben &amp; Medien-Galerie
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_gallery'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_gallery'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_gallery"
+                                value="1"
+                                <?= ($currentSettings['enable_gallery'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Foto-Alben &amp; Medien-Galerie (<code>gallery.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Chronologische Fotowand aller Cloud-Bilder, virtuelle Foto-Alben ohne doppelten Speicherverbrauch, Vollbild-Diashow mit Tastatursteuerung, lokaler EXIF-Metadaten-Inspektor und öffentliche Gäste-Sammelalben per QR-Code.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_gallery'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="gallery.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🖼️ Foto-Galerie öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 21: Online-Formulare & Veranstaltungs-Anmeldung -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📝 Online-Formulare &amp; Anmeldung
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_forms'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_forms'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_forms"
+                                value="1"
+                                <?= ($currentSettings['enable_forms'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Online-Formulare &amp; Anmeldung (<code>forms.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    DSGVO-konformer Formular-Baukasten mit 4 Vorlagen (<em>Event-Anmeldung, Helfer-/Schichtliste, Online-Mitgliedsantrag, Feedback-Bogen</em>), Kapazitätslimit, Gäste-QR-Code, CSV-Cloud-Ablage und 1-Klick-Übernahme in <code>club.php</code>.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_forms'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="forms.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                📝 Online-Formulare öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>
