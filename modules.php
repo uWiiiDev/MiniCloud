@@ -265,6 +265,18 @@ $allModules = [
         'badgeCls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300',
     ],
     [
+        'key'      => 'music',
+        'enabled'  => ($appSettings['enable_music'] ?? '1') === '1',
+        'title'    => 'Musik- & Hörbuch-Studio',
+        'icon'     => '🎵',
+        'url'      => 'music.php',
+        'category' => 'extra',
+        'catLabel' => 'Sicherheit, KI & Freizeit',
+        'desc'     => 'MP3/Audio-Player & Hörbuch-Bibliothek mit ID3-Tags, Cover-Erkennung, Frequenz-Visualizer, Equalizer, Hörbuch-Lesezeichen & teilbaren Playlists.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300',
+    ],
+    [
         'key'      => 'games',
         'enabled'  => ($appSettings['enable_games'] ?? '1') === '1',
         'title'    => 'Spiele-Zentrale',

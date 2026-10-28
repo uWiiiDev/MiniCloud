@@ -687,6 +687,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_club'                   => '1',
         'enable_gallery'                => '1',
         'enable_forms'                  => '1',
+        'enable_music'                  => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3028,6 +3029,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_forms',
             'color'       => 'bg-teal-600',
         ],
+        'music' => [
+            'icon'        => '🎵',
+            'label'       => 'Musik-, Podcast- & Hörbuch-Studio',
+            'url'         => 'music.php',
+            'setting_key' => 'enable_music',
+            'color'       => 'bg-rose-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3047,7 +3055,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite'], true)) {
         return null;
     }
 
@@ -3073,6 +3081,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'club.php'      => 'club',
         'gallery.php'   => 'gallery',
         'forms.php'     => 'forms',
+        'music.php'     => 'music',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };

@@ -1623,6 +1623,12 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4">Bis zur Einzellöschung einer Rückmeldung, Löschung des Formulars oder Kontolöschung</td>
                     </tr>
                     <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">music_playlists, music_playlist_items &amp; music_track_meta</td>
+                        <td class="py-3 px-4"><code>title, description, shared_user_id, share_token</code> / <code>playlist_id, file_id, sort_order</code> / <code>file_id, title_tag, artist_tag, album_tag, duration_sec, cover_data_uri, is_favorite, last_position_sec, play_count</code></td>
+                        <td class="py-3 px-4">Musik-, Podcast- &amp; Hörbuch-Studio (<code>music.php</code>): Virtuelle Playlists (inkl. interner Freigabe &amp; öffentlichem Link), lokaler ID3-Tag- &amp; Cover-Cache sowie persönlicher Hörbuch-Positionsmerker (<code>last_position_sec</code>)</td>
+                        <td class="py-3 px-4">Bis zum Löschen der Playlist / Audiodatei oder Kontolöschung</td>
+                    </tr>
+                    <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">game_scores, game_saves &amp; game_matches</td>
                         <td class="py-3 px-4"><code>user_id, game_key, score, duration_sec</code> / <code>state_json</code> / <code>game_type, player1_id, player2_id, board_json, winner_id</code></td>
                         <td class="py-3 px-4">Highscore-Bestenlisten, gespeicherte Einzelspieler-Spielstände und Live-Mehrspieler-Duelle in der Spiele-Zentrale (<code>games.php</code>)</td>

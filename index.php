@@ -2980,6 +2980,12 @@ async function renderPreviewItem(index) {
                 <audio controls autoplay class="w-full">
                     <source src="${item.inlineUrl}">
                 </audio>
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <a href="music.php?play=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                        <span>🎵</span>
+                        <span>Im Musik- &amp; Hörbuch-Studio öffnen</span>
+                    </a>
+                </div>
             </div>
         `;
     } else if (isZipPreviewable(item)) {

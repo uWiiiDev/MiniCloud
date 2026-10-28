@@ -73,7 +73,13 @@
 ### 12. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
 - Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
 
-### 13. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
+### 13. 🎵 Music, Podcast & Audiobook Studio (`music.php`)
+- **Automatic Cloud Audio Library & Local ID3/Cover Parser:** Automatically discovers all non-encrypted audio files (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) across your personal folders and shared folders without duplicating storage, and extracts **ID3v2/v1 tags (Title, Artist, Album, Year, Duration) + embedded Album Cover art (`APIC`)** 100% locally in PHP.
+- **HTTP `206 Partial Content` Range Streaming, Frequency Visualizer & 4-Band Sound Presets:** Instant seeking across large MP3s/audiobooks, live Web Audio API frequency spectrum visualizer, and 4 sound presets (*🎧 Studio Neutral*, *🔊 Bass Boost*, *🎙️ Voice / Audiobook*, *🎸 Brilliance / Pop*).
+- **🔖 Audiobook Position Memory, Sleep Timer & Lock-Screen MediaSession:** Automatically remembers your playback position (`last_position_sec`) for long tracks, offers `-15s`/`+15s` skip buttons, variable speed (`0.75×`–`2.0×`), a Sleep Timer (`🌙 15/30/45/60 min`), and smartphone lock-screen / Bluetooth car audio integration (`navigator.mediaSession`).
+- **📋 Shareable Playlists:** Create custom playlists, upload new audio files directly into `Musik/`, and share playlists with other Cloud users or externally via public link and local SVG QR code.
+
+### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 100% offline-capable HTML5 games with cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
   - **Solo Classics:** *2048 Cloud*, *Sudoku (4 difficulty levels + pencil notes)*, *Memory*, *Snake Retro*, *Block Fall (Tetris)*, *Minesweeper*, and *Solitaire (Klondike)*.
   - **👥 Live Multiplayer & AI Duels:** *Chess (with full move validation & AI)*, *Connect Four*, *Battleship*, and *Tic-Tac-Toe*.
