@@ -1165,6 +1165,27 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
         ],
         [
+            'id'       => 'games_module',
+            'title'    => 'Browserspiele, Cloud-Bestenlisten & Live-Duelle',
+            'icon'     => '🎮',
+            'keywords' => [
+                'spiel', 'spiele', 'spielen', 'browserspiele', 'pausenraum', '2048', 'sudoku', 'minesweeper', 'wordle', 'wort des tages', 'memory', 'tetris', 'block puzzle', 'snake', 'breakout', 'brick breaker', 'vier gewinnt', 'tic tac toe', 'highscore', 'bestenliste', 'duell',
+                'game', 'games', 'play', 'leaderboard', 'jeux', 'juegos', 'giochi', 'spellen', 'gry', 'jogos', 'hry', 'oyun', 'oyunlar', 'ігри', 'грати',
+            ],
+            'answer'   => "In der **🎮 Spiele-Zentrale** (`games.php`) erwarten dich **9 werbefreie Browserspiele** direkt in deiner Cloud:\n\n"
+                . "- **🧩 Denk- & Logikspiele:** **🔢 2048**, **🧠 Cloud-Sudoku** (mit Notiz-Modus & Spielstand-Sync), **💣 Minesweeper**, **🔤 Wort des Tages** (tägliches Cloud-Wordle für alle Mitglieder) und **🃏 Memory**.\n"
+                . "- **👾 Arcade-Klassiker:** **🧱 Block-Puzzle (Tetris)**, **🐍 Retro-Snake** und **🏓 Brick Breaker (Breakout)**.\n"
+                . "- **⚔️ Live-Duelle & KI:** Spiele **🔴🟡 Vier Gewinnt** oder **❌⭕ Tic-Tac-Toe** entweder sofort gegen die Computer-KI oder fordere andere Cloud-Benutzer zum Live-Duell heraus!\n"
+                . "- **🏆 Cloud-Bestenlisten:** Vergleiche deine Highscores (*Heute / 30 Tage / Gesamt*) mit allen Mitgliedern deiner Cloud.",
+            'actions'  => [
+                ['label' => '🎮 Spiele-Zentrale öffnen', 'url' => 'games.php'],
+            ],
+            'followups' => [
+                $pack['q_ebooks'],
+                $pack['q_storage'],
+            ],
+        ],
+        [
             'id'       => 'pdf_tools_scan',
             'title'    => 'PDF-Werkzeugkasten & Kamera-Dokumentenscanner',
             'icon'     => '📄',

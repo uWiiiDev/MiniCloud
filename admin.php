@@ -1238,6 +1238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableOffice    = isset($_POST['enable_office']) && $_POST['enable_office'] === '1' ? '1' : '0';
         $enableAssistant = isset($_POST['enable_assistant']) && $_POST['enable_assistant'] === '1' ? '1' : '0';
         $enableEbooks    = isset($_POST['enable_ebooks']) && $_POST['enable_ebooks'] === '1' ? '1' : '0';
+        $enableGames     = isset($_POST['enable_games']) && $_POST['enable_games'] === '1' ? '1' : '0';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1254,6 +1255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_office', $enableOffice);
         saveAppSetting($pdo, 'enable_assistant', $enableAssistant);
         saveAppSetting($pdo, 'enable_ebooks', $enableEbooks);
+        saveAppSetting($pdo, 'enable_games', $enableGames);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -2844,6 +2846,42 @@ foreach ($modList as $mItem) {
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="ebooks.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 📚 E-Book-Bibliothek öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 16: Browserspiele & Pausenraum -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🎮 Browserspiele &amp; Pausenraum
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_games'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_games'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_games"
+                                value="1"
+                                <?= ($currentSettings['enable_games'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Spiele-Zentrale &amp; Cloud-Highscores (<code>games.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    9 werbefreie Browserspiele (<em>2048, Sudoku, Minesweeper, Wort des Tages, Memory, Block-Puzzle, Snake, Brick Breaker</em> sowie <em>Vier Gewinnt &amp; Tic-Tac-Toe</em> gegen KI oder andere Cloud-Mitglieder) inkl. Highscore-Ranglisten.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_games'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="games.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🎮 Spiele-Zentrale öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

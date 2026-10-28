@@ -508,6 +508,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_games'] ?? '1') === '1'): ?>
+                        <a
+                            href="games.php"
+                            data-nav-item="games"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Browserspiele &amp; Pausenraum"
+                        >
+                            <span>🎮</span>
+                            <span class="hidden md:inline">Spiele</span>
+                        </a>
+                    <?php endif; ?>
+
                     <a
                         href="trash.php"
                         data-nav-item="trash"
@@ -718,6 +731,17 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             </div>
                             <?php endif; ?>
 
+                            <?php if (($appSettings['enable_games'] ?? '1') === '1'): ?>
+                            <div data-launcher-item="games" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
+                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
+                                <a href="games.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <span class="text-lg">🎮</span>
+                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Spiele</span>
+                                </a>
+                                <button type="button" data-nav-star="games" onclick="toggleHeaderNavFavorite('games', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
+                            </div>
+                            <?php endif; ?>
+
                             <div data-launcher-item="trash" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
                                 <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
                                 <a href="trash.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -823,7 +847,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'office', 'ebooks', 'assistant', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'pdf_tools', 'trash'];
+                    const defaultOrder  = ['files', 'office', 'ebooks', 'games', 'assistant', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'pdf_tools', 'trash'];
 
                     function getPinnedNav() {
                         try {

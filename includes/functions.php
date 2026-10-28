@@ -733,6 +733,7 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_office'                 => '1',
         'enable_assistant'              => '1',
         'enable_ebooks'                 => '1',
+        'enable_games'                  => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3031,6 +3032,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_ebooks',
             'color'       => 'bg-amber-600',
         ],
+        'games' => [
+            'icon'        => '🎮',
+            'label'       => 'Browserspiele & Pausenraum',
+            'url'         => 'games.php',
+            'setting_key' => 'enable_games',
+            'color'       => 'bg-fuchsia-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3049,8 +3057,8 @@ function detectCurrentModuleKeyForStats(): ?string
     $script = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
-    $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'heartbeat', 'poll_state', 'live_status'], true)) {
+    $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
+    if (in_array($ajaxAction, ['unread_count', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state'], true)) {
         return null;
     }
 
@@ -3070,6 +3078,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'menti.php'     => 'menti',
         'assistant.php' => 'assistant',
         'ebooks.php'    => 'ebooks',
+        'games.php'     => 'games',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3193,6 +3202,9 @@ function getModuleInventorySummary(PDO $pdo): array
            AND LOWER(SUBSTRING_INDEX(`original_name`, '.', -1)) = 'epub'"
     );
     $summary['ebooks'] = $epubCount . ' E-' . ($epubCount === 1 ? 'Book (.epub)' : 'Books (.epub)');
+
+    $gameScoreCount = $safeCount("SELECT COUNT(*) FROM `game_scores`");
+    $summary['games'] = $gameScoreCount . ' Highscore-' . ($gameScoreCount === 1 ? 'Runde' : 'Runden');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
