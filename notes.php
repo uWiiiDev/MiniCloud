@@ -248,6 +248,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
+            if (function_exists('finfo_open')) {
+                $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+                $realMime = $finfo ? (string)finfo_file($finfo, $tmpPath) : '';
+                if ($finfo) {
+                    finfo_close($finfo);
+                }
+                if ($realMime !== '' && !str_starts_with($realMime, 'audio/') && !in_array($realMime, ['video/webm', 'video/mp4', 'video/ogg', 'application/ogg', 'application/octet-stream'], true)) {
+                    setFlash('error', 'Ungültiges Audioformat für die Sprachnotiz.');
+                    header('Location: notes.php');
+                    exit;
+                }
+            }
+
             $stats = getUserStorageStats($pdo, $userId);
             if (($stats['used'] + $fileSize) > $stats['quota']) {
                 setFlash('error', 'Nicht genügend freier Cloud-Speicherplatz für die Sprachnotiz.');
@@ -662,7 +675,7 @@ require_once __DIR__ . '/includes/header.php';
                 'audio_dur'     => $audioDur,
                 'audio_url'     => $hasAudio ? ('notes.php?stream_audio=' . $nid) : '',
                 'share_target'  => !empty($note['shared_user_id']) ? 'user:' . (int)$note['shared_user_id'] : '',
-            ], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+            ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8');
         ?>
             <div class="note-card"
                  data-search="<?= e($searchBlob) ?>"

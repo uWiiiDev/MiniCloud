@@ -1069,16 +1069,16 @@ function getLocalizedKbTranslation(string $id, string $lang, string $appTitle): 
             'uk' => ['🎮 Браузерні ігри та живі дуелі', "У **🎮 Іграх** (`games.php`) доступні 9 ігор без реклами (*2048, Судоку, Сапер, Слово дня, Меморі, Блок-пазл, Змійка, Арканоїд, Чотири в ряд і Хрестики-нулики*) з таблицями рекордів."],
         ],
         'music_player' => [
-            'en' => ['🎵 Music, Podcast & Audiobook Studio (`music.php`)', "With the **🎵 Music & Audiobook Studio** (`music.php`) you can stream all audio files (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) directly from your cloud:\n\n- **💿 Local ID3 Tag & Cover Art Parser:** Automatically extracts Title, Artist, Album, Year, Duration, and embedded Album Cover art (`APIC`).\n- **📊 Live Frequency Visualizer & Equalizer:** Animated Web Audio API spectrum bars plus 4 sound presets (*🎧 Studio Neutral, 🔊 Bass Boost, 🎙️ Voice / Audiobook, 🎸 Brilliance / Pop*).\n- **🔖 Audiobook Resume & Sleep Timer:** Automatically remembers your playback position (`last_position_sec`), offers `-15s`/`+15s` skip buttons, playback speed (`0.75×`–`2.0×`), Sleep Timer (`🌙 15–60 min`), and **📱 Smartphone Lock-Screen / Car Bluetooth controls**.\n- **📋 Shareable Playlists:** Group tracks into playlists and share them with Cloud users or via public link + QR code!"],
-            'fr' => ['🎵 Studio Musique, Podcast & Livre Audio (`music.php`)', "Le **🎵 Studio Musique & Livre Audio** (`music.php`) lit tous vos fichiers audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) avec lecture des tags ID3 & pochettes d'album, égaliseur 4 profils, reprise automatique des livres audio, minuteur de veille (`🌙`) et playlists partageables."],
-            'es' => ['🎵 Estudio de Música, Podcasts y Audiolibros (`music.php`)', "El **🎵 Estudio de Música y Audiolibros** (`music.php`) reproduce todos tus archivos de audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) con etiquetas ID3 y carátulas, visualizador de frecuencias, ecualizador, memoria de posición para audiolibros, temporizador de sueño (`🌙`) y listas de reproducción compartibles."],
-            'it' => ['🎵 Studio Musica, Podcast & Audiolibri (`music.php`)', "Lo **🎵 Studio Musica & Audiolibri** (`music.php`) riproduce tutti i file audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) con tag ID3 e copertine, visualizzatore di spettro, equalizzatore, segnalibro automatico per audiolibri, sleep timer (`🌙`) e playlist condivisibili."],
-            'nl' => ['🎵 Muziek-, Podcast- & Luisterboekstudio (`music.php`)', "Met de **🎵 Muziek- & Luisterboekstudio** (`music.php`) speel je alle audiobestanden (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) af met ID3-tags en albumhoezen, equalizer, automatische hervatting voor luisterboeken, slaaptimer (`🌙`) en deelbare afspeellijsten."],
-            'pl' => ['🎵 Studio Muzyki, Podcastów i Audiobooków (`music.php`)', "**🎵 Studio Muzyki i Audiobooków** (`music.php`) odtwarza pliki audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) z tagami ID3 i okładkami, korektorem dźwięku, zapamiętywaniem pozycji audiobooków, wyłącznikiem czasowym (`🌙`) i udostępnianiem playlist."],
-            'pt' => ['🎵 Estúdio de Música, Podcasts e Audiolivros (`music.php`)', "O **🎵 Estúdio de Música e Audiolivros** (`music.php`) reproduz ficheiros de áudio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) com tags ID3 e capas, equalizador, memória de posição para audiolivros, temporizador (`🌙`) e playlists partilháveis."],
-            'cs' => ['🎵 Studio hudby, podcastů a audioknih (`music.php`)', "**🎵 Studio hudby a audioknih** (`music.php`) přehrává zvukové soubory (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) s ID3 tagy a obaly alb, ekvalizérem, pamětí pozice audioknih, časovačem vypnutí (`🌙`) a sdílenými playlisty."],
-            'tr' => ['🎵 Müzik, Podcast ve Sesli Kitap Stüdyosu (`music.php`)', "**🎵 Müzik ve Sesli Kitap Stüdyosu** (`music.php`) buluttaki tüm ses dosyalarını (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) ID3 etiketleri, albüm kapakları, ekolayzır, sesli kitap kaldığı yerden devam etme, uyku zamanlayıcısı (`🌙`) ve paylaşılabilir çalma listeleriyle oynatır."],
-            'uk' => ['🎵 Студія музики, подкастів та аудіокниг (`music.php`)', "**🎵 Студія музики та аудіокниг** (`music.php`) відтворює аудіофайли (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) з ID3-тегами та обкладинками, еквалайзером, запам'ятовуванням позиції аудіокниг, таймером сну (`🌙`) та спільними плейлистами."],
+            'en' => ['🎵 Music, Podcast & Audiobook Studio (`music.php`)', "With the **🎵 Music & Audiobook Studio** (`music.php`) you can stream all audio files (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) directly from your cloud:\n\n- **📖 1-Click Audiobook Mode & `1 → 99` Chapter Sorting:** Automatically recognizes track/disc tags (`TRCK`/`TPOS`) and filename chapter numbers (`Kapitel 2` before `Kapitel 10`, `CD 1/2`), activates the *🎙️ Voice / Audiobook* equalizer, disables shuffle, and shows a resume banner for your last audiobook.\n- **💿 Local ID3 Tag & Cover Art Parser:** Automatically extracts Title, Artist, Album, Year, Duration, and embedded Album Cover art (`APIC`).\n- **📊 Live Frequency Visualizer & Equalizer:** Animated Web Audio API spectrum bars plus 4 sound presets (*🎧 Studio Neutral, 🔊 Bass Boost, 🎙️ Voice / Audiobook, 🎸 Brilliance / Pop*).\n- **🔖 Audiobook Resume & Sleep Timer:** Automatically remembers your playback position (`last_position_sec`), offers `-15s`/`+15s` skip buttons, playback speed (`0.75×`–`2.0×`), Sleep Timer (`🌙 15–60 min`), and **📱 Smartphone Lock-Screen / Car Bluetooth controls**.\n- **📋 Shareable Playlists:** Group tracks into playlists and share them with Cloud users or via public link + QR code!"],
+            'fr' => ['🎵 Studio Musique, Podcast & Livre Audio (`music.php`)', "Le **🎵 Studio Musique & Livre Audio** (`music.php`) lit tous vos fichiers audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) avec **📖 Mode Livre Audio 1-clic & tri automatique des chapitres (`1 → 99`)**, lecture des tags ID3 & pochettes d'album, égaliseur 4 profils, reprise automatique des livres audio, minuteur de veille (`🌙`) et playlists partageables."],
+            'es' => ['🎵 Estudio de Música, Podcasts y Audiolibros (`music.php`)', "El **🎵 Estudio de Música y Audiolibros** (`music.php`) reproduce todos tus archivos de audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) con **📖 Modo Audiolibro y ordenación natural de capítulos (`1 → 99`)**, etiquetas ID3 y carátulas, visualizador de frecuencias, ecualizador, memoria de posición, temporizador de sueño (`🌙`) y listas de reproducción compartibles."],
+            'it' => ['🎵 Studio Musica, Podcast & Audiolibri (`music.php`)', "Lo **🎵 Studio Musica & Audiolibri** (`music.php`) riproduce tutti i file audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) con **📖 Modalità Audiolibro e ordinamento capitoli (`1 → 99`)**, tag ID3 e copertine, visualizzatore di spettro, equalizzatore, segnalibro automatico, sleep timer (`🌙`) e playlist condivisibili."],
+            'nl' => ['🎵 Muziek-, Podcast- & Luisterboekstudio (`music.php`)', "Met de **🎵 Muziek- & Luisterboekstudio** (`music.php`) speel je alle audiobestanden (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) af met **📖 1-klik Luisterboekmodus & hoofdstuksortering (`1 → 99`)**, ID3-tags en albumhoezen, equalizer, automatische hervatting, slaaptimer (`🌙`) en deelbare afspeellijsten."],
+            'pl' => ['🎵 Studio Muzyki, Podcastów i Audiobooków (`music.php`)', "**🎵 Studio Muzyki i Audiobooków** (`music.php`) odtwarza pliki audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) z **📖 Trybem Audiobooka i sortowaniem rozdziałów (`1 → 99`)**, tagami ID3 i okładkami, korektorem dźwięku, zapamiętywaniem pozycji, wyłącznikiem czasowym (`🌙`) i udostępnianiem playlist."],
+            'pt' => ['🎵 Estúdio de Música, Podcasts e Audiolivros (`music.php`)', "O **🎵 Estúdio de Música e Audiolivros** (`music.php`) reproduz ficheiros de áudio (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) com **📖 Modo Audiolivro e ordenação de capítulos (`1 → 99`)**, tags ID3 e capas, equalizador, memória de posição, temporizador (`🌙`) e playlists partilháveis."],
+            'cs' => ['🎵 Studio hudby, podcastů a audioknih (`music.php`)', "**🎵 Studio hudby a audioknih** (`music.php`) přehrává zvukové soubory (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) s **📖 Režimem audioknihy a řazením kapitol (`1 → 99`)**, ID3 tagy a obaly alb, ekvalizérem, pamětí pozice, časovačem vypnutí (`🌙`) a sdílenými playlisty."],
+            'tr' => ['🎵 Müzik, Podcast ve Sesli Kitap Stüdyosu (`music.php`)', "**🎵 Müzik ve Sesli Kitap Stüdyosu** (`music.php`) buluttaki tüm ses dosyalarını (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) **📖 Sesli Kitap Modu ve bölüm sıralaması (`1 → 99`)**, ID3 etiketleri, albüm kapakları, ekolayzır, kaldığı yerden devam etme, uyku zamanlayıcısı (`🌙`) ve paylaşılabilir çalma listeleriyle oynatır."],
+            'uk' => ['🎵 Студія музики, подкастів та аудіокниг (`music.php`)', "**🎵 Студія музики та аудіокниг** (`music.php`) відтворює аудіофайли (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`) з **📖 Режимом аудіокниги та сортуванням розділів (`1 → 99`)**, ID3-тегами та обкладинками, еквалайзером, запам'ятовуванням позиції, таймером сну (`🌙`) та спільними плейлистами."],
         ],
     ];
 
@@ -1525,15 +1525,16 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'notes_pinboard',
-            'title'    => 'Notizwand & Pinboard (Haftnotizen)',
+            'title'    => 'Notizwand, Sprachnotizen & Diktierfunktion (Haftnotizen)',
             'icon'     => '📌',
             'keywords' => [
-                'notiz', 'notizen', 'haftnotiz', 'pinboard', 'pinnwand', 'tag', 'hashtag', 'anpinnen', 'markdown export',
-                'notes', 'sticky note', 'notas', 'notities', 'notatki', 'poznamky', 'notlar', 'нотатки',
+                'notiz', 'notizen', 'haftnotiz', 'pinboard', 'pinnwand', 'tag', 'hashtag', 'anpinnen', 'markdown export', 'sprachnotiz', 'sprachnotizen', 'sprachaufnahme', 'diktieren', 'diktat', 'mikrofon',
+                'notes', 'sticky note', 'voice note', 'dictation', 'notas', 'notities', 'notatki', 'poznamky', 'notlar', 'нотатки',
             ],
-            'answer'   => "Auf der **📌 Notizwand** (`notes.php`) hältst du Ideen, Checklisten und Infos auf farbigen Haftnotizen fest:\n\n"
-                . "- Nutze **`#Tags`** zur schnellen Filterung, pinne wichtige Notizen oben an (erscheinen dann auch in **🏠 Mein Tag**) und teile Notizen mit Benutzern oder Gruppen.\n"
-                . "- Mit einem Klick exportierst du jede Notiz als `.md`-Datei in deine Cloud.\n"
+            'answer'   => "Auf der **📌 Notizwand** (`notes.php`) hältst du Ideen, Checklisten und Sprachmemos auf farbigen Haftnotizen fest:\n\n"
+                . "- **🎙️ Sprachnotizen per Mikrofon:** Nimm im Notiz-Dialog direkt per Mikrofon eine Sprachnotiz auf (inkl. Live-Pegelanzeige) oder hänge eine Audiodatei an. Die Aufnahme wird in `Notizen/Sprachnotizen/` gespeichert und lässt sich direkt auf der Notizkarte mit Tempo-Wahl (`1×` bis `2×`) abspielen.\n"
+                . "- **🗣️ Sprache-zu-Text-Diktierfunktion:** Klicke auf **„🗣️ Text diktieren“**, um gesprochene Sätze live in das Textfeld schreiben zu lassen.\n"
+                . "- **🏷️ `#Tags`, Anpinnen & Teilen:** Filtere nach `#Tags` oder über den Schnellfilter **„🎙️ Sprachnotizen“**, pinne wichtige Notizen oben an (erscheinen auch in **🏠 Mein Tag**), teile sie mit Benutzern und exportiere jede Notiz als `.md`-Datei.\n"
                 . "- 💡 **Schnellbefehl hier im Chat:** Schreibe mir einfach `Notiz: WLAN-Gastpasswort` (bzw. `Note: ...`) und ich erstelle die Haftnotiz sofort für dich!",
             'actions'  => [
                 ['label' => $pack['act_notes'], 'url' => 'notes.php'],
@@ -1704,19 +1705,21 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'music_player',
-            'title'    => 'Musik-, Podcast- & Hörbuch-Studio (MP3-Player)',
+            'title'    => 'Musik-, Podcast- & Hörbuch-Studio (MP3-Player & Hörbuch-Modus)',
             'icon'     => '🎵',
             'keywords' => [
-                'musik', 'mp3', 'audio', 'player', 'musikplayer', 'hoerbuch', 'hörbuch', 'podcast', 'playlist', 'wiedergabeliste', 'equalizer', 'id3', 'cover', 'sleep timer', 'schlummer', 'flac', 'wav', 'ogg', 'm4a',
-                'music', 'music player', 'audiobook', 'musique', 'lecteur audio', 'musica', 'reproductor', 'muziek', 'muzyka', 'hudba', 'muzik', 'музика', 'плеєр',
+                'musik', 'mp3', 'audio', 'player', 'musikplayer', 'hoerbuch', 'hörbuch', 'hoerbuchmodus', 'hörbuchmodus', 'kapitel', 'nummerierung', 'sortieren', 'reihenfolge', 'podcast', 'playlist', 'wiedergabeliste', 'equalizer', 'id3', 'cover', 'sleep timer', 'schlummer', 'flac', 'wav', 'ogg', 'm4a',
+                'music', 'music player', 'audiobook', 'chapter', 'musique', 'lecteur audio', 'musica', 'reproductor', 'muziek', 'muzyka', 'hudba', 'muzik', 'музика', 'плеєр',
             ],
             'answer'   => "Mit dem **🎵 Musik-, Podcast- & Hörbuch-Studio** (`music.php`) spielst du alle Audiodateien (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) direkt aus deiner Cloud ab:\n\n"
+                . "- **📖 1-Klick-Hörbuch-Modus & Kapitel-Sortierung (`1 → 99`):** Erkennt Track-/CD-Nummern aus ID3-Tags (`TRCK`/`TPOS`) sowie Dateinamen (`Kapitel 2` vor `Kapitel 10`, `01_Intro.mp3`, `CD 1/2`), sortiert mehrteilige Hörbücher automatisch in die richtige Reihenfolge, aktiviert das Klangprofil *🎙️ Stimme / Hörbuch* und zeigt oben ein **Hörbuch-Gedächtnis-Banner** zum Weiterhören an.\n"
                 . "- **💿 100 % lokale ID3-Tag- & Cover-Erkennung:** Liest Titel, Interpret, Album, Jahr, Spieldauer und eingebettete Album-Cover (`APIC`) automatisch aus.\n"
                 . "- **📊 Frequenz-Visualizer & 4 Sound-Presets:** Live-Frequenzbalken sowie 4 Klangprofile (*🎧 Studio Neutral, 🔊 Bass-Boost, 🎙️ Stimme / Hörbuch, 🎸 Brillanz / Pop*).\n"
                 . "- **🔖 Hörbuch-Positionsmerker & Sleep-Timer:** Merkt sich automatisch deine letzte Hörposition (`last_position_sec`), bietet `-15s`/`+15s`-Sprungtasten, Tempo-Wahl (`0.75×`–`2.0×`), **🌙 Sleep-Timer** (`15–60 Min.`) sowie **📱 Smartphone-Sperrbildschirm- & Auto-Bluetooth-Steuerung**.\n"
                 . "- **📋 Teilbare Playlists:** Erstelle eigene Wiedergabelisten und teile sie intern mit Cloud-Mitgliedern oder extern per Link & QR-Code!",
             'actions'  => [
                 ['label' => '🎵 Musik- & Hörbuch-Studio', 'url' => 'music.php'],
+                ['label' => '📖 Hörbuch-Modus starten', 'url' => 'music.php?audiobook=1&sort=chapter'],
             ],
             'followups' => [
                 $pack['q_ebooks'],

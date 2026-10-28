@@ -517,6 +517,10 @@ if (isset($_GET['stream_file'])) {
     $contentType = $mimeMap[$ext] ?? 'audio/mpeg';
     $fileSize    = (int)filesize($physicalPath);
 
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
     if (isset($_GET['download']) && $_GET['download'] === '1') {
         $safeDownloadName = str_replace(['"', "\r", "\n"], '', (string)$fileRow['original_name']);
         header('Content-Type: ' . $contentType);
@@ -599,18 +603,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
-    // Passwortgeschützte Gast-Playlist entsperren
+    // Passwortgeschützte Gast-Playlist entsperren (inkl. Brute-Force-Ratenbegrenzung)
     if ($action === 'unlock_playlist') {
         $plId = (int)($_POST['playlist_id'] ?? 0);
         $pass = (string)($_POST['playlist_password'] ?? '');
+        $clientIp = getClientIp();
+
+        if (isLoginBlocked($pdo, $clientIp)) {
+            setFlash('error', 'Zu viele Fehlversuche. Bitte warte 5 Minuten.');
+            header('Location: music.php?playlist_token=' . urlencode($playlistToken));
+            exit;
+        }
+
         $stmtP = $pdo->prepare('SELECT id, password_hash, share_token FROM music_playlists WHERE id = :id LIMIT 1');
         $stmtP->execute([':id' => $plId]);
         $plRow = $stmtP->fetch();
 
         if ($plRow && !empty($plRow['password_hash']) && password_verify($pass, (string)$plRow['password_hash'])) {
+            recordLoginAttempt($pdo, $clientIp, true);
             $_SESSION['unlocked_music_playlists'][(int)$plRow['id']] = true;
             setFlash('success', 'Playlist erfolgreich entsperrt.');
         } else {
+            recordLoginAttempt($pdo, $clientIp, false);
             setFlash('error', 'Das eingegebene Passwort ist leider falsch.');
         }
         header('Location: music.php?playlist_token=' . urlencode((string)($plRow['share_token'] ?? $playlistToken)));
@@ -619,10 +633,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
     requireLogin();
 
-    // AJAX: Favorit umschalten (❤️)
+    // AJAX: Favorit umschalten (❤️) – inkl. IDOR-Berechtigungsprüfung
     if ($action === 'toggle_favorite') {
         header('Content-Type: application/json; charset=UTF-8');
         $fid = (int)($_POST['file_id'] ?? 0);
+        $stmtF = $pdo->prepare('SELECT * FROM files WHERE id = :id LIMIT 1');
+        $stmtF->execute([':id' => $fid]);
+        $fRow = $stmtF->fetch();
+        if (!$fRow || !canPlayAudioFile($pdo, $fRow, $userId, '')) {
+            echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung']);
+            exit;
+        }
+
         $stmtCur = $pdo->prepare('SELECT is_favorite FROM music_track_meta WHERE file_id = :fid AND user_id = :uid LIMIT 1');
         $stmtCur->execute([':fid' => $fid, ':uid' => $userId]);
         $cur = (int)$stmtCur->fetchColumn();
@@ -638,28 +660,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
-    // AJAX: Hörbuch-/Wiedergabeposition & Play-Counter speichern
+    // AJAX: Hörbuch-/Wiedergabeposition & Play-Counter speichern – inkl. IDOR-Berechtigungsprüfung
     if ($action === 'save_progress') {
         header('Content-Type: application/json; charset=UTF-8');
         $fid     = (int)($_POST['file_id'] ?? 0);
-        $posSec  = max(0, (int)($_POST['position_sec'] ?? 0));
+        $posSec  = max(0, min(864000, (int)($_POST['position_sec'] ?? 0)));
         $incPlay = !empty($_POST['inc_play']) ? 1 : 0;
 
         if ($fid > 0) {
-            $pdo->prepare(
-                'INSERT INTO music_track_meta (file_id, user_id, last_position_sec, play_count)
-                 VALUES (:fid, :uid, :pos, :inc)
-                 ON DUPLICATE KEY UPDATE
-                    last_position_sec = :pos2,
-                    play_count = play_count + :inc2'
-            )->execute([
-                ':fid'  => $fid,
-                ':uid'  => $userId,
-                ':pos'  => $posSec,
-                ':inc'  => $incPlay,
-                ':pos2' => $posSec,
-                ':inc2' => $incPlay,
-            ]);
+            $stmtF = $pdo->prepare('SELECT * FROM files WHERE id = :id LIMIT 1');
+            $stmtF->execute([':id' => $fid]);
+            $fRow = $stmtF->fetch();
+            if ($fRow && canPlayAudioFile($pdo, $fRow, $userId, '')) {
+                $pdo->prepare(
+                    'INSERT INTO music_track_meta (file_id, user_id, last_position_sec, play_count)
+                     VALUES (:fid, :uid, :pos, :inc)
+                     ON DUPLICATE KEY UPDATE
+                        last_position_sec = :pos2,
+                        play_count = play_count + :inc2'
+                )->execute([
+                    ':fid'  => $fid,
+                    ':uid'  => $userId,
+                    ':pos'  => $posSec,
+                    ':inc'  => $incPlay,
+                    ':pos2' => $posSec,
+                    ':inc2' => $incPlay,
+                ]);
+            }
         }
         echo json_encode(['ok' => true]);
         exit;
@@ -696,6 +723,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
                 if (!in_array($ext, $allowedExts, true) || $fileSize <= 0 || $fileSize > MAX_FILE_SIZE) {
                     continue;
+                }
+                if (function_exists('finfo_open')) {
+                    $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+                    $realMime = $finfo ? (string)finfo_file($finfo, $tmpPath) : '';
+                    if ($finfo) {
+                        finfo_close($finfo);
+                    }
+                    if ($realMime !== '' && !str_starts_with($realMime, 'audio/') && !in_array($realMime, ['video/webm', 'video/mp4', 'video/ogg', 'application/ogg', 'application/octet-stream'], true)) {
+                        continue;
+                    }
                 }
                 if (($usedBytes + $fileSize) > $quotaBytes) {
                     setFlash('warning', 'Dein Cloud-Speicherkontingent ist ausgeschöpft.');
@@ -764,7 +801,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $playlistId       = (int)($_POST['playlist_id'] ?? 0);
         $title            = trim((string)($_POST['title'] ?? ''));
         $description      = trim((string)($_POST['description'] ?? ''));
-        $sharedUserId     = (int)($_POST['shared_user_id'] ?? 0) ?: null;
+        $candSharedUser   = (int)($_POST['shared_user_id'] ?? 0);
+        $visiblePeerIds   = array_map(static fn(array $u): int => (int)$u['id'], getVisibleUsersForUser($pdo, $userId));
+        $sharedUserId     = ($candSharedUser > 0 && in_array($candSharedUser, $visiblePeerIds, true)) ? $candSharedUser : null;
         $enablePublicLink = !empty($_POST['enable_public_link']);
         $newPassword      = trim((string)($_POST['playlist_password'] ?? ''));
         $clearPassword    = !empty($_POST['clear_password']);
@@ -796,7 +835,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if ($clearPassword) {
                 $passwordHash = null;
             } elseif ($newPassword !== '') {
-                $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+                $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 12]);
             }
 
             $pdo->prepare(
@@ -817,7 +856,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             exit;
         } else {
             $shareToken   = $enablePublicLink ? bin2hex(random_bytes(20)) : null;
-            $passwordHash = $newPassword !== '' ? password_hash($newPassword, PASSWORD_DEFAULT) : null;
+            $passwordHash = $newPassword !== '' ? password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 12]) : null;
 
             $pdo->prepare(
                 'INSERT INTO music_playlists (user_id, title, description, shared_user_id, share_token, password_hash)
