@@ -825,5 +825,206 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
     document.querySelectorAll(selector).forEach(enhanceUserSelect);
 })();
 </script>
+
+<?php
+$currentScriptForAssistant = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
+if (
+    isLoggedIn()
+    && (($footerSettings['enable_assistant'] ?? '1') === '1')
+    && $currentScriptForAssistant !== 'assistant.php'
+):
+?>
+<!-- Schwebendes Schnell-Chat-Widget: 🤖 Lokaler Cloud-Assistent -->
+<div id="mcQuickAssistantContainer" class="fixed bottom-4 right-4 z-40 flex flex-col items-end">
+    <!-- Aufklappbares Chat-Fenster -->
+    <div id="mcQuickAssistantPanel"
+         class="hidden mb-3 w-[calc(100vw-2rem)] sm:w-96 max-h-[520px] flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+        <!-- Kopfleiste -->
+        <div class="px-4 py-3 bg-gradient-to-r from-brand-600 to-indigo-600 text-white flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="text-lg">🤖</span>
+                <div class="min-w-0">
+                    <p class="text-xs font-bold truncate">Cloud-Assistent</p>
+                    <p class="text-[10px] text-white/80 truncate">100 % Lokal · Live-Suche &amp; Hilfe</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <a href="assistant.php"
+                   class="px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-semibold text-white transition-colors"
+                   title="Große Assistenten-Ansicht öffnen">
+                    Vollbild ↗
+                </a>
+                <button type="button" onclick="toggleMcQuickAssistant(false)"
+                        class="p-1 rounded-lg hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+                        aria-label="Schließen">
+                    ✕
+                </button>
+            </div>
+        </div>
+
+        <!-- Nachrichtenbereich -->
+        <div id="mcQuickAssistantMessages" class="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-[260px] max-h-[360px] bg-slate-50/60 dark:bg-slate-950/40"></div>
+
+        <!-- Eingabezeile -->
+        <form onsubmit="submitMcQuickAssistant(event)" class="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
+            <input type="text" id="mcQuickAssistantInput"
+                   placeholder="Frage stellen oder „Suche …“ / „Notiz: …“"
+                   autocomplete="off"
+                   class="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <button type="submit" id="mcQuickAssistantSendBtn"
+                    class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0">
+                &rarr;
+            </button>
+        </form>
+    </div>
+
+    <!-- Schwebender Button -->
+    <button type="button" id="mcQuickAssistantFab" onclick="toggleMcQuickAssistant()"
+            class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white text-xs font-bold shadow-lg hover:shadow-xl transition-all cursor-pointer border border-white/20"
+            title="Lokalen KI- &amp; Wissens-Assistenten öffnen">
+        <span class="text-base">🤖</span>
+        <span class="hidden sm:inline">Assistent</span>
+    </button>
+</div>
+
+<script>
+(() => {
+    const csrf = <?= json_encode(getCsrfToken()) ?>;
+    const storeKey = 'mc_assistant_chat_v1_' + <?= json_encode((int)$_SESSION['user_id']) ?>;
+    const userName = <?= json_encode((string)($_SESSION['username'] ?? 'Benutzer')) ?>;
+
+    const fmtMd = (t) => {
+        let s = String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        s = s.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono text-[10px]">$1</code>');
+        return s.replace(/\n/g, '<br>');
+    };
+
+    const getHist = () => {
+        try {
+            const r = sessionStorage.getItem(storeKey);
+            if (r) {
+                const p = JSON.parse(r);
+                if (Array.isArray(p) && p.length) return p;
+            }
+        } catch (e) {}
+        return [{
+            role: 'assistant',
+            reply: `Hallo **${userName}**! 👋 Wie kann ich dir auf dieser Seite helfen?`,
+            actions: [],
+            followups: [
+                'Wie viel Speicherplatz habe ich noch frei?',
+                'Was steht diese Woche bei mir an?',
+                'Wie funktioniert die OCR-Texterkennung?'
+            ]
+        }];
+    };
+
+    const saveHist = (arr) => {
+        try { sessionStorage.setItem(storeKey, JSON.stringify(arr.slice(-30))); } catch (e) {}
+    };
+
+    const renderQuick = () => {
+        const box = document.getElementById('mcQuickAssistantMessages');
+        if (!box) return;
+        const hist = getHist();
+        box.innerHTML = '';
+        hist.forEach((m) => {
+            const d = document.createElement('div');
+            if (m.role === 'user') {
+                d.className = 'flex justify-end';
+                d.innerHTML = `<div class="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm bg-brand-600 text-white text-xs shadow-2xs">${fmtMd(m.text)}</div>`;
+            } else {
+                d.className = 'flex items-start gap-2';
+                let actHtml = '';
+                if (Array.isArray(m.actions) && m.actions.length) {
+                    actHtml = '<div class="flex flex-wrap gap-1.5 pt-2">' + m.actions.map((a) =>
+                        `<a href="${a.url}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold">${fmtMd(a.label)} &rarr;</a>`
+                    ).join('') + '</div>';
+                }
+                let folHtml = '';
+                if (Array.isArray(m.followups) && m.followups.length) {
+                    folHtml = '<div class="flex flex-wrap gap-1 pt-2 mt-2 border-t border-slate-200/70 dark:border-slate-700/70">' + m.followups.map((f) =>
+                        `<button type="button" onclick="askMcQuickChip(${JSON.stringify(f).replace(/"/g, '&quot;')})" class="text-left px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-brand-50 dark:hover:bg-brand-950/50 border border-slate-200 dark:border-slate-700 text-[10px] font-medium text-slate-700 dark:text-slate-300 cursor-pointer">💬 ${fmtMd(f)}</button>`
+                    ).join('') + '</div>';
+                }
+                d.innerHTML = `
+                    <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-xs shrink-0 mt-0.5">🤖</span>
+                    <div class="max-w-[88%] px-3 py-2.5 rounded-2xl rounded-tl-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-100 leading-relaxed">
+                        <div>${fmtMd(m.reply)}</div>
+                        ${actHtml}
+                        ${folHtml}
+                    </div>
+                `;
+            }
+            box.appendChild(d);
+        });
+        box.scrollTop = box.scrollHeight;
+    };
+
+    window.toggleMcQuickAssistant = (forceState) => {
+        const panel = document.getElementById('mcQuickAssistantPanel');
+        if (!panel) return;
+        const shouldOpen = typeof forceState === 'boolean' ? forceState : panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !shouldOpen);
+        panel.classList.toggle('flex', shouldOpen);
+        if (shouldOpen) {
+            renderQuick();
+            setTimeout(() => document.getElementById('mcQuickAssistantInput')?.focus(), 60);
+        }
+    };
+
+    window.askMcQuickChip = async (q) => {
+        await sendQuickMsg(q);
+    };
+
+    window.submitMcQuickAssistant = async (ev) => {
+        ev.preventDefault();
+        const inp = document.getElementById('mcQuickAssistantInput');
+        if (!inp) return;
+        const txt = inp.value.trim();
+        if (!txt) return;
+        inp.value = '';
+        await sendQuickMsg(txt);
+    };
+
+    const sendQuickMsg = async (txt) => {
+        const hist = getHist();
+        hist.push({ role: 'user', text: txt });
+        saveHist(hist);
+        renderQuick();
+
+        const btn = document.getElementById('mcQuickAssistantSendBtn');
+        if (btn) btn.disabled = true;
+
+        try {
+            const fd = new FormData();
+            fd.append('ajax', '1');
+            fd.append('csrf_token', csrf);
+            fd.append('message', txt);
+            const r = await fetch('assistant.php', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (d && d.ok) {
+                hist.push({
+                    role: 'assistant',
+                    reply: d.reply,
+                    actions: d.actions || [],
+                    followups: d.followups || []
+                });
+            } else {
+                hist.push({ role: 'assistant', reply: '⚠️ ' + (d?.error || 'Fehler'), actions: [], followups: [] });
+            }
+        } catch (e) {
+            hist.push({ role: 'assistant', reply: '⚠️ Verbindungsfehler.', actions: [], followups: [] });
+        } finally {
+            if (btn) btn.disabled = false;
+            saveHist(hist);
+            renderQuick();
+        }
+    };
+})();
+</script>
+<?php endif; ?>
 </body>
 </html>

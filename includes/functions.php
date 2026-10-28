@@ -720,6 +720,7 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_pdf_tools'              => '1',
         'enable_projects'               => '1',
         'enable_office'                 => '1',
+        'enable_assistant'              => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3004,6 +3005,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_menti',
             'color'       => 'bg-pink-600',
         ],
+        'assistant' => [
+            'icon'        => '🤖',
+            'label'       => 'Lokaler KI- & Wissens-Assistent',
+            'url'         => 'assistant.php',
+            'setting_key' => 'enable_assistant',
+            'color'       => 'bg-purple-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3041,6 +3049,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'passwords.php' => 'passwords',
         'polls.php'     => 'polls',
         'menti.php'     => 'menti',
+        'assistant.php' => 'assistant',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3155,6 +3164,8 @@ function getModuleInventorySummary(PDO $pdo): array
 
     $mentiCount = $safeCount("SELECT COUNT(*) FROM `menti_sessions`");
     $summary['menti'] = $mentiCount . ' Live-' . ($mentiCount === 1 ? 'Präsentation' : 'Präsentationen');
+
+    $summary['assistant'] = 'Live-Kontodaten & Handbuch';
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
