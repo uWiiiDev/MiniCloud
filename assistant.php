@@ -1161,16 +1161,17 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'office_light',
-            'title'    => 'Office Light (Word, Excel, Markdown & Live-Co-Editing)',
+            'title'    => 'Office Light (Word, Excel, PowerPoint, Markdown & Live-Co-Editing)',
             'icon'     => '📝',
             'keywords' => [
-                'office', 'word', 'excel', 'tabelle', 'kalkulation', 'docx', 'xlsx', 'csv', 'markdown', 'dokument erstellen', 'vorlage', 'brief', 'protokoll', 'formel', 'gleichzeitig bearbeiten', 'co editing',
-                'spreadsheet', 'document', 'tableur', 'hoja de calculo', 'foglio di calcolo', 'arkusz', 'tabulka', 'tablo', 'таблиця', 'документ',
+                'office', 'word', 'excel', 'powerpoint', 'praesentation', 'folien', 'beamer', 'slides', 'pptx', 'tabelle', 'kalkulation', 'docx', 'xlsx', 'csv', 'markdown', 'dokument erstellen', 'vorlage', 'brief', 'protokoll', 'formel', 'gleichzeitig bearbeiten', 'co editing',
+                'spreadsheet', 'presentation', 'document', 'tableur', 'hoja de calculo', 'foglio di calcolo', 'arkusz', 'tabulka', 'tablo', 'таблиця', 'документ',
             ],
             'answer'   => "**📝 Office Light** (`office.php`) ist deine integrierte Büro-Zentrale direkt im Browser – komplett ohne Zusatzsoftware:\n\n"
                 . "- **📘 Word-Dokumente (`.docx`):** Formatierter Text, Überschriften, Tabellen, Listen, Farben & Druck-/PDF-Ansicht.\n"
                 . "- **📗 Excel-Tabellen (`.xlsx` & `.csv`):** Mehrere Tabellenblätter, Formeln wie `=SUM(A1:A10)`, `=AVERAGE(...)`, `=MIN(...)`, `=MAX(...)`, Spalten-Sortierung und Diagramm-Vorschau.\n"
-                . "- **✨ 6 Schnellstart-Vorlagen:** Leeres Word-Dokument, Geschäftsbrief, Besprechungsprotokoll, Leere Tabelle, Budget-/Kassenplan und Stundenzettel.\n"
+                . "- **📙 PowerPoint-Präsentationen (`.pptx`):** Visueller 16:9-Folien-Editor mit 6 Folien-Layouts (inkl. Cloud-Bildern & Kennzahlen), 6 Farbdesigns, Sprechernotizen, Handout-PDF-Druck und **▶️ Vollbild-Beamer-Modus mit Laserpointer**.\n"
+                . "- **✨ 8 Schnellstart-Vorlagen:** Leeres Word-Dokument, Geschäftsbrief, Besprechungsprotokoll, Leere Tabelle, Budget-/Kassenplan, Stundenzettel, Leere Präsentation und Vereins-/Projekt-Pitch.\n"
                 . "- **🟢 Live-Team-Zusammenarbeit:** Wenn mehrere Personen dasselbe Dokument öffnen, seht ihr oben live, wer gerade mitschreibt, und Änderungen werden automatisch synchronisiert!",
             'actions'  => [
                 ['label' => $pack['act_office'], 'url' => 'office.php'],

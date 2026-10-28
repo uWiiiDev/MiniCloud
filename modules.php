@@ -68,7 +68,7 @@ $allModules = [
         'url'      => 'office.php',
         'category' => 'files_office',
         'catLabel' => 'Dateien & Büro',
-        'desc'     => 'Textdokumente, Tabellenkalkulationen und Markdown-Dateien direkt im Browser erstellen und bearbeiten.',
+        'desc'     => 'Word-Dokumente (.docx), Excel-Tabellen (.xlsx), PowerPoint-Präsentationen (.pptx) und Markdown direkt im Browser erstellen und im Team bearbeiten.',
         'badge'    => '',
         'badgeCls' => '',
     ],

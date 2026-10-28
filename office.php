@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $groupFolderId  = isset($_POST['group_folder_id']) ? (int)$_POST['group_folder_id'] : 0;
     $sharedFolderId = isset($_POST['shared_folder_id']) ? (int)$_POST['shared_folder_id'] : 0;
 
-    if (!in_array($docType, ['docx', 'xlsx', 'csv', 'txt', 'md'], true)) {
+    if (!in_array($docType, ['docx', 'xlsx', 'pptx', 'csv', 'txt', 'md'], true)) {
         $docType = 'docx';
     }
 
@@ -145,9 +145,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     if ($rawDocName === '') {
         $rawDocName = match ($docType) {
             'xlsx' => 'Neue_Tabelle_' . date('Y-m-d'),
+            'pptx' => 'Neue_Praesentation_' . date('Y-m-d'),
             'csv'  => 'Neue_Liste_' . date('Y-m-d'),
             'txt'  => 'Neue_Notiz_' . date('Y-m-d'),
-            'md'   => ' Neues_Protokoll_' . date('Y-m-d'),
+            'md'   => 'Neues_Protokoll_' . date('Y-m-d'),
             default => 'Neues_Dokument_' . date('Y-m-d'),
         };
     }
@@ -220,6 +221,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $starterRows[3] = ['', '', 'SUMME STUNDEN / HONORAR', '', '', '=SUM(F2:F3)', '', '=SUM(H2:H3)'];
         }
         $createdOk = writeSpreadsheetData([['name' => $sheetTitle, 'rows' => $starterRows]], $physicalPath, $cleanBase);
+    } elseif ($docType === 'pptx') {
+        $authorName = (string)($_SESSION['username'] ?? '');
+        if ($templateKey === 'pitch_pptx') {
+            $starterDeck = [
+                'theme'      => 'navy',
+                'transition' => 'fade',
+                'slides'     => [
+                    [
+                        'layout'   => 'title',
+                        'title'    => $docTitle,
+                        'subtitle' => 'Präsentiert von ' . $authorName . ' · ' . date('d.m.Y'),
+                        'body'     => '',
+                        'col2'     => '',
+                        'stat_val' => '',
+                        'image_id' => 0,
+                        'notes'    => 'Begrüßung der Teilnehmer und kurzer Überblick über das Ziel des Vortrags.',
+                    ],
+                    [
+                        'layout'   => 'bullets',
+                        'title'    => '1. Agenda & wichtigste Themen',
+                        'subtitle' => 'Überblick über die heutigen Schwerpunkte',
+                        'body'     => "Ausgangslage & aktuelle Kennzahlen\nWichtigste Meilensteine & Fortschritte\nOffene Punkte & Entscheidungen\nNächste Schritte & Zeitplan",
+                        'col2'     => '',
+                        'stat_val' => '',
+                        'image_id' => 0,
+                        'notes'    => 'Kurz durch die 4 Agenda-Punkte führen.',
+                    ],
+                    [
+                        'layout'   => 'two_col',
+                        'title'    => '2. Vergleich & Optionen',
+                        'subtitle' => 'Gegenüberstellung der beiden Varianten',
+                        'body'     => "Variante A (Schnellstart)\nGeringerer Aufwand\nSofort einsatzbereit\nBewährte Struktur",
+                        'col2'     => "Variante B (Ausbau)\nErweiterte Funktionen\nMehr Flexibilität für große Teams\nLangfristige Skalierung",
+                        'stat_val' => '',
+                        'image_id' => 0,
+                        'notes'    => 'Vor- und Nachteile gemeinsam mit dem Team abwägen.',
+                    ],
+                    [
+                        'layout'   => 'big_stat',
+                        'title'    => '3. Unser wichtigstes Ziel',
+                        'subtitle' => 'Gemeinsam erfolgreich umgesetzt – vielen Dank für eure Aufmerksamkeit!',
+                        'body'     => '',
+                        'col2'     => '',
+                        'stat_val' => '100 %',
+                        'image_id' => 0,
+                        'notes'    => 'Fragerunde eröffnen.',
+                    ],
+                ],
+            ];
+        } else {
+            $starterDeck = [
+                'theme'      => 'light',
+                'transition' => 'fade',
+                'slides'     => [
+                    [
+                        'layout'   => 'title',
+                        'title'    => $docTitle,
+                        'subtitle' => 'Erstellt am ' . date('d.m.Y') . ($authorName !== '' ? ' · ' . $authorName : ''),
+                        'body'     => '',
+                        'col2'     => '',
+                        'stat_val' => '100 %',
+                        'image_id' => 0,
+                        'notes'    => '',
+                    ],
+                    [
+                        'layout'   => 'bullets',
+                        'title'    => 'Überblick & Kernpunkte',
+                        'subtitle' => '',
+                        'body'     => "Erster wichtiger Punkt\nZweiter wichtiger Punkt\nDritter wichtiger Punkt",
+                        'col2'     => '',
+                        'stat_val' => '',
+                        'image_id' => 0,
+                        'notes'    => '',
+                    ],
+                ],
+            ];
+        }
+        $createdOk = writePptxData($starterDeck, $physicalPath);
     } elseif ($docType === 'md') {
         if ($templateKey === 'md_notes') {
             $starterMd = "# 📝 {$docTitle}\n\n_Erstellt am " . date('d.m.Y') . "_\n\n## 🎯 Ziele & Zusammenfassung\n- Punkt 1\n- Punkt 2\n\n## ✅ Checkliste\n- [ ] Erster Schritt\n- [ ] Zweiter Schritt\n\n## 💡 Notizen\nHier Text eingeben...\n";
@@ -351,6 +430,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             exit;
         }
         $writeOk = writeSpreadsheetData($decodedSheets, $tmpSave, $updatedOrigName);
+    } elseif ($editorType === 'slides') {
+        $slidesJson = (string)($_POST['slides_json'] ?? '{}');
+        $decodedDeck = json_decode($slidesJson, true);
+        if (!is_array($decodedDeck)) {
+            @unlink($tmpSave);
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ungültige Präsentationsdaten übermittelt.']);
+            exit;
+        }
+        $writeOk = writePptxData($decodedDeck, $tmpSave);
     } else {
         $textContent = (string)($_POST['text_content'] ?? '');
         $writeOk = (@file_put_contents($tmpSave, $textContent) !== false);
@@ -526,12 +615,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'colla
                 $tKey    = mb_substr(trim((string)($d['target'] ?? '')), 0, 120);
                 $payload = $d['payload'] ?? null;
 
-                if (!in_array($dType, ['sheet_cell', 'sheet_full', 'word_block', 'word_full', 'text_full'], true) || $payload === null) {
+                if (!in_array($dType, ['sheet_cell', 'sheet_full', 'word_block', 'word_full', 'slides_slide', 'slides_full', 'text_full'], true) || $payload === null) {
                     continue;
                 }
 
-                // Konfliktprüfung für Einzel-Zelle oder Einzel-Absatz: Ist genau dieses Element gerade von jemand anderem fokussiert?
-                if (in_array($dType, ['sheet_cell', 'word_block'], true) && $tKey !== '') {
+                // Konfliktprüfung für Einzel-Zelle, Einzel-Absatz oder Einzel-Folie: Ist genau dieses Element gerade von jemand anderem fokussiert?
+                if (in_array($dType, ['sheet_cell', 'word_block', 'slides_slide'], true) && $tKey !== '') {
                     $stmtCheckLock->execute([':fid' => $fileId, ':uid' => $userId, ':ft' => $tKey]);
                     $lockedByUser = $stmtCheckLock->fetchColumn();
                     if ($lockedByUser !== false) {
@@ -744,6 +833,7 @@ if ($fileId <= 0) {
 
     $countWord   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'word'));
     $countSheet  = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'sheet'));
+    $countSlides = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'slides'));
     $countText   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'text'));
     $countShared = count(array_filter($officeDocs, static fn(array $d): bool => $d['is_shared']));
 
@@ -759,7 +849,7 @@ if ($fileId <= 0) {
                     <span>MiniCloud Office Light</span>
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Word-Dokumente (<code>.docx</code>), Excel-Tabellen (<code>.xlsx</code> / <code>.csv</code>) und Markdown-Dateien direkt im Browser erstellen, gemeinsam im Team live bearbeiten und verwalten – 100 % lokal auf deinem Server.
+                    Word-Dokumente (<code>.docx</code>), Excel-Tabellen (<code>.xlsx</code> / <code>.csv</code>), PowerPoint-Präsentationen (<code>.pptx</code>) und Markdown-Dateien direkt im Browser erstellen, im Team live bearbeiten und präsentieren – 100 % lokal auf deinem Server.
                 </p>
             </div>
             <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors shrink-0">
@@ -776,8 +866,8 @@ if ($fileId <= 0) {
                 </div>
             </div>
 
-            <!-- 6 Schnell-Vorlagen-Kacheln -->
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <!-- 8 Schnell-Vorlagen-Kacheln (Word, Excel & PowerPoint) -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
                 <button type="button" onclick="selectOfficePreset('docx', 'blank', 'Neues_Dokument')"
                         class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 text-left transition-all cursor-pointer group">
                     <div class="text-xl mb-1">📘</div>
@@ -819,6 +909,20 @@ if ($fileId <= 0) {
                     <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300">Stundenzettel</div>
                     <div class="text-[10px] text-slate-500">.xlsx Zeiterfassung</div>
                 </button>
+
+                <button type="button" onclick="selectOfficePreset('pptx', 'blank', 'Praesentation_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-orange-50/70 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-900/50 border border-orange-200 dark:border-orange-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">📙</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-orange-700 dark:group-hover:text-orange-300">Präsentation</div>
+                    <div class="text-[10px] text-slate-500">.pptx Folien (16:9)</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('pptx', 'pitch_pptx', 'Vortrag_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-orange-50/70 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-900/50 border border-orange-200 dark:border-orange-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">🎤</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-orange-700 dark:group-hover:text-orange-300">Vereins-/Projekt-Pitch</div>
+                    <div class="text-[10px] text-slate-500">.pptx 4 Starter-Folien</div>
+                </button>
             </div>
 
             <!-- Erstellungs-Formular -->
@@ -832,6 +936,7 @@ if ($fileId <= 0) {
                     <select name="doc_type" id="officeHubDocType" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
                         <option value="docx">📘 Word-Dokument (.docx)</option>
                         <option value="xlsx">📗 Excel-Tabelle (.xlsx)</option>
+                        <option value="pptx">📙 PowerPoint-Präsentation (.pptx)</option>
                         <option value="csv">📊 CSV-Tabelle (.csv)</option>
                         <option value="md">📒 Markdown (.md)</option>
                         <option value="txt">📄 Textdatei (.txt)</option>
@@ -878,6 +983,10 @@ if ($fileId <= 0) {
                     <button type="button" data-office-filter="sheet" onclick="filterOfficeHub('sheet')"
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
                         📗 Tabellen (<?= $countSheet ?>)
+                    </button>
+                    <button type="button" data-office-filter="slides" onclick="filterOfficeHub('slides')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        📙 PowerPoint (<?= $countSlides ?>)
                     </button>
                     <button type="button" data-office-filter="text" onclick="filterOfficeHub('text')"
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
@@ -1029,6 +1138,7 @@ if ($fileId <= 0) {
             let typeMatch = true;
             if (currentOfficeFilter === 'word') typeMatch = (dType === 'word');
             else if (currentOfficeFilter === 'sheet') typeMatch = (dType === 'sheet');
+            else if (currentOfficeFilter === 'slides') typeMatch = (dType === 'slides');
             else if (currentOfficeFilter === 'text') typeMatch = (dType === 'text');
             else if (currentOfficeFilter === 'shared') typeMatch = dShared;
 
@@ -1085,6 +1195,8 @@ $isVaultLocked  = ((int)($file['is_encrypted'] ?? 0) === 1) || (is_file($physica
 // Inhalt je nach Editor-Typ laden
 $wordHtmlContent = '';
 $sheetsData      = [];
+$slidesDeckData  = ['theme' => 'light', 'transition' => 'fade', 'slides' => []];
+$cloudImagesList = [];
 $textContent     = '';
 
 if (!$isVaultLocked && is_file($physicalPath)) {
@@ -1092,6 +1204,18 @@ if (!$isVaultLocked && is_file($physicalPath)) {
         $wordHtmlContent = readDocxAsHtml($physicalPath);
     } elseif ($editorType === 'sheet') {
         $sheetsData = readSpreadsheetData($physicalPath, $origName);
+    } elseif ($editorType === 'slides') {
+        $slidesDeckData = readPptxData($physicalPath);
+        // Eigene Cloud-Bilder für den Bild-Wähler in PowerPoint Light bereitstellen
+        $stmtImgs = $pdo->prepare(
+            "SELECT id, original_name, folder_path
+             FROM files
+             WHERE user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0
+               AND (LOWER(original_name) REGEXP '\\\\.(jpg|jpeg|png|gif|webp)$' OR mime_type LIKE 'image/%')
+             ORDER BY upload_date DESC LIMIT 100"
+        );
+        $stmtImgs->execute([':uid' => $userId]);
+        $cloudImagesList = $stmtImgs->fetchAll();
     } else {
         $textContent = (string)@file_get_contents($physicalPath);
     }
@@ -1122,9 +1246,10 @@ require_once __DIR__ . '/includes/header.php';
 
         <?php
         $typeBadge = match ($editorType) {
-            'word'  => ['icon' => '📄', 'label' => 'Word Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'],
-            'sheet' => ['icon' => '📊', 'label' => 'Calc Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'],
-            default => ['icon' => '📝', 'label' => 'Text-Editor (.' . strtoupper($ext) . ')', 'cls' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'],
+            'word'   => ['icon' => '📄', 'label' => 'Word Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'],
+            'sheet'  => ['icon' => '📊', 'label' => 'Calc Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'],
+            'slides' => ['icon' => '📙', 'label' => 'PowerPoint Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'],
+            default  => ['icon' => '📝', 'label' => 'Text-Editor (.' . strtoupper($ext) . ')', 'cls' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'],
         };
         ?>
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border <?= $typeBadge['cls'] ?> shrink-0">
@@ -1211,7 +1336,9 @@ require_once __DIR__ . '/includes/header.php';
             ? '🛡️ Konfliktschutz aktiv: Zellen anderer Bearbeiter werden live markiert &amp; geschützt'
             : ($editorType === 'word'
                 ? '🛡️ Konfliktschutz aktiv: Absätze anderer Bearbeiter werden beim Tippen live gesperrt &amp; synchronisiert'
-                : '🛡️ Live-Synchronisation für Text-/Markdown-Zeilen aktiv') ?>
+                : ($editorType === 'slides'
+                    ? '🛡️ Konfliktschutz aktiv: Folien anderer Bearbeiter werden live markiert &amp; synchronisiert'
+                    : '🛡️ Live-Synchronisation für Text-/Markdown-Zeilen aktiv')) ?>
     </div>
 </div>
 <?php endif; ?>
@@ -1400,6 +1527,167 @@ require_once __DIR__ . '/includes/header.php';
             <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                 <span id="sheetCellSummary">Tipp: Doppelklick auf Reiter zum Umbenennen</span>
             </div>
+        </div>
+    </div>
+
+<?php elseif ($editorType === 'slides'): ?>
+    <!-- ================================================================== -->
+    <!-- 2b. POWERPOINT LIGHT EDITOR (.PPTX)                                -->
+    <!-- ================================================================== -->
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8">
+        <!-- Obere Werkzeugleiste: Folien-Aktionen, Layout, Farbdesign & Beamer-Start -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <?php if ($canEdit): ?>
+                    <button type="button" onclick="pptxAddSlide()"
+                            class="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer">
+                        ➕ Neue Folie
+                    </button>
+                    <button type="button" onclick="pptxDuplicateSlide()"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer" title="Aktuelle Folie duplizieren">
+                        📄 Duplizieren
+                    </button>
+                    <button type="button" onclick="pptxMoveSlide(-1)"
+                            class="px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer" title="Folie nach oben">
+                        ↑
+                    </button>
+                    <button type="button" onclick="pptxMoveSlide(1)"
+                            class="px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer" title="Folie nach unten">
+                        ↓
+                    </button>
+                    <button type="button" onclick="pptxDeleteSlide()"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/50 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-red-600 dark:text-red-400 cursor-pointer" title="Aktuelle Folie löschen">
+                        🗑️
+                    </button>
+
+                    <span class="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5"></span>
+
+                    <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Layout:</label>
+                    <select id="pptxSlideLayoutSelect" onchange="pptxChangeLayout(this.value)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <option value="title">🎯 Titelfolie (Zentriert)</option>
+                        <option value="bullets">📋 Titel + Aufzählung / Text</option>
+                        <option value="two_col">⚖️ Zwei Spalten (Vergleich)</option>
+                        <option value="image_text">🖼️ Cloud-Bild + Text</option>
+                        <option value="big_stat">🚀 Große Kennzahl / Zitat</option>
+                        <option value="section">🔖 Kapitel-Trennfolie</option>
+                    </select>
+
+                    <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Design:</label>
+                    <select id="pptxDeckThemeSelect" onchange="pptxChangeTheme(this.value)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <option value="light">☀️ Klassisch Hell</option>
+                        <option value="navy">🌌 Business Dunkelblau</option>
+                        <option value="emerald">🌲 Natur Smaragd</option>
+                        <option value="amber">🏛️ Warm Gold / Verein</option>
+                        <option value="rose">🌸 Modern Rosé</option>
+                        <option value="slate">🖤 Obsidian Dunkel</option>
+                    </select>
+
+                    <select id="pptxTransitionSelect" onchange="pptxChangeTransition(this.value)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200" title="Folienübergang bei Präsentation">
+                        <option value="fade">✨ Überblenden</option>
+                        <option value="slide">➡️ Gleiten</option>
+                        <option value="zoom">🔍 Zoom</option>
+                        <option value="none">⚡ Direkt</option>
+                    </select>
+                <?php endif; ?>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="pptxPrintHandout()"
+                        class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                    🖨️ Handout / PDF
+                </button>
+                <button type="button" onclick="pptxStartPresentation(0)"
+                        class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition cursor-pointer flex items-center gap-1.5">
+                    ▶️ Präsentation starten
+                </button>
+            </div>
+        </div>
+
+        <!-- Zweispaltiger Hauptbereich: Links Folien-Miniaturen, Rechts 16:9 Folien-Bühne + Sprechernotizen -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 min-h-[64vh]">
+            <!-- Linke Seitenleiste: Folien-Übersicht -->
+            <aside class="lg:col-span-3 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 p-3 overflow-y-auto max-h-[68vh] space-y-2" id="pptxThumbnailsList">
+                <!-- Dynamisch per JS gerendert -->
+            </aside>
+
+            <!-- Rechte Hauptspalte: 16:9 Folien-Editor & Sprechernotizen -->
+            <div class="lg:col-span-9 bg-slate-100 dark:bg-slate-950/80 p-4 sm:p-6 flex flex-col justify-between gap-4">
+                <!-- 16:9 Live-Vorschau & Eingabefelder -->
+                <div id="pptxStageContainer" class="w-full max-w-4xl mx-auto aspect-16/9 rounded-2xl shadow-lg border border-slate-300/80 dark:border-slate-700 p-6 sm:p-10 flex flex-col justify-between transition-colors relative overflow-hidden">
+                    <!-- Dynamisch per JS gerendert -->
+                </div>
+
+                <!-- Bild-Auswahlleiste (nur sichtbar bei Layout "image_text") -->
+                <div id="pptxImagePickerBar" class="hidden max-w-4xl w-full mx-auto p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span class="font-semibold text-slate-700 dark:text-slate-200">🖼️ Cloud-Bild für diese Folie auswählen:</span>
+                    <select id="pptxCloudImageSelect" onchange="pptxSelectCloudImage(this.value)"
+                            class="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs">
+                        <option value="0">— Kein Bild ausgewählt —</option>
+                        <?php foreach ($cloudImagesList as $cImg): ?>
+                            <option value="<?= (int)$cImg['id'] ?>">
+                                📷 <?= e((string)$cImg['original_name']) ?><?= !empty($cImg['folder_path']) ? (' (' . e((string)$cImg['folder_path']) . ')') : '' ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Sprechernotizen (Speaker Notes) -->
+                <div class="max-w-4xl w-full mx-auto bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-1.5">
+                    <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span class="font-semibold">🎙️ Sprechernotizen für diese Folie (nur für Vortragende &amp; im Handout):</span>
+                        <span id="pptxSlideCounterLabel">Folie 1 / 1</span>
+                    </div>
+                    <textarea id="pptxSpeakerNotesInput" rows="2" <?= $canEdit ? '' : 'readonly' ?>
+                              placeholder="Notizen, Stichworte oder Regieanweisungen für deinen Vortrag eingeben…"
+                              class="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>Format: OpenXML PowerPoint (<code>.pptx</code>, 16:9 Widescreen)</span>
+            <span>Kompatibel mit Microsoft PowerPoint, LibreOffice Impress &amp; Apple Keynote</span>
+        </div>
+    </div>
+
+    <!-- Vollbild-Präsentations-Modus (Beamer-Ansicht mit Laserpointer) -->
+    <div id="pptxPresenterModal" class="hidden fixed inset-0 z-50 bg-black flex flex-col justify-between select-none">
+        <div class="flex items-center justify-between px-5 py-3 bg-black/60 border-b border-white/10 text-white text-xs">
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-sm"><?= e($docTitleWithoutExt) ?></span>
+                <span id="pptxPresCounter" class="px-2.5 py-0.5 rounded-full bg-white/15 font-semibold">1 / 1</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="btnToggleLaser" onclick="pptxToggleLaser()"
+                        class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer">
+                    🔴 Laserpointer (Taste L)
+                </button>
+                <button type="button" onclick="pptxStepPresentation(-1)"
+                        class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 font-bold cursor-pointer">
+                    ← Zurück
+                </button>
+                <button type="button" onclick="pptxStepPresentation(1)"
+                        class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 font-bold cursor-pointer">
+                    Weiter →
+                </button>
+                <button type="button" onclick="pptxStopPresentation()"
+                        class="px-3 py-1.5 rounded-xl bg-red-600/80 hover:bg-red-600 font-bold cursor-pointer">
+                    ✕ Beenden (Esc)
+                </button>
+            </div>
+        </div>
+
+        <div id="pptxPresViewport" class="relative flex-1 flex items-center justify-center p-4 sm:p-10 overflow-hidden" onmousemove="pptxMoveLaser(event)">
+            <div id="pptxPresSlideBox" class="w-full max-w-6xl aspect-16/9 rounded-2xl shadow-2xl p-8 sm:p-14 flex flex-col justify-between transition-all duration-300 relative overflow-hidden"></div>
+            <div id="pptxLaserDot" class="hidden fixed w-4 h-4 rounded-full bg-red-600 shadow-[0_0_16px_6px_rgba(239,68,68,0.85)] pointer-events-none z-50 -translate-x-1/2 -translate-y-1/2"></div>
+        </div>
+
+        <div class="px-5 py-2.5 bg-black/60 border-t border-white/10 text-xs text-slate-300 flex items-center justify-between gap-4">
+            <span id="pptxPresNotesHint" class="truncate text-slate-400">🎙️ Sprechernotiz: –</span>
+            <span class="hidden sm:inline text-slate-500 shrink-0">Pfeiltasten / Leertaste = Weiter · L = Laserpointer · Esc = Beenden</span>
         </div>
     </div>
 
@@ -2136,6 +2424,624 @@ if (OFFICE_EDITOR_TYPE === 'sheet') {
 }
 
 // ============================================================================
+// 2b. POWERPOINT LIGHT FUNKTIONEN (.PPTX - 16:9 Folien, Designs, Beamer & Sync)
+// ============================================================================
+let slidesDeckState = <?= $editorType === 'slides' ? json_encode($slidesDeckData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : '{"theme":"light","transition":"fade","slides":[]}' ?>;
+let activeSlideIdx  = 0;
+let slidesLastTypedAt = 0;
+let slidesInputDebounce = null;
+let pptxPresActive  = false;
+let pptxPresIdx     = 0;
+let pptxLaserOn     = false;
+
+const PPTX_THEMES = {
+    light:   { bg: 'bg-white text-slate-900',         accent: 'text-orange-600', sub: 'text-slate-500', card: 'bg-slate-50 border-slate-200',       badge: 'bg-orange-100 text-orange-700', hexBg: '#FFFFFF', hexFg: '#0F172A', hexAcc: '#EA580C' },
+    navy:    { bg: 'bg-slate-900 text-white',         accent: 'text-sky-400',    sub: 'text-slate-300', card: 'bg-slate-800/90 border-slate-700',   badge: 'bg-sky-500/20 text-sky-300',    hexBg: '#0F172A', hexFg: '#F8FAFC', hexAcc: '#38BDF8' },
+    emerald: { bg: 'bg-emerald-950 text-emerald-50',  accent: 'text-emerald-300',sub: 'text-emerald-200/80', card: 'bg-emerald-900/70 border-emerald-800', badge: 'bg-emerald-500/20 text-emerald-200', hexBg: '#064E3B', hexFg: '#ECFDF5', hexAcc: '#34D399' },
+    amber:   { bg: 'bg-amber-50 text-stone-900',      accent: 'text-amber-700',  sub: 'text-stone-600', card: 'bg-white/90 border-amber-200',       badge: 'bg-amber-200/70 text-amber-900',hexBg: '#FFFBEB', hexFg: '#1C1917', hexAcc: '#D97706' },
+    rose:    { bg: 'bg-rose-950 text-rose-50',        accent: 'text-rose-300',   sub: 'text-rose-200/80', card: 'bg-rose-900/70 border-rose-800',   badge: 'bg-rose-500/20 text-rose-200',  hexBg: '#4C0519', hexFg: '#FFF1F2', hexAcc: '#FB7185' },
+    slate:   { bg: 'bg-zinc-950 text-zinc-100',       accent: 'text-indigo-400', sub: 'text-zinc-400',  card: 'bg-zinc-900 border-zinc-800',        badge: 'bg-indigo-500/20 text-indigo-300', hexBg: '#18181B', hexFg: '#F4F4F5', hexAcc: '#818CF8' }
+};
+
+function ensureSlidesDeckValid() {
+    if (!slidesDeckState || typeof slidesDeckState !== 'object') {
+        slidesDeckState = { theme: 'light', transition: 'fade', slides: [] };
+    }
+    if (!PPTX_THEMES[slidesDeckState.theme]) slidesDeckState.theme = 'light';
+    if (!['fade', 'slide', 'zoom', 'none'].includes(slidesDeckState.transition)) slidesDeckState.transition = 'fade';
+    if (!Array.isArray(slidesDeckState.slides) || slidesDeckState.slides.length === 0) {
+        slidesDeckState.slides = [{
+            id: 's_' + Math.random().toString(36).slice(2, 9),
+            layout: 'title',
+            title: 'Präsentationstitel',
+            subtitle: 'Untertitel',
+            body: '',
+            col2: '',
+            imageId: 0,
+            notes: ''
+        }];
+    }
+    if (activeSlideIdx < 0 || activeSlideIdx >= slidesDeckState.slides.length) {
+        activeSlideIdx = Math.max(0, slidesDeckState.slides.length - 1);
+    }
+}
+
+function getSlidePeerLock(slideIdx) {
+    const targetKey = 'slide:' + slideIdx;
+    return collabPeers.find(p => !p.isMe && p.focusTarget === targetKey) || null;
+}
+
+function queueActiveSlideDelta() {
+    const s = slidesDeckState.slides[activeSlideIdx];
+    if (!s) return;
+    if (slidesInputDebounce) clearTimeout(slidesInputDebounce);
+    slidesInputDebounce = setTimeout(() => {
+        queueCollabDelta('slides_slide', 'slide:' + activeSlideIdx, {
+            slideIdx: activeSlideIdx,
+            slide: s
+        });
+    }, 220);
+}
+
+function queueFullDeckDelta() {
+    queueCollabDelta('slides_full', 'deck', slidesDeckState);
+}
+
+function renderPptxThumbnails() {
+    const listEl = document.getElementById('pptxThumbnailsList');
+    if (!listEl) return;
+    ensureSlidesDeckValid();
+    const themeObj = PPTX_THEMES[slidesDeckState.theme] || PPTX_THEMES.light;
+
+    let html = '';
+    slidesDeckState.slides.forEach((sl, idx) => {
+        const isActive = idx === activeSlideIdx;
+        const peerLock = getSlidePeerLock(idx);
+        const ringCls  = isActive
+            ? 'ring-2 ring-orange-500 border-orange-500 shadow-sm'
+            : 'border-slate-200 dark:border-slate-700 hover:border-orange-300';
+        const peerBadge = peerLock
+            ? `<span style="background:${peerLock.color};" class="px-1.5 py-0.5 rounded text-[9px] font-bold text-white truncate max-w-[100px]">🔒 ${escapeSheetHtml(peerLock.username)}</span>`
+            : '';
+
+        const layoutIcons = { title: '🎯', bullets: '📋', two_col: '⚖️', image_text: '🖼️', big_stat: '🚀', section: '🔖' };
+        const icon = layoutIcons[sl.layout] || '📋';
+
+        html += `
+        <div onclick="pptxSelectSlide(${idx})"
+             class="group cursor-pointer rounded-xl border ${ringCls} bg-white dark:bg-slate-800 p-2 transition select-none">
+            <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                <span>Folie ${idx + 1} · ${icon}</span>
+                ${peerBadge}
+            </div>
+            <div class="aspect-16/9 rounded-lg ${themeObj.bg} p-2.5 flex flex-col justify-between overflow-hidden border border-black/10">
+                <div class="text-[11px] font-extrabold leading-tight line-clamp-2">${escapeSheetHtml(sl.title || 'Ohne Titel')}</div>
+                <div class="text-[9px] ${themeObj.sub} line-clamp-2">${escapeSheetHtml(sl.subtitle || (sl.body || '').split('\n')[0] || '')}</div>
+            </div>
+        </div>`;
+    });
+    listEl.innerHTML = html;
+}
+
+function renderPptxEditor() {
+    if (OFFICE_EDITOR_TYPE !== 'slides') return;
+    ensureSlidesDeckValid();
+
+    const sl = slidesDeckState.slides[activeSlideIdx];
+    const themeObj = PPTX_THEMES[slidesDeckState.theme] || PPTX_THEMES.light;
+
+    currentFocusTarget = 'slide:' + activeSlideIdx;
+    currentFocusLabel  = 'Folie ' + (activeSlideIdx + 1);
+
+    const layoutSel = document.getElementById('pptxSlideLayoutSelect');
+    if (layoutSel) layoutSel.value = sl.layout || 'bullets';
+
+    const themeSel = document.getElementById('pptxDeckThemeSelect');
+    if (themeSel) themeSel.value = slidesDeckState.theme || 'light';
+
+    const transSel = document.getElementById('pptxTransitionSelect');
+    if (transSel) transSel.value = slidesDeckState.transition || 'fade';
+
+    const counterEl = document.getElementById('pptxSlideCounterLabel');
+    if (counterEl) counterEl.textContent = `Folie ${activeSlideIdx + 1} / ${slidesDeckState.slides.length}`;
+
+    const notesEl = document.getElementById('pptxSpeakerNotesInput');
+    if (notesEl && document.activeElement !== notesEl) {
+        notesEl.value = sl.notes || '';
+    }
+
+    const imgBar = document.getElementById('pptxImagePickerBar');
+    const imgSel = document.getElementById('pptxCloudImageSelect');
+    if (imgBar) {
+        if (sl.layout === 'image_text' && OFFICE_CAN_EDIT) {
+            imgBar.classList.remove('hidden');
+            if (imgSel) imgSel.value = String(sl.imageId || 0);
+        } else {
+            imgBar.classList.add('hidden');
+        }
+    }
+
+    renderPptxThumbnails();
+
+    const stage = document.getElementById('pptxStageContainer');
+    if (!stage) return;
+
+    stage.className = `w-full max-w-4xl mx-auto aspect-16/9 rounded-2xl shadow-lg border border-slate-300/80 dark:border-slate-700 p-6 sm:p-10 flex flex-col justify-between transition-colors relative overflow-hidden ${themeObj.bg}`;
+
+    const peerLock = getSlidePeerLock(activeSlideIdx);
+    const lockBanner = peerLock
+        ? `<div style="background:${peerLock.color};" class="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold text-white shadow-sm z-20">🔒 Wird gerade von ${escapeSheetHtml(peerLock.username)} bearbeitet</div>`
+        : '';
+
+    const roAttr = OFFICE_CAN_EDIT ? '' : 'readonly';
+    const inputBase = 'w-full bg-transparent border border-transparent hover:border-current/20 focus:border-orange-500 focus:bg-black/5 rounded-xl px-2.5 py-1.5 focus:outline-none transition';
+
+    let innerHtml = lockBanner;
+
+    if (sl.layout === 'title') {
+        innerHtml += `
+        <div class="my-auto text-center space-y-4 px-4">
+            <span class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${themeObj.badge}">Präsentation</span>
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Haupttitel eingeben…"
+                   class="${inputBase} text-2xl sm:text-4xl font-extrabold text-center tracking-tight">
+            <input type="text" id="pptxFieldSubtitle" ${roAttr} value="${escapeSheetHtml(sl.subtitle || '')}"
+                   placeholder="Untertitel, Datum oder Referent…"
+                   class="${inputBase} text-sm sm:text-lg font-medium text-center ${themeObj.sub}">
+        </div>`;
+    } else if (sl.layout === 'section') {
+        innerHtml += `
+        <div class="my-auto space-y-3 border-l-4 border-orange-500 pl-6 py-4">
+            <span class="text-xs font-bold uppercase tracking-widest ${themeObj.accent}">Kapitel / Abschnitt</span>
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Kapitelüberschrift…"
+                   class="${inputBase} text-2xl sm:text-4xl font-extrabold tracking-tight">
+            <input type="text" id="pptxFieldSubtitle" ${roAttr} value="${escapeSheetHtml(sl.subtitle || '')}"
+                   placeholder="Kurze Beschreibung des Abschnitts…"
+                   class="${inputBase} text-sm sm:text-base ${themeObj.sub}">
+        </div>`;
+    } else if (sl.layout === 'big_stat') {
+        innerHtml += `
+        <div class="flex flex-col justify-between h-full">
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Überschrift / Kontext…"
+                   class="${inputBase} text-lg sm:text-2xl font-bold">
+            <div class="my-auto text-center space-y-2 py-4">
+                <input type="text" id="pptxFieldSubtitle" ${roAttr} value="${escapeSheetHtml(sl.subtitle || '')}"
+                       placeholder="98 % oder große Kennzahl…"
+                       class="${inputBase} text-4xl sm:text-6xl font-black text-center ${themeObj.accent}">
+                <textarea id="pptxFieldBody" rows="2" ${roAttr}
+                          placeholder="Erklärung oder Zitat unter der Kennzahl…"
+                          class="${inputBase} text-center text-xs sm:text-base ${themeObj.sub} resize-none">${escapeSheetHtml(sl.body || '')}</textarea>
+            </div>
+        </div>`;
+    } else if (sl.layout === 'two_col') {
+        innerHtml += `
+        <div class="flex flex-col h-full gap-3">
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Folientitel…"
+                   class="${inputBase} text-xl sm:text-2xl font-extrabold">
+            <div class="grid grid-cols-2 gap-4 flex-1 min-h-0">
+                <div class="rounded-xl border p-3 flex flex-col ${themeObj.card}">
+                    <span class="text-[11px] font-bold uppercase tracking-wider mb-1 ${themeObj.accent}">Linke Spalte</span>
+                    <textarea id="pptxFieldBody" ${roAttr}
+                              placeholder="Stichpunkte links (1 Punkt pro Zeile)…"
+                              class="w-full flex-1 bg-transparent resize-none text-xs sm:text-sm leading-relaxed focus:outline-none">${escapeSheetHtml(sl.body || '')}</textarea>
+                </div>
+                <div class="rounded-xl border p-3 flex flex-col ${themeObj.card}">
+                    <span class="text-[11px] font-bold uppercase tracking-wider mb-1 ${themeObj.accent}">Rechte Spalte</span>
+                    <textarea id="pptxFieldCol2" ${roAttr}
+                              placeholder="Stichpunkte rechts (1 Punkt pro Zeile)…"
+                              class="w-full flex-1 bg-transparent resize-none text-xs sm:text-sm leading-relaxed focus:outline-none">${escapeSheetHtml(sl.col2 || '')}</textarea>
+                </div>
+            </div>
+        </div>`;
+    } else if (sl.layout === 'image_text') {
+        const imgPreviewHtml = sl.imageId > 0
+            ? `<img src="preview.php?id=${Number(sl.imageId)}&raw=1" alt="Folienbild" class="w-full h-full object-cover rounded-xl">`
+            : `<div class="text-center p-4 text-xs ${themeObj.sub}">🖼️<br>Wähle unten ein Bild aus deiner Cloud</div>`;
+        innerHtml += `
+        <div class="flex flex-col h-full gap-3">
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Folientitel…"
+                   class="${inputBase} text-xl sm:text-2xl font-extrabold">
+            <div class="grid grid-cols-12 gap-4 flex-1 min-h-0">
+                <div class="col-span-5 rounded-xl border overflow-hidden flex items-center justify-center ${themeObj.card}">
+                    ${imgPreviewHtml}
+                </div>
+                <div class="col-span-7 flex flex-col">
+                    <textarea id="pptxFieldBody" ${roAttr}
+                              placeholder="Erläuterungen & Stichpunkte (1 Punkt pro Zeile)…"
+                              class="${inputBase} flex-1 resize-none text-xs sm:text-base leading-relaxed">${escapeSheetHtml(sl.body || '')}</textarea>
+                </div>
+            </div>
+        </div>`;
+    } else {
+        // Standard: bullets
+        innerHtml += `
+        <div class="flex flex-col h-full gap-2">
+            <input type="text" id="pptxFieldTitle" ${roAttr} value="${escapeSheetHtml(sl.title || '')}"
+                   placeholder="Folientitel eingeben…"
+                   class="${inputBase} text-xl sm:text-3xl font-extrabold">
+            <input type="text" id="pptxFieldSubtitle" ${roAttr} value="${escapeSheetHtml(sl.subtitle || '')}"
+                   placeholder="Optionaler Untertitel / Kernaussage…"
+                   class="${inputBase} text-xs sm:text-sm font-medium ${themeObj.accent}">
+            <textarea id="pptxFieldBody" ${roAttr}
+                      placeholder="• Stichpunkte hier eingeben (jede Zeile wird ein Aufzählungspunkt)…"
+                      class="${inputBase} flex-1 resize-none text-sm sm:text-lg leading-relaxed">${escapeSheetHtml(sl.body || '')}</textarea>
+        </div>`;
+    }
+
+    innerHtml += `
+    <div class="pt-2 border-t border-current/10 flex items-center justify-between text-[10px] ${themeObj.sub}">
+        <span>${escapeSheetHtml(titleInputEl ? titleInputEl.value : '')}</span>
+        <span>${activeSlideIdx + 1} / ${slidesDeckState.slides.length}</span>
+    </div>`;
+
+    stage.innerHTML = innerHtml;
+
+    const bindField = (elId, propName, refreshThumbs = false) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.addEventListener('input', () => {
+            slidesLastTypedAt = Date.now();
+            slidesDeckState.slides[activeSlideIdx][propName] = el.value;
+            markDirty();
+            if (refreshThumbs) renderPptxThumbnails();
+            queueActiveSlideDelta();
+        });
+    };
+
+    bindField('pptxFieldTitle', 'title', true);
+    bindField('pptxFieldSubtitle', 'subtitle', true);
+    bindField('pptxFieldBody', 'body', true);
+    bindField('pptxFieldCol2', 'col2', false);
+}
+
+const pptxNotesInputEl = document.getElementById('pptxSpeakerNotesInput');
+if (pptxNotesInputEl) {
+    pptxNotesInputEl.addEventListener('input', () => {
+        ensureSlidesDeckValid();
+        slidesLastTypedAt = Date.now();
+        slidesDeckState.slides[activeSlideIdx].notes = pptxNotesInputEl.value;
+        markDirty();
+        queueActiveSlideDelta();
+    });
+}
+
+function pptxSelectSlide(idx) {
+    ensureSlidesDeckValid();
+    if (idx < 0 || idx >= slidesDeckState.slides.length) return;
+    activeSlideIdx = idx;
+    renderPptxEditor();
+}
+
+function pptxAddSlide() {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    const newSlide = {
+        id: 's_' + Math.random().toString(36).slice(2, 9),
+        layout: 'bullets',
+        title: 'Neue Folie ' + (slidesDeckState.slides.length + 1),
+        subtitle: '',
+        body: "Erster Punkt\nZweiter Punkt\nDritter Punkt",
+        col2: '',
+        imageId: 0,
+        notes: ''
+    };
+    slidesDeckState.slides.splice(activeSlideIdx + 1, 0, newSlide);
+    activeSlideIdx++;
+    markDirty();
+    renderPptxEditor();
+    queueFullDeckDelta();
+}
+
+function pptxDuplicateSlide() {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    const cur = slidesDeckState.slides[activeSlideIdx];
+    const copy = JSON.parse(JSON.stringify(cur));
+    copy.id = 's_' + Math.random().toString(36).slice(2, 9);
+    copy.title = (copy.title || 'Folie') + ' (Kopie)';
+    slidesDeckState.slides.splice(activeSlideIdx + 1, 0, copy);
+    activeSlideIdx++;
+    markDirty();
+    renderPptxEditor();
+    queueFullDeckDelta();
+}
+
+function pptxMoveSlide(dir) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    const targetIdx = activeSlideIdx + dir;
+    if (targetIdx < 0 || targetIdx >= slidesDeckState.slides.length) return;
+    const tmp = slidesDeckState.slides[activeSlideIdx];
+    slidesDeckState.slides[activeSlideIdx] = slidesDeckState.slides[targetIdx];
+    slidesDeckState.slides[targetIdx] = tmp;
+    activeSlideIdx = targetIdx;
+    markDirty();
+    renderPptxEditor();
+    queueFullDeckDelta();
+}
+
+function pptxDeleteSlide() {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    if (slidesDeckState.slides.length <= 1) {
+        alert('Eine Präsentation muss mindestens eine Folie enthalten.');
+        return;
+    }
+    if (!confirm(`Folie ${activeSlideIdx + 1} wirklich löschen?`)) return;
+    slidesDeckState.slides.splice(activeSlideIdx, 1);
+    if (activeSlideIdx >= slidesDeckState.slides.length) {
+        activeSlideIdx = slidesDeckState.slides.length - 1;
+    }
+    markDirty();
+    renderPptxEditor();
+    queueFullDeckDelta();
+}
+
+function pptxChangeLayout(newLayout) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    slidesDeckState.slides[activeSlideIdx].layout = newLayout;
+    markDirty();
+    renderPptxEditor();
+    queueActiveSlideDelta();
+}
+
+function pptxChangeTheme(newTheme) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    slidesDeckState.theme = newTheme;
+    markDirty();
+    renderPptxEditor();
+    queueFullDeckDelta();
+}
+
+function pptxChangeTransition(newTrans) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    slidesDeckState.transition = newTrans;
+    markDirty();
+    queueFullDeckDelta();
+}
+
+function pptxSelectCloudImage(imgIdStr) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureSlidesDeckValid();
+    slidesDeckState.slides[activeSlideIdx].imageId = parseInt(imgIdStr, 10) || 0;
+    markDirty();
+    renderPptxEditor();
+    queueActiveSlideDelta();
+}
+
+function formatBulletsHtml(rawText, accentClass) {
+    const lines = String(rawText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return '';
+    return '<ul class="space-y-2.5 text-left">' + lines.map(l => {
+        const clean = l.replace(/^[•\-*]\s*/, '');
+        return `<li class="flex items-start gap-2.5"><span class="${accentClass} font-bold">▸</span><span>${escapeSheetHtml(clean)}</span></li>`;
+    }).join('') + '</ul>';
+}
+
+function renderPresentationSlideBox(idx) {
+    ensureSlidesDeckValid();
+    const sl = slidesDeckState.slides[idx] || slidesDeckState.slides[0];
+    const themeObj = PPTX_THEMES[slidesDeckState.theme] || PPTX_THEMES.light;
+    const box = document.getElementById('pptxPresSlideBox');
+    if (!box) return;
+
+    const tr = slidesDeckState.transition || 'fade';
+    box.style.opacity = tr === 'none' ? '1' : '0';
+    box.style.transform = tr === 'zoom' ? 'scale(0.95)' : (tr === 'slide' ? 'translateX(24px)' : 'none');
+
+    setTimeout(() => {
+        box.className = `w-full max-w-6xl aspect-16/9 rounded-2xl shadow-2xl p-8 sm:p-16 flex flex-col justify-between transition-all duration-300 relative overflow-hidden ${themeObj.bg}`;
+
+        let html = '';
+        if (sl.layout === 'title') {
+            html = `
+            <div class="my-auto text-center space-y-5 px-6">
+                <span class="inline-block px-4 py-1 rounded-full text-xs sm:text-sm font-bold uppercase tracking-widest ${themeObj.badge}">Präsentation</span>
+                <h1 class="text-3xl sm:text-6xl font-extrabold tracking-tight leading-tight">${escapeSheetHtml(sl.title || '')}</h1>
+                <p class="text-lg sm:text-2xl ${themeObj.sub}">${escapeSheetHtml(sl.subtitle || '')}</p>
+            </div>`;
+        } else if (sl.layout === 'section') {
+            html = `
+            <div class="my-auto border-l-8 border-orange-500 pl-8 py-6 space-y-3">
+                <div class="text-sm font-bold uppercase tracking-widest ${themeObj.accent}">Abschnitt</div>
+                <h1 class="text-3xl sm:text-6xl font-extrabold tracking-tight">${escapeSheetHtml(sl.title || '')}</h1>
+                <p class="text-lg sm:text-2xl ${themeObj.sub}">${escapeSheetHtml(sl.subtitle || '')}</p>
+            </div>`;
+        } else if (sl.layout === 'big_stat') {
+            html = `
+            <div class="flex flex-col justify-between h-full">
+                <h2 class="text-2xl sm:text-4xl font-extrabold">${escapeSheetHtml(sl.title || '')}</h2>
+                <div class="my-auto text-center space-y-4">
+                    <div class="text-5xl sm:text-8xl font-black ${themeObj.accent}">${escapeSheetHtml(sl.subtitle || '')}</div>
+                    <p class="text-base sm:text-2xl max-w-3xl mx-auto ${themeObj.sub}">${escapeSheetHtml(sl.body || '')}</p>
+                </div>
+            </div>`;
+        } else if (sl.layout === 'two_col') {
+            html = `
+            <div class="flex flex-col h-full gap-6">
+                <h2 class="text-2xl sm:text-4xl font-extrabold">${escapeSheetHtml(sl.title || '')}</h2>
+                <div class="grid grid-cols-2 gap-6 flex-1 items-start">
+                    <div class="rounded-2xl border p-6 h-full text-base sm:text-xl ${themeObj.card}">
+                        ${formatBulletsHtml(sl.body, themeObj.accent)}
+                    </div>
+                    <div class="rounded-2xl border p-6 h-full text-base sm:text-xl ${themeObj.card}">
+                        ${formatBulletsHtml(sl.col2, themeObj.accent)}
+                    </div>
+                </div>
+            </div>`;
+        } else if (sl.layout === 'image_text') {
+            const imgHtml = sl.imageId > 0
+                ? `<img src="preview.php?id=${Number(sl.imageId)}&raw=1" alt="" class="w-full h-full object-cover rounded-2xl">`
+                : `<div class="text-sm ${themeObj.sub}">Kein Bild gewählt</div>`;
+            html = `
+            <div class="flex flex-col h-full gap-6">
+                <h2 class="text-2xl sm:text-4xl font-extrabold">${escapeSheetHtml(sl.title || '')}</h2>
+                <div class="grid grid-cols-12 gap-6 flex-1 min-h-0">
+                    <div class="col-span-5 rounded-2xl border overflow-hidden flex items-center justify-center ${themeObj.card}">${imgHtml}</div>
+                    <div class="col-span-7 text-base sm:text-2xl flex items-center">${formatBulletsHtml(sl.body, themeObj.accent)}</div>
+                </div>
+            </div>`;
+        } else {
+            html = `
+            <div class="flex flex-col h-full gap-4">
+                <div>
+                    <h2 class="text-2xl sm:text-5xl font-extrabold">${escapeSheetHtml(sl.title || '')}</h2>
+                    ${sl.subtitle ? `<p class="text-sm sm:text-xl font-semibold mt-1 ${themeObj.accent}">${escapeSheetHtml(sl.subtitle)}</p>` : ''}
+                </div>
+                <div class="flex-1 text-base sm:text-2xl pt-2">
+                    ${formatBulletsHtml(sl.body, themeObj.accent)}
+                </div>
+            </div>`;
+        }
+
+        html += `
+        <div class="pt-3 border-t border-current/10 flex items-center justify-between text-xs ${themeObj.sub}">
+            <span>${escapeSheetHtml(titleInputEl ? titleInputEl.value : '')}</span>
+            <span>Folie ${idx + 1} / ${slidesDeckState.slides.length}</span>
+        </div>`;
+
+        box.innerHTML = html;
+        box.style.opacity = '1';
+        box.style.transform = 'none';
+    }, tr === 'none' ? 0 : 120);
+
+    const cnt = document.getElementById('pptxPresCounter');
+    if (cnt) cnt.textContent = `${idx + 1} / ${slidesDeckState.slides.length}`;
+
+    const notesHint = document.getElementById('pptxPresNotesHint');
+    if (notesHint) {
+        notesHint.textContent = '🎙️ Sprechernotiz: ' + (sl.notes ? sl.notes : '– (keine Notiz hinterlegt)');
+    }
+}
+
+function pptxStartPresentation(startIdx = 0) {
+    ensureSlidesDeckValid();
+    pptxPresActive = true;
+    pptxPresIdx = (typeof startIdx === 'number' && startIdx >= 0) ? startIdx : activeSlideIdx;
+    const modal = document.getElementById('pptxPresenterModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (modal.requestFullscreen) {
+            modal.requestFullscreen().catch(() => {});
+        }
+    }
+    renderPresentationSlideBox(pptxPresIdx);
+}
+
+function pptxStepPresentation(delta) {
+    if (!pptxPresActive) return;
+    const next = pptxPresIdx + delta;
+    if (next < 0 || next >= slidesDeckState.slides.length) return;
+    pptxPresIdx = next;
+    renderPresentationSlideBox(pptxPresIdx);
+}
+
+function pptxStopPresentation() {
+    pptxPresActive = false;
+    pptxLaserOn = false;
+    const dot = document.getElementById('pptxLaserDot');
+    if (dot) dot.classList.add('hidden');
+    const modal = document.getElementById('pptxPresenterModal');
+    if (modal) modal.classList.add('hidden');
+    if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+    }
+}
+
+function pptxToggleLaser() {
+    pptxLaserOn = !pptxLaserOn;
+    const dot = document.getElementById('pptxLaserDot');
+    const btn = document.getElementById('btnToggleLaser');
+    if (dot) dot.classList.toggle('hidden', !pptxLaserOn);
+    if (btn) btn.classList.toggle('bg-red-600', pptxLaserOn);
+}
+
+function pptxMoveLaser(e) {
+    if (!pptxLaserOn) return;
+    const dot = document.getElementById('pptxLaserDot');
+    if (!dot) return;
+    dot.style.left = e.clientX + 'px';
+    dot.style.top  = e.clientY + 'px';
+}
+
+document.addEventListener('keydown', (e) => {
+    if (!pptxPresActive) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        pptxStepPresentation(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        pptxStepPresentation(-1);
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        pptxStopPresentation();
+    } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        pptxToggleLaser();
+    }
+});
+
+function pptxPrintHandout() {
+    ensureSlidesDeckValid();
+    const themeObj = PPTX_THEMES[slidesDeckState.theme] || PPTX_THEMES.light;
+    const docName  = titleInputEl ? titleInputEl.value : 'Praesentation';
+    const win = window.open('', '_blank', 'width=960,height=750');
+    if (!win) {
+        alert('Bitte Popups für den Handout-Druck erlauben.');
+        return;
+    }
+
+    let slidesHtml = '';
+    slidesDeckState.slides.forEach((sl, i) => {
+        const bullets = String(sl.body || '').split(/\r?\n/).filter(Boolean).map(l => `<li>${escapeSheetHtml(l.replace(/^[•\-*]\s*/, ''))}</li>`).join('');
+        const col2    = String(sl.col2 || '').split(/\r?\n/).filter(Boolean).map(l => `<li>${escapeSheetHtml(l.replace(/^[•\-*]\s*/, ''))}</li>`).join('');
+        slidesHtml += `
+        <div class="slide-wrap">
+            <div class="slide-box" style="background:${themeObj.hexBg};color:${themeObj.hexFg};border-left:6px solid ${themeObj.hexAcc};">
+                <div class="slide-num">Folie ${i + 1} / ${slidesDeckState.slides.length}</div>
+                <h2>${escapeSheetHtml(sl.title || '')}</h2>
+                ${sl.subtitle ? `<p class="sub" style="color:${themeObj.hexAcc};">${escapeSheetHtml(sl.subtitle)}</p>` : ''}
+                ${bullets ? `<ul>${bullets}</ul>` : ''}
+                ${col2 ? `<ul>${col2}</ul>` : ''}
+            </div>
+            ${sl.notes ? `<div class="notes"><strong>🎙️ Sprechernotiz:</strong> ${escapeSheetHtml(sl.notes)}</div>` : ''}
+        </div>`;
+    });
+
+    win.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>${escapeSheetHtml(docName)} - Handout</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; color: #0f172a; }
+        h1 { font-size: 20px; margin-bottom: 16px; }
+        .slide-wrap { page-break-inside: avoid; margin-bottom: 22px; }
+        .slide-box { border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px 24px; }
+        .slide-num { font-size: 11px; opacity: 0.7; margin-bottom: 6px; font-weight: bold; }
+        .slide-box h2 { margin: 0 0 6px 0; font-size: 20px; }
+        .slide-box .sub { margin: 0 0 10px 0; font-weight: 600; font-size: 14px; }
+        .slide-box ul { margin: 8px 0 0 18px; font-size: 13px; line-height: 1.5; }
+        .notes { margin-top: 6px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #94a3b8; font-size: 12px; color: #334155; }
+    </style></head><body>
+    <h1>📙 Handout: ${escapeSheetHtml(docName)}</h1>
+    ${slidesHtml}
+    <script>window.onload = () => { window.print(); };<\/script>
+    </body></html>`);
+    win.document.close();
+}
+
+if (OFFICE_EDITOR_TYPE === 'slides') {
+    ensureSlidesDeckValid();
+    currentFocusTarget = 'slide:0';
+    currentFocusLabel  = 'Folie 1';
+    renderPptxEditor();
+}
+
+// ============================================================================
 // 3. TEXT-EDITOR FUNKTIONEN (inkl. Zeilen-Fokus & Live-Sync)
 // ============================================================================
 const plainTextEl = document.getElementById('plainTextEditor');
@@ -2197,6 +3103,8 @@ async function saveOfficeDocument(isSilentAutoSave = false) {
         formData.append('html_content', getCleanWordHtml());
     } else if (OFFICE_EDITOR_TYPE === 'sheet') {
         formData.append('sheets_json', JSON.stringify(sheetsState));
+    } else if (OFFICE_EDITOR_TYPE === 'slides') {
+        formData.append('slides_json', JSON.stringify(slidesDeckState));
     } else if (plainTextEl) {
         formData.append('text_content', plainTextEl.value);
     }
@@ -2342,6 +3250,24 @@ function applyIncomingDeltas(deltas) {
                 });
                 lastKnownBlockCount = wordSurface.children.length;
             }
+        } else if (OFFICE_EDITOR_TYPE === 'slides') {
+            if (d.type === 'slides_slide' && d.payload && typeof d.payload.slideIdx === 'number' && d.payload.slide) {
+                const idx = d.payload.slideIdx;
+                if (slidesDeckState.slides && slidesDeckState.slides[idx]) {
+                    slidesDeckState.slides[idx] = d.payload.slide;
+                    if (idx !== activeSlideIdx || Date.now() - slidesLastTypedAt > 1200) {
+                        renderPptxEditor();
+                    } else {
+                        renderPptxThumbnails();
+                    }
+                }
+            } else if (d.type === 'slides_full' && d.payload && Array.isArray(d.payload.slides)) {
+                if (Date.now() - slidesLastTypedAt > 1200) {
+                    slidesDeckState = d.payload;
+                    ensureSlidesDeckValid();
+                    renderPptxEditor();
+                }
+            }
         } else if (plainTextEl && d.type === 'text_full' && typeof d.payload === 'string') {
             // Nur übernehmen, wenn man nicht gerade in den letzten 1,2 Sekunden selbst getippt hat
             if (Date.now() - plainLastTypedAt > 1200) {
@@ -2402,6 +3328,8 @@ async function runCollabSyncTick() {
                     renderSpreadsheet();
                 } else if (OFFICE_EDITOR_TYPE === 'word') {
                     applyWordPeerLocks();
+                } else if (OFFICE_EDITOR_TYPE === 'slides') {
+                    renderPptxThumbnails();
                 }
             }
         }

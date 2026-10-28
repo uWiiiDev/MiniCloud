@@ -669,6 +669,9 @@ function getFileTypeBadge(string $originalName, string $mimeType): array
     if (in_array($ext, ['xls', 'xlsx', 'csv', 'ods'], true)) {
         return ['label' => strtoupper($ext), 'bg' => 'bg-emerald-100 dark:bg-emerald-950/70', 'text' => 'text-emerald-700 dark:text-emerald-300'];
     }
+    if (in_array($ext, ['ppt', 'pptx', 'odp'], true)) {
+        return ['label' => strtoupper($ext), 'bg' => 'bg-orange-100 dark:bg-orange-950/70', 'text' => 'text-orange-700 dark:text-orange-300'];
+    }
     if (in_array($ext, ['mp4', 'mkv', 'mov', 'webm', 'mp3', 'wav', 'ogg'], true)) {
         return ['label' => strtoupper($ext), 'bg' => 'bg-pink-100 dark:bg-pink-950/70', 'text' => 'text-pink-700 dark:text-pink-300'];
     }

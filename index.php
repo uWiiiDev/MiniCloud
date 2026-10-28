@@ -2466,6 +2466,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 >
                     <option value="docx">📄 Word-Dokument (.docx)</option>
                     <option value="xlsx">📊 Excel-Tabelle (.xlsx)</option>
+                    <option value="pptx">📙 PowerPoint-Präsentation (.pptx)</option>
                     <option value="csv">📋 CSV-Tabelle (.csv)</option>
                     <option value="txt">📝 Textnotiz (.txt)</option>
                     <option value="md">📑 Markdown-Protokoll (.md)</option>
@@ -3476,6 +3477,7 @@ function updateOfficeDefaultFilename(type) {
     const defaults = {
         docx: 'Neues_Dokument_' + today,
         xlsx: 'Neue_Tabelle_' + today,
+        pptx: 'Neue_Praesentation_' + today,
         csv:  'Neue_Liste_' + today,
         txt:  'Neue_Notiz_' + today,
         md:   'Neues_Protokoll_' + today

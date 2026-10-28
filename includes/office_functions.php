@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 /**
  * Prüft, ob eine Datei anhand ihrer Endung von MiniCloud Office Light unterstützt wird,
- * und gibt den Editor-Typ zurück ('word', 'sheet', 'text' oder null).
+ * und gibt den Editor-Typ zurück ('word', 'sheet', 'slides', 'text' oder null).
  */
 function getOfficeEditorType(string $filename): ?string
 {
@@ -16,6 +16,7 @@ function getOfficeEditorType(string $filename): ?string
     return match ($ext) {
         'docx' => 'word',
         'xlsx', 'csv' => 'sheet',
+        'pptx' => 'slides',
         'txt', 'md', 'html', 'htm' => 'text',
         default => null,
     };
@@ -30,6 +31,7 @@ function getOfficeMimeType(string $filename): string
     return match ($ext) {
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'csv'  => 'text/csv',
         'md'   => 'text/markdown',
         'html', 'htm' => 'text/html',
@@ -1123,6 +1125,454 @@ function writeSheetsAsXlsx(array $sheets, string $targetPath): bool
     foreach ($worksheetXmls as $idx => $wsXml) {
         $zip->addFromString('xl/worksheets/sheet' . ($idx + 1) . '.xml', $wsXml);
     }
+
+    $zip->close();
+
+    if (!@rename($tmpFile, $targetPath)) {
+        if (!@copy($tmpFile, $targetPath)) {
+            @unlink($tmpFile);
+            return false;
+        }
+        @unlink($tmpFile);
+    }
+    @chmod($targetPath, 0640);
+    return true;
+}
+
+// ============================================================================
+// 3. POWERPOINT LIGHT (.PPTX) LESEN & SCHREIBEN (OpenXML PresentationML)
+// ============================================================================
+
+/**
+ * Liest eine .pptx-Präsentation aus und liefert ein strukturiertes Array mit Theme & Folien.
+ * Unterstützt sowohl in MiniCloud erstellte Präsentationen (inkl. Layouts, 2-Spalten, Bildern & Notizen)
+ * als auch extern in Microsoft PowerPoint / LibreOffice Impress erstellte .pptx-Dateien.
+ *
+ * @return array{theme: string, transition: string, slides: array<int, array<string, mixed>>}
+ */
+function readPptxData(string $filePath): array
+{
+    $defaultDeck = [
+        'theme'      => 'light',
+        'transition' => 'fade',
+        'slides'     => [
+            [
+                'layout'     => 'title',
+                'title'      => 'Präsentationstitel',
+                'subtitle'   => 'Untertitel oder Name des Vortragenden',
+                'body'       => '',
+                'col2'       => '',
+                'stat_val'   => '100 %',
+                'image_id'   => 0,
+                'notes'      => '',
+            ],
+        ],
+    ];
+
+    if (!is_file($filePath) || !class_exists('ZipArchive')) {
+        return $defaultDeck;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== true) {
+        return $defaultDeck;
+    }
+
+    // 1. Prüfen, ob unsere verlustfreie MiniCloud-Metadatendatei im PPTX-Archiv eingebettet ist
+    $mcJson = $zip->getFromName('ppt/minicloud_slides.json');
+    if (is_string($mcJson) && $mcJson !== '') {
+        $decoded = json_decode($mcJson, true);
+        if (is_array($decoded) && !empty($decoded['slides']) && is_array($decoded['slides'])) {
+            $zip->close();
+            return [
+                'theme'      => in_array(($decoded['theme'] ?? 'light'), ['light', 'navy', 'emerald', 'amber', 'rose', 'slate'], true) ? $decoded['theme'] : 'light',
+                'transition' => in_array(($decoded['transition'] ?? 'fade'), ['fade', 'slide', 'zoom', 'none'], true) ? $decoded['transition'] : 'fade',
+                'slides'     => array_values($decoded['slides']),
+            ];
+        }
+    }
+
+    // 2. Fallback für extern hochgeladene PowerPoint-Dateien: ppt/slides/slide1..N.xml parsen
+    $slideFiles = [];
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = (string)$zip->getNameIndex($i);
+        if (preg_match('#^ppt/slides/slide(\d+)\.xml$#i', $name, $m)) {
+            $slideFiles[(int)$m[1]] = $name;
+        }
+    }
+
+    if (empty($slideFiles)) {
+        $zip->close();
+        return $defaultDeck;
+    }
+
+    ksort($slideFiles, SORT_NUMERIC);
+    $parsedSlides = [];
+
+    foreach ($slideFiles as $slideNum => $entryName) {
+        $xml = $zip->getFromName($entryName);
+        if (!is_string($xml) || trim($xml) === '') {
+            continue;
+        }
+
+        $dom = new DOMDocument();
+        if (!@$dom->loadXML($xml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+            continue;
+        }
+
+        $xp = new DOMXPath($dom);
+        $xp->registerNamespace('p', 'http://schemas.openxmlformats.org/presentationml/2006/main');
+        $xp->registerNamespace('a', 'http://schemas.openxmlformats.org/drawingml/2006/main');
+
+        $titleText = '';
+        $bodyLines = [];
+
+        $shapes = $xp->query('//p:sp');
+        if ($shapes !== false) {
+            foreach ($shapes as $sIdx => $spNode) {
+                if (!$spNode instanceof DOMElement) {
+                    continue;
+                }
+                $phNode = $xp->query('.//p:nvSpPr/p:nvPr/p:ph', $spNode)->item(0);
+                $phType = ($phNode instanceof DOMElement) ? strtolower($phNode->getAttribute('type')) : '';
+
+                $paragraphs = $xp->query('.//a:p', $spNode);
+                $shapeLines = [];
+                if ($paragraphs !== false) {
+                    foreach ($paragraphs as $pNode) {
+                        $tNodes = $xp->query('.//a:t', $pNode);
+                        $line = '';
+                        if ($tNodes !== false) {
+                            foreach ($tNodes as $tNode) {
+                                $line .= $tNode->textContent;
+                            }
+                        }
+                        $line = trim($line);
+                        if ($line !== '') {
+                            $shapeLines[] = $line;
+                        }
+                    }
+                }
+
+                if (empty($shapeLines)) {
+                    continue;
+                }
+
+                if ($titleText === '' && ($phType === 'title' || $phType === 'ctrtitle' || $sIdx === 0)) {
+                    $titleText = implode(' – ', $shapeLines);
+                } else {
+                    foreach ($shapeLines as $sl) {
+                        $bodyLines[] = $sl;
+                    }
+                }
+            }
+        }
+
+        // Sprechernotizen (falls vorhanden) aus ppt/notesSlides/notesSlideN.xml lesen
+        $notesText = '';
+        $notesXml = $zip->getFromName('ppt/notesSlides/notesSlide' . $slideNum . '.xml');
+        if (is_string($notesXml) && $notesXml !== '') {
+            $nDom = new DOMDocument();
+            if (@$nDom->loadXML($notesXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+                $nXp = new DOMXPath($nDom);
+                $nXp->registerNamespace('a', 'http://schemas.openxmlformats.org/drawingml/2006/main');
+                $nTexts = [];
+                foreach ($nXp->query('//a:t') as $nt) {
+                    $val = trim($nt->textContent);
+                    if ($val !== '' && !ctype_digit($val)) {
+                        $nTexts[] = $val;
+                    }
+                }
+                $notesText = implode("\n", $nTexts);
+            }
+        }
+
+        $parsedSlides[] = [
+            'layout'   => ($slideNum === 1 && count($bodyLines) <= 2) ? 'title' : 'bullets',
+            'title'    => $titleText !== '' ? $titleText : ('Folie ' . $slideNum),
+            'subtitle' => ($slideNum === 1 && !empty($bodyLines)) ? implode(' · ', $bodyLines) : '',
+            'body'     => ($slideNum === 1 && count($bodyLines) <= 2) ? '' : implode("\n", $bodyLines),
+            'col2'     => '',
+            'stat_val' => '100 %',
+            'image_id' => 0,
+            'notes'    => $notesText,
+        ];
+    }
+
+    $zip->close();
+    if (empty($parsedSlides)) {
+        return $defaultDeck;
+    }
+
+    return [
+        'theme'      => 'light',
+        'transition' => 'fade',
+        'slides'     => $parsedSlides,
+    ];
+}
+
+/**
+ * Erzeugt eine standardkonforme OpenXML PowerPoint-Datei (.pptx) im 16:9-Breitbildformat,
+ * kompatibel mit Microsoft PowerPoint, LibreOffice Impress und Apple Keynote.
+ *
+ * @param array<string, mixed> $deckData
+ */
+function writePptxData(array $deckData, string $targetPath): bool
+{
+    if (!class_exists('ZipArchive')) {
+        return false;
+    }
+
+    $theme = in_array(($deckData['theme'] ?? 'light'), ['light', 'navy', 'emerald', 'amber', 'rose', 'slate'], true)
+        ? (string)$deckData['theme']
+        : 'light';
+    $transition = in_array(($deckData['transition'] ?? 'fade'), ['fade', 'slide', 'zoom', 'none'], true)
+        ? (string)$deckData['transition']
+        : 'fade';
+
+    $rawSlides = isset($deckData['slides']) && is_array($deckData['slides']) ? $deckData['slides'] : [];
+    $cleanSlides = [];
+
+    foreach ($rawSlides as $idx => $s) {
+        if (!is_array($s)) {
+            continue;
+        }
+        $layout = (string)($s['layout'] ?? 'bullets');
+        if (!in_array($layout, ['title', 'bullets', 'two_col', 'image_text', 'big_stat', 'section'], true)) {
+            $layout = 'bullets';
+        }
+        $cleanSlides[] = [
+            'id'       => (string)($s['id'] ?? ('s_' . ($idx + 1))),
+            'layout'   => $layout,
+            'title'    => mb_substr(trim((string)($s['title'] ?? ('Folie ' . ($idx + 1)))), 0, 250),
+            'subtitle' => mb_substr(trim((string)($s['subtitle'] ?? '')), 0, 350),
+            'body'     => mb_substr(trim((string)($s['body'] ?? '')), 0, 5000),
+            'col2'     => mb_substr(trim((string)($s['col2'] ?? '')), 0, 5000),
+            'stat_val' => mb_substr(trim((string)($s['stat_val'] ?? '')), 0, 80),
+            'imageId'  => max(0, (int)($s['imageId'] ?? $s['image_id'] ?? 0)),
+            'notes'    => mb_substr(trim((string)($s['notes'] ?? '')), 0, 4000),
+        ];
+    }
+
+    if (empty($cleanSlides)) {
+        $cleanSlides[] = [
+            'layout'   => 'title',
+            'title'    => 'Neue Präsentation',
+            'subtitle' => '',
+            'body'     => '',
+            'col2'     => '',
+            'stat_val' => '',
+            'image_id' => 0,
+            'notes'    => '',
+        ];
+    }
+
+    // Farbpalette passend zum gewählten Präsentations-Design
+    $themeColors = [
+        'light'   => ['bg' => 'FFFFFF', 'title' => '0F172A', 'body' => '334155', 'accent' => '2563EB'],
+        'navy'    => ['bg' => '0F172A', 'title' => 'F8FAFC', 'body' => 'CBD5E1', 'accent' => '38BDF8'],
+        'emerald' => ['bg' => '064E3B', 'title' => 'ECFDF5', 'body' => 'A7F3D0', 'accent' => '34D399'],
+        'amber'   => ['bg' => 'FFFBEB', 'title' => '78350F', 'body' => '92400E', 'accent' => 'D97706'],
+        'rose'    => ['bg' => 'FFF1F2', 'title' => '881337', 'body' => '9F1239', 'accent' => 'E11D48'],
+        'slate'   => ['bg' => '18181B', 'title' => 'FAFAFA', 'body' => 'D4D4D8', 'accent' => 'A855F7'],
+    ];
+    $pal = $themeColors[$theme] ?? $themeColors['light'];
+
+    $tmpFile = tempnam(sys_get_temp_dir(), 'mc_pptx_');
+    if ($tmpFile === false) {
+        return false;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($tmpFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        @unlink($tmpFile);
+        return false;
+    }
+
+    $ctOverrides = [
+        '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
+        '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>',
+        '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>',
+        '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>',
+    ];
+    $presRels = [
+        '<Relationship Id="rIdMaster1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>',
+        '<Relationship Id="rIdTheme1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>',
+    ];
+    $sldIdList = [];
+
+    foreach ($cleanSlides as $idx => $sl) {
+        $slideNum = $idx + 1;
+        $rId      = 'rIdSlide' . $slideNum;
+        $sldId    = 256 + $idx;
+
+        $ctOverrides[] = '<Override PartName="/ppt/slides/slide' . $slideNum . '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>';
+        $presRels[]    = '<Relationship Id="' . $rId . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' . $slideNum . '.xml"/>';
+        $sldIdList[]   = '<p:sldId id="' . $sldId . '" r:id="' . $rId . '"/>';
+
+        $escTitle = htmlspecialchars($sl['title'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+        // Textzeilen für den Hauptbereich zusammenstellen
+        $bodyLines = [];
+        if ($sl['layout'] === 'title' || $sl['layout'] === 'section') {
+            if ($sl['subtitle'] !== '') {
+                $bodyLines = preg_split('/\r\n|\r|\n/', $sl['subtitle']) ?: [];
+            }
+        } elseif ($sl['layout'] === 'big_stat') {
+            if ($sl['stat_val'] !== '') {
+                $bodyLines[] = $sl['stat_val'];
+            }
+            if ($sl['subtitle'] !== '') {
+                $bodyLines[] = $sl['subtitle'];
+            }
+        } else {
+            if ($sl['body'] !== '') {
+                foreach (preg_split('/\r\n|\r|\n/', $sl['body']) ?: [] as $ln) {
+                    if (trim($ln) !== '') {
+                        $bodyLines[] = '• ' . ltrim(trim($ln), '•-* ');
+                    }
+                }
+            }
+            if ($sl['layout'] === 'two_col' && $sl['col2'] !== '') {
+                $bodyLines[] = '';
+                foreach (preg_split('/\r\n|\r|\n/', $sl['col2']) ?: [] as $ln2) {
+                    if (trim($ln2) !== '') {
+                        $bodyLines[] = '• ' . ltrim(trim($ln2), '•-* ');
+                    }
+                }
+            }
+        }
+
+        if (empty($bodyLines)) {
+            $bodyLines[] = '';
+        }
+
+        $bodyParagraphsXml = '';
+        foreach ($bodyLines as $bLine) {
+            $escLine = htmlspecialchars($bLine, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $fontSize = ($sl['layout'] === 'big_stat' && $bLine === $sl['stat_val']) ? 5400 : 2200;
+            $bodyParagraphsXml .= '<a:p><a:r><a:rPr lang="de-DE" sz="' . $fontSize . '" dirty="0"><a:solidFill><a:srgbClr val="' . $pal['body'] . '"/></a:solidFill></a:rPr><a:t>' . $escLine . '</a:t></a:r></a:p>';
+        }
+
+        $titleY  = ($sl['layout'] === 'title' || $sl['layout'] === 'section') ? 2100000 : 650000;
+        $titleSz = ($sl['layout'] === 'title' || $sl['layout'] === 'section') ? 4400 : 3400;
+        $bodyY   = ($sl['layout'] === 'title' || $sl['layout'] === 'section') ? 3600000 : 1850000;
+
+        $slideXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            . '<p:cSld>'
+            . '<p:bg><p:bgPr><a:solidFill><a:srgbClr val="' . $pal['bg'] . '"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>'
+            . '<p:spTree>'
+            . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+            . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+            // Shape 1: Folientitel
+            . '<p:sp>'
+            . '<p:nvSpPr><p:cNvPr id="2" name="Title 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>'
+            . '<p:spPr><a:xfrm><a:off x="800000" y="' . $titleY . '"/><a:ext cx="10592000" cy="1100000"/></a:xfrm></p:spPr>'
+            . '<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="de-DE" sz="' . $titleSz . '" b="1" dirty="0"><a:solidFill><a:srgbClr val="' . $pal['title'] . '"/></a:solidFill></a:rPr><a:t>' . $escTitle . '</a:t></a:r></a:p></p:txBody>'
+            . '</p:sp>'
+            // Shape 2: Haupttext / Aufzählung
+            . '<p:sp>'
+            . '<p:nvSpPr><p:cNvPr id="3" name="Content Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph idx="1"/></p:nvPr></p:nvSpPr>'
+            . '<p:spPr><a:xfrm><a:off x="800000" y="' . $bodyY . '"/><a:ext cx="10592000" cy="4300000"/></a:xfrm></p:spPr>'
+            . '<p:txBody><a:bodyPr/><a:lstStyle/>' . $bodyParagraphsXml . '</p:txBody>'
+            . '</p:sp>'
+            . '</p:spTree>'
+            . '</p:cSld>'
+            . '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>'
+            . '</p:sld>';
+
+        $slideRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>'
+            . '</Relationships>';
+
+        $zip->addFromString('ppt/slides/slide' . $slideNum . '.xml', $slideXml);
+        $zip->addFromString('ppt/slides/_rels/slide' . $slideNum . '.xml.rels', $slideRelsXml);
+    }
+
+    // Minimalistisches SlideLayout & SlideMaster & Theme für volle PowerPoint/LibreOffice-Kompatibilität
+    $slideLayoutXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="titleAndContent" preserve="1">'
+        . '<p:cSld name="Title and Content"><p:spTree>'
+        . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+        . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+        . '</p:spTree></p:cSld>'
+        . '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>'
+        . '</p:sldLayout>';
+
+    $slideLayoutRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>'
+        . '</Relationships>';
+
+    $slideMasterXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+        . '<p:cSld><p:spTree>'
+        . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+        . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+        . '</p:spTree></p:cSld>'
+        . '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>'
+        . '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>'
+        . '</p:sldMaster>';
+
+    $slideMasterRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>'
+        . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>'
+        . '</Relationships>';
+
+    $themeXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="MiniCloud Theme">'
+        . '<a:themeElements>'
+        . '<a:clrScheme name="MiniCloud"><a:dk1><a:srgbClr val="0F172A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="334155"/></a:dk2><a:lt2><a:srgbClr val="F8FAFC"/></a:lt2><a:accent1><a:srgbClr val="2563EB"/></a:accent1><a:accent2><a:srgbClr val="059669"/></a:accent2><a:accent3><a:srgbClr val="D97706"/></a:accent3><a:accent4><a:srgbClr val="E11D48"/></a:accent4><a:accent5><a:srgbClr val="7C3AED"/></a:accent5><a:accent6><a:srgbClr val="0891B2"/></a:accent6><a:hlink><a:srgbClr val="2563EB"/></a:hlink><a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink></a:clrScheme>'
+        . '<a:fontScheme name="MiniCloud"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme>'
+        . '<a:fmtScheme name="MiniCloud"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>'
+        . '</a:themeElements>'
+        . '</a:theme>';
+
+    $presentationXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1">'
+        . '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rIdMaster1"/></p:sldMasterIdLst>'
+        . '<p:sldIdLst>' . implode('', $sldIdList) . '</p:sldIdLst>'
+        . '<p:sldSz cx="12192000" cy="6858000" type="screen16x9"/>'
+        . '<p:notesSz cx="6858000" cy="9144000"/>'
+        . '</p:presentation>';
+
+    $presentationRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . implode('', $presRels)
+        . '</Relationships>';
+
+    $contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Default Extension="json" ContentType="application/json"/>'
+        . implode('', $ctOverrides)
+        . '</Types>';
+
+    $rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>'
+        . '</Relationships>';
+
+    $zip->addFromString('[Content_Types].xml', $contentTypesXml);
+    $zip->addFromString('_rels/.rels', $rootRelsXml);
+    $zip->addFromString('ppt/presentation.xml', $presentationXml);
+    $zip->addFromString('ppt/_rels/presentation.xml.rels', $presentationRelsXml);
+    $zip->addFromString('ppt/slideLayouts/slideLayout1.xml', $slideLayoutXml);
+    $zip->addFromString('ppt/slideLayouts/_rels/slideLayout1.xml.rels', $slideLayoutRelsXml);
+    $zip->addFromString('ppt/slideMasters/slideMaster1.xml', $slideMasterXml);
+    $zip->addFromString('ppt/slideMasters/_rels/slideMaster1.xml.rels', $slideMasterRelsXml);
+    $zip->addFromString('ppt/theme/theme1.xml', $themeXml);
+
+    // Verlustfreie MiniCloud-Metadaten für 1:1 Roundtrip im Browser einbetten
+    $zip->addFromString('ppt/minicloud_slides.json', json_encode([
+        'theme'      => $theme,
+        'transition' => $transition,
+        'slides'     => $cleanSlides,
+    ], JSON_UNESCAPED_UNICODE));
 
     $zip->close();
 

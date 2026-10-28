@@ -19,8 +19,9 @@
 - **👥 3-Tier Internal User & Group Sharing:** Share folders and files with other users or groups using granular permissions (*Read Only*, *Read & Write*, or *Read, Write & Delete*).
 
 ### 2. 📄 MiniCloud Office Light with Live Team Collaboration (`office.php`)
-- **100% Local Document Processing:** Create and edit **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV (`.csv`)**, **Markdown (`.md`)**, and **Text (`.txt`)** files directly in the browser without external servers (no Microsoft 365 or Google Docs required).
-- **🟢 Real-Time Team Presence & Cell/Paragraph Locking:** When multiple users edit a shared document simultaneously, Office Light displays active collaborators in real time, locks currently focused Excel cells or Word paragraphs against accidental overwrites, and streams changes live to all screens.
+- **100% Local Document Processing:** Create and edit **Word (`.docx`)**, **Excel (`.xlsx`)**, **PowerPoint (`.pptx`)**, **CSV (`.csv`)**, **Markdown (`.md`)**, and **Text (`.txt`)** files directly in the browser without external servers (no Microsoft 365 or Google Docs required).
+- **📙 PowerPoint Light (`.pptx` Slide Editor & Fullscreen Beamer Mode):** Build 16:9 widescreen presentations with 6 slide layouts (*Title*, *Bullets*, *Two Columns*, *Cloud Image + Text*, *Big Stat / Quote*, *Section Header*), 6 presentation color themes, speaker notes, printable PDF handouts, and a fullscreen presenter view with a built-in laser pointer (`L` key). Generates standards-compliant OpenXML `.pptx` archives compatible with Microsoft PowerPoint, LibreOffice Impress, and Apple Keynote.
+- **🟢 Real-Time Team Presence & Cell/Paragraph/Slide Locking:** When multiple users edit a shared document simultaneously, Office Light displays active collaborators in real time, locks currently focused Excel cells, Word paragraphs, or PowerPoint slides against accidental overwrites, and streams changes live to all screens.
 
 ### 3. 📅 Calendar, Recurring Events, 2-Way CalDAV & `.ics` Feed (`calendar.php`, `caldav.php`)
 - Monthly and agenda views, recurring events, file attachments, automatic contact birthdays (`🎂`), 3-tier calendar sharing, personal `.ics` subscription feeds, and a **native 2-way CalDAV server (`caldav.php`)** for iOS, macOS Calendar, Thunderbird, and Android (*DAVx⁵*).
