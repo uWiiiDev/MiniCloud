@@ -620,6 +620,8 @@ function ensureSchemaUpdated(PDO $pdo): void
             `color` VARCHAR(24) NOT NULL DEFAULT 'amber',
             `tags` VARCHAR(255) NOT NULL DEFAULT '',
             `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
+            `audio_file_id` INT UNSIGNED DEFAULT NULL,
+            `audio_duration_sec` INT UNSIGNED NOT NULL DEFAULT 0,
             `shared_user_id` INT UNSIGNED DEFAULT NULL,
             `group_id` INT UNSIGNED DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -628,11 +630,19 @@ function ensureSchemaUpdated(PDO $pdo): void
             KEY `idx_notes_user` (`user_id`, `is_pinned`),
             KEY `idx_notes_shared` (`shared_user_id`),
             KEY `idx_notes_group` (`group_id`),
+            KEY `idx_notes_audio` (`audio_file_id`),
             CONSTRAINT `fk_notes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
             CONSTRAINT `fk_notes_shared` FOREIGN KEY (`shared_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-            CONSTRAINT `fk_notes_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL
+            CONSTRAINT `fk_notes_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
+            CONSTRAINT `fk_notes_audio` FOREIGN KEY (`audio_file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $colsNotes = $pdo->query("SHOW COLUMNS FROM `notes`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('audio_file_id', $colsNotes, true)) {
+        $pdo->exec("ALTER TABLE `notes` ADD COLUMN `audio_file_id` INT UNSIGNED DEFAULT NULL AFTER `is_pinned`");
+        $pdo->exec("ALTER TABLE `notes` ADD COLUMN `audio_duration_sec` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `audio_file_id`");
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `contacts` (

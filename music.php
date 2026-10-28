@@ -891,7 +891,7 @@ if ($userId > 0) {
            AND f.is_encrypted = 0
            AND f.group_folder_id IS NULL
            AND (
-               LOWER(f.original_name) REGEXP '\\\\.(mp3|m4a|wav|ogg|flac|aac|opus)$'
+               LOWER(f.original_name) REGEXP '\\\\.(mp3|m4a|wav|ogg|flac|aac|opus|webm)$'
                OR f.mime_type LIKE 'audio/%'
            )
            AND (
