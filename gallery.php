@@ -1108,8 +1108,15 @@ require_once __DIR__ . '/includes/header.php';
                                     </p>
                                 </div>
 
-                                <?php if ($activeAlbum && !$isGuestMode && canEditGalleryAlbum($pdo, $activeAlbum, $userId, '')): ?>
-                                    <div class="flex items-center gap-1 shrink-0">
+                                <div class="flex items-center gap-1 shrink-0">
+                                    <?php if (!$isGuestMode): ?>
+                                        <a href="office.php?id=<?= $fid ?>&amp;return_gallery=1<?= $activeAlbum ? '&amp;return_album=' . (int)$activeAlbum['id'] : '' ?>"
+                                           title="Im Foto- &amp; Bild-Studio bearbeiten (Zuschneiden, Größe, Filter, DSGVO-Pixel)"
+                                           class="p-1.5 rounded-lg hover:bg-pink-50 dark:hover:bg-pink-950/50 text-slate-400 hover:text-pink-600 transition">
+                                            🎨
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($activeAlbum && !$isGuestMode && canEditGalleryAlbum($pdo, $activeAlbum, $userId, '')): ?>
                                         <form method="post" class="inline">
                                             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                                             <input type="hidden" name="action" value="update_album_item">
@@ -1132,8 +1139,8 @@ require_once __DIR__ . '/includes/header.php';
                                                 ✕
                                             </button>
                                         </form>
-                                    </div>
-                                <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -1167,6 +1174,12 @@ require_once __DIR__ . '/includes/header.php';
                     class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold transition">
                 ℹ️ EXIF-Info
             </button>
+            <?php if (!$isGuestMode): ?>
+            <a id="lbBtnEdit" href="#"
+               class="px-3 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-xs font-bold transition">
+                🎨 Bearbeiten
+            </a>
+            <?php endif; ?>
             <a id="lbBtnDownload" href="#" download
                class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold transition">
                 ⬇️ Download
@@ -1516,9 +1529,10 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <script>
-const GALLERY_ITEMS = <?= json_encode(array_map(static function (array $p) use ($albumToken): array {
+const GALLERY_ITEMS = <?= json_encode(array_map(static function (array $p) use ($albumToken, $activeAlbum): array {
     $fid = (int)$p['id'];
     $tokParam = $albumToken !== '' ? '&album_token=' . urlencode($albumToken) : '';
+    $retAlbum = $activeAlbum ? '&return_album=' . (int)$activeAlbum['id'] : '';
     return [
         'id'       => $fid,
         'title'    => (trim((string)($p['caption'] ?? '')) !== '') ? (string)$p['caption'] : (string)$p['original_name'],
@@ -1528,6 +1542,7 @@ const GALLERY_ITEMS = <?= json_encode(array_map(static function (array $p) use (
         'url'      => 'gallery.php?stream_file=' . $fid . $tokParam,
         'dlUrl'    => 'gallery.php?stream_file=' . $fid . '&download=1' . $tokParam,
         'exifUrl'  => 'gallery.php?exif_file=' . $fid . $tokParam,
+        'editUrl'  => 'office.php?id=' . $fid . '&return_gallery=1' . $retAlbum,
     ];
 }, $displayedPhotos), JSON_UNESCAPED_UNICODE) ?>;
 
@@ -1567,6 +1582,10 @@ function renderLightboxSlide() {
     document.getElementById('lbSubtitle').textContent = item.date + (item.by ? ' · ' + item.by : '');
     document.getElementById('lbCounter').textContent = (lbIndex + 1) + ' / ' + GALLERY_ITEMS.length;
     document.getElementById('lbBtnDownload').href = item.dlUrl;
+    const editBtn = document.getElementById('lbBtnEdit');
+    if (editBtn && item.editUrl) {
+        editBtn.href = item.editUrl;
+    }
 
     if (!document.getElementById('lbExifDrawer').classList.contains('hidden')) {
         loadExifForCurrent();

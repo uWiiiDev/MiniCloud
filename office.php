@@ -451,15 +451,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         exit;
     }
 
-    // Optionaler neuer Dateiname (Endung bleibt erhalten)
+    // Optionaler neuer Dateiname (Endung bleibt erhalten bzw. bei Bild-Konvertierung anpassbar)
     $newTitleInput = trim((string)($_POST['doc_title'] ?? ''));
+    $targetExt = $ext;
+    if ($editorType === 'image') {
+        $reqExt = strtolower(trim((string)($_POST['target_ext'] ?? $ext)));
+        if (in_array($reqExt, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            $targetExt = ($reqExt === 'jpeg') ? 'jpg' : $reqExt;
+        }
+    }
     $updatedOrigName = $origName;
     if ($newTitleInput !== '') {
         $cleanNew = sanitizeOriginalFilename($newTitleInput);
         $newBase  = pathinfo($cleanNew, PATHINFO_FILENAME);
         if ($newBase !== '') {
-            $updatedOrigName = $newBase . '.' . $ext;
+            $updatedOrigName = $newBase . '.' . $targetExt;
         }
+    } elseif ($targetExt !== $ext) {
+        $updatedOrigName = pathinfo($origName, PATHINFO_FILENAME) . '.' . $targetExt;
     }
 
     // Temporäre Zieldatei erzeugen, um Größe und Kontingent vor dem Überschreiben zu prüfen
@@ -504,6 +513,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             exit;
         }
         $writeOk = writeVisioData($decodedVisio, $tmpSave);
+    } elseif ($editorType === 'image') {
+        if (isset($_FILES['image_blob']) && (int)($_FILES['image_blob']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $writeOk = @move_uploaded_file((string)$_FILES['image_blob']['tmp_name'], $tmpSave)
+                || @copy((string)$_FILES['image_blob']['tmp_name'], $tmpSave);
+        } elseif (!empty($_POST['image_data_url']) && is_string($_POST['image_data_url'])) {
+            if (preg_match('#^data:image/(?:png|jpeg|jpg|webp);base64,(.+)$#i', $_POST['image_data_url'], $m)) {
+                $bin = base64_decode($m[1], true);
+                if ($bin !== false && strlen($bin) > 0) {
+                    $writeOk = (@file_put_contents($tmpSave, $bin) !== false);
+                }
+            }
+        }
     } else {
         $textContent = (string)($_POST['text_content'] ?? '');
         $writeOk = (@file_put_contents($tmpSave, $textContent) !== false);
@@ -517,6 +538,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     }
 
     $newSize = (int)filesize($tmpSave);
+    $saveMode = ($editorType === 'image' && ($_POST['save_mode'] ?? 'overwrite') === 'copy') ? 'copy' : 'overwrite';
+
+    if ($saveMode === 'copy') {
+        $ownerStats = getUserStorageStats($pdo, (int)$file['user_id']);
+        if ($newSize > $ownerStats['free']) {
+            @unlink($tmpSave);
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Nicht genügend freier Cloud-Speicherplatz für die neue Bildkopie.']);
+            exit;
+        }
+        do {
+            $newStored = generateSafeStoredFilename();
+            $newDest   = UPLOAD_DIR . $newStored;
+        } while (file_exists($newDest));
+
+        if (!@rename($tmpSave, $newDest)) {
+            if (!@copy($tmpSave, $newDest)) {
+                @unlink($tmpSave);
+                http_response_code(500);
+                echo json_encode(['success' => false, 'message' => 'Kopie konnte nicht gespeichert werden.']);
+                exit;
+            }
+            @unlink($tmpSave);
+        }
+        @chmod($newDest, 0640);
+
+        $copyBase = pathinfo($updatedOrigName, PATHINFO_FILENAME);
+        if (strtolower($copyBase) === strtolower(pathinfo($origName, PATHINFO_FILENAME))) {
+            $copyBase .= '_bearbeitet_' . date('His');
+        }
+        $copyOrigName = $copyBase . '.' . $targetExt;
+        $copyMime     = getOfficeMimeType($copyOrigName);
+
+        $stmtCopy = $pdo->prepare(
+            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+             VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, 0)'
+        );
+        $stmtCopy->execute([
+            ':uid'   => (int)$file['user_id'],
+            ':gf_id' => !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null,
+            ':fn'    => $newStored,
+            ':orig'  => $copyOrigName,
+            ':fp'    => (string)$file['folder_path'],
+            ':sz'    => $newSize,
+            ':mime'  => $copyMime,
+        ]);
+        $newCopyId = (int)$pdo->lastInsertId();
+
+        echo json_encode([
+            'success'   => true,
+            'message'   => 'Als Kopie „' . $copyOrigName . '“ gespeichert (' . date('H:i:s') . ' Uhr)',
+            'filename'  => $copyOrigName,
+            'size'      => formatBytes($newSize),
+            'newFileId' => $newCopyId,
+            'updatedAt' => date('d.m.Y H:i') . ' Uhr',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $oldSize = (int)$file['file_size'];
     $sizeDelta = $newSize - $oldSize;
 
@@ -932,6 +1012,7 @@ if ($fileId <= 0) {
     $countSlides  = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'slides'));
     $countVisio   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'visio'));
     $countMindmap = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'mindmap'));
+    $countImage   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'image'));
     $countText    = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'text'));
     $countShared  = count(array_filter($officeDocs, static fn(array $d): bool => $d['is_shared']));
 
@@ -944,18 +1025,24 @@ if ($fileId <= 0) {
             <div>
                 <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
                     <span class="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 text-2xl shrink-0">📝</span>
-                    <span>MiniCloud Office Light</span>
+                    <span>MiniCloud Office Light &amp; Bild-Studio</span>
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Word (<code>.docx</code>), Excel (<code>.xlsx</code>), PowerPoint (<code>.pptx</code>), Visio-Diagramme (<code>.drawio</code>), Mind-Maps und Markdown direkt im Browser erstellen und im Team live bearbeiten – 100 % lokal auf deinem Server.
+                    Word (<code>.docx</code>), Excel (<code>.xlsx</code>), PowerPoint (<code>.pptx</code>), Visio (<code>.drawio</code>), Mind-Maps, Foto-/Bildbearbeitung und Markdown direkt im Browser – 100 % lokal auf deinem Server.
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2 shrink-0">
-                <a href="mindmap.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800 text-xs sm:text-sm font-semibold transition-colors">
-                    🧠 Mind-Map-Editor &rarr;
+                <a href="gallery.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-50 dark:bg-pink-950/60 hover:bg-pink-100 text-pink-700 dark:text-pink-300 border border-pink-200/80 dark:border-pink-800 text-xs sm:text-sm font-semibold transition-colors">
+                    🖼️ Foto-Galerie
                 </a>
-                <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors">
-                    📁 Zur Dateiverwaltung &rarr;
+                <a href="pdf_tools.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 text-xs sm:text-sm font-semibold transition-colors">
+                    📄 PDF &amp; Scan
+                </a>
+                <a href="mindmap.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800 text-xs sm:text-sm font-semibold transition-colors">
+                    🧠 Mind-Map-Editor
+                </a>
+                <a href="index.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors">
+                    📁 Dateien &rarr;
                 </a>
             </div>
         </div>
@@ -1128,6 +1215,10 @@ if ($fileId <= 0) {
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
                         🧠 Mind-Maps (<?= $countMindmap ?>)
                     </button>
+                    <button type="button" data-office-filter="image" onclick="filterOfficeHub('image')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        🎨 Bilder (<?= $countImage ?>)
+                    </button>
                     <button type="button" data-office-filter="text" onclick="filterOfficeHub('text')"
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
                         📒 Text &amp; MD (<?= $countText ?>)
@@ -1290,6 +1381,7 @@ if ($fileId <= 0) {
             else if (currentOfficeFilter === 'slides') typeMatch = (dType === 'slides');
             else if (currentOfficeFilter === 'visio') typeMatch = (dType === 'visio');
             else if (currentOfficeFilter === 'mindmap') typeMatch = (dType === 'mindmap');
+            else if (currentOfficeFilter === 'image') typeMatch = (dType === 'image');
             else if (currentOfficeFilter === 'text') typeMatch = (dType === 'text');
             else if (currentOfficeFilter === 'shared') typeMatch = dShared;
 
@@ -1337,7 +1429,10 @@ $returnFolder = isset($_GET['return_folder']) ? trim((string)$_GET['return_folde
 if ($returnFolder !== '' && empty($returnQuery['shared_folder'])) {
     $returnQuery['folder'] = $returnFolder;
 }
-$backUrl = 'index.php' . (!empty($returnQuery) ? '?' . http_build_query($returnQuery) : '');
+$backFromGallery = !empty($_GET['return_gallery']);
+$backUrl = $backFromGallery
+    ? ('gallery.php' . (!empty($_GET['return_album']) ? '?album=' . (int)$_GET['return_album'] : ''))
+    : ('index.php' . (!empty($returnQuery) ? '?' . http_build_query($returnQuery) : ''));
 
 $storedFilename = basename((string)$file['filename']);
 $physicalPath   = UPLOAD_DIR . $storedFilename;
@@ -1386,9 +1481,9 @@ require_once __DIR__ . '/includes/header.php';
             href="<?= e($backUrl) ?>"
             id="btnBackToCloud"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors shrink-0"
-            title="Zurück zur Dateiliste"
+            title="<?= $backFromGallery ? 'Zurück zur Foto-Galerie' : 'Zurück zur Dateiliste' ?>"
         >
-            &larr; Dateien
+            &larr; <?= $backFromGallery ? '🖼️ Galerie' : 'Dateien' ?>
         </a>
         <a
             href="office.php"
@@ -1404,6 +1499,7 @@ require_once __DIR__ . '/includes/header.php';
             'sheet'  => ['icon' => '📊', 'label' => 'Calc Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'],
             'slides' => ['icon' => '📙', 'label' => 'PowerPoint Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'],
             'visio'  => ['icon' => '📐', 'label' => 'Visio Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800'],
+            'image'  => ['icon' => '🎨', 'label' => 'Foto- & Bild-Studio (.' . strtoupper($ext) . ')', 'cls' => 'bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800'],
             default  => ['icon' => '📝', 'label' => 'Text-Editor (.' . strtoupper($ext) . ')', 'cls' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'],
         };
         ?>
@@ -1453,10 +1549,17 @@ require_once __DIR__ . '/includes/header.php';
         </a>
 
         <?php if ($canEdit && !$isVaultLocked): ?>
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none" title="Speichert Änderungen bei Team-Bearbeitung nach wenigen Sekunden automatisch in die Datei">
-                <input type="checkbox" id="chkOfficeAutoSave" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
-                <span>⚡ Auto-Save</span>
-            </label>
+            <?php if ($editorType === 'image'): ?>
+                <select id="imgStudioSaveMode" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200" title="Wähle, ob das Originalbild (mit 🕓 Versionsschutz) aktualisiert oder eine neue Datei im Ordner angelegt wird">
+                    <option value="overwrite">💾 Original aktualisieren (mit 🕓 Versionsschutz)</option>
+                    <option value="copy">📄 Als neue Kopie speichern</option>
+                </select>
+            <?php else: ?>
+                <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none" title="Speichert Änderungen bei Team-Bearbeitung nach wenigen Sekunden automatisch in die Datei">
+                    <input type="checkbox" id="chkOfficeAutoSave" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                    <span>⚡ Auto-Save</span>
+                </label>
+            <?php endif; ?>
 
             <button
                 type="button"
@@ -2013,6 +2116,215 @@ require_once __DIR__ . '/includes/header.php';
         <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span id="visioStatsLabel">0 Formen &bull; 0 Verbindungen</span>
             <span>Format: Vektor-Diagramm (<code>.drawio</code> / <code>.svg</code>) &bull; Klicke auf „🔗 Pfeil verbinden“ zum Verknüpfen zweier Formen</span>
+        </div>
+    </div>
+
+<?php elseif ($editorType === 'image'): ?>
+    <!-- ================================================================== -->
+    <!-- 2d. FOTO- & BILD-STUDIO (.JPG, .PNG, .WEBP, .GIF, .BMP)            -->
+    <!-- ================================================================== -->
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8">
+        <!-- Obere Haupt-Werkzeugleiste: 4 Studio-Bereiche + Undo/Reset -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <button type="button" id="imgTabBtnTransform" onclick="switchImgStudioTab('transform')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-pink-600 text-white shadow-2xs transition cursor-pointer">
+                    ✂️ Zuschneiden &amp; Drehen
+                </button>
+                <button type="button" id="imgTabBtnResize" onclick="switchImgStudioTab('resize')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition cursor-pointer">
+                    📐 Größe &amp; Komprimierung
+                </button>
+                <button type="button" id="imgTabBtnAdjust" onclick="switchImgStudioTab('adjust')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition cursor-pointer">
+                    ☀️ Belichtung &amp; Filter
+                </button>
+                <button type="button" id="imgTabBtnDraw" onclick="switchImgStudioTab('draw')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition cursor-pointer">
+                    ✏️ Zeichnen, Text &amp; 🔲 DSGVO-Pixel
+                </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+                <?php if ($canEdit): ?>
+                    <button type="button" id="btnImgUndo" onclick="imgStudioUndo()" disabled
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 disabled:opacity-40 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                            title="Letzten Bearbeitungsschritt rückgängig machen (Strg+Z)">
+                        ↩️ Rückgängig
+                    </button>
+                    <button type="button" onclick="imgStudioResetOriginal()"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                            title="Alle ungespeicherten Änderungen verwerfen und Originalbild neu laden">
+                        🔄 Original
+                    </button>
+                <?php endif; ?>
+                <button type="button" onclick="imgStudioDownloadLocal()"
+                        class="px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-xs font-bold cursor-pointer"
+                        title="Bearbeitetes Bild direkt auf den PC/Smartphone herunterladen">
+                    ⬇️ Als Bild laden
+                </button>
+            </div>
+        </div>
+
+        <?php if ($canEdit): ?>
+        <!-- Unter-Werkzeugleisten je nach aktivem Studio-Tab -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs">
+            <!-- TAB 1: ZUSCHNEIDEN, DREHEN & SPIEGELN -->
+            <div id="imgPanelTransform" class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-slate-600 dark:text-slate-300">🔄 Drehen &amp; Spiegeln:</span>
+                <button type="button" onclick="imgStudioRotate(-90)" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">↶ 90° links</button>
+                <button type="button" onclick="imgStudioRotate(90)" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">↷ 90° rechts</button>
+                <button type="button" onclick="imgStudioFlip('h')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">⇄ Horizontal</button>
+                <button type="button" onclick="imgStudioFlip('v')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">⇅ Vertikal</button>
+
+                <span class="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-1"></span>
+
+                <span class="font-bold text-slate-600 dark:text-slate-300">✂️ Zuschnitt:</span>
+                <select id="imgCropAspect" onchange="imgStudioStartCrop(this.value)" class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                    <option value="">— Zuschnitt wählen oder Rahmen mit Maus ziehen —</option>
+                    <option value="free">✂️ Frei zuschneiden</option>
+                    <option value="1:1">🟦 1:1 Quadrat / Profilbild</option>
+                    <option value="16:9">🖥️ 16:9 Präsentation / Banner</option>
+                    <option value="4:3">📷 4:3 Klassisches Foto</option>
+                    <option value="3:2">🎞️ 3:2 Spiegelreflex</option>
+                    <option value="a4">📄 DIN A4 Hochformat</option>
+                </select>
+                <button type="button" id="btnApplyCrop" onclick="imgStudioApplyCrop()" class="hidden px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">
+                    ✓ Zuschnitt anwenden
+                </button>
+                <button type="button" id="btnCancelCrop" onclick="imgStudioCancelCrop()" class="hidden px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    ✕ Aufheben
+                </button>
+            </div>
+
+            <!-- TAB 2: GRÖSSE ÄNDERN & KOMPRIMIEREN -->
+            <div id="imgPanelResize" class="hidden flex-wrap items-center gap-3">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-bold text-slate-600 dark:text-slate-300">📐 Skalieren:</span>
+                    <button type="button" onclick="imgStudioScalePreset(0.75)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">75 %</button>
+                    <button type="button" onclick="imgStudioScalePreset(0.5)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">50 %</button>
+                    <button type="button" onclick="imgStudioMaxDimPreset(1920)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">Full-HD (1920 px)</button>
+                    <button type="button" onclick="imgStudioMaxDimPreset(1280)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">Web (1280 px)</button>
+                    <button type="button" onclick="imgStudioMaxDimPreset(800)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">Kompakt (800 px)</button>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <input type="number" id="imgResizeW" min="16" max="8000" oninput="imgStudioSyncAspect('w')" class="w-20 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-center">
+                    <span>×</span>
+                    <input type="number" id="imgResizeH" min="16" max="8000" oninput="imgStudioSyncAspect('h')" class="w-20 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-center">
+                    <span>px</span>
+                    <label class="inline-flex items-center gap-1 text-[11px] cursor-pointer">
+                        <input type="checkbox" id="imgResizeLock" checked class="rounded text-pink-600"> 🔒 Proportion
+                    </label>
+                    <button type="button" onclick="imgStudioApplyResize()" class="px-2.5 py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white font-bold cursor-pointer">
+                        ✓ Größe ändern
+                    </button>
+                </div>
+
+                <span class="h-5 w-px bg-slate-300 dark:bg-slate-700"></span>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-bold text-slate-600 dark:text-slate-300">📦 Format &amp; Qualität:</span>
+                    <select id="imgExportFormat" onchange="imgStudioUpdateSizeEstimate()" class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                        <option value="jpg" <?= in_array($ext, ['jpg', 'jpeg'], true) ? 'selected' : '' ?>>JPEG (.jpg – Foto-Standard)</option>
+                        <option value="webp" <?= $ext === 'webp' ? 'selected' : '' ?>>WebP (.webp – Extrem platzsparend)</option>
+                        <option value="png" <?= $ext === 'png' ? 'selected' : '' ?>>PNG (.png – Verlustfrei / Grafik)</option>
+                    </select>
+                    <input type="range" id="imgExportQuality" min="15" max="100" value="88" oninput="document.getElementById('imgQualityVal').textContent=this.value+'%'; imgStudioUpdateSizeEstimate();" class="w-24 accent-pink-600">
+                    <span id="imgQualityVal" class="font-mono font-bold w-10">88%</span>
+                    <span id="imgSizeEstimateBadge" class="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                        Berechne Größe…
+                    </span>
+                </div>
+            </div>
+
+            <!-- TAB 3: BELICHTUNG, FARBEN & FOTO-FILTER -->
+            <div id="imgPanelAdjust" class="hidden space-y-2.5">
+                <div class="flex flex-wrap items-center gap-4">
+                    <label class="flex items-center gap-1.5">
+                        <span class="font-semibold w-20">☀️ Helligkeit:</span>
+                        <input type="range" id="imgAdjBright" min="-80" max="80" value="0" oninput="imgStudioPreviewAdjust()" class="w-28 accent-pink-600">
+                    </label>
+                    <label class="flex items-center gap-1.5">
+                        <span class="font-semibold w-20">◐ Kontrast:</span>
+                        <input type="range" id="imgAdjContrast" min="-80" max="80" value="0" oninput="imgStudioPreviewAdjust()" class="w-28 accent-pink-600">
+                    </label>
+                    <label class="flex items-center gap-1.5">
+                        <span class="font-semibold w-20">🎨 Sättigung:</span>
+                        <input type="range" id="imgAdjSat" min="-100" max="100" value="0" oninput="imgStudioPreviewAdjust()" class="w-28 accent-pink-600">
+                    </label>
+                    <label class="flex items-center gap-1.5">
+                        <span class="font-semibold w-16">📜 Sepia:</span>
+                        <input type="range" id="imgAdjSepia" min="0" max="100" value="0" oninput="imgStudioPreviewAdjust()" class="w-24 accent-pink-600">
+                    </label>
+                    <button type="button" onclick="imgStudioCommitAdjust()" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">
+                        ✓ Farbkorrektur übernehmen
+                    </button>
+                    <button type="button" onclick="imgStudioResetAdjustSliders()" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">
+                        Regler 0
+                    </button>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span class="font-bold text-slate-500 mr-1">✨ 1-Klick-Filter:</span>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('auto')" class="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200 font-semibold cursor-pointer">✨ Auto-Brillanz</button>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('bw')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">🖤 Schwarz-Weiß</button>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('sepia')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">📜 Vintage / Sepia</button>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('warm')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">🌅 Warm / Sommer</button>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('doc')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">📄 Dokumenten-Kontrast</button>
+                    <button type="button" onclick="imgStudioApplyFilterPreset('invert')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-semibold cursor-pointer">🔄 Invertieren</button>
+                </div>
+            </div>
+
+            <!-- TAB 4: ZEICHNEN, PFEILE, TEXT/WASSERZEICHEN & DSGVO-VERPIXELUNG -->
+            <div id="imgPanelDraw" class="hidden flex flex-wrap items-center gap-2">
+                <span class="font-bold text-slate-600 dark:text-slate-300">Werkzeug:</span>
+                <button type="button" data-img-tool="pixelate" onclick="setImgDrawTool('pixelate')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-pink-600 text-white font-bold cursor-pointer" title="Mit gedrückter Maustaste über Gesichter, Kennzeichen oder sensible Daten ziehen, um sie irreversibel zu verpixeln">
+                    🔲 DSGVO-Verpixelung
+                </button>
+                <button type="button" data-img-tool="blur" onclick="setImgDrawTool('blur')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer" title="Bereich mit Weichzeichner unkenntlich machen">
+                    💧 Unschärfe-Pinsel
+                </button>
+                <button type="button" data-img-tool="pen" onclick="setImgDrawTool('pen')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    🖊️ Freihand-Stift
+                </button>
+                <button type="button" data-img-tool="arrow" onclick="setImgDrawTool('arrow')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    ↗️ Hinweispfeil
+                </button>
+                <button type="button" data-img-tool="rect" onclick="setImgDrawTool('rect')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    ▭ Rahmen
+                </button>
+                <button type="button" data-img-tool="text" onclick="setImgDrawTool('text')" class="img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    🔤 Text / Wasserzeichen
+                </button>
+
+                <span class="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-1"></span>
+
+                <label class="flex items-center gap-1">
+                    <span>Farbe:</span>
+                    <input type="color" id="imgDrawColor" value="#e11d48" class="w-7 h-7 rounded cursor-pointer border-0">
+                </label>
+                <label class="flex items-center gap-1">
+                    <span>Größe:</span>
+                    <input type="range" id="imgDrawSize" min="4" max="60" value="22" class="w-20 accent-pink-600">
+                </label>
+                <input type="text" id="imgWatermarkText" placeholder="Text für Klick ins Bild (z.B. © Verein 2026)…" class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 w-56">
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Haupt-Arbeitsfläche (Canvas + interaktiver Crop-Overlay) -->
+        <div class="relative w-full min-h-[58vh] max-h-[72vh] overflow-auto bg-slate-900/95 flex items-center justify-center p-4 sm:p-6 select-none">
+            <div id="imgCanvasContainer" class="relative inline-block shadow-2xl">
+                <canvas id="imgStudioCanvas" class="max-w-full max-h-[64vh] w-auto h-auto block rounded bg-[repeating-conic-gradient(#cbd5e1_0%_25%,#f8fafc_0%_50%)] bg-[length:20px_20px]"></canvas>
+                <!-- Visueller Zuschnitt-Auswahlrahmen -->
+                <div id="imgCropOverlay" class="hidden absolute border-2 border-dashed border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.58)] pointer-events-none"></div>
+            </div>
+        </div>
+
+        <!-- Untere Statuszeile -->
+        <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span id="imgStudioStatsLabel">Lade Bild…</span>
+            <span>🛡️ 100 % lokale HTML5-Canvas-Bildbearbeitung im Browser &bull; Original bleibt über 🕓 Dateiversionen jederzeit wiederherstellbar</span>
         </div>
     </div>
 
@@ -4026,6 +4338,755 @@ if (OFFICE_EDITOR_TYPE === 'visio') {
 }
 
 // ============================================================================
+// 2d. FOTO- & BILD-STUDIO FUNKTIONEN (.JPG, .PNG, .WEBP, .GIF, .BMP)
+// ============================================================================
+const imgStudioCanvas = document.getElementById('imgStudioCanvas');
+const imgStudioCtx    = imgStudioCanvas ? imgStudioCanvas.getContext('2d', { willReadFrequently: true }) : null;
+const imgBaseCanvas   = document.createElement('canvas');
+const imgBaseCtx      = imgBaseCanvas.getContext('2d', { willReadFrequently: true });
+
+let imgOriginalImage  = null;
+let imgUndoStack      = []; // Array von { width, height, dataUrl } (max. 15 Schritte)
+let imgActiveTab      = 'transform';
+let imgDrawTool       = 'pixelate';
+let imgIsDrawing      = false;
+let imgDrawStartX     = 0;
+let imgDrawStartY     = 0;
+let imgDrawSnapshot   = null; // ImageData vor aktuellem Pfeil/Rahmen-Zug
+let imgAdjustDirty    = false;
+
+// Crop-Status
+let imgCropActive     = false;
+let imgCropDragging   = false;
+let imgCropAspectVal  = '';
+let imgCropStart      = { x: 0, y: 0 };
+let imgCropRect       = null; // { x, y, w, h } in Canvas-Pixelkoordinaten
+let imgSizeEstTimer   = null;
+
+function initImageStudio() {
+    if (!imgStudioCanvas || !imgStudioCtx) return;
+    currentFocusTarget = 'image_canvas';
+    currentFocusLabel  = 'Foto-Studio';
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        imgOriginalImage = img;
+        applyImageSourceToStudio(img, false);
+        imgUndoStack = [];
+        updateImgUndoBtn();
+        imgStudioUpdateStats();
+        imgStudioUpdateSizeEstimate();
+    };
+    img.onerror = () => {
+        const lbl = document.getElementById('imgStudioStatsLabel');
+        if (lbl) lbl.textContent = '⚠️ Bilddatei konnte nicht geladen werden.';
+    };
+    img.src = 'download.php?id=' + encodeURIComponent(String(OFFICE_FILE_ID)) + '&inline=1&t=' + Date.now();
+}
+
+function applyImageSourceToStudio(source, recordDirty = true) {
+    if (!imgStudioCanvas || !imgStudioCtx) return;
+    const w = Math.max(1, source.naturalWidth || source.width || 1);
+    const h = Math.max(1, source.naturalHeight || source.height || 1);
+    imgStudioCanvas.width  = w;
+    imgStudioCanvas.height = h;
+    imgStudioCtx.clearRect(0, 0, w, h);
+    imgStudioCtx.drawImage(source, 0, 0, w, h);
+
+    syncImgBaseFromStudio();
+    syncImgResizeInputs();
+    imgStudioCancelCrop();
+    imgStudioResetAdjustSliders(false);
+    imgStudioUpdateStats();
+    imgStudioUpdateSizeEstimate();
+    if (recordDirty) {
+        markDirty();
+    }
+}
+
+function syncImgBaseFromStudio() {
+    if (!imgStudioCanvas) return;
+    imgBaseCanvas.width  = imgStudioCanvas.width;
+    imgBaseCanvas.height = imgStudioCanvas.height;
+    imgBaseCtx.clearRect(0, 0, imgBaseCanvas.width, imgBaseCanvas.height);
+    imgBaseCtx.drawImage(imgStudioCanvas, 0, 0);
+    imgAdjustDirty = false;
+}
+
+function pushImgUndoSnapshot() {
+    if (!imgStudioCanvas) return;
+    if (imgAdjustDirty) {
+        imgStudioCommitAdjust(false);
+    }
+    try {
+        const snap = {
+            width: imgStudioCanvas.width,
+            height: imgStudioCanvas.height,
+            imageData: imgStudioCtx.getImageData(0, 0, imgStudioCanvas.width, imgStudioCanvas.height)
+        };
+        imgUndoStack.push(snap);
+        if (imgUndoStack.length > 15) {
+            imgUndoStack.shift();
+        }
+        updateImgUndoBtn();
+    } catch (e) {}
+}
+
+function updateImgUndoBtn() {
+    const btn = document.getElementById('btnImgUndo');
+    if (btn) {
+        btn.disabled = imgUndoStack.length === 0;
+        btn.textContent = imgUndoStack.length > 0 ? `↩️ Rückgängig (${imgUndoStack.length})` : '↩️ Rückgängig';
+    }
+}
+
+function imgStudioUndo() {
+    if (!imgStudioCanvas || imgUndoStack.length === 0) return;
+    const snap = imgUndoStack.pop();
+    updateImgUndoBtn();
+    imgStudioCanvas.width  = snap.width;
+    imgStudioCanvas.height = snap.height;
+    imgStudioCtx.putImageData(snap.imageData, 0, 0);
+    syncImgBaseFromStudio();
+    syncImgResizeInputs();
+    imgStudioCancelCrop();
+    imgStudioResetAdjustSliders(false);
+    imgStudioUpdateStats();
+    imgStudioUpdateSizeEstimate();
+    markDirty();
+}
+
+function imgStudioResetOriginal() {
+    if (!imgOriginalImage) return;
+    if (hasUnsavedChanges && !confirm('Alle aktuellen Bearbeitungsschritte verwerfen und zum Originalbild zurückkehren?')) {
+        return;
+    }
+    pushImgUndoSnapshot();
+    applyImageSourceToStudio(imgOriginalImage, false);
+    hasUnsavedChanges = false;
+    const statusEl = document.getElementById('officeStatusText');
+    if (statusEl) {
+        statusEl.textContent = '✓ Original wiederhergestellt';
+        statusEl.className = 'font-semibold text-emerald-600 dark:text-emerald-400';
+    }
+}
+
+function switchImgStudioTab(tab) {
+    if (imgAdjustDirty && tab !== 'adjust') {
+        imgStudioCommitAdjust(true);
+    }
+    if (tab !== 'transform') {
+        imgStudioCancelCrop();
+    }
+    imgActiveTab = tab;
+
+    const tabs = {
+        transform: { btn: 'imgTabBtnTransform', panel: 'imgPanelTransform' },
+        resize:    { btn: 'imgTabBtnResize',    panel: 'imgPanelResize' },
+        adjust:    { btn: 'imgTabBtnAdjust',    panel: 'imgPanelAdjust' },
+        draw:      { btn: 'imgTabBtnDraw',      panel: 'imgPanelDraw' }
+    };
+
+    Object.keys(tabs).forEach(k => {
+        const b = document.getElementById(tabs[k].btn);
+        const p = document.getElementById(tabs[k].panel);
+        if (b) {
+            if (k === tab) {
+                b.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-pink-600 text-white shadow-2xs transition cursor-pointer';
+            } else {
+                b.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition cursor-pointer';
+            }
+        }
+        if (p) {
+            if (k === tab) {
+                p.classList.remove('hidden');
+                if (k === 'resize' || k === 'draw') p.classList.add('flex');
+            } else {
+                p.classList.add('hidden');
+                p.classList.remove('flex');
+            }
+        }
+    });
+
+    if (imgStudioCanvas) {
+        imgStudioCanvas.style.cursor = (tab === 'draw' || tab === 'transform') ? 'crosshair' : 'default';
+    }
+    if (tab === 'resize') {
+        syncImgResizeInputs();
+        imgStudioUpdateSizeEstimate();
+    }
+}
+
+function imgStudioRotate(deg) {
+    if (!imgStudioCanvas || !OFFICE_CAN_EDIT) return;
+    pushImgUndoSnapshot();
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const tmp = document.createElement('canvas');
+    tmp.width  = (Math.abs(deg) === 90) ? h : w;
+    tmp.height = (Math.abs(deg) === 90) ? w : h;
+    const tctx = tmp.getContext('2d');
+    tctx.translate(tmp.width / 2, tmp.height / 2);
+    tctx.rotate((deg * Math.PI) / 180);
+    tctx.drawImage(imgStudioCanvas, -w / 2, -h / 2);
+    applyImageSourceToStudio(tmp, true);
+}
+
+function imgStudioFlip(dir) {
+    if (!imgStudioCanvas || !OFFICE_CAN_EDIT) return;
+    pushImgUndoSnapshot();
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const tmp = document.createElement('canvas');
+    tmp.width  = w;
+    tmp.height = h;
+    const tctx = tmp.getContext('2d');
+    if (dir === 'h') {
+        tctx.translate(w, 0);
+        tctx.scale(-1, 1);
+    } else {
+        tctx.translate(0, h);
+        tctx.scale(1, -1);
+    }
+    tctx.drawImage(imgStudioCanvas, 0, 0);
+    applyImageSourceToStudio(tmp, true);
+}
+
+// --- ZUSCHNEIDEN (CROP) ---
+function getAspectNumeric(val) {
+    if (val === '1:1') return 1;
+    if (val === '16:9') return 16 / 9;
+    if (val === '4:3') return 4 / 3;
+    if (val === '3:2') return 3 / 2;
+    if (val === 'a4') return 210 / 297;
+    return 0;
+}
+
+function imgStudioStartCrop(aspectVal) {
+    if (!imgStudioCanvas || !OFFICE_CAN_EDIT) return;
+    imgCropAspectVal = aspectVal || '';
+    if (!aspectVal) {
+        imgStudioCancelCrop();
+        return;
+    }
+    imgCropActive = true;
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const ratio = getAspectNumeric(aspectVal);
+
+    let cw = Math.round(w * 0.8);
+    let ch = Math.round(h * 0.8);
+    if (ratio > 0) {
+        if (cw / ch > ratio) {
+            cw = Math.round(ch * ratio);
+        } else {
+            ch = Math.round(cw / ratio);
+        }
+    }
+    imgCropRect = {
+        x: Math.round((w - cw) / 2),
+        y: Math.round((h - ch) / 2),
+        w: Math.max(16, cw),
+        h: Math.max(16, ch)
+    };
+    renderImgCropOverlay();
+}
+
+function renderImgCropOverlay() {
+    const ov = document.getElementById('imgCropOverlay');
+    const applyBtn  = document.getElementById('btnApplyCrop');
+    const cancelBtn = document.getElementById('btnCancelCrop');
+    if (!ov || !imgStudioCanvas) return;
+
+    if (!imgCropRect || imgCropRect.w < 8 || imgCropRect.h < 8) {
+        ov.classList.add('hidden');
+        if (applyBtn) applyBtn.classList.add('hidden');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        return;
+    }
+
+    const scaleX = imgStudioCanvas.clientWidth / imgStudioCanvas.width;
+    const scaleY = imgStudioCanvas.clientHeight / imgStudioCanvas.height;
+    ov.style.left   = Math.round(imgCropRect.x * scaleX) + 'px';
+    ov.style.top    = Math.round(imgCropRect.y * scaleY) + 'px';
+    ov.style.width  = Math.round(imgCropRect.w * scaleX) + 'px';
+    ov.style.height = Math.round(imgCropRect.h * scaleY) + 'px';
+    ov.classList.remove('hidden');
+    if (applyBtn) applyBtn.classList.remove('hidden');
+    if (cancelBtn) cancelBtn.classList.remove('hidden');
+}
+
+function imgStudioApplyCrop() {
+    if (!imgStudioCanvas || !imgCropRect || imgCropRect.w < 8 || imgCropRect.h < 8) return;
+    pushImgUndoSnapshot();
+    const rx = Math.max(0, Math.min(imgStudioCanvas.width - 1, Math.round(imgCropRect.x)));
+    const ry = Math.max(0, Math.min(imgStudioCanvas.height - 1, Math.round(imgCropRect.y)));
+    const rw = Math.max(1, Math.min(imgStudioCanvas.width - rx, Math.round(imgCropRect.w)));
+    const rh = Math.max(1, Math.min(imgStudioCanvas.height - ry, Math.round(imgCropRect.h)));
+
+    const tmp = document.createElement('canvas');
+    tmp.width  = rw;
+    tmp.height = rh;
+    tmp.getContext('2d').drawImage(imgStudioCanvas, rx, ry, rw, rh, 0, 0, rw, rh);
+    applyImageSourceToStudio(tmp, true);
+}
+
+function imgStudioCancelCrop() {
+    imgCropActive   = false;
+    imgCropDragging = false;
+    imgCropRect     = null;
+    const sel = document.getElementById('imgCropAspect');
+    if (sel) sel.value = '';
+    renderImgCropOverlay();
+}
+
+// --- SKALIEREN & KOMPRIMIEREN ---
+function syncImgResizeInputs() {
+    if (!imgStudioCanvas) return;
+    const wIn = document.getElementById('imgResizeW');
+    const hIn = document.getElementById('imgResizeH');
+    if (wIn) wIn.value = imgStudioCanvas.width;
+    if (hIn) hIn.value = imgStudioCanvas.height;
+}
+
+function imgStudioSyncAspect(changedAxis) {
+    if (!imgStudioCanvas) return;
+    const lock = document.getElementById('imgResizeLock');
+    if (!lock || !lock.checked) return;
+    const wIn = document.getElementById('imgResizeW');
+    const hIn = document.getElementById('imgResizeH');
+    if (!wIn || !hIn) return;
+    const ratio = imgStudioCanvas.width / Math.max(1, imgStudioCanvas.height);
+    if (changedAxis === 'w') {
+        const w = Math.max(16, parseInt(wIn.value || '0', 10));
+        hIn.value = Math.max(16, Math.round(w / ratio));
+    } else {
+        const h = Math.max(16, parseInt(hIn.value || '0', 10));
+        wIn.value = Math.max(16, Math.round(h * ratio));
+    }
+}
+
+function imgStudioScalePreset(factor) {
+    if (!imgStudioCanvas) return;
+    const wIn = document.getElementById('imgResizeW');
+    const hIn = document.getElementById('imgResizeH');
+    if (wIn && hIn) {
+        wIn.value = Math.max(16, Math.round(imgStudioCanvas.width * factor));
+        hIn.value = Math.max(16, Math.round(imgStudioCanvas.height * factor));
+        imgStudioApplyResize();
+    }
+}
+
+function imgStudioMaxDimPreset(maxPx) {
+    if (!imgStudioCanvas) return;
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const longest = Math.max(w, h);
+    if (longest <= maxPx) {
+        alert(`Das Bild ist mit ${w} × ${h} px bereits kleiner oder gleich ${maxPx} px.`);
+        return;
+    }
+    imgStudioScalePreset(maxPx / longest);
+}
+
+function imgStudioApplyResize() {
+    if (!imgStudioCanvas || !OFFICE_CAN_EDIT) return;
+    const wIn = document.getElementById('imgResizeW');
+    const hIn = document.getElementById('imgResizeH');
+    const nw  = Math.max(16, Math.min(8000, parseInt(wIn ? wIn.value : '0', 10) || imgStudioCanvas.width));
+    const nh  = Math.max(16, Math.min(8000, parseInt(hIn ? hIn.value : '0', 10) || imgStudioCanvas.height));
+    if (nw === imgStudioCanvas.width && nh === imgStudioCanvas.height) return;
+
+    pushImgUndoSnapshot();
+    const tmp = document.createElement('canvas');
+    tmp.width  = nw;
+    tmp.height = nh;
+    const tctx = tmp.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.imageSmoothingQuality = 'high';
+    tctx.drawImage(imgStudioCanvas, 0, 0, nw, nh);
+    applyImageSourceToStudio(tmp, true);
+}
+
+function getSelectedImgExportMimeAndQuality() {
+    const fmtEl = document.getElementById('imgExportFormat');
+    const qEl   = document.getElementById('imgExportQuality');
+    const fmt   = fmtEl ? fmtEl.value : 'jpg';
+    const qVal  = Math.max(0.15, Math.min(1, (parseInt(qEl ? qEl.value : '88', 10) || 88) / 100));
+    let mime    = 'image/jpeg';
+    if (fmt === 'webp') mime = 'image/webp';
+    else if (fmt === 'png') mime = 'image/png';
+    return { fmt, mime, quality: qVal };
+}
+
+function formatImgBytesJs(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1).replace('.', ',') + ' KB';
+    return (bytes / 1048576).toFixed(2).replace('.', ',') + ' MB';
+}
+
+function imgStudioUpdateSizeEstimate() {
+    if (!imgStudioCanvas) return;
+    if (imgSizeEstTimer) clearTimeout(imgSizeEstTimer);
+    imgSizeEstTimer = setTimeout(() => {
+        const badge = document.getElementById('imgSizeEstimateBadge');
+        const { fmt, mime, quality } = getSelectedImgExportMimeAndQuality();
+        imgStudioCanvas.toBlob(blob => {
+            if (!blob) return;
+            const sizeStr = formatImgBytesJs(blob.size);
+            if (badge) {
+                badge.textContent = `≈ ${sizeStr} (${fmt.toUpperCase()})`;
+            }
+            imgStudioUpdateStats(sizeStr);
+        }, mime, quality);
+    }, 120);
+}
+
+function imgStudioUpdateStats(estSizeStr = '') {
+    const lbl = document.getElementById('imgStudioStatsLabel');
+    if (!lbl || !imgStudioCanvas) return;
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const mp = ((w * h) / 1000000).toFixed(1).replace('.', ',');
+    lbl.textContent = `📐 Auflösung: ${w} × ${h} px (${mp} MP)` + (estSizeStr ? ` • 📦 Exportgröße: ≈ ${estSizeStr}` : '');
+}
+
+// --- BELICHTUNG, FARBEN & 1-KLICK-FILTER ---
+function imgStudioPreviewAdjust() {
+    if (!imgStudioCanvas || !imgStudioCtx || !imgBaseCanvas.width) return;
+    const b = parseInt((document.getElementById('imgAdjBright') || {}).value || '0', 10);
+    const c = parseInt((document.getElementById('imgAdjContrast') || {}).value || '0', 10);
+    const s = parseInt((document.getElementById('imgAdjSat') || {}).value || '0', 10);
+    const p = parseInt((document.getElementById('imgAdjSepia') || {}).value || '0', 10);
+
+    imgStudioCtx.save();
+    imgStudioCtx.clearRect(0, 0, imgStudioCanvas.width, imgStudioCanvas.height);
+    imgStudioCtx.filter = `brightness(${100 + b}%) contrast(${100 + c}%) saturate(${100 + s}%) sepia(${p}%)`;
+    imgStudioCtx.drawImage(imgBaseCanvas, 0, 0);
+    imgStudioCtx.restore();
+    imgAdjustDirty = (b !== 0 || c !== 0 || s !== 0 || p !== 0);
+}
+
+function imgStudioCommitAdjust(recordUndo = true) {
+    if (!imgAdjustDirty) return;
+    if (recordUndo) {
+        // Undo-Snapshot vom Zustand VOR der Regler-Vorschau speichern
+        try {
+            imgUndoStack.push({
+                width: imgBaseCanvas.width,
+                height: imgBaseCanvas.height,
+                imageData: imgBaseCtx.getImageData(0, 0, imgBaseCanvas.width, imgBaseCanvas.height)
+            });
+            if (imgUndoStack.length > 15) imgUndoStack.shift();
+            updateImgUndoBtn();
+        } catch (e) {}
+    }
+    syncImgBaseFromStudio();
+    imgStudioResetAdjustSliders(false);
+    imgStudioUpdateSizeEstimate();
+    markDirty();
+}
+
+function imgStudioResetAdjustSliders(restoreBase = true) {
+    ['imgAdjBright', 'imgAdjContrast', 'imgAdjSat', 'imgAdjSepia'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '0';
+    });
+    if (restoreBase && imgAdjustDirty && imgStudioCtx && imgBaseCanvas.width) {
+        imgStudioCtx.clearRect(0, 0, imgStudioCanvas.width, imgStudioCanvas.height);
+        imgStudioCtx.drawImage(imgBaseCanvas, 0, 0);
+    }
+    imgAdjustDirty = false;
+}
+
+function imgStudioApplyFilterPreset(preset) {
+    if (!imgStudioCanvas || !imgStudioCtx || !OFFICE_CAN_EDIT) return;
+    if (imgAdjustDirty) imgStudioResetAdjustSliders(true);
+    pushImgUndoSnapshot();
+
+    const w = imgStudioCanvas.width;
+    const h = imgStudioCanvas.height;
+    const tmp = document.createElement('canvas');
+    tmp.width  = w;
+    tmp.height = h;
+    const tctx = tmp.getContext('2d');
+
+    if (preset === 'auto') {
+        tctx.filter = 'brightness(106%) contrast(114%) saturate(118%)';
+    } else if (preset === 'bw') {
+        tctx.filter = 'grayscale(100%) contrast(112%)';
+    } else if (preset === 'sepia') {
+        tctx.filter = 'sepia(85%) contrast(106%) brightness(98%)';
+    } else if (preset === 'warm') {
+        tctx.filter = 'saturate(130%) sepia(22%) brightness(104%)';
+    } else if (preset === 'doc') {
+        tctx.filter = 'grayscale(100%) contrast(165%) brightness(112%)';
+    } else if (preset === 'invert') {
+        tctx.filter = 'invert(100%)';
+    }
+    tctx.drawImage(imgStudioCanvas, 0, 0);
+    applyImageSourceToStudio(tmp, true);
+}
+
+// --- ZEICHNEN, WASSERZEICHEN & DSGVO-VERPIXELUNG ---
+function setImgDrawTool(tool) {
+    imgDrawTool = tool;
+    document.querySelectorAll('.img-draw-tool-btn').forEach(btn => {
+        if (btn.getAttribute('data-img-tool') === tool) {
+            btn.className = 'img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-pink-600 text-white font-bold cursor-pointer';
+        } else {
+            btn.className = 'img-draw-tool-btn px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer';
+        }
+    });
+}
+
+function getImgCanvasCoords(evt) {
+    const rect = imgStudioCanvas.getBoundingClientRect();
+    const clientX = evt.touches && evt.touches[0] ? evt.touches[0].clientX : evt.clientX;
+    const clientY = evt.touches && evt.touches[0] ? evt.touches[0].clientY : evt.clientY;
+    const scaleX = imgStudioCanvas.width / Math.max(1, rect.width);
+    const scaleY = imgStudioCanvas.height / Math.max(1, rect.height);
+    return {
+        x: Math.max(0, Math.min(imgStudioCanvas.width, (clientX - rect.left) * scaleX)),
+        y: Math.max(0, Math.min(imgStudioCanvas.height, (clientY - rect.top) * scaleY))
+    };
+}
+
+function applyPixelateBrushAt(cx, cy, radius) {
+    if (!imgStudioCtx || !imgStudioCanvas) return;
+    const blockSize = Math.max(8, Math.round(radius * 0.65));
+    const r = Math.max(12, radius * 1.4);
+    const startX = Math.max(0, Math.floor((cx - r) / blockSize) * blockSize);
+    const startY = Math.max(0, Math.floor((cy - r) / blockSize) * blockSize);
+    const endX   = Math.min(imgStudioCanvas.width, Math.ceil((cx + r) / blockSize) * blockSize);
+    const endY   = Math.min(imgStudioCanvas.height, Math.ceil((cy + r) / blockSize) * blockSize);
+
+    for (let y = startY; y < endY; y += blockSize) {
+        for (let x = startX; x < endX; x += blockSize) {
+            const bw = Math.min(blockSize, imgStudioCanvas.width - x);
+            const bh = Math.min(blockSize, imgStudioCanvas.height - y);
+            const sample = imgStudioCtx.getImageData(x + Math.floor(bw / 2), y + Math.floor(bh / 2), 1, 1).data;
+            imgStudioCtx.fillStyle = `rgb(${sample[0]}, ${sample[1]}, ${sample[2]})`;
+            imgStudioCtx.fillRect(x, y, bw, bh);
+        }
+    }
+}
+
+function applyBlurBrushAt(cx, cy, radius) {
+    if (!imgStudioCtx || !imgStudioCanvas) return;
+    const r = Math.max(14, radius * 1.5);
+    const sx = Math.max(0, Math.round(cx - r));
+    const sy = Math.max(0, Math.round(cy - r));
+    const sw = Math.min(imgStudioCanvas.width - sx, Math.round(r * 2));
+    const sh = Math.min(imgStudioCanvas.height - sy, Math.round(r * 2));
+    if (sw < 4 || sh < 4) return;
+
+    const smallW = Math.max(2, Math.round(sw / 6));
+    const smallH = Math.max(2, Math.round(sh / 6));
+    const tmp = document.createElement('canvas');
+    tmp.width  = smallW;
+    tmp.height = smallH;
+    const tctx = tmp.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.drawImage(imgStudioCanvas, sx, sy, sw, sh, 0, 0, smallW, smallH);
+
+    imgStudioCtx.save();
+    imgStudioCtx.beginPath();
+    imgStudioCtx.arc(cx, cy, r * 0.85, 0, Math.PI * 2);
+    imgStudioCtx.clip();
+    imgStudioCtx.imageSmoothingEnabled = true;
+    imgStudioCtx.drawImage(tmp, 0, 0, smallW, smallH, sx, sy, sw, sh);
+    imgStudioCtx.restore();
+}
+
+function drawArrowOnImgCtx(ctx, x1, y1, x2, y2, color, lineWidth) {
+    const headLen = Math.max(14, lineWidth * 3.2);
+    const angle   = Math.atan2(y2 - y1, x2 - x1);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.lineWidth   = lineWidth;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+if (imgStudioCanvas && OFFICE_CAN_EDIT) {
+    const handlePointerDown = (e) => {
+        const pt = getImgCanvasCoords(e);
+
+        // Fall 1: Zuschnitt-Rahmen im Transform-Tab mit der Maus aufziehen
+        if (imgActiveTab === 'transform') {
+            imgCropActive   = true;
+            imgCropDragging = true;
+            imgCropStart    = pt;
+            imgCropRect     = { x: pt.x, y: pt.y, w: 0, h: 0 };
+            renderImgCropOverlay();
+            return;
+        }
+
+        if (imgActiveTab !== 'draw') return;
+        e.preventDefault();
+
+        const color = (document.getElementById('imgDrawColor') || {}).value || '#e11d48';
+        const size  = parseInt((document.getElementById('imgDrawSize') || {}).value || '22', 10);
+
+        if (imgDrawTool === 'text') {
+            const wmInput = document.getElementById('imgWatermarkText');
+            let txt = wmInput && wmInput.value.trim() ? wmInput.value.trim() : prompt('Text / Wasserzeichen eingeben:', '© MiniCloud');
+            if (!txt) return;
+            pushImgUndoSnapshot();
+            const fontSize = Math.max(16, Math.round(size * (imgStudioCanvas.width / 650)));
+            imgStudioCtx.save();
+            imgStudioCtx.font = `bold ${fontSize}px system-ui, sans-serif`;
+            imgStudioCtx.fillStyle = color;
+            imgStudioCtx.shadowColor = 'rgba(0,0,0,0.45)';
+            imgStudioCtx.shadowBlur  = 4;
+            imgStudioCtx.fillText(txt, pt.x, pt.y);
+            imgStudioCtx.restore();
+            syncImgBaseFromStudio();
+            imgStudioUpdateSizeEstimate();
+            markDirty();
+            return;
+        }
+
+        pushImgUndoSnapshot();
+        imgIsDrawing  = true;
+        imgDrawStartX = pt.x;
+        imgDrawStartY = pt.y;
+        imgDrawSnapshot = imgStudioCtx.getImageData(0, 0, imgStudioCanvas.width, imgStudioCanvas.height);
+
+        const scaledSize = Math.max(4, Math.round(size * (imgStudioCanvas.width / 800)));
+        if (imgDrawTool === 'pixelate') {
+            applyPixelateBrushAt(pt.x, pt.y, scaledSize);
+        } else if (imgDrawTool === 'blur') {
+            applyBlurBrushAt(pt.x, pt.y, scaledSize);
+        } else if (imgDrawTool === 'pen') {
+            imgStudioCtx.save();
+            imgStudioCtx.strokeStyle = color;
+            imgStudioCtx.lineWidth   = Math.max(2, scaledSize * 0.35);
+            imgStudioCtx.lineCap     = 'round';
+            imgStudioCtx.lineJoin    = 'round';
+            imgStudioCtx.beginPath();
+            imgStudioCtx.moveTo(pt.x, pt.y);
+        }
+    };
+
+    const handlePointerMove = (e) => {
+        if (imgActiveTab === 'transform' && imgCropDragging) {
+            const pt = getImgCanvasCoords(e);
+            let x = Math.min(imgCropStart.x, pt.x);
+            let y = Math.min(imgCropStart.y, pt.y);
+            let w = Math.abs(pt.x - imgCropStart.x);
+            let h = Math.abs(pt.y - imgCropStart.y);
+            const ratio = getAspectNumeric(imgCropAspectVal);
+            if (ratio > 0 && w > 0) {
+                h = Math.round(w / ratio);
+                if (y + h > imgStudioCanvas.height) {
+                    h = imgStudioCanvas.height - y;
+                    w = Math.round(h * ratio);
+                }
+            }
+            imgCropRect = { x, y, w, h };
+            renderImgCropOverlay();
+            return;
+        }
+
+        if (!imgIsDrawing || imgActiveTab !== 'draw') return;
+        e.preventDefault();
+        const pt    = getImgCanvasCoords(e);
+        const color = (document.getElementById('imgDrawColor') || {}).value || '#e11d48';
+        const size  = parseInt((document.getElementById('imgDrawSize') || {}).value || '22', 10);
+        const scaledSize = Math.max(4, Math.round(size * (imgStudioCanvas.width / 800)));
+
+        if (imgDrawTool === 'pixelate') {
+            applyPixelateBrushAt(pt.x, pt.y, scaledSize);
+        } else if (imgDrawTool === 'blur') {
+            applyBlurBrushAt(pt.x, pt.y, scaledSize);
+        } else if (imgDrawTool === 'pen') {
+            imgStudioCtx.lineTo(pt.x, pt.y);
+            imgStudioCtx.stroke();
+        } else if (imgDrawTool === 'arrow' && imgDrawSnapshot) {
+            imgStudioCtx.putImageData(imgDrawSnapshot, 0, 0);
+            drawArrowOnImgCtx(imgStudioCtx, imgDrawStartX, imgDrawStartY, pt.x, pt.y, color, Math.max(3, scaledSize * 0.35));
+        } else if (imgDrawTool === 'rect' && imgDrawSnapshot) {
+            imgStudioCtx.putImageData(imgDrawSnapshot, 0, 0);
+            imgStudioCtx.save();
+            imgStudioCtx.strokeStyle = color;
+            imgStudioCtx.lineWidth   = Math.max(3, scaledSize * 0.35);
+            imgStudioCtx.strokeRect(
+                Math.min(imgDrawStartX, pt.x),
+                Math.min(imgDrawStartY, pt.y),
+                Math.abs(pt.x - imgDrawStartX),
+                Math.abs(pt.y - imgDrawStartY)
+            );
+            imgStudioCtx.restore();
+        }
+    };
+
+    const handlePointerUp = () => {
+        if (imgCropDragging) {
+            imgCropDragging = false;
+            renderImgCropOverlay();
+        }
+        if (imgIsDrawing) {
+            if (imgDrawTool === 'pen') {
+                imgStudioCtx.restore();
+            }
+            imgIsDrawing = false;
+            imgDrawSnapshot = null;
+            syncImgBaseFromStudio();
+            imgStudioUpdateSizeEstimate();
+            markDirty();
+        }
+    };
+
+    imgStudioCanvas.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+
+    imgStudioCanvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    window.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+}
+
+function imgStudioDownloadLocal() {
+    if (!imgStudioCanvas) return;
+    if (imgAdjustDirty) imgStudioCommitAdjust(true);
+    const { fmt, mime, quality } = getSelectedImgExportMimeAndQuality();
+    const docName = (titleInputEl && titleInputEl.value ? titleInputEl.value.replace(/\.[^.]+$/, '') : 'bild') + '.' + fmt;
+    imgStudioCanvas.toBlob(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = docName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }, mime, quality);
+}
+
+if (OFFICE_EDITOR_TYPE === 'image') {
+    initImageStudio();
+}
+
+// ============================================================================
 // 3. TEXT-EDITOR FUNKTIONEN (inkl. Zeilen-Fokus & Live-Sync)
 // ============================================================================
 const plainTextEl = document.getElementById('plainTextEditor');
@@ -4091,6 +5152,21 @@ async function saveOfficeDocument(isSilentAutoSave = false) {
         formData.append('slides_json', JSON.stringify(slidesDeckState));
     } else if (OFFICE_EDITOR_TYPE === 'visio') {
         formData.append('visio_json', JSON.stringify(visioState));
+    } else if (OFFICE_EDITOR_TYPE === 'image' && imgStudioCanvas) {
+        if (imgAdjustDirty) {
+            imgStudioCommitAdjust(true);
+        }
+        const { fmt, mime, quality } = getSelectedImgExportMimeAndQuality();
+        const saveModeEl = document.getElementById('imgStudioSaveMode');
+        const saveMode   = saveModeEl ? saveModeEl.value : 'overwrite';
+        formData.append('save_mode', saveMode);
+        formData.append('target_ext', fmt);
+        const imgBlob = await new Promise(resolve => imgStudioCanvas.toBlob(resolve, mime, quality));
+        if (imgBlob) {
+            formData.append('image_blob', imgBlob, 'edited.' + fmt);
+        } else {
+            formData.append('image_data_url', imgStudioCanvas.toDataURL(mime, quality));
+        }
     } else if (plainTextEl) {
         formData.append('text_content', plainTextEl.value);
     }
@@ -4103,6 +5179,9 @@ async function saveOfficeDocument(isSilentAutoSave = false) {
         const data = await resp.json();
         if (data.success) {
             hasUnsavedChanges = false;
+            if (data.filename && titleInputEl) {
+                titleInputEl.value = data.filename;
+            }
             if (statusEl) {
                 statusEl.textContent = '✓ ' + data.message + ' • ' + data.size;
                 statusEl.className = 'font-semibold text-emerald-600 dark:text-emerald-400';

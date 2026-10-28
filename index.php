@@ -2899,6 +2899,13 @@ async function renderPreviewItem(index) {
     if (previewOfficeBtn) {
         if (item.officeUrl && item.officeUrl !== '') {
             previewOfficeBtn.href = item.officeUrl;
+            const isImgItem = isImagePreviewable(item);
+            previewOfficeBtn.innerHTML = isImgItem
+                ? '<span>🎨</span><span class="hidden sm:inline">Bild bearbeiten</span>'
+                : '<span>✏️</span><span class="hidden sm:inline">Bearbeiten</span>';
+            previewOfficeBtn.title = isImgItem
+                ? 'Im Foto- & Bild-Studio bearbeiten (Zuschneiden, Größe, Filter, DSGVO-Pixel)'
+                : 'In Office Light bearbeiten';
             previewOfficeBtn.classList.remove('hidden');
             previewOfficeBtn.classList.add('inline-flex');
         } else {

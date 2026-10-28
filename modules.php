@@ -63,13 +63,13 @@ $allModules = [
     [
         'key'      => 'office',
         'enabled'  => ($appSettings['enable_office'] ?? '1') === '1',
-        'title'    => 'Office Light',
+        'title'    => 'Office Light & Bild-Studio',
         'icon'     => '📝',
         'url'      => 'office.php',
         'category' => 'files_office',
         'catLabel' => 'Dateien & Büro',
-        'desc'     => 'Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Visio-Diagramme (.drawio), Mind-Maps und Markdown direkt im Browser erstellen und im Team bearbeiten.',
-        'badge'    => '5-in-1',
+        'desc'     => 'Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Visio (.drawio), Mind-Maps sowie 🎨 Foto- & Bild-Studio (Zuschneiden, Komprimieren, Filter & DSGVO-Pixel) im Browser.',
+        'badge'    => '6-in-1',
         'badgeCls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300',
     ],
     [
