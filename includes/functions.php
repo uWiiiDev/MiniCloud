@@ -2149,19 +2149,8 @@ function getVisibleUsersForUser(PDO $pdo, int $userId): array
  */
 function getGroupsForUser(PDO $pdo, int $userId): array
 {
-    if (isAdmin()) {
-        $stmt = $pdo->query('SELECT id, name FROM `groups` ORDER BY name ASC');
-        return $stmt ? $stmt->fetchAll() : [];
-    }
-    $stmt = $pdo->prepare(
-        'SELECT g.id, g.name
-         FROM `groups` g
-         INNER JOIN group_members gm ON gm.group_id = g.id
-         WHERE gm.user_id = :uid
-         ORDER BY g.name ASC'
-    );
-    $stmt->execute([':uid' => $userId]);
-    return $stmt->fetchAll();
+    // Legacy-Benutzergruppen wurden abgeschafft; Teilen erfolgt direkt mit Cloud-Benutzern oder per Freigabelink.
+    return [];
 }
 
 /**

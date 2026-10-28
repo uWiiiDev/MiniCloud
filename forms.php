@@ -1155,7 +1155,7 @@ require_once __DIR__ . '/includes/header.php';
                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"></textarea>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Max. Plätze (0 = unbegrenzt)</label>
                     <input type="number" name="max_submissions" min="0" value="0"
@@ -1165,15 +1165,7 @@ require_once __DIR__ . '/includes/header.php';
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Anmeldeschluss (optional)</label>
                     <input type="date" name="closes_at"
                            class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mit Gruppe teilen</label>
-                    <select name="group_id" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                        <option value="0">— Keine Gruppe —</option>
-                        <?php foreach ($userGroupsList as $grp): ?>
-                            <option value="<?= (int)$grp['id'] ?>">👥 <?= e((string)$grp['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input type="hidden" name="group_id" value="0">
                 </div>
             </div>
 

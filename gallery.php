@@ -1241,21 +1241,11 @@ require_once __DIR__ . '/includes/header.php';
                        class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Datum / Ereignis</label>
-                    <input type="date" name="event_date" value="<?= date('Y-m-d') ?>"
-                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mit Gruppe teilen</label>
-                    <select name="group_id" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                        <option value="0">— Nur privat / gezielt —</option>
-                        <?php foreach ($userGroupsList as $grp): ?>
-                            <option value="<?= (int)$grp['id'] ?>">👥 <?= e((string)$grp['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Datum / Ereignis</label>
+                <input type="date" name="event_date" value="<?= date('Y-m-d') ?>"
+                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                <input type="hidden" name="group_id" value="0">
             </div>
 
             <?php if (!empty($shareableUsers)): ?>
@@ -1444,23 +1434,11 @@ require_once __DIR__ . '/includes/header.php';
                        class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Datum</label>
-                    <input type="date" name="event_date" value="<?= e((string)($activeAlbum['event_date'] ?? '')) ?>"
-                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mit Gruppe teilen</label>
-                    <select name="group_id" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                        <option value="0">— Keine Gruppe —</option>
-                        <?php foreach ($userGroupsList as $grp): ?>
-                            <option value="<?= (int)$grp['id'] ?>" <?= (int)($activeAlbum['group_id'] ?? 0) === (int)$grp['id'] ? 'selected' : '' ?>>
-                                👥 <?= e((string)$grp['name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Datum</label>
+                <input type="date" name="event_date" value="<?= e((string)($activeAlbum['event_date'] ?? '')) ?>"
+                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                <input type="hidden" name="group_id" value="0">
             </div>
 
             <div>

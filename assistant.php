@@ -1131,7 +1131,7 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
             'answer'   => "Du kannst **Dateien und ganze Ordner** auf zwei Arten teilen:\n\n"
                 . "- **🌐 Öffentlicher Freigabelink (auch für Gäste ohne Konto):** Klicke bei einer Datei oder einem Ordner auf das **Teilen-Symbol (🔗)**. Optional kannst du ein **Passwort**, ein **Ablaufdatum** und ein **Download-Limit** festlegen oder einen **QR-Code** anzeigen.\n"
-                . "- **👥 Intern mit Cloud-Benutzern oder Gruppen:** Wähle im Teilen-Dialog einfach per **Live-Suche** den gewünschten Benutzer oder eine Gruppe aus und lege fest, ob **👁️ Nur Lesen** oder **✏️ Lesen & Schreiben** erlaubt sein soll.\n\n"
+                . "- **👤 Intern mit Cloud-Benutzern:** Wähle im Teilen-Dialog einfach per **Live-Suche** den gewünschten Benutzer aus und lege die **3-stufige Berechtigung** fest (**👁️ Nur Lesen**, **✏️ Lesen & Schreiben** oder **🗑️ Lesen, Schreiben & Löschen**).\n\n"
                 . "*Hinweis:* Damit dich andere Benutzer in der Teilen-Auswahl finden, muss in deinen **⚙️ Einstellungen** die Option *„Teilen-Sichtbarkeit“* aktiviert sein.",
             'actions'  => [
                 ['label' => $pack['act_files'], 'url' => 'index.php'],
@@ -1144,17 +1144,17 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'group_folders',
-            'title'    => 'Ordner mit Gruppen & Teams teilen',
-            'icon'     => '👥',
+            'title'    => 'Gemeinsame Ordner mit Cloud-Benutzern teilen',
+            'icon'     => '📁',
             'keywords' => [
-                'gruppenordner', 'teamordner', 'gemeinsamer ordner', 'abteilung', 'verein', 'gruppe',
+                'gruppenordner', 'teamordner', 'gemeinsamer ordner', 'abteilung', 'verein', 'gruppe', 'ordner teilen',
                 'group folder', 'shared folder', 'team folder', 'dossier de groupe', 'carpeta de grupo', 'cartella di gruppo', 'groepsmap', 'folder grupowy', 'pasta de grupo', 'skupinova slozka', 'grup klasoru', 'групова папка',
             ],
-            'answer'   => "Gemeinsame **👥 Team- & Gruppen-Ordner** (z. B. für Familie, Projekte, Vereine oder Abteilungen) richtest du ganz flexibel direkt über das **Teilen-Menü (`🔗`)** ein:\n\n"
+            'answer'   => "Gemeinsame **📁 Austausch- & Projekt-Ordner** richtest du direkt über das **Teilen-Menü (`🔗`)** ein:\n\n"
                 . "1. Lege in **📂 Dateien** (`index.php`) einen beliebigen Ordner an und klicke auf das **🔗 Teilen-Symbol**.\n"
-                . "2. Wähle unter *„Mit Cloud-Benutzern oder Gruppen teilen“* entweder einzelne Mitglieder oder eine komplette **👥 Benutzergruppe** aus.\n"
+                . "2. Wähle unter *„Mit Cloud-Benutzern teilen“* die gewünschten Benutzer aus (oder erstelle einen **öffentlichen Ordner-Link / Digitalen Briefkasten**).\n"
                 . "3. Lege die gewünschte **3-stufige Berechtigung** fest: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** oder **🗑️ Lesen, Schreiben & Löschen**.\n"
-                . "4. Der geteilte Ordner erscheint bei allen berechtigten Mitgliedern sofort unter *„Für mich freigegeben“* (sowie per WebDAV) und unterstützt die gemeinsame Live-Bearbeitung in **📝 Office Light**!",
+                . "4. Der geteilte Ordner erscheint bei den berechtigten Benutzern sofort unter *„Für mich freigegeben“* (sowie per WebDAV) und unterstützt die gemeinsame Live-Bearbeitung in **📝 Office Light**!",
             'actions'  => [
                 ['label' => $pack['act_files'], 'url' => 'index.php'],
             ],
