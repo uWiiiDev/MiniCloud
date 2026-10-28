@@ -1285,55 +1285,41 @@ $pageTitle = $activePlaylist ? ('Playlist: ' . $activePlaylist['title']) : 'Musi
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-28">
-    <!-- Kopfzeile -->
-    <div class="mc-card p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div class="space-y-1">
-            <div class="flex items-center gap-2.5 flex-wrap">
-                <span class="text-2xl sm:text-3xl">🎵</span>
-                <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                    <?php if ($activePlaylist): ?>
-                        Playlist: <?= e((string)$activePlaylist['title']) ?>
-                    <?php else: ?>
-                        Musik-, Podcast- &amp; Hörbuch-Studio
-                    <?php endif; ?>
-                </h1>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                    <?= count($displayedTracks) ?> <?= count($displayedTracks) === 1 ? 'Titel' : 'Titel' ?>
-                </span>
-            </div>
-            <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                <?php if ($activePlaylist): ?>
-                    <?= e((string)($activePlaylist['description'] ?: 'Erstellt von ' . $activePlaylist['owner_name'])) ?>
-                <?php else: ?>
-                    Spiele Musik, Podcasts und Hörbücher direkt aus deiner Cloud ab – inkl. ID3-Cover, Equalizer, Playlists, Hörbuch-Gedächtnis &amp; Smartphone-Sperrbildschirm-Steuerung.
-                <?php endif; ?>
-            </p>
-        </div>
-
-        <?php if (!$isGuestMode): ?>
-            <div class="flex flex-wrap items-center gap-2">
+<main class="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-5 space-y-3 sm:space-y-5 pb-24">
+    <!-- Kompakte Aktionsleiste (ohne sperrige Überschrift) -->
+    <?php if (!$isGuestMode): ?>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
                 <?php if ($activePlaylist): ?>
                     <a href="music.php"
-                       class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition">
+                       class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition">
                         ← Alle Titel
                     </a>
+                    <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate max-w-[180px] sm:max-w-xs">
+                        💿 <?= e((string)$activePlaylist['title']) ?>
+                    </span>
+                <?php else: ?>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                        🎵 <?= count($displayedTracks) ?> Titel
+                    </span>
                 <?php endif; ?>
+            </div>
 
+            <div class="flex items-center gap-1.5 sm:gap-2">
                 <button type="button"
                         onclick="document.getElementById('modalUploadAudio').classList.remove('hidden')"
-                        class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition cursor-pointer">
-                    📤 Musik / Hörbuch hochladen
+                        class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition cursor-pointer">
+                    📤 <span class="hidden xs:inline">Musik / Hörbuch </span>Hochladen
                 </button>
 
                 <button type="button"
                         onclick="document.getElementById('modalCreatePlaylist').classList.remove('hidden')"
-                        class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition cursor-pointer">
-                    ➕ Neue Playlist
+                        class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition cursor-pointer">
+                    ➕ Playlist
                 </button>
             </div>
-        <?php endif; ?>
-    </div>
+        </div>
+    <?php endif; ?>
 
     <?php if ($activePlaylist && $isPlaylistLocked): ?>
         <!-- Passwort-Abfrage für geschützte Gast-Playlists -->
@@ -1358,38 +1344,40 @@ require_once __DIR__ . '/includes/header.php';
     <?php else: ?>
 
         <!-- HAUPT-STUDIO-BEREICH: Links/Oben Player-Deck + Rechts Trackliste & Playlists -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
 
-            <!-- LINKE SPALTE (4 Spalten): STUDIO-PLAYER, VISUALIZER, KLANG-BOOSTER & SLEEP-TIMER -->
-            <div class="lg:col-span-4 space-y-4 lg:sticky lg:top-20">
-                <div class="mc-card p-5 bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white rounded-2xl border border-slate-800 shadow-xl space-y-4">
-                    <!-- Album-Cover / Vinyl + Live-Visualizer -->
-                    <div class="relative flex flex-col items-center text-center">
-                        <div id="playerCoverWrap" class="relative w-44 h-44 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/15 bg-gradient-to-br from-rose-600 via-indigo-700 to-slate-900 flex items-center justify-center">
+            <!-- LINKE SPALTE (4 Spalten): KOMPAKTER STUDIO-PLAYER, VISUALIZER, KLANG-BOOSTER & SLEEP-TIMER -->
+            <div class="lg:col-span-4 space-y-3 sm:space-y-4 lg:sticky lg:top-20">
+                <div class="mc-card p-3.5 sm:p-5 bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950 text-white rounded-2xl border border-slate-800 shadow-xl space-y-3">
+                    <!-- Mobil: Cover links + Infos rechts | Desktop (lg): Cover zentriert -->
+                    <div class="flex flex-row lg:flex-col items-center gap-3 lg:text-center">
+                        <div id="playerCoverWrap" class="relative w-16 h-16 sm:w-20 sm:h-20 lg:w-40 lg:h-40 shrink-0 rounded-xl lg:rounded-2xl overflow-hidden shadow-xl border border-white/15 bg-gradient-to-br from-rose-600 via-indigo-700 to-slate-900 flex items-center justify-center">
                             <img id="playerCoverImg" src="" alt="Cover" class="hidden w-full h-full object-cover">
                             <div id="playerVinylFallback" class="flex flex-col items-center justify-center">
-                                <div id="playerVinylDisc" class="w-32 h-32 rounded-full bg-[radial-gradient(circle,#f43f5e_0%,#be123c_22%,#0f172a_24%,#1e293b_48%,#0f172a_52%,#1e293b_75%,#020617_100%)] border-4 border-white/20 flex items-center justify-center shadow-inner transition-transform duration-700">
-                                    <div class="w-8 h-8 rounded-full bg-slate-950 border-2 border-rose-400 flex items-center justify-center text-xs">🎵</div>
+                                <div id="playerVinylDisc" class="w-12 h-12 sm:w-14 sm:h-14 lg:w-28 lg:h-28 rounded-full bg-[radial-gradient(circle,#f43f5e_0%,#be123c_22%,#0f172a_24%,#1e293b_48%,#0f172a_52%,#1e293b_75%,#020617_100%)] border-2 lg:border-4 border-white/20 flex items-center justify-center shadow-inner transition-transform duration-700">
+                                    <div class="w-4 h-4 lg:w-7 lg:h-7 rounded-full bg-slate-950 border border-rose-400 flex items-center justify-center text-[9px] lg:text-xs">🎵</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Live-Frequenz-Visualizer (Web Audio API) -->
-                        <canvas id="audioVisualizerCanvas" width="280" height="44" class="w-full h-11 mt-3 rounded-lg bg-black/25 px-2"></canvas>
+                        <div class="min-w-0 flex-1 w-full">
+                            <h2 id="playerTitle" class="text-sm sm:text-base lg:text-lg font-extrabold tracking-tight text-white line-clamp-1">
+                                Kein Titel ausgewählt
+                            </h2>
+                            <p id="playerArtist" class="text-xs text-rose-300 font-medium line-clamp-1">
+                                Wähle einen Titel oder tippe auf „▶️ Alle abspielen“
+                            </p>
+                            <p id="playerAlbumFolder" class="text-[11px] text-slate-400 line-clamp-1"></p>
 
-                        <h2 id="playerTitle" class="mt-3 text-base sm:text-lg font-extrabold tracking-tight text-white line-clamp-1">
-                            Kein Titel ausgewählt
-                        </h2>
-                        <p id="playerArtist" class="text-xs sm:text-sm text-rose-300 font-medium line-clamp-1">
-                            Wähle rechts einen Titel oder klicke auf „▶️ Alle abspielen“
-                        </p>
-                        <p id="playerAlbumFolder" class="text-[11px] text-slate-400 line-clamp-1 mt-0.5"></p>
+                            <!-- Live-Frequenz-Visualizer (Web Audio API) -->
+                            <canvas id="audioVisualizerCanvas" width="280" height="36" class="w-full h-7 lg:h-10 mt-1.5 lg:mt-2.5 rounded-lg bg-black/25 px-2"></canvas>
 
-                        <!-- Hörbuch-Positions-Banner (falls gespeicherte Stelle vorhanden) -->
-                        <button type="button" id="btnResumePosition" onclick="resumeSavedTrackPosition()"
-                                class="hidden mt-2 px-3 py-1 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold transition cursor-pointer">
-                            🔖 Weiterhören ab <span id="resumePosLabel">00:00</span>
-                        </button>
+                            <!-- Hörbuch-Positions-Banner (falls gespeicherte Stelle vorhanden) -->
+                            <button type="button" id="btnResumePosition" onclick="resumeSavedTrackPosition()"
+                                    class="hidden mt-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-[11px] font-bold transition cursor-pointer">
+                                🔖 Weiterhören ab <span id="resumePosLabel">00:00</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Fortschrittsbalken & Zeitanzeige -->
@@ -1407,84 +1395,84 @@ require_once __DIR__ . '/includes/header.php';
                     <!-- Haupt-Steuertasten (Zurück, -15s, Play/Pause, +15s, Weiter) -->
                     <div class="flex items-center justify-center gap-2 sm:gap-3">
                         <button type="button" onclick="stepTrack(-1)" title="Vorheriger Titel"
-                                class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-sm font-bold transition cursor-pointer">
+                                class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs sm:text-sm font-bold transition cursor-pointer">
                             ⏮️
                         </button>
                         <button type="button" onclick="seekRelative(-15)" title="15 Sekunden zurückspulen (ideal für Hörbücher)"
-                                class="px-2.5 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition cursor-pointer">
+                                class="px-2.5 h-8 sm:h-9 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition cursor-pointer">
                             -15s
                         </button>
                         <button type="button" id="btnPlayPauseMain" onclick="toggleAudioPlay()" title="Abspielen / Pause (Leertaste)"
-                                class="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/40 flex items-center justify-center text-xl font-bold transition cursor-pointer">
+                                class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/40 flex items-center justify-center text-lg sm:text-xl font-bold transition cursor-pointer">
                             ▶️
                         </button>
                         <button type="button" onclick="seekRelative(15)" title="15 Sekunden vorspulen"
-                                class="px-2.5 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition cursor-pointer">
+                                class="px-2.5 h-8 sm:h-9 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition cursor-pointer">
                             +15s
                         </button>
                         <button type="button" onclick="stepTrack(1)" title="Nächster Titel"
-                                class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-sm font-bold transition cursor-pointer">
+                                class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs sm:text-sm font-bold transition cursor-pointer">
                             ⏭️
                         </button>
                     </div>
 
                     <!-- Zusatz-Steuerung: Hörbuch-Modus, Shuffle, Repeat, Lautstärke -->
-                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10 text-xs">
-                        <div class="flex flex-wrap items-center gap-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-white/10 text-xs">
+                        <div class="flex flex-wrap items-center gap-1">
                             <button type="button" id="btnAudiobookMode" onclick="toggleAudiobookMode()"
-                                    class="px-2.5 py-1.5 rounded-lg <?= $audiobookMode ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-white/10 hover:bg-white/20 text-white font-semibold' ?> transition cursor-pointer"
+                                    class="px-2 py-1 rounded-lg <?= $audiobookMode ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-white/10 hover:bg-white/20 text-white font-semibold' ?> transition cursor-pointer"
                                     title="Hörbuch-Modus: Spielt Kapitel strikt der Reihe nach (1 → 99), deaktiviert Zufallswiedergabe und aktiviert klare Sprachwiedergabe">
                                 📖 Hörbuch <?= $audiobookMode ? 'An' : 'Aus' ?>
                             </button>
                             <button type="button" id="btnShuffle" onclick="toggleShuffle()"
-                                    class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer"
+                                    class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer"
                                     title="Zufallswiedergabe (Shuffle)">
                                 🔀 Aus
                             </button>
                             <button type="button" id="btnRepeat" onclick="cycleRepeatMode()"
-                                    class="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer"
+                                    class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 font-semibold transition cursor-pointer"
                                     title="Wiederholungs-Modus umschalten">
                                 🔁 Alle
                             </button>
                         </div>
 
-                        <div class="flex items-center gap-1.5">
+                        <div class="hidden sm:flex items-center gap-1.5">
                             <button type="button" id="btnMute" onclick="toggleMute()" class="text-sm cursor-pointer" title="Stummschalten">🔊</button>
                             <input type="range" id="playerVolumeSlider" min="0" max="100" value="90"
-                                    oninput="setAudioVolume(this.value)"
-                                    class="w-16 accent-rose-500 cursor-pointer">
+                                   oninput="setAudioVolume(this.value)"
+                                   class="w-16 accent-rose-500 cursor-pointer">
                         </div>
                     </div>
 
-                    <!-- Klang-Profil (Equalizer), Geschwindigkeit & Sleep-Timer -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2 pt-2 border-t border-white/10 text-xs">
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-slate-300 font-semibold">🎛️ Klang-Profil:</span>
+                    <!-- Kompakte 3er-Leiste für Klang-Profil (Equalizer), Tempo & Sleep-Timer -->
+                    <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-white/10 text-[11px]">
+                        <div class="flex flex-col gap-0.5">
+                            <label for="eqPresetSelect" class="text-slate-400 font-semibold truncate">🎛️ Klang</label>
                             <select id="eqPresetSelect" onchange="applyEqualizerPreset(this.value)"
-                                    class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold">
-                                <option value="flat">🎧 Studio Neutral</option>
-                                <option value="bass">🔊 Bass-Boost</option>
-                                <option value="voice">🎙️ Stimme / Hörbuch</option>
-                                <option value="pop">🎸 Brillanz / Pop</option>
+                                    class="w-full px-1.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] font-semibold">
+                                <option value="flat">Neutral</option>
+                                <option value="bass">Bass+</option>
+                                <option value="voice">Stimme</option>
+                                <option value="pop">Pop</option>
                             </select>
                         </div>
 
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-slate-300 font-semibold">⏩ Tempo:</span>
+                        <div class="flex flex-col gap-0.5">
+                            <label for="playbackRateSelect" class="text-slate-400 font-semibold truncate">⏩ Tempo</label>
                             <select id="playbackRateSelect" onchange="setAudioPlaybackRate(this.value)"
-                                    class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold">
-                                <option value="0.75">0.75× (Langsam)</option>
-                                <option value="1" selected>1.0× (Normal)</option>
-                                <option value="1.25">1.25× (Hörbuch)</option>
-                                <option value="1.5">1.5× (Schnell)</option>
-                                <option value="2">2.0× (Doppelt)</option>
+                                    class="w-full px-1.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] font-semibold">
+                                <option value="0.75">0.75×</option>
+                                <option value="1" selected>1.0×</option>
+                                <option value="1.25">1.25×</option>
+                                <option value="1.5">1.5×</option>
+                                <option value="2">2.0×</option>
                             </select>
                         </div>
 
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-slate-300 font-semibold">🌙 Einschlaf-Timer:</span>
+                        <div class="flex flex-col gap-0.5">
+                            <label for="sleepTimerSelect" class="text-slate-400 font-semibold truncate">🌙 Timer</label>
                             <select id="sleepTimerSelect" onchange="setSleepTimer(this.value)"
-                                    class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold">
+                                    class="w-full px-1.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] font-semibold">
                                 <option value="0">Aus</option>
                                 <option value="15">15 Min.</option>
                                 <option value="30">30 Min.</option>
@@ -1492,18 +1480,18 @@ require_once __DIR__ . '/includes/header.php';
                                 <option value="60">60 Min.</option>
                             </select>
                         </div>
-                        <div id="sleepTimerBadge" class="hidden text-center py-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-mono text-[11px]">
-                            🌙 Stoppt in <span id="sleepTimerCountdown">00:00</span>
-                        </div>
+                    </div>
+                    <div id="sleepTimerBadge" class="hidden text-center py-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-mono text-[11px]">
+                        🌙 Stoppt in <span id="sleepTimerCountdown">00:00</span>
                     </div>
                 </div>
 
-                <!-- PLAYLISTS-ÜBERSICHT (Links unter dem Player) -->
+                <!-- PLAYLISTS-ÜBERSICHT (Links unter dem Player; auf Mobil nur eingeblendet, wenn Playlists vorhanden sind) -->
                 <?php if (!$isGuestMode): ?>
-                <div class="mc-card p-4 space-y-3">
+                <div class="mc-card p-3 sm:p-4 space-y-2 <?= empty($playlists) ? 'hidden lg:block' : '' ?>">
                     <div class="flex items-center justify-between">
-                        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <span>📋</span> Meine &amp; geteilte Playlists (<?= count($playlists) ?>)
+                        <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>📋</span> Playlists (<?= count($playlists) ?>)
                         </h3>
                         <button type="button"
                                 onclick="document.getElementById('modalCreatePlaylist').classList.remove('hidden')"
@@ -1514,23 +1502,23 @@ require_once __DIR__ . '/includes/header.php';
 
                     <?php if (empty($playlists)): ?>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
-                            Noch keine Playlist angelegt. Erstelle z. B. eine Playlist für deine Lieblingssongs, Vereinslieder oder ein Hörbuch!
+                            Noch keine Playlist angelegt.
                         </p>
                     <?php else: ?>
-                        <div class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                        <div class="flex lg:flex-col gap-1.5 overflow-x-auto lg:max-h-56 lg:overflow-y-auto pb-1 lg:pb-0">
                             <?php foreach ($playlists as $pl):
                                 $pid = (int)$pl['id'];
                                 $isAct = ($activePlaylistId === $pid);
                             ?>
                                 <a href="music.php?playlist=<?= $pid ?>"
-                                   class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition <?= $isAct ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100' ?>">
-                                    <div class="min-w-0 truncate">
+                                   class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition <?= $isAct ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100' ?>">
+                                    <div class="min-w-0 truncate max-w-[160px] lg:max-w-none">
                                         <span>💿 <?= e((string)$pl['title']) ?></span>
                                         <?php if (!empty($pl['share_token'])): ?>
                                             <span title="Öffentlicher Link aktiv">🔗</span>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="px-2 py-0.5 rounded-full text-[11px] <?= $isAct ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                    <span class="px-1.5 py-0.5 rounded-full text-[10px] <?= $isAct ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                                         <?= (int)$pl['track_count'] ?>
                                     </span>
                                 </a>
