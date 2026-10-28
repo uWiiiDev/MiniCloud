@@ -1642,11 +1642,35 @@ require_once __DIR__ . '/includes/header.php';
 
                     <button type="button" onclick="insertFormulaTemplate('=SUMME(A1:A5)')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold cursor-pointer" title="Summenformel in aktive Zelle einfügen">Σ Summe</button>
                     <button type="button" onclick="insertFormulaTemplate('=MITTELWERT(A1:A5)')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold cursor-pointer" title="Mittelwert (Durchschnitt) einfügen">Ø Mittelwert</button>
-                    <button type="button" onclick="insertFormulaTemplate('=MIN(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">Min</button>
-                    <button type="button" onclick="insertFormulaTemplate('=MAX(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">Max</button>
-                    <button type="button" onclick="insertFormulaTemplate('=ANZAHL(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">Anzahl</button>
+                    <button type="button" onclick="insertFormulaTemplate('=MIN(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer" title="Kleinsten Wert im Bereich finden">Min</button>
+                    <button type="button" onclick="insertFormulaTemplate('=MAX(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer" title="Größten Wert im Bereich finden">Max</button>
+                    <button type="button" onclick="insertFormulaTemplate('=ANZAHL(A1:A5)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer" title="Anzahl der Zahlenzellen zählen">Anzahl</button>
+                    <button type="button" onclick="insertFormulaTemplate('=RUNDEN(A1;2)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer" title="Auf Nachkommastellen runden">Runden</button>
+                    <button type="button" onclick="insertFormulaTemplate('=WENN(A1>=0; &quot;OK&quot;; &quot;Prüfen&quot;)')" class="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer" title="Wenn-Dann-Sonst Bedingung einfügen">Wenn</button>
+                    <button type="button" onclick="document.getElementById('sheetFormulaHelpBox')?.classList.toggle('hidden')" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold cursor-pointer" title="Alle verfügbaren Formeln &amp; Rechenbeispiele anzeigen">ƒx Alle Formeln</button>
 
                     <button type="button" onclick="exportActiveSheetCsv()" class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer ml-auto" title="Aktuelles Tabellenblatt als CSV herunterladen">📥 Als CSV exportieren</button>
+                </div>
+
+                <!-- Aufklappbare Formel-Kurzreferenz -->
+                <div id="sheetFormulaHelpBox" class="hidden p-3 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 text-xs space-y-2 shadow-2xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-indigo-700 dark:text-indigo-300">📊 Verfügbare Formeln in Excel Light (Klick fügt Beispiel in aktive Zelle ein):</span>
+                        <button type="button" onclick="document.getElementById('sheetFormulaHelpBox').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 cursor-pointer font-bold">✕</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 text-[11px]">
+                        <button type="button" onclick="insertFormulaTemplate('=SUMME(A1:A10)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=SUMME(A1:A10)</code> / <code>=SUM(...)</code> · Summe</button>
+                        <button type="button" onclick="insertFormulaTemplate('=MITTELWERT(A1:A10)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=MITTELWERT(A1:A10)</code> / <code>=AVG(...)</code> · Durchschnitt</button>
+                        <button type="button" onclick="insertFormulaTemplate('=MIN(A1:A10)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=MIN(A1:A10)</code> · Kleinster Wert</button>
+                        <button type="button" onclick="insertFormulaTemplate('=MAX(A1:A10)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=MAX(A1:A10)</code> · Größter Wert</button>
+                        <button type="button" onclick="insertFormulaTemplate('=ANZAHL(A1:A10)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=ANZAHL(A1:A10)</code> / <code>=COUNT(...)</code> · Anzahl Zahlen</button>
+                        <button type="button" onclick="insertFormulaTemplate('=PRODUKT(A1:A5)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=PRODUKT(A1:A5)</code> · Multipliziert Bereich</button>
+                        <button type="button" onclick="insertFormulaTemplate('=RUNDEN(A1*1,19; 2)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=RUNDEN(Wert; Stellen)</code> · Auf Dezimalstellen runden</button>
+                        <button type="button" onclick="insertFormulaTemplate('=WENN(A1>=100; &quot;Ziel erreicht&quot;; &quot;Offen&quot;)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=WENN(Bed.; Dann; Sonst)</code> · Bedingung (<code>IF</code>)</button>
+                        <button type="button" onclick="insertFormulaTemplate('=ABS(A1)')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=ABS(A1)</code> &amp; <code>=WURZEL(A1)</code> · Betrag / Wurzel</button>
+                        <button type="button" onclick="insertFormulaTemplate('=HEUTE()')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=HEUTE()</code> / <code>=TODAY()</code> · Aktuelles Datum</button>
+                        <button type="button" onclick="insertFormulaTemplate('=(A1+B1)*1,19')" class="text-left p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><code>=(A1+B1)*1,19</code> · Grundrechenarten <code>+ - * / ( )</code></button>
+                    </div>
                 </div>
             <?php endif; ?>
 
@@ -2380,12 +2404,92 @@ function evaluateSheetCell(sheetIdx, r, c, visited = {}) {
     };
 
     try {
-        // Bereichsfunktionen SUM / SUMME / AVERAGE / MITTELWERT / MIN / MAX / COUNT / ANZAHL
-        expr = expr.replace(/\b(SUMME|SUM|MITTELWERT|AVERAGE|AVG|MIN|MAX|ANZAHL|COUNT)\s*\(([^()]+)\)/gi, (_, fnName, inside) => {
+        // 1. Datum-Funktion =HEUTE() / =TODAY()
+        if (/^(HEUTE|TODAY)\s*\(\s*\)$/i.test(expr)) {
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            return `${dd}.${mm}.${now.getFullYear()}`;
+        }
+
+        // Hilfsfunktion: Einzelnen Teil-Ausdruck (mit Zellen & Grundrechenarten) numerisch auswerten
+        const evalSubExpr = (subRaw) => {
+            let s = String(subRaw ?? '').trim();
+            if (s === '') return 0;
+            // Bereichsfunktionen in Teil-Ausdruck auflösen
+            s = s.replace(/\b(SUMME|SUM|MITTELWERT|AVERAGE|AVG|MIN|MAX|ANZAHL|COUNT|PRODUKT|PRODUCT)\s*\(([^()]+)\)/gi, (_, fnName, inside) => {
+                const fn = fnName.toUpperCase();
+                const vals = resolveArgsNumbers(inside);
+                if (fn === 'ANZAHL' || fn === 'COUNT') return String(vals.length);
+                if (vals.length === 0) return '0';
+                if (fn === 'PRODUKT' || fn === 'PRODUCT') return String(vals.reduce((a, b) => a * b, 1));
+                const sum = vals.reduce((a, b) => a + b, 0);
+                if (fn === 'SUMME' || fn === 'SUM') return String(sum);
+                if (fn === 'MITTELWERT' || fn === 'AVERAGE' || fn === 'AVG') return String(sum / vals.length);
+                if (fn === 'MIN') return String(Math.min(...vals));
+                if (fn === 'MAX') return String(Math.max(...vals));
+                return '0';
+            });
+            // Zellreferenzen (z. B. A1, B12) ersetzen
+            s = s.replace(/\b([A-Za-z]+)(\d+)\b/g, (_, colLet, rowNumStr) => {
+                const cc = colNameToIdx(colLet);
+                const rr = parseInt(rowNumStr, 10) - 1;
+                const cellVal = evaluateSheetCell(sheetIdx, rr, cc, { ...visited });
+                const num = parseFloat(String(cellVal).replace(',', '.'));
+                return isNaN(num) ? '0' : String(num);
+            });
+            // Deutsche Kommazahlen (z. B. 1,19) in Punktzahlen umwandeln
+            s = s.replace(/(\d),(\d)/g, '$1.$2');
+            if (!/^[0-9+\-*/().\s]+$/.test(s)) return NaN;
+            return Number(Function('"use strict"; return (' + s + ');')());
+        };
+
+        // 2. WENN / IF Funktion: =WENN(Bedingung; Dann; Sonst)
+        const ifMatch = expr.match(/^(WENN|IF)\s*\((.+)\)$/i);
+        if (ifMatch) {
+            const parts = ifMatch[2].split(';');
+            const args = parts.length >= 2 ? parts : ifMatch[2].split(',');
+            if (args.length >= 2) {
+                const condStr = args[0].trim();
+                const thenRaw = (args[1] ?? '').trim();
+                const elseRaw = (args[2] ?? '""').trim();
+                const cmpMatch = condStr.match(/^(.+?)(>=|<=|<>|!=|=|>|<)(.+)$/);
+                let condOk = false;
+                if (cmpMatch) {
+                    const leftVal = evalSubExpr(cmpMatch[1]);
+                    const op = cmpMatch[2];
+                    const rightVal = evalSubExpr(cmpMatch[3]);
+                    if (op === '>=') condOk = leftVal >= rightVal;
+                    else if (op === '<=') condOk = leftVal <= rightVal;
+                    else if (op === '<>' || op === '!=') condOk = leftVal !== rightVal;
+                    else if (op === '=') condOk = leftVal === rightVal;
+                    else if (op === '>') condOk = leftVal > rightVal;
+                    else if (op === '<') condOk = leftVal < rightVal;
+                } else {
+                    condOk = Boolean(evalSubExpr(condStr));
+                }
+                const chosen = condOk ? thenRaw : elseRaw;
+                if ((chosen.startsWith('"') && chosen.endsWith('"')) || (chosen.startsWith("'") && chosen.endsWith("'"))) {
+                    return chosen.slice(1, -1);
+                }
+                if (/^[A-Za-z]+\d+$/.test(chosen)) {
+                    const m = chosen.match(/^([A-Za-z]+)(\d+)$/);
+                    return String(evaluateSheetCell(sheetIdx, parseInt(m[2], 10) - 1, colNameToIdx(m[1]), { ...visited }));
+                }
+                const numRes = evalSubExpr(chosen);
+                return !isNaN(numRes) && isFinite(numRes)
+                    ? (Number.isInteger(numRes) ? String(numRes) : String(Math.round(numRes * 10000) / 10000))
+                    : chosen;
+            }
+        }
+
+        // 3. Bereichsfunktionen SUMME / SUM / MITTELWERT / AVERAGE / AVG / MIN / MAX / ANZAHL / COUNT / PRODUKT / PRODUCT
+        expr = expr.replace(/\b(SUMME|SUM|MITTELWERT|AVERAGE|AVG|MIN|MAX|ANZAHL|COUNT|PRODUKT|PRODUCT)\s*\(([^()]+)\)/gi, (_, fnName, inside) => {
             const fn = fnName.toUpperCase();
             const vals = resolveArgsNumbers(inside);
             if (fn === 'ANZAHL' || fn === 'COUNT') return String(vals.length);
             if (vals.length === 0) return '0';
+            if (fn === 'PRODUKT' || fn === 'PRODUCT') return String(vals.reduce((a, b) => a * b, 1));
             const sum = vals.reduce((a, b) => a + b, 0);
             if (fn === 'SUMME' || fn === 'SUM') return String(sum);
             if (fn === 'MITTELWERT' || fn === 'AVERAGE' || fn === 'AVG') return String(sum / vals.length);
@@ -2394,7 +2498,25 @@ function evaluateSheetCell(sheetIdx, r, c, visited = {}) {
             return '0';
         });
 
-        // Einzelne Zellreferenzen (z. B. A1, B12) durch ihren Zahlenwert ersetzen
+        // 4. Mathematische Zusatzfunktionen RUNDEN / ROUND, ABS, WURZEL / SQRT
+        expr = expr.replace(/\b(RUNDEN|ROUND)\s*\(([^()]+)\)/gi, (_, _fn, inside) => {
+            const sep = inside.includes(';') ? ';' : ',';
+            const parts = inside.split(sep);
+            const val = evalSubExpr(parts[0] ?? '0');
+            const dec = parts.length > 1 ? Math.max(0, Math.min(10, parseInt(parts[1].trim(), 10) || 0)) : 0;
+            if (isNaN(val)) return '0';
+            const factor = Math.pow(10, dec);
+            return String(Math.round(val * factor) / factor);
+        });
+        expr = expr.replace(/\b(ABS|WURZEL|SQRT)\s*\(([^()]+)\)/gi, (_, fnName, inside) => {
+            const fn = fnName.toUpperCase();
+            const val = evalSubExpr(inside);
+            if (isNaN(val)) return '0';
+            if (fn === 'ABS') return String(Math.abs(val));
+            return val >= 0 ? String(Math.sqrt(val)) : 'NaN';
+        });
+
+        // 5. Einzelne Zellreferenzen (z. B. A1, B12) durch ihren Zahlenwert ersetzen
         expr = expr.replace(/\b([A-Za-z]+)(\d+)\b/g, (_, colLet, rowNumStr) => {
             const cc = colNameToIdx(colLet);
             const rr = parseInt(rowNumStr, 10) - 1;
@@ -2402,6 +2524,9 @@ function evaluateSheetCell(sheetIdx, r, c, visited = {}) {
             const num = parseFloat(String(cellVal).replace(',', '.'));
             return isNaN(num) ? '0' : String(num);
         });
+
+        // Deutsche Kommazahlen (z. B. 1,19) in Punktzahlen umwandeln
+        expr = expr.replace(/(\d),(\d)/g, '$1.$2');
 
         // Nur sichere mathematische Zeichen zulassen
         if (!/^[0-9+\-*/().\s]+$/.test(expr)) {
