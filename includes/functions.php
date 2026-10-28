@@ -734,6 +734,8 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_assistant'              => '1',
         'enable_ebooks'                 => '1',
         'enable_games'                  => '1',
+        'enable_mindmap'                => '1',
+        'enable_budget'                 => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3039,6 +3041,20 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_games',
             'color'       => 'bg-fuchsia-600',
         ],
+        'mindmap' => [
+            'icon'        => '🧠',
+            'label'       => 'Mind-Map-Editor & Ideensammler',
+            'url'         => 'mindmap.php',
+            'setting_key' => 'enable_mindmap',
+            'color'       => 'bg-cyan-600',
+        ],
+        'budget' => [
+            'icon'        => '💰',
+            'label'       => 'Haushaltsplaner & Finanz-Übersicht',
+            'url'         => 'budget.php',
+            'setting_key' => 'enable_budget',
+            'color'       => 'bg-emerald-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3079,6 +3095,8 @@ function detectCurrentModuleKeyForStats(): ?string
         'assistant.php' => 'assistant',
         'ebooks.php'    => 'ebooks',
         'games.php'     => 'games',
+        'mindmap.php'   => 'mindmap',
+        'budget.php'    => 'budget',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3205,6 +3223,12 @@ function getModuleInventorySummary(PDO $pdo): array
 
     $gameScoreCount = $safeCount("SELECT COUNT(*) FROM `game_scores`");
     $summary['games'] = $gameScoreCount . ' Highscore-' . ($gameScoreCount === 1 ? 'Runde' : 'Runden');
+
+    $mindmapCount = $safeCount("SELECT COUNT(*) FROM `mindmaps`");
+    $summary['mindmap'] = $mindmapCount . ' Mind-' . ($mindmapCount === 1 ? 'Map' : 'Maps');
+
+    $budgetEntryCount = $safeCount("SELECT COUNT(*) FROM `budget_entries`");
+    $summary['budget'] = $budgetEntryCount . ' ' . ($budgetEntryCount === 1 ? 'Buchung' : 'Buchungen');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
