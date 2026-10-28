@@ -712,7 +712,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'asset') {
 // =============================================================================
 // 2. AJAX- & FORMULAR-AKTIONEN (POST)
 // =============================================================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $postAction = (string)($_POST['action'] ?? '');
     $csrf       = (string)($_POST['csrf_token'] ?? '');
 
@@ -1532,7 +1532,7 @@ $stmtEpubs = $pdo->prepare(
                )
            )
        )
-     ORDER BY f.uploaded_at DESC"
+     ORDER BY f.upload_date DESC, f.id DESC"
 );
 $stmtEpubs->execute([
     ':uid1'     => $userId,
@@ -1591,7 +1591,7 @@ foreach ($rawEpubFiles as $idx => $fRow) {
         'original_name'     => (string)$fRow['original_name'],
         'folder_path'       => (string)($fRow['folder_path'] ?? ''),
         'file_size'         => (int)$fRow['file_size'],
-        'uploaded_at'       => (string)$fRow['uploaded_at'],
+        'uploaded_at'       => (string)($fRow['upload_date'] ?? ''),
         'source_kind'       => (string)$fRow['source_kind'],
         'owner_username'    => (string)($fRow['owner_username'] ?? ''),
         'group_folder_name' => (string)($fRow['group_folder_name'] ?? ''),

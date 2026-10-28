@@ -890,8 +890,56 @@ if (
 <script>
 (() => {
     const csrf = <?= json_encode(getCsrfToken()) ?>;
-    const storeKey = 'mc_assistant_chat_v1_' + <?= json_encode((int)$_SESSION['user_id']) ?>;
+    const uiLang = <?= json_encode(function_exists('getCurrentLang') ? getCurrentLang() : 'de') ?>;
+    const storeKey = 'mc_assistant_chat_v2_' + <?= json_encode((int)$_SESSION['user_id']) ?> + '_' + uiLang;
     const userName = <?= json_encode((string)($_SESSION['username'] ?? 'Benutzer')) ?>;
+
+    const quickGreets = {
+        de: {
+            reply: `Hallo **${userName}**! 👋 Wie kann ich dir auf dieser Seite helfen?`,
+            followups: ['Wie viel Speicherplatz habe ich noch frei?', 'Welche Termine stehen bei mir an?', 'Wie funktioniert der E-Book-Reader (.epub)?']
+        },
+        en: {
+            reply: `Hello **${userName}**! 👋 How can I help you on this page?`,
+            followups: ['How much free storage space do I have left?', 'What appointments do I have coming up?', 'How does the E-Book Reader (.epub) work?']
+        },
+        fr: {
+            reply: `Bonjour **${userName}** ! 👋 Comment puis-je vous aider sur cette page ?`,
+            followups: ['Combien d’espace de stockage me reste-t-il ?', 'Quels sont mes prochains rendez-vous ?', 'Comment fonctionne le lecteur E-Book (.epub) ?']
+        },
+        es: {
+            reply: `¡Hola **${userName}**! 👋 ¿Cómo puedo ayudarte en esta página?`,
+            followups: ['¿Cuánto espacio de almacenamiento libre me queda?', '¿Qué citas tengo próximamente?', '¿Cómo funciona el lector de E-Books (.epub)?']
+        },
+        it: {
+            reply: `Ciao **${userName}**! 👋 Come posso aiutarti in questa pagina?`,
+            followups: ['Quanto spazio di archiviazione libero mi rimane?', 'Quali sono i miei prossimi appuntamenti?', 'Come funziona il lettore E-Book (.epub)?']
+        },
+        nl: {
+            reply: `Hallo **${userName}**! 👋 Hoe kan ik je op deze pagina helpen?`,
+            followups: ['Hoeveel vrije opslagruimte heb ik nog?', 'Welke afspraken staan er op mijn agenda?', 'Hoe werkt de E-Book-lezer (.epub)?']
+        },
+        pl: {
+            reply: `Cześć **${userName}**! 👋 Jak mogę Ci pomóc na tej stronie?`,
+            followups: ['Ile mam jeszcze wolnego miejsca?', 'Jakie mam nadchodzące terminy?', 'Jak działa czytnik E-Booków (.epub)?']
+        },
+        pt: {
+            reply: `Olá **${userName}**! 👋 Como posso ajudar nesta página?`,
+            followups: ['Quanto espaço de armazenamento livre ainda tenho?', 'Quais são os meus próximos compromissos?', 'Como funciona o leitor de E-Books (.epub)?']
+        },
+        cs: {
+            reply: `Ahoj **${userName}**! 👋 Jak ti mohu na této stránce pomoci?`,
+            followups: ['Kolik volného místa mi ještě zbývá?', 'Jaké události mě čekají?', 'Jak funguje čtečka E-knih (.epub)?']
+        },
+        tr: {
+            reply: `Merhaba **${userName}**! 👋 Bu sayfada size nasıl yardımcı olabilirim?`,
+            followups: ['Ne kadar boş depolama alanım kaldı?', 'Yaklaşan hangi randevularım var?', 'E-Kitap Okuyucu (.epub) nasıl çalışır?']
+        },
+        uk: {
+            reply: `Привіт, **${userName}**! 👋 Як я можу допомогти на цій сторінці?`,
+            followups: ['Скільки вільного місця у мене залишилося?', 'Які події у мене заплановані?', 'Як працює рідер електронних книг (.epub)?']
+        }
+    };
 
     const fmtMd = (t) => {
         let s = String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -909,15 +957,12 @@ if (
                 if (Array.isArray(p) && p.length) return p;
             }
         } catch (e) {}
+        const pack = quickGreets[uiLang] || quickGreets.de;
         return [{
             role: 'assistant',
-            reply: `Hallo **${userName}**! 👋 Wie kann ich dir auf dieser Seite helfen?`,
+            reply: pack.reply,
             actions: [],
-            followups: [
-                'Wie viel Speicherplatz habe ich noch frei?',
-                'Was steht diese Woche bei mir an?',
-                'Wie funktioniert die OCR-Texterkennung?'
-            ]
+            followups: pack.followups
         }];
     };
 
