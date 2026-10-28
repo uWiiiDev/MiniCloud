@@ -471,7 +471,7 @@ if (isset($_GET['cover_file'])) {
         exit;
     }
 
-    $physicalPath = UPLOAD_DIR . basename((string)$fileRow['filename']);
+    $physicalPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename((string)$fileRow['filename']);
     $parsed       = parseLocalAudioMetadata($physicalPath, true);
     if ($parsed['has_cover'] === 1 && $parsed['cover_data'] !== '') {
         header('Content-Type: ' . ($parsed['cover_mime'] ?: 'image/jpeg'));
@@ -497,7 +497,7 @@ if (isset($_GET['stream_file'])) {
         exit('Kein Zugriff auf diese Audiodatei.');
     }
 
-    $physicalPath = UPLOAD_DIR . basename((string)$fileRow['filename']);
+    $physicalPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename((string)$fileRow['filename']);
     if (!is_file($physicalPath)) {
         http_response_code(404);
         exit('Audiodatei nicht gefunden.');
@@ -665,48 +665,49 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
-    // Direkt-Upload von Audiodateien in den Ordner "Musik"
+    // Direkt-Upload von Audiodateien in den Ordner "Musik" (oder "Musik/<Unterordner>")
     if ($action === 'upload_audio') {
         $targetPlaylistId = (int)($_POST['playlist_id'] ?? 0);
-        $safeFolder = 'Musik';
+        $subFolderRaw     = trim((string)($_POST['target_subfolder'] ?? ''));
+        $subFolderClean   = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß _\-\/]/u', '', $subFolderRaw);
+        $subFolderClean   = normalizeFolderPath((string)$subFolderClean);
+        $safeFolder       = $subFolderClean !== '' ? ('Musik/' . $subFolderClean) : 'Musik';
 
-        $stmtChkFolder = $pdo->prepare('SELECT id FROM user_folders WHERE user_id = :uid AND folder_path = :fp AND group_folder_id IS NULL LIMIT 1');
-        $stmtChkFolder->execute([':uid' => $userId, ':fp' => $safeFolder]);
-        if (!$stmtChkFolder->fetchColumn()) {
-            $pdo->prepare('INSERT INTO user_folders (user_id, folder_path) VALUES (:uid, :fp)')
-                ->execute([':uid' => $userId, ':fp' => $safeFolder]);
-        }
+        ensureUploadDirReady(UPLOAD_DIR);
+        registerFolderHierarchy($pdo, $userId, $safeFolder);
+
+        $stats = getUserStorageStats($pdo, $userId);
+        $usedBytes  = (int)$stats['used'];
+        $quotaBytes = (int)$stats['quota'];
 
         $uploadedCount = 0;
         if (!empty($_FILES['audio_files']['name']) && is_array($_FILES['audio_files']['name'])) {
             $fileCount   = count($_FILES['audio_files']['name']);
-            $allowedExts = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus'];
+            $allowedExts = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'webm'];
 
             for ($i = 0; $i < $fileCount; $i++) {
                 if (($_FILES['audio_files']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                     continue;
                 }
                 $tmpPath  = (string)$_FILES['audio_files']['tmp_name'][$i];
-                $origName = basename((string)$_FILES['audio_files']['name'][$i]);
+                $origName = sanitizeFileName(basename((string)$_FILES['audio_files']['name'][$i]));
                 $fileSize = (int)$_FILES['audio_files']['size'][$i];
                 $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
 
                 if (!in_array($ext, $allowedExts, true) || $fileSize <= 0 || $fileSize > MAX_FILE_SIZE) {
                     continue;
                 }
-                if (!hasAvailableQuota($pdo, $userId, $fileSize)) {
+                if (($usedBytes + $fileSize) > $quotaBytes) {
                     setFlash('warning', 'Dein Cloud-Speicherkontingent ist ausgeschöpft.');
                     break;
                 }
 
-                $storedName = generateSafeStoredFilename();
-                if (!is_dir(UPLOAD_DIR)) {
-                    mkdir(UPLOAD_DIR, 0750, true);
-                }
-                $destPath = UPLOAD_DIR . $storedName;
+                $storedName = generateStoredFileName($ext);
+                $destPath   = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $storedName;
 
                 if (move_uploaded_file($tmpPath, $destPath)) {
                     @chmod($destPath, 0640);
+                    $usedBytes += $fileSize;
                     $mimeMap = [
                         'mp3'  => 'audio/mpeg',
                         'm4a'  => 'audio/mp4',
@@ -715,12 +716,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         'ogg'  => 'audio/ogg',
                         'opus' => 'audio/ogg',
                         'flac' => 'audio/flac',
+                        'webm' => 'audio/webm',
                     ];
                     $mimeType = $mimeMap[$ext] ?? 'audio/mpeg';
 
                     $stmtIns = $pdo->prepare(
-                        'INSERT INTO files (user_id, folder_path, filename, original_name, file_size, mime_type)
-                         VALUES (:uid, :fp, :fn, :on, :fs, :mt)'
+                        'INSERT INTO files (user_id, folder_path, filename, original_name, file_size, mime_type, is_encrypted)
+                         VALUES (:uid, :fp, :fn, :on, :fs, :mt, 0)'
                     );
                     $stmtIns->execute([
                         ':uid' => $userId,
@@ -746,11 +748,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
 
         if ($uploadedCount > 0) {
-            setFlash('success', $uploadedCount . ' Audiodatei(en) erfolgreich in deinen Ordner „Musik/“ hochgeladen!');
+            setFlash('success', $uploadedCount . ' Audiodatei(en) erfolgreich in deinen Ordner „' . $safeFolder . '/“ hochgeladen!');
         } else {
             setFlash('warning', 'Bitte wähle gültige Audiodateien (.mp3, .m4a, .wav, .ogg, .flac, .aac, .opus) aus.');
         }
-        header('Location: music.php' . ($targetPlaylistId > 0 ? '?playlist=' . $targetPlaylistId : ''));
+        $redirectQuery = $targetPlaylistId > 0
+            ? '?playlist=' . $targetPlaylistId
+            : ($subFolderClean !== '' ? '?folder=' . urlencode($safeFolder) . '&audiobook=1&sort=chapter' : '');
+        header('Location: music.php' . $redirectQuery);
         exit;
     }
 
@@ -1015,7 +1020,7 @@ if ($userId > 0) {
         $fnNums = extractTrackAndDiscFromFilename((string)$row['original_name'], (string)($row['folder_path'] ?? ''));
 
         if ((int)($row['meta_parsed'] ?? 0) !== 1) {
-            $phys = UPLOAD_DIR . basename((string)$row['filename']);
+            $phys = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename((string)$row['filename']);
             $id3  = parseLocalAudioMetadata($phys, false);
             $trkNo = $id3['track_no'] > 0 ? $id3['track_no'] : $fnNums['track_no'];
             $dscNo = $id3['disc_no'] > 0 ? $id3['disc_no'] : $fnNums['disc_no'];
@@ -1113,7 +1118,7 @@ if ($activePlaylist && !$isPlaylistLocked) {
         if (isset($allAudioFiles[$fid])) {
             $displayedTracks[] = $allAudioFiles[$fid];
         } else {
-            $phys = UPLOAD_DIR . basename((string)$row['filename']);
+            $phys = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename((string)$row['filename']);
             $id3  = parseLocalAudioMetadata($phys, false);
             $fnNums = extractTrackAndDiscFromFilename((string)$row['original_name'], (string)($row['folder_path'] ?? ''));
             $fallbackBase = pathinfo((string)$row['original_name'], PATHINFO_FILENAME);
@@ -1831,10 +1836,18 @@ require_once __DIR__ . '/includes/header.php';
                 <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Audiodateien auswählen (.mp3, .m4a, .flac, .wav, .ogg, .aac, .opus) *
                 </label>
-                <input type="file" name="audio_files[]" accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.opus,audio/*" multiple required
+                <input type="file" name="audio_files[]" accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.opus,.webm,audio/*" multiple required
                        class="w-full text-xs sm:text-sm text-slate-700 dark:text-slate-200 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-rose-600 file:text-white hover:file:bg-rose-700">
-                <p class="text-[11px] text-slate-500 mt-1.5">
-                    Die Dateien werden automatisch in deinem Cloud-Ordner <code>Musik/</code> gespeichert und auf ID3-Tags &amp; Cover gescannt.
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Optionaler Unterordner unter <code>Musik/</code> (ideal für Hörbücher oder Alben)
+                </label>
+                <input type="text" name="target_subfolder" placeholder="z. B. Hörbücher/Der kleine Prinz (leer lassen für Musik/)"
+                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm">
+                <p class="text-[11px] text-slate-500 mt-1">
+                    Die Dateien werden automatisch gespeichert und auf ID3-Tags, Kapitelnummern &amp; Cover gescannt.
                 </p>
             </div>
 
