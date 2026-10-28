@@ -328,6 +328,27 @@ function getTranslationDictionary(): array
             'nl' => 'Bestuur & Rolrechten',
             'it' => 'Direttivo & Permessi di ruolo',
         ],
+        'Statistik & Auswertungen' => [
+            'en' => 'Statistics & Analytics',
+            'fr' => 'Statistiques & Analyses',
+            'es' => 'Estadísticas y Análisis',
+            'nl' => 'Statistieken & Analyses',
+            'it' => 'Statistiche & Analisi',
+        ],
+        '🎂 Altersverteilung der Mitglieder' => [
+            'en' => '🎂 Member Age Distribution',
+            'fr' => '🎂 Répartition par âge des membres',
+            'es' => '🎂 Distribución por edad de los miembros',
+            'nl' => '🎂 Leeftijdsopbouw van de leden',
+            'it' => '🎂 Distribuzione per età dei soci',
+        ],
+        '🏆 Abteilungs- & Spartengrößen' => [
+            'en' => '🏆 Department & Division Sizes',
+            'fr' => '🏆 Taille des sections & départements',
+            'es' => '🏆 Tamaño de secciones y departamentos',
+            'nl' => '🏆 Afdelings- & sectiegroottes',
+            'it' => '🏆 Dimensioni di reparti e sezioni',
+        ],
         'Gruppen-Sprachräume' => [
             'en' => 'Group Voice Rooms',
             'fr' => 'Salons vocaux de groupe',

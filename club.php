@@ -1127,46 +1127,225 @@ $stmtMembers->execute([
 ]);
 $members = $stmtMembers->fetchAll();
 
-// Kennzahlen berechnen
+// Kennzahlen & umfangreiche Vereinsstatistiken berechnen (Altersverteilung, Abteilungsgrößen, Zugehörigkeit, Jubiläen)
 $statsTotalMembers   = 0;
 $statsActiveMembers  = 0;
 $statsYouthMembers   = 0;
 $statsBoardMembers   = 0;
 $upcomingBirthdays   = [];
 
+$statStatusCounts = [
+    'active'   => 0,
+    'youth'    => 0,
+    'passive'  => 0,
+    'honorary' => 0,
+    'left'     => 0,
+];
+$statAgeBrackets = [
+    'u14'     => ['label' => '👶 Unter 14 J. (Kinder)',          'count' => 0, 'color' => 'bg-sky-500'],
+    '14_17'   => ['label' => '🌱 14 – 17 J. (Jugend)',           'count' => 0, 'color' => 'bg-cyan-500'],
+    '18_29'   => ['label' => '🏃 18 – 29 J. (Junge Erwachsene)', 'count' => 0, 'color' => 'bg-emerald-500'],
+    '30_44'   => ['label' => '⚡ 30 – 44 Jahre',                 'count' => 0, 'color' => 'bg-brand-600'],
+    '45_59'   => ['label' => '🏅 45 – 59 Jahre',                 'count' => 0, 'color' => 'bg-indigo-500'],
+    '60_74'   => ['label' => '🌿 60 – 74 Jahre',                 'count' => 0, 'color' => 'bg-amber-500'],
+    '75_plus' => ['label' => '👑 Ab 75 Jahre (Senioren)',        'count' => 0, 'color' => 'bg-purple-500'],
+    'unknown' => ['label' => '❓ Ohne Geburtsdatum',             'count' => 0, 'color' => 'bg-slate-400'],
+];
+$statAgeSum      = 0;
+$statAgeKnownCnt = 0;
+$statMinAge      = null;
+$statMaxAge      = null;
+
+$statDepartments = []; // Name => Anzahl aktive Mitglieder
+$statTariffDist  = []; // Tarif-Name => ['count' => int, 'annual_sum' => float]
+$statAnnualProjectedFees = 0.0;
+
+$statTenureBrackets = [
+    'u2'      => ['label' => '🆕 Neu (< 2 Jahre)',        'count' => 0, 'color' => 'bg-cyan-500'],
+    '2_5'     => ['label' => '🌱 2 – 5 Jahre',            'count' => 0, 'color' => 'bg-emerald-500'],
+    '6_10'    => ['label' => '🤝 6 – 10 Jahre',           'count' => 0, 'color' => 'bg-brand-600'],
+    '11_24'   => ['label' => '🏅 11 – 24 Jahre',          'count' => 0, 'color' => 'bg-indigo-500'],
+    '25_plus' => ['label' => '👑 25+ Jahre (Ehrentreue)', 'count' => 0, 'color' => 'bg-amber-500'],
+];
+$statTenureSum      = 0;
+$statTenureKnownCnt = 0;
+$clubAnniversaries  = []; // Jubiläen im gewählten Jahr (5, 10, 15, 20, 25, 30, 40, 50, 60, 70 J.)
+$statJoinsByYear    = [];
+$statLeavesByYear   = [];
+for ($y = (int)$selectedYear - 4; $y <= (int)$selectedYear; $y++) {
+    $statJoinsByYear[(string)$y]  = 0;
+    $statLeavesByYear[(string)$y] = 0;
+}
+$statWorkFulfilledCount = 0;
+$reqWorkHours = max(0.0, (float)$activeClub['default_work_hours']);
+
 foreach ($members as $m) {
-    if ($m['status'] !== 'left') {
+    $mStat = (string)$m['status'];
+    if (isset($statStatusCounts[$mStat])) {
+        $statStatusCounts[$mStat]++;
+    }
+
+    // Ein- und Austritte nach Jahr zählen
+    if (!empty($m['joined_date'])) {
+        $jYear = substr((string)$m['joined_date'], 0, 4);
+        if (isset($statJoinsByYear[$jYear])) {
+            $statJoinsByYear[$jYear]++;
+        }
+    }
+    if (!empty($m['left_date'])) {
+        $lYear = substr((string)$m['left_date'], 0, 4);
+        if (isset($statLeavesByYear[$lYear])) {
+            $statLeavesByYear[$lYear]++;
+        }
+    }
+
+    if ($mStat !== 'left') {
         $statsTotalMembers++;
     }
-    if ($m['status'] === 'active') {
+    if ($mStat === 'active') {
         $statsActiveMembers++;
-    } elseif ($m['status'] === 'youth') {
+    } elseif ($mStat === 'youth') {
         $statsYouthMembers++;
     }
-    if ($m['status'] !== 'left' && trim((string)$m['board_role']) !== '') {
+    if ($mStat !== 'left' && trim((string)$m['board_role']) !== '') {
         $statsBoardMembers++;
     }
-    if ($m['status'] !== 'left' && !empty($m['birth_date'])) {
-        $bParts = explode('-', (string)$m['birth_date']);
-        if (count($bParts) === 3) {
-            $nextBday = date('Y') . '-' . $bParts[1] . '-' . $bParts[2];
-            if ($nextBday < date('Y-m-d')) {
-                $nextBday = ((int)date('Y') + 1) . '-' . $bParts[1] . '-' . $bParts[2];
+
+    // Für aktive Vereinsmitglieder (nicht ausgetreten): Abteilungen, Alter, Tarif, Zugehörigkeit, Arbeitsstunden
+    if ($mStat !== 'left') {
+        // 1. Abteilungsgrößen (unterstützt auch Komma-getrennte Mehrfach-Abteilungen wie "Fußball, Tennis")
+        $rawDep = trim((string)$m['department']);
+        if ($rawDep === '') {
+            $depList = ['Hauptverein (Ohne Sparte)'];
+        } else {
+            $depList = array_filter(array_map('trim', preg_split('/[,;\/]+/', $rawDep) ?: [$rawDep]));
+            if (empty($depList)) {
+                $depList = [$rawDep];
             }
-            $daysLeft = (int)round((strtotime($nextBday) - strtotime(date('Y-m-d'))) / 86400);
-            if ($daysLeft >= 0 && $daysLeft <= 60) {
-                $turningAge = (int)substr($nextBday, 0, 4) - (int)$bParts[0];
-                $upcomingBirthdays[] = [
-                    'name'        => $m['first_name'] . ' ' . $m['last_name'],
-                    'date_fmt'    => $bParts[2] . '.' . $bParts[1] . '.',
-                    'days_left'   => $daysLeft,
-                    'turning_age' => $turningAge,
-                    'is_round'    => ($turningAge > 0 && $turningAge % 10 === 0),
-                ];
+        }
+        foreach ($depList as $dName) {
+            $statDepartments[$dName] = ($statDepartments[$dName] ?? 0) + 1;
+        }
+
+        // 2. Altersverteilung & Geburtstagsvorschau
+        if (!empty($m['birth_date'])) {
+            $bParts = explode('-', (string)$m['birth_date']);
+            if (count($bParts) === 3) {
+                $birthTs = strtotime((string)$m['birth_date']);
+                if ($birthTs !== false) {
+                    $ageNow = (int)date('Y') - (int)$bParts[0];
+                    if (date('m-d') < ($bParts[1] . '-' . $bParts[2])) {
+                        $ageNow--;
+                    }
+                    $ageNow = max(0, $ageNow);
+                    $statAgeSum += $ageNow;
+                    $statAgeKnownCnt++;
+                    if ($statMinAge === null || $ageNow < $statMinAge) {
+                        $statMinAge = $ageNow;
+                    }
+                    if ($statMaxAge === null || $ageNow > $statMaxAge) {
+                        $statMaxAge = $ageNow;
+                    }
+
+                    if ($ageNow < 14) {
+                        $statAgeBrackets['u14']['count']++;
+                    } elseif ($ageNow <= 17) {
+                        $statAgeBrackets['14_17']['count']++;
+                    } elseif ($ageNow <= 29) {
+                        $statAgeBrackets['18_29']['count']++;
+                    } elseif ($ageNow <= 44) {
+                        $statAgeBrackets['30_44']['count']++;
+                    } elseif ($ageNow <= 59) {
+                        $statAgeBrackets['45_59']['count']++;
+                    } elseif ($ageNow <= 74) {
+                        $statAgeBrackets['60_74']['count']++;
+                    } else {
+                        $statAgeBrackets['75_plus']['count']++;
+                    }
+                }
+
+                $nextBday = date('Y') . '-' . $bParts[1] . '-' . $bParts[2];
+                if ($nextBday < date('Y-m-d')) {
+                    $nextBday = ((int)date('Y') + 1) . '-' . $bParts[1] . '-' . $bParts[2];
+                }
+                $daysLeft = (int)round((strtotime($nextBday) - strtotime(date('Y-m-d'))) / 86400);
+                if ($daysLeft >= 0 && $daysLeft <= 60) {
+                    $turningAge = (int)substr($nextBday, 0, 4) - (int)$bParts[0];
+                    $upcomingBirthdays[] = [
+                        'name'        => $m['first_name'] . ' ' . $m['last_name'],
+                        'date_fmt'    => $bParts[2] . '.' . $bParts[1] . '.',
+                        'days_left'   => $daysLeft,
+                        'turning_age' => $turningAge,
+                        'is_round'    => ($turningAge > 0 && $turningAge % 10 === 0),
+                    ];
+                }
+            } else {
+                $statAgeBrackets['unknown']['count']++;
             }
+        } else {
+            $statAgeBrackets['unknown']['count']++;
+        }
+
+        // 3. Beitragsstruktur & Jahresprognose
+        $tTitle = !empty($m['tier_title']) ? (string)$m['tier_title'] : 'Beitragsfrei / Kein Tarif';
+        $tBase  = (float)($m['tier_amount'] ?? 0.0);
+        $tCycle = (string)($m['tier_cycle'] ?? 'yearly');
+        $tAnnual = match ($tCycle) {
+            'monthly'     => round($tBase * 12, 2),
+            'quarterly'   => round($tBase * 4, 2),
+            'half_yearly' => round($tBase * 2, 2),
+            default       => $tBase,
+        };
+        if (!isset($statTariffDist[$tTitle])) {
+            $statTariffDist[$tTitle] = ['count' => 0, 'annual_sum' => 0.0];
+        }
+        $statTariffDist[$tTitle]['count']++;
+        $statTariffDist[$tTitle]['annual_sum'] += $tAnnual;
+        $statAnnualProjectedFees += $tAnnual;
+
+        // 4. Vereinszugehörigkeit & Jubiläen
+        if (!empty($m['joined_date'])) {
+            $jParts = explode('-', (string)$m['joined_date']);
+            if (count($jParts) === 3) {
+                $yearsInClub = max(0, (int)$selectedYear - (int)$jParts[0]);
+                $statTenureSum += $yearsInClub;
+                $statTenureKnownCnt++;
+
+                if ($yearsInClub < 2) {
+                    $statTenureBrackets['u2']['count']++;
+                } elseif ($yearsInClub <= 5) {
+                    $statTenureBrackets['2_5']['count']++;
+                } elseif ($yearsInClub <= 10) {
+                    $statTenureBrackets['6_10']['count']++;
+                } elseif ($yearsInClub <= 24) {
+                    $statTenureBrackets['11_24']['count']++;
+                } else {
+                    $statTenureBrackets['25_plus']['count']++;
+                }
+
+                if (in_array($yearsInClub, [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 75], true)) {
+                    $clubAnniversaries[] = [
+                        'name'        => $m['first_name'] . ' ' . $m['last_name'],
+                        'member_no'   => (string)$m['member_no'],
+                        'department'  => (string)$m['department'],
+                        'joined_year' => (int)$jParts[0],
+                        'years'       => $yearsInClub,
+                    ];
+                }
+            }
+        }
+
+        // 5. Pflichtstunden erfüllt?
+        if ($reqWorkHours > 0.0 && (float)$m['work_hours_year'] >= $reqWorkHours) {
+            $statWorkFulfilledCount++;
         }
     }
 }
+arsort($statDepartments);
+uasort($statTariffDist, static fn(array $a, array $b): int => $b['count'] <=> $a['count']);
+usort($clubAnniversaries, static fn(array $a, array $b): int => $b['years'] <=> $a['years']);
+$statAvgAge    = $statAgeKnownCnt > 0 ? round($statAgeSum / $statAgeKnownCnt, 1) : 0.0;
+$statAvgTenure = $statTenureKnownCnt > 0 ? round($statTenureSum / $statTenureKnownCnt, 1) : 0.0;
 usort($upcomingBirthdays, static fn(array $a, array $b): int => $a['days_left'] <=> $b['days_left']);
 
 // 3. Beitragszahlungen im gewählten Beitragsjahr
@@ -1446,6 +1625,13 @@ require_once __DIR__ . '/includes/header.php';
                 <span>📑</span>
                 <span>Protokolle &amp; Dokumente</span>
                 <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= count($clubDocs) ?></span>
+            </button>
+        <?php endif; ?>
+
+        <?php if ($canReadMembers): ?>
+            <button type="button" data-club-tab-btn="tab-stats" onclick="switchClubTab('tab-stats')" class="club-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold cursor-pointer">
+                <span>📊</span>
+                <span>Statistik &amp; Auswertungen</span>
             </button>
         <?php endif; ?>
 
@@ -2158,6 +2344,283 @@ require_once __DIR__ . '/includes/header.php';
             <?php endif; ?>
         </div>
     </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 6: STATISTIK & AUSWERTUNGEN (ALTER, ABTEILUNGEN, JUBILÄEN)      -->
+    <!-- =================================================================== -->
+    <?php if ($canReadMembers): ?>
+    <div id="tab-stats" data-club-tab-panel="tab-stats" class="hidden space-y-6">
+        <!-- Obere Statistik-Kennzahlen -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🎂 Durchschnittsalter</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+                    <?= $statAgeKnownCnt > 0 ? number_format($statAvgAge, 1, ',', '.') . ' J.' : '–' ?>
+                </p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <?php if ($statMinAge !== null && $statMaxAge !== null): ?>
+                        Spanne: <?= $statMinAge ?> bis <?= $statMaxAge ?> Jahre (<?= $statAgeKnownCnt ?> erfasst)
+                    <?php else: ?>
+                        Noch keine Geburtsdaten hinterlegt
+                    <?php endif; ?>
+                </p>
+            </div>
+
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🏆 Abteilungen / Sparten</p>
+                <p class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
+                    <?= count($statDepartments) ?>
+                </p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <?php if (!empty($statDepartments)): ?>
+                        Größte: <?= e((string)array_key_first($statDepartments)) ?> (<?= (int)reset($statDepartments) ?>)
+                    <?php else: ?>
+                        Keine aktiven Mitglieder
+                    <?php endif; ?>
+                </p>
+            </div>
+
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">⏳ Ø Vereinszugehörigkeit</p>
+                <p class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                    <?= $statTenureKnownCnt > 0 ? number_format($statAvgTenure, 1, ',', '.') . ' J.' : '–' ?>
+                </p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <?= count($clubAnniversaries) ?> runde Jubiläen in <?= e($selectedYear) ?>
+                </p>
+            </div>
+
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">💶 Jahresbeitrags-Potenzial</p>
+                <?php if ($canReadFees): ?>
+                    <p class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+                        <?= e(formatClubMoney($statAnnualProjectedFees, $currency)) ?>
+                    </p>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Hochrechnung laut aktuellen Tarifen
+                    </p>
+                <?php else: ?>
+                    <p class="text-sm font-bold text-slate-400 mt-2">🔒 Nur für Kassenwart</p>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 1. ALTERSVERTEILUNG -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+                <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 dark:text-white">🎂 Altersverteilung der Mitglieder</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Altersstruktur aller aktiven Vereinsmitglieder (z. B. für Verband- &amp; Sportbund-Meldungen)
+                        </p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                        Ø <?= number_format($statAvgAge, 1, ',', '.') ?> Jahre
+                    </span>
+                </div>
+
+                <div class="space-y-3">
+                    <?php
+                    $denomAge = max(1, $statsTotalMembers);
+                    foreach ($statAgeBrackets as $bKey => $bMeta):
+                        if ($bKey === 'unknown' && $bMeta['count'] === 0) {
+                            continue;
+                        }
+                        $cnt = (int)$bMeta['count'];
+                        $pct = round(($cnt / $denomAge) * 100, 1);
+                    ?>
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-semibold text-slate-800 dark:text-slate-200"><?= e($bMeta['label']) ?></span>
+                                <span class="font-bold text-slate-900 dark:text-white">
+                                    <?= $cnt ?> <span class="text-slate-400 font-normal">(<?= number_format($pct, 1, ',', '.') ?> %)</span>
+                                </span>
+                            </div>
+                            <div class="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                <div class="h-full <?= e($bMeta['color']) ?> rounded-full transition-all duration-300" style="width: <?= max($cnt > 0 ? 3 : 0, min(100, $pct)) ?>%"></div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- 2. ABTEILUNGS- & SPARTENGRÖSSEN -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+                <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 dark:text-white">🏆 Abteilungs- &amp; Spartengrößen</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Verteilung der Mitglieder auf die einzelnen Abteilungen, Mannschaften oder Sparten
+                        </p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                        <?= count($statDepartments) ?> Sparten
+                    </span>
+                </div>
+
+                <?php if (empty($statDepartments)): ?>
+                    <p class="text-xs text-slate-400 py-4 text-center">Noch keine Mitglieder vorhanden.</p>
+                <?php else: ?>
+                    <div class="space-y-3">
+                        <?php
+                        $depColors = ['bg-indigo-600', 'bg-brand-600', 'bg-emerald-600', 'bg-cyan-600', 'bg-amber-500', 'bg-purple-600', 'bg-rose-500'];
+                        $dIdx = 0;
+                        foreach ($statDepartments as $depName => $depCnt):
+                            $pctDep = round(($depCnt / max(1, $statsTotalMembers)) * 100, 1);
+                            $barClr = $depColors[$dIdx % count($depColors)];
+                            $dIdx++;
+                        ?>
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="font-semibold text-slate-800 dark:text-slate-200">🏷️ <?= e((string)$depName) ?></span>
+                                    <span class="font-bold text-slate-900 dark:text-white">
+                                        <?= (int)$depCnt ?> <?= (int)$depCnt === 1 ? 'Mitglied' : 'Mitglieder' ?>
+                                        <span class="text-slate-400 font-normal">(<?= number_format($pctDep, 1, ',', '.') ?> %)</span>
+                                    </span>
+                                </div>
+                                <div class="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div class="h-full <?= $barClr ?> rounded-full transition-all duration-300" style="width: <?= max($depCnt > 0 ? 4 : 0, min(100, $pctDep)) ?>%"></div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 3. MITGLIEDERSTATUS & BEITRAGSTARIF-STRUKTUR -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-200 dark:border-slate-800">
+                        🟢 Mitglieder-Status &amp; Beitragsstruktur
+                    </h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mt-3">
+                        <div class="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/60 text-center">
+                            <p class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">🟢 Aktiv</p>
+                            <p class="text-lg font-extrabold text-emerald-800 dark:text-emerald-200"><?= $statStatusCounts['active'] ?></p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/70 dark:border-sky-800/60 text-center">
+                            <p class="text-[10px] font-bold uppercase text-sky-700 dark:text-sky-300">🌱 Jugend</p>
+                            <p class="text-lg font-extrabold text-sky-800 dark:text-sky-200"><?= $statStatusCounts['youth'] ?></p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/60 text-center">
+                            <p class="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">⏸️ Passiv</p>
+                            <p class="text-lg font-extrabold text-amber-800 dark:text-amber-200"><?= $statStatusCounts['passive'] ?></p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-800/60 text-center">
+                            <p class="text-[10px] font-bold uppercase text-purple-700 dark:text-purple-300">🏅 Ehrenm.</p>
+                            <p class="text-lg font-extrabold text-purple-800 dark:text-purple-200"><?= $statStatusCounts['honorary'] ?></p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                            <p class="text-[10px] font-bold uppercase text-slate-500">🚪 Ausgetr.</p>
+                            <p class="text-lg font-extrabold text-slate-700 dark:text-slate-300"><?= $statStatusCounts['left'] ?></p>
+                        </div>
+                    </div>
+                </div>
+
+                <?php if ($canReadFees && !empty($statTariffDist)): ?>
+                <div class="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        💶 Verteilung nach Beitragstarifen (Jahres-Soll)
+                    </h4>
+                    <div class="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs">
+                        <?php foreach ($statTariffDist as $tName => $tData): ?>
+                            <div class="py-2 flex items-center justify-between gap-2">
+                                <span class="font-semibold text-slate-800 dark:text-slate-200"><?= e((string)$tName) ?></span>
+                                <div class="text-right">
+                                    <span class="font-bold text-slate-900 dark:text-white"><?= (int)$tData['count'] ?> Mitgl.</span>
+                                    <span class="ml-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                                        (<?= e(formatClubMoney((float)$tData['annual_sum'], $currency)) ?> / Jahr)
+                                    </span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <!-- Ein- & Austritte der letzten 5 Jahre -->
+                <div class="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        📈 Mitglieder-Entwicklung (Ein- &amp; Austritte)
+                    </h4>
+                    <div class="grid grid-cols-5 gap-2 text-center text-xs">
+                        <?php foreach ($statJoinsByYear as $yrKey => $jCnt): ?>
+                            <?php $lCnt = (int)($statLeavesByYear[$yrKey] ?? 0); ?>
+                            <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80">
+                                <p class="font-bold text-slate-700 dark:text-slate-200"><?= e($yrKey) ?></p>
+                                <p class="text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">+<?= (int)$jCnt ?></p>
+                                <p class="text-rose-500 text-[11px]">-<?= $lCnt ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. VEREINSZUGEHÖRIGKEIT & EHRUNGS-/JUBILÄUMSLISTE -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+                <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 dark:text-white">🏅 Vereinszugehörigkeit &amp; Ehrungs-Jubiläen <?= e($selectedYear) ?></h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Treuedauer und runde Mitgliedschaftsjubiläen für Ehrungen auf der Jahreshauptversammlung
+                        </p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                        Ø <?= number_format($statAvgTenure, 1, ',', '.') ?> J.
+                    </span>
+                </div>
+
+                <div class="space-y-2.5">
+                    <?php foreach ($statTenureBrackets as $tbKey => $tbMeta): ?>
+                        <?php
+                        $tCnt = (int)$tbMeta['count'];
+                        $tPct = round(($tCnt / max(1, $statsTotalMembers)) * 100, 1);
+                        ?>
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-semibold text-slate-800 dark:text-slate-200"><?= e($tbMeta['label']) ?></span>
+                                <span class="font-bold text-slate-900 dark:text-white">
+                                    <?= $tCnt ?> <span class="text-slate-400 font-normal">(<?= number_format($tPct, 1, ',', '.') ?> %)</span>
+                                </span>
+                            </div>
+                            <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                <div class="h-full <?= e($tbMeta['color']) ?> rounded-full" style="width: <?= max($tCnt > 0 ? 3 : 0, min(100, $tPct)) ?>%"></div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                        🎖️ Runde Vereinsjubiläen im Jahr <?= e($selectedYear) ?>
+                    </h4>
+                    <?php if (empty($clubAnniversaries)): ?>
+                        <p class="text-xs text-slate-400 italic">
+                            Im Jahr <?= e($selectedYear) ?> stehen keine runden Beitrittsjubiläen (5, 10, 15, 20, 25, 30, 40, 50 J.) an.
+                        </p>
+                    <?php else: ?>
+                        <div class="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs max-h-48 overflow-y-auto">
+                            <?php foreach ($clubAnniversaries as $ann): ?>
+                                <div class="py-2 flex items-center justify-between gap-2">
+                                    <div>
+                                        <span class="font-bold text-slate-900 dark:text-white"><?= e($ann['name']) ?></span>
+                                        <span class="text-slate-400 ml-1">(#<?= e($ann['member_no']) ?> · Eintritt <?= (int)$ann['joined_year'] ?>)</span>
+                                    </div>
+                                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0">
+                                        🏅 <?= (int)$ann['years'] ?> Jahre
+                                    </span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- MODAL: MITGLIED AUFNEHMEN / BEARBEITEN -->
