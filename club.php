@@ -1098,6 +1098,338 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: club.php?club=' . $activeClubId . ($exportType === 'fees' ? '#tab-fees' : '#tab-members'));
         exit;
     }
+
+    // 9. Muster-CSV für Mitglieder-Import herunterladen
+    if ($action === 'download_member_csv_template' && $canWriteMembers) {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="Muster_Mitgliederimport.csv"');
+        $sample = [
+            'Mitglieds-Nr.;Vorname;Nachname;Status;Abteilung;Amt;E-Mail;Telefon;Strasse;PLZ;Ort;Geburtsdatum;Eintrittsdatum;IBAN;BIC;SEPA_Mandatsreferenz;Notiz',
+            '1005;Max;Mustermann;active;Fussball;Trainer;max@example.org;0170-1234567;Hauptstr. 12;12345;Musterstadt;15.05.1985;01.01.2020;DE89370400440532013000;;MV-1005;Übungsleiter C-Lizenz',
+            '1006;Anna;Beispiel;youth;Jugend;;anna@example.org;0171-9876543;Gartenweg 4;12345;Musterstadt;20.09.2011;01.03.2023;;;;',
+        ];
+        echo "\xEF\xBB\xBF" . implode("\r\n", $sample) . "\r\n";
+        exit;
+    }
+
+    // 10. Mitglieder importieren (CSV-Datei, Copy-&-Paste aus Excel oder Übernahme aus Cloud-Kontakten)
+    if ($action === 'import_members' && $canWriteMembers) {
+        $importSource   = (string)($_POST['import_source'] ?? 'csv'); // 'csv' oder 'contacts'
+        $defaultTierId  = !empty($_POST['default_fee_tier_id']) ? (int)$_POST['default_fee_tier_id'] : null;
+        $defaultDept    = mb_substr(trim((string)($_POST['default_department'] ?? '')), 0, 120);
+        $skipDuplicates = isset($_POST['skip_duplicates']) && $_POST['skip_duplicates'] === '1';
+
+        // Bestehende Mitglieder für Duplikats-Check und nächste Mitgliedsnummer laden
+        $stmtExisting = $pdo->prepare('SELECT member_no, first_name, last_name, email FROM club_members WHERE club_id = :cid');
+        $stmtExisting->execute([':cid' => $activeClubId]);
+        $existingRows = $stmtExisting->fetchAll();
+
+        $existingKeys = [];
+        $nextAutoNo   = 1001 + count($existingRows);
+        foreach ($existingRows as $er) {
+            $kName = mb_strtolower(trim((string)$er['first_name'] . '|' . (string)$er['last_name']), 'UTF-8');
+            $existingKeys[$kName] = true;
+            if (trim((string)$er['email']) !== '') {
+                $existingKeys['mail:' . mb_strtolower(trim((string)$er['email']), 'UTF-8')] = true;
+            }
+            if (ctype_digit((string)$er['member_no']) && (int)$er['member_no'] >= $nextAutoNo) {
+                $nextAutoNo = (int)$er['member_no'] + 1;
+            }
+        }
+
+        $parseFlexibleDate = static function (string $val): ?string {
+            $val = trim($val);
+            if ($val === '') {
+                return null;
+            }
+            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $val)) {
+                return $val;
+            }
+            if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $val, $m)) {
+                return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            }
+            if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
+                return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            }
+            return null;
+        };
+
+        $normalizeStatus = static function (string $val): string {
+            $v = mb_strtolower(trim($val), 'UTF-8');
+            return match (true) {
+                in_array($v, ['youth', 'jugend', 'kind', 'kinder', 'schüler', 'schueler', 'junior'], true) => 'youth',
+                in_array($v, ['passive', 'passiv', 'förder', 'foerder', 'fördermitglied', 'ruhend'], true) => 'passive',
+                in_array($v, ['honorary', 'ehren', 'ehrenmitglied'], true) => 'honorary',
+                in_array($v, ['left', 'ausgetreten', 'gekündigt', 'gekuendigt', 'inaktiv'], true) => 'left',
+                default => 'active',
+            };
+        };
+
+        $importedCount = 0;
+        $skippedCount  = 0;
+
+        $stmtInsMem = $pdo->prepare(
+            'INSERT INTO club_members
+                (club_id, member_no, first_name, last_name, email, phone, street, postal_code, city,
+                 birth_date, joined_date, left_date, status, department, board_role, fee_tier_id,
+                 iban, bic, sepa_mandate_ref, sepa_signed_date, notes)
+             VALUES
+                (:cid, :mno, :fn, :ln, :em, :ph, :st, :pc, :ct,
+                 :bd, :jd, NULL, :stat, :dep, :br, :ft,
+                 :ib, :bic, :sref, NULL, :nt)'
+        );
+
+        // FALL A: Übernahme aus dem Cloud-Adressbuch (contacts.php)
+        if ($importSource === 'contacts') {
+            $stmtContacts = $pdo->prepare(
+                'SELECT first_name, last_name, email, phone, mobile, street, postal_code, city, birthday, organization, role_title, notes
+                 FROM contacts
+                 WHERE user_id = :uid
+                 ORDER BY last_name ASC, first_name ASC'
+            );
+            $stmtContacts->execute([':uid' => $userId]);
+            foreach ($stmtContacts->fetchAll() as $ct) {
+                $fn = mb_substr(trim((string)$ct['first_name']), 0, 100);
+                $ln = mb_substr(trim((string)$ct['last_name']), 0, 100);
+                if ($fn === '' && $ln === '') {
+                    continue;
+                }
+                if ($fn === '') {
+                    $fn = '–';
+                }
+                if ($ln === '') {
+                    $ln = '–';
+                }
+                $em = mb_substr(trim((string)($ct['email'] ?? '')), 0, 190);
+                $kName = mb_strtolower($fn . '|' . $ln, 'UTF-8');
+                $kMail = $em !== '' ? ('mail:' . mb_strtolower($em, 'UTF-8')) : '';
+
+                if ($skipDuplicates && (isset($existingKeys[$kName]) || ($kMail !== '' && isset($existingKeys[$kMail])))) {
+                    $skippedCount++;
+                    continue;
+                }
+
+                $ph = trim((string)($ct['mobile'] ?? '')) !== '' ? trim((string)$ct['mobile']) : trim((string)($ct['phone'] ?? ''));
+                $mno = (string)$nextAutoNo++;
+
+                $stmtInsMem->execute([
+                    ':cid'  => $activeClubId,
+                    ':mno'  => $mno,
+                    ':fn'   => $fn,
+                    ':ln'   => $ln,
+                    ':em'   => $em,
+                    ':ph'   => mb_substr($ph, 0, 80),
+                    ':st'   => mb_substr(trim((string)($ct['street'] ?? '')), 0, 190),
+                    ':pc'   => mb_substr(trim((string)($ct['postal_code'] ?? '')), 0, 30),
+                    ':ct'   => mb_substr(trim((string)($ct['city'] ?? '')), 0, 100),
+                    ':bd'   => !empty($ct['birthday']) ? (string)$ct['birthday'] : null,
+                    ':jd'   => date('Y-m-d'),
+                    ':stat' => 'active',
+                    ':dep'  => $defaultDept !== '' ? $defaultDept : mb_substr(trim((string)($ct['organization'] ?? '')), 0, 120),
+                    ':br'   => mb_substr(trim((string)($ct['role_title'] ?? '')), 0, 120),
+                    ':ft'   => $defaultTierId,
+                    ':ib'   => '',
+                    ':bic'  => '',
+                    ':sref' => '',
+                    ':nt'   => mb_substr(trim((string)($ct['notes'] ?? '')), 0, 500),
+                ]);
+                $existingKeys[$kName] = true;
+                if ($kMail !== '') {
+                    $existingKeys[$kMail] = true;
+                }
+                $importedCount++;
+            }
+        } else {
+            // FALL B: CSV-Datei oder Copy-&-Paste aus Excel / Tabelle
+            $rawCsv = '';
+            if (isset($_FILES['csv_file']) && is_array($_FILES['csv_file']) && (int)($_FILES['csv_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $tmpPath = (string)$_FILES['csv_file']['tmp_name'];
+                $fSize   = (int)($_FILES['csv_file']['size'] ?? 0);
+                if (is_uploaded_file($tmpPath) && $fSize > 0 && $fSize <= 5 * 1024 * 1024) {
+                    $rawCsv = (string)file_get_contents($tmpPath);
+                }
+            }
+            if ($rawCsv === '' && !empty($_POST['csv_paste_text'])) {
+                $rawCsv = (string)$_POST['csv_paste_text'];
+            }
+
+            // UTF-8 BOM entfernen & bei Windows-1252 / ISO-8859-1 aus deutschem Excel nach UTF-8 konvertieren
+            $rawCsv = preg_replace('/^\xEF\xBB\xBF/', '', $rawCsv) ?? $rawCsv;
+            if ($rawCsv !== '' && !mb_check_encoding($rawCsv, 'UTF-8')) {
+                $rawCsv = mb_convert_encoding($rawCsv, 'UTF-8', 'Windows-1252,ISO-8859-1');
+            }
+
+            $lines = preg_split('/\r\n|\r|\n/', trim($rawCsv)) ?: [];
+            $lines = array_values(array_filter($lines, static fn(string $l): bool => trim($l) !== ''));
+
+            if (!empty($lines)) {
+                // Trennzeichen automatisch erkennen (Tab bei Excel Copy&Paste, sonst ; oder ,)
+                $firstLine = $lines[0];
+                $delim = ';';
+                $cntTab  = substr_count($firstLine, "\t");
+                $cntSemi = substr_count($firstLine, ';');
+                $cntCom  = substr_count($firstLine, ',');
+                if ($cntTab > $cntSemi && $cntTab >= $cntCom) {
+                    $delim = "\t";
+                } elseif ($cntCom > $cntSemi) {
+                    $delim = ',';
+                }
+
+                $firstCells = str_getcsv($firstLine, $delim);
+                $colMap = [];
+                $hasHeader = false;
+
+                foreach ($firstCells as $idx => $cellRaw) {
+                    $cNorm = preg_replace('/[^a-z0-9äöüß]/u', '', mb_strtolower(trim((string)$cellRaw), 'UTF-8')) ?? '';
+                    $mapped = match (true) {
+                        in_array($cNorm, ['mitgliedsnr', 'mitgliedsnummer', 'nr', 'mnr', 'memberno', 'id'], true) => 'member_no',
+                        in_array($cNorm, ['vorname', 'firstname', 'givenname', 'rufname'], true) => 'first_name',
+                        in_array($cNorm, ['nachname', 'familienname', 'lastname', 'surname'], true) => 'last_name',
+                        in_array($cNorm, ['name', 'vollständigername', 'fullname'], true) => 'full_name',
+                        in_array($cNorm, ['status', 'mitgliedsstatus', 'art'], true) => 'status',
+                        in_array($cNorm, ['abteilung', 'sparte', 'mannschaft', 'gruppe', 'department'], true) => 'department',
+                        in_array($cNorm, ['amt', 'funktion', 'rolle', 'vorstandsamt', 'boardrole'], true) => 'board_role',
+                        in_array($cNorm, ['email', 'emailadresse', 'mail'], true) => 'email',
+                        in_array($cNorm, ['telefon', 'mobil', 'handy', 'phone', 'telefonnummer'], true) => 'phone',
+                        in_array($cNorm, ['strasse', 'straße', 'adresse', 'anschrift', 'street'], true) => 'street',
+                        in_array($cNorm, ['plz', 'postleitzahl', 'zip', 'postalcode'], true) => 'postal_code',
+                        in_array($cNorm, ['ort', 'stadt', 'wohnort', 'city'], true) => 'city',
+                        in_array($cNorm, ['geburtsdatum', 'geburtstag', 'geboren', 'birthdate', 'birthday'], true) => 'birth_date',
+                        in_array($cNorm, ['eintrittsdatum', 'eintritt', 'beitritt', 'mitgliedseit', 'joineddate', 'joindate'], true) => 'joined_date',
+                        in_array($cNorm, ['iban', 'kontonummer'], true) => 'iban',
+                        in_array($cNorm, ['bic', 'swift'], true) => 'bic',
+                        in_array($cNorm, ['sepamandatsreferenz', 'mandatsreferenz', 'separef', 'mandat'], true) => 'sepa_mandate_ref',
+                        in_array($cNorm, ['notiz', 'notizen', 'bemerkung', 'hinweis', 'notes'], true) => 'notes',
+                        default => '',
+                    };
+                    if ($mapped !== '') {
+                        $colMap[$mapped] = $idx;
+                        if (in_array($mapped, ['first_name', 'last_name', 'full_name', 'email', 'member_no'], true)) {
+                            $hasHeader = true;
+                        }
+                    }
+                }
+
+                // Falls keine Kopfzeile erkannt wurde: Standard-Reihenfolge (Vorname;Nachname;E-Mail;Telefon;Abteilung;Geburtsdatum)
+                $startIdx = $hasHeader ? 1 : 0;
+                if (!$hasHeader) {
+                    $colMap = [
+                        'first_name' => 0,
+                        'last_name'  => 1,
+                        'email'      => 2,
+                        'phone'      => 3,
+                        'department' => 4,
+                        'birth_date' => 5,
+                    ];
+                }
+
+                for ($i = $startIdx, $totalLines = count($lines); $i < $totalLines; $i++) {
+                    $rowCells = str_getcsv($lines[$i], $delim);
+                    if (empty($rowCells)) {
+                        continue;
+                    }
+                    $getVal = static fn(string $key): string => isset($colMap[$key], $rowCells[$colMap[$key]])
+                        ? trim((string)$rowCells[$colMap[$key]])
+                        : '';
+
+                    $fn = $getVal('first_name');
+                    $ln = $getVal('last_name');
+                    if ($fn === '' && $ln === '' && isset($colMap['full_name'])) {
+                        $full = $getVal('full_name');
+                        if (str_contains($full, ',')) {
+                            [$lnPart, $fnPart] = array_map('trim', explode(',', $full, 2));
+                            $fn = $fnPart;
+                            $ln = $lnPart;
+                        } else {
+                            $parts = preg_split('/\s+/', $full) ?: [];
+                            $ln = (string)array_pop($parts);
+                            $fn = implode(' ', $parts);
+                        }
+                    }
+
+                    $fn = mb_substr($fn, 0, 100);
+                    $ln = mb_substr($ln, 0, 100);
+                    if ($fn === '' && $ln === '') {
+                        continue;
+                    }
+                    if ($fn === '') {
+                        $fn = '–';
+                    }
+                    if ($ln === '') {
+                        $ln = '–';
+                    }
+
+                    $em    = mb_substr($getVal('email'), 0, 190);
+                    $kName = mb_strtolower($fn . '|' . $ln, 'UTF-8');
+                    $kMail = $em !== '' ? ('mail:' . mb_strtolower($em, 'UTF-8')) : '';
+
+                    if ($skipDuplicates && (isset($existingKeys[$kName]) || ($kMail !== '' && isset($existingKeys[$kMail])))) {
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    $mno = mb_substr($getVal('member_no'), 0, 40);
+                    if ($mno === '') {
+                        $mno = (string)$nextAutoNo++;
+                    }
+                    $dep = $getVal('department');
+                    if ($dep === '') {
+                        $dep = $defaultDept;
+                    }
+
+                    $stmtInsMem->execute([
+                        ':cid'  => $activeClubId,
+                        ':mno'  => $mno,
+                        ':fn'   => $fn,
+                        ':ln'   => $ln,
+                        ':em'   => $em,
+                        ':ph'   => mb_substr($getVal('phone'), 0, 80),
+                        ':st'   => mb_substr($getVal('street'), 0, 190),
+                        ':pc'   => mb_substr($getVal('postal_code'), 0, 30),
+                        ':ct'   => mb_substr($getVal('city'), 0, 100),
+                        ':bd'   => $parseFlexibleDate($getVal('birth_date')),
+                        ':jd'   => $parseFlexibleDate($getVal('joined_date')) ?? date('Y-m-d'),
+                        ':stat' => $normalizeStatus($getVal('status')),
+                        ':dep'  => mb_substr($dep, 0, 120),
+                        ':br'   => mb_substr($getVal('board_role'), 0, 120),
+                        ':ft'   => $defaultTierId,
+                        ':ib'   => $canWriteFees ? strtoupper(preg_replace('/\s+/', '', mb_substr($getVal('iban'), 0, 50)) ?? '') : '',
+                        ':bic'  => $canWriteFees ? strtoupper(mb_substr($getVal('bic'), 0, 30)) : '',
+                        ':sref' => $canWriteFees ? mb_substr($getVal('sepa_mandate_ref'), 0, 80) : '',
+                        ':nt'   => mb_substr($getVal('notes'), 0, 500),
+                    ]);
+
+                    $existingKeys[$kName] = true;
+                    if ($kMail !== '') {
+                        $existingKeys[$kMail] = true;
+                    }
+                    $importedCount++;
+                }
+            }
+        }
+
+        if ($importedCount > 0) {
+            setFlash(
+                'success',
+                sprintf(
+                    '✅ %d %s erfolgreich importiert%s.',
+                    $importedCount,
+                    $importedCount === 1 ? 'Mitglied wurde' : 'Mitglieder wurden',
+                    $skippedCount > 0 ? sprintf(' (%d vorhandene Duplikate übersprungen)', $skippedCount) : ''
+                )
+            );
+        } else {
+            setFlash(
+                'warning',
+                $skippedCount > 0
+                    ? sprintf('Keine neuen Mitglieder importiert (%d Einträge waren bereits vorhanden).', $skippedCount)
+                    : 'Keine gültigen Mitgliedszeilen zum Importieren gefunden.'
+            );
+        }
+
+        header('Location: club.php?club=' . $activeClubId . '#tab-members');
+        exit;
+    }
 }
 
 // --- Daten für die Anzeige laden ---
@@ -1672,6 +2004,14 @@ require_once __DIR__ . '/includes/header.php';
                         </button>
                     </form>
                     <?php if ($canWriteMembers): ?>
+                        <button
+                            type="button"
+                            onclick="document.getElementById('importMembersModal').classList.remove('hidden')"
+                            class="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 text-xs font-semibold cursor-pointer"
+                            title="Mitglieder per CSV/Excel-Datei, Copy &amp; Paste oder aus den Cloud-Kontakten importieren"
+                        >
+                            📤 Importieren
+                        </button>
                         <button
                             type="button"
                             onclick="openMemberModal()"
@@ -2625,6 +2965,114 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- MODAL: MITGLIED AUFNEHMEN / BEARBEITEN -->
 <?php if ($canWriteMembers): ?>
+<!-- MODAL: MITGLIEDER IMPORTIEREN (CSV, EXCEL COPY & PASTE, ADRESSBUCH) -->
+<div id="importMembersModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 my-8">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div>
+                <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">📤 Mitglieder importieren</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Per CSV-/Excel-Datei, per Copy &amp; Paste direkt aus Excel oder aus Ihrem Cloud-Adressbuch
+                </p>
+            </div>
+            <button type="button" onclick="document.getElementById('importMembersModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">✕</button>
+        </div>
+
+        <!-- 1-Klick Muster-Vorlage herunterladen -->
+        <div class="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="text-slate-700 dark:text-slate-200">
+                <strong>💡 Tipp:</strong> Laden Sie unsere fertige Excel-/CSV-Musterdatei herunter oder nutzen Sie Ihre eigene Tabelle (Spalten wie <em>Vorname, Nachname, Abteilung, Geburtsdatum, E-Mail, Telefon, Straße, PLZ, Ort, IBAN</em> werden automatisch erkannt!).
+            </div>
+            <form action="club.php?club=<?= $activeClubId ?>" method="post" class="shrink-0">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="download_member_csv_template">
+                <button type="submit" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer">
+                    📄 Muster-CSV herunterladen
+                </button>
+            </form>
+        </div>
+
+        <form action="club.php?club=<?= $activeClubId ?>" method="post" enctype="multipart/form-data" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="import_members">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 cursor-pointer">
+                    <input type="radio" name="import_source" value="csv" checked onchange="document.getElementById('clubCsvImportFields').classList.remove('hidden')" class="mt-0.5">
+                    <span class="text-xs">
+                        <strong class="block text-slate-900 dark:text-white">📄 CSV-Datei / Excel Copy &amp; Paste</strong>
+                        <span class="text-slate-500 dark:text-slate-400">Trennzeichen (<code>;</code>, <code>,</code> oder Tab) &amp; Datum (<code>TT.MM.JJJJ</code>) werden automatisch erkannt</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 cursor-pointer">
+                    <input type="radio" name="import_source" value="contacts" onchange="document.getElementById('clubCsvImportFields').classList.add('hidden')" class="mt-0.5">
+                    <span class="text-xs">
+                        <strong class="block text-slate-900 dark:text-white">📇 Aus Cloud-Kontakten übernehmen</strong>
+                        <span class="text-slate-500 dark:text-slate-400">Importiert Kontakte aus Ihrem MiniCloud-Adressbuch (<code>contacts.php</code>)</span>
+                    </span>
+                </label>
+            </div>
+
+            <div id="clubCsvImportFields" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Option A: CSV-Datei auswählen (<code>.csv</code> oder <code>.txt</code>)
+                    </label>
+                    <input
+                        type="file"
+                        name="csv_file"
+                        accept=".csv,.txt,text/csv,text/plain"
+                        class="w-full text-xs text-slate-700 dark:text-slate-200 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-brand-50 dark:file:bg-brand-950/70 file:text-brand-700 dark:file:text-brand-300 cursor-pointer"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Oder Option B: Zeilen direkt aus Excel / LibreOffice Calc hier einfügen (<code>Strg+V</code>)
+                    </label>
+                    <textarea
+                        name="csv_paste_text"
+                        rows="4"
+                        placeholder="Vorname;Nachname;E-Mail;Telefon;Abteilung;Geburtsdatum&#10;Max;Mustermann;max@example.org;0170-123456;Fußball;15.05.1985"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
+                    ></textarea>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                        Standard-Beitragstarif (falls nicht angegeben)
+                    </label>
+                    <select name="default_fee_tier_id" class="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
+                        <option value="">– Kein Standard-Tarif –</option>
+                        <?php foreach ($feeTiers as $ft): ?>
+                            <option value="<?= (int)$ft['id'] ?>"><?= e((string)$ft['title']) ?> (<?= e(formatClubMoney((float)$ft['amount'], $currency)) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                        Standard-Abteilung (falls Spalte leer)
+                    </label>
+                    <input type="text" name="default_department" placeholder="z. B. Hauptverein" class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs">
+                </div>
+            </div>
+
+            <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                <input type="checkbox" name="skip_duplicates" value="1" checked class="rounded border-slate-300 text-brand-600">
+                <span>Bereits vorhandene Mitglieder (gleicher Vor- &amp; Nachname oder gleiche E-Mail) automatisch überspringen</span>
+            </label>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('importMembersModal').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold cursor-pointer">Abbrechen</button>
+                <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer">📤 Jetzt importieren</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div id="memberModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 my-8">
         <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
