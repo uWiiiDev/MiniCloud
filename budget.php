@@ -29,6 +29,13 @@ if (($appSettings['enable_budget'] ?? '1') !== '1' && !isAdmin()) {
  */
 function ensureBudgetSchema(PDO $pdo): void
 {
+    static $done = false;
+    if ($done || (!empty($_SESSION['_mc_budget_schema_ok']) && $_SESSION['_mc_budget_schema_ok'] === 1)) {
+        $done = true;
+        return;
+    }
+    $done = true;
+
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `budget_books` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -95,6 +102,10 @@ function ensureBudgetSchema(PDO $pdo): void
             KEY `idx_budget_goals_book` (`book_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_mc_budget_schema_ok'] = 1;
+    }
 }
 
 ensureBudgetSchema($pdo);
@@ -274,6 +285,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $isSplit = isset($_POST['is_shared_split']) && $_POST['is_shared_split'] === '1' ? 1 : 0;
         $fileId  = !empty($_POST['file_id']) ? (int)$_POST['file_id'] : null;
+        if ($fileId !== null && $fileId > 0) {
+            $stmtChkFile = $pdo->prepare('SELECT id FROM files WHERE id = :fid AND user_id = :uid AND deleted_at IS NULL LIMIT 1');
+            $stmtChkFile->execute([':fid' => $fileId, ':uid' => $userId]);
+            if (!$stmtChkFile->fetchColumn()) {
+                $fileId = null;
+            }
+        } else {
+            $fileId = null;
+        }
         $note    = mb_substr(trim((string)($_POST['note'] ?? '')), 0, 480);
 
         if ($title === '') {

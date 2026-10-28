@@ -1008,6 +1008,42 @@ function getLocalizedKbTranslation(string $id, string $lang, string $appTitle): 
             'tr' => ['🔒 Sıfır Bilgi Dosya Kasası (AES-256-GCM)', "Dosya listesindeki kilit simgesine (**🔒**) tıklayarak gizli dosyalarınızı **AES-256-GCM** ile şifreleyebilirsiniz."],
             'uk' => ['🔒 Сейф файлів Zero-Knowledge (AES-256-GCM)', "Шифруйте конфіденційні файли алгоритмом **AES-256-GCM**, натиснувши на значок замка (**🔒**) у списку файлів."],
         ],
+        'mindmap_editor' => [
+            'en' => ['🧠 Mind Map Editor & Idea Collector', "With the **🧠 Mind Map Editor** (`mindmap.php`) you can visually structure ideas, projects, and study topics:\n\n- **Keyboard shortcuts:** `Tab` creates a child node, `Enter` creates a sibling node, `Del` deletes a node.\n- **Auto-Layout & Templates:** Tree and radial layouts, plus templates for Brainstorming, Project Planning, Travel, and Study.\n- **1-Click Export & Tasks:** Convert any node directly into a **Kanban task** (`tasks.php`) or **sticky note** (`notes.php`), or save your map as SVG/PNG/Markdown to your cloud files!"],
+            'fr' => ['🧠 Éditeur de cartes mentales (Mind-Map)', "L'**🧠 Éditeur de cartes mentales** (`mindmap.php`) vous permet de structurer vos idées visuellement (`Tab` = sous-nœud, `Entrée` = nœud frère), de partager vos cartes en équipe et de convertir un nœud en tâche ou en note en 1 clic."],
+            'es' => ['🧠 Editor de mapas mentales', "Con el **🧠 Editor de mapas mentales** (`mindmap.php`) estructura ideas y proyectos visualmente (`Tab` = subnodo, `Enter` = nodo hermano), aplica auto-diseño y convierte nodos en tareas o notas con 1 clic."],
+            'it' => ['🧠 Editor di mappe mentali', "Con l'**🧠 Editor di mappe mentali** (`mindmap.php`) organizza visivamente idee e progetti (`Tab` = sottonodo, `Invio` = nodo fratello) ed esporta in PNG/SVG/Markdown o in attività e note."],
+            'nl' => ['🧠 Mindmap-editor & Ideeënverzamelaar', "Met de **🧠 Mindmap-editor** (`mindmap.php`) structureer je ideeën visueel (`Tab` = subknoop, `Enter` = nevenknoop) en zet je knopen met 1 klik om in taken of notities."],
+            'pl' => ['🧠 Edytor map myśli (Mind-Map)', "W **🧠 Edytorze map myśli** (`mindmap.php`) wizualnie porządkujesz pomysły i projekty (`Tab` = podwęzeł, `Enter` = węzeł równorzędny) oraz przekształcasz węzły w zadania lub notatki."],
+            'pt' => ['🧠 Editor de Mapas Mentais', "Com o **🧠 Editor de Mapas Mentais** (`mindmap.php`) estruture ideias visualmente (`Tab` = subnó, `Enter` = nó irmão) e converta nós em tarefas ou notas com 1 clique."],
+            'cs' => ['🧠 Editor myšlenkových map', "V **🧠 Editoru myšlenkových map** (`mindmap.php`) vizuálně třídíš nápady a projekty (`Tab` = poduzel, `Enter` = sourozenecký uzel) a jedním kliknutím z nich vytvoříš úkol nebo poznámku."],
+            'tr' => ['🧠 Zihin Haritası (Mind-Map) Düzenleyici', "**🧠 Zihin Haritası Düzenleyici** (`mindmap.php`) ile fikirlerinizi görsel olarak yapılandırın (`Tab` = alt düğüm, `Enter` = kardeş düğüm) ve düğümleri tek tıkla göreve veya nota dönüştürün."],
+            'uk' => ['🧠 Редактор інтелект-карт (Mind-Map)', "У **🧠 Редакторі інтелект-карт** (`mindmap.php`) візуально структуруйте ідеї та проєкти (`Tab` = підвузол, `Enter` = сусідній вузол) і перетворюйте вузли на завдання чи нотатки."],
+        ],
+        'budget_planner' => [
+            'en' => ['💰 Household Planner & Finance Tracker', "The **💰 Household Planner** (`budget.php`) helps you manage personal, family, or shared-flat finances:\n\n- **Income, Expenses & Categories:** Visual monthly breakdown, 6-month trend chart, and receipt file linking (`files`).\n- **Recurring Subscriptions & Fixed Costs:** Track rent, utilities, and streaming subscriptions and book them into any month with **1 click**.\n- **Savings Goals & Fair Split:** Track savings targets with progress bars and automatically calculate **who owes whom** in shared household books."],
+            'fr' => ['💰 Planificateur de budget & Finances', "Le **💰 Planificateur de budget** (`budget.php`) gère vos revenus, dépenses, charges fixes/abonnements, objectifs d'épargne et la répartition équitable des frais en famille ou colocation."],
+            'es' => ['💰 Planificador familiar y Finanzas', "El **💰 Planificador familiar** (`budget.php`) gestiona ingresos, gastos, gastos fijos/suscripciones, metas de ahorro y el reparto automático de gastos entre miembros."],
+            'it' => ['💰 Pianificatore familiare & Finanze', "Il **💰 Pianificatore familiare** (`budget.php`) gestisce entrate, uscite, costi fissi/abbonamenti, obiettivi di risparmio e la divisione spese in famiglia o casa condivisa."],
+            'nl' => ['💰 Huishoudplanner & Financieel overzicht', "De **💰 Huishoudplanner** (`budget.php`) beheert inkomsten, uitgaven, vaste lasten/abonnementen, spaardoelen en eerlijke kostenverdeling."],
+            'pl' => ['💰 Planer budżetu domowego i finansów', "**💰 Planer budżetu** (`budget.php`) pozwala zarządzać przychodami, wydatkami, opłatami stałymi, celami oszczędnościowymi i rozliczeniami grupowymi."],
+            'pt' => ['💰 Planeador Financeiro e Orçamento Familiar', "O **💰 Planeador Financeiro** (`budget.php`) gere receitas, despesas, custos fixos/subscrições, metas de poupança e divisão de despesas."],
+            'cs' => ['💰 Rodinný rozpočet a plánovač financí', "**💰 Plánovač rozpočtu** (`budget.php`) spravuje příjmy, výdaje, trvalé platby, spořicí cíle a vyrovnání výdajů v domácnosti."],
+            'tr' => ['💰 Bütçe Planlayıcı ve Finans Özeti', "**💰 Bütçe Planlayıcı** (`budget.php`) ile gelir-giderlerinizi, sabit fatura/aboneliklerinizi, tasarruf hedeflerinizi ve ortak harcama paylaşımlarını yönetin."],
+            'uk' => ['💰 Планувальник бюджету та фінансів', "**💰 Планувальник бюджету** (`budget.php`) допомагає вести облік доходів і витрат, регулярних платежів, цілей заощаджень та спільних витрат."],
+        ],
+        'browser_games' => [
+            'en' => ['🎮 Browser Games, Cloud Highscores & Live Duels', "In the **🎮 Games Center** (`games.php`) you'll find 9 ad-free browser games:\n\n- **Singleplayer & Daily:** *2048*, *Sudoku*, *Minesweeper*, *Word of the Day (Cloud Wordle)*, *Memory*, *Block Puzzle*, *Retro Snake*, and *Brick Breaker*.\n- **Live Multiplayer Duels:** Challenge the AI or other cloud users in **Connect Four** and **Tic-Tac-Toe** and compete on the cloud leaderboards!"],
+            'fr' => ['🎮 Jeux de navigateur & Duels en direct', "Dans **🎮 Jeux** (`games.php`), profitez de 9 jeux sans publicité (*2048, Sudoku, Démineur, Mot du jour, Memory, Block-Puzzle, Snake, Brick Breaker, Puissance 4 & Morpion*) avec classements Cloud et duels en direct !"],
+            'es' => ['🎮 Juegos de navegador y Duelos en vivo', "En **🎮 Juegos** (`games.php`) tienes 9 juegos sin publicidad (*2048, Sudoku, Buscaminas, Palabra del día, Memory, Block-Puzzle, Snake, Brick Breaker, 4 en Raya y Tres en Raya*) con récords en la nube."],
+            'it' => ['🎮 Giochi da browser & Sfide dal vivo', "In **🎮 Giochi** (`games.php`) trovi 9 giochi senza pubblicità (*2048, Sudoku, Campo Minato, Parola del giorno, Memory, Block-Puzzle, Snake, Brick Breaker, Forza 4 e Tris*) con classifiche Cloud."],
+            'nl' => ['🎮 Browserspellen & Live Duels', "In **🎮 Spellen** (`games.php`) vind je 9 reclamevrije spellen (*2048, Sudoku, Mijnenveger, Woord van de dag, Memory, Block-Puzzle, Snake, Brick Breaker, Vier op een rij & Boter-kaas-en-eieren*) met highscores."],
+            'pl' => ['🎮 Gry przeglądarkowe i pojedynki na żywo', "W **🎮 Grach** (`games.php`) znajdziesz 9 gier bez reklam (*2048, Sudoku, Saper, Słowo dnia, Memory, Block-Puzzle, Snake, Brick Breaker, Cztery w rzędzie i Kółko-krzyżyk*) z rankingami Cloud."],
+            'pt' => ['🎮 Jogos de Navegador e Duelos ao Vivo', "Em **🎮 Jogos** (`games.php`) encontra 9 jogos sem anúncios (*2048, Sudoku, Campo Minado, Palavra do dia, Memória, Block-Puzzle, Snake, Brick Breaker, 4 em Linha e Jogo do Galo*) com recordes na nuvem."],
+            'cs' => ['🎮 Prohlížečové hry a živé souboje', "V **🎮 Hrách** (`games.php`) najdeš 9 her bez reklam (*2048, Sudoku, Hledání min, Slovo dne, Pexeso, Block-Puzzle, Snake, Brick Breaker, Čtyři v řadě a Piškvorky*) s žebříčky."],
+            'tr' => ['🎮 Tarayıcı Oyunları ve Canlı Düellolar', "**🎮 Oyunlar** (`games.php`) bölümünde reklamsız 9 oyun (*2048, Sudoku, Mayın Tarlası, Günün Kelimesi, Hafıza, Blok Yapboz, Yılan, Tuğla Kırıcı, Dört Bağlantı ve XOX*) ve bulut liderlik tabloları bulunur."],
+            'uk' => ['🎮 Браузерні ігри та живі дуелі', "У **🎮 Іграх** (`games.php`) доступні 9 ігор без реклами (*2048, Судоку, Сапер, Слово дня, Меморі, Блок-пазл, Змійка, Арканоїд, Чотири в ряд і Хрестики-нулики*) з таблицями рекордів."],
+        ],
     ];
 
     if (isset($translations[$id][$lang])) {
@@ -1454,6 +1490,65 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
         ],
         [
+            'id'       => 'mindmap_editor',
+            'title'    => 'Mind-Map-Editor & Ideensammler',
+            'icon'     => '🧠',
+            'keywords' => [
+                'mindmap', 'mind map', 'mind-map', 'ideensammler', 'brainstorming', 'knoten', 'gedankenkarte', 'baumdiagramm',
+                'carte mentale', 'mapa mental', 'mappa mentale', 'mapa mysli', 'myslenkova mapa', 'zihin haritasi', 'інтелект-карта',
+            ],
+            'answer'   => "Mit dem **🧠 Mind-Map-Editor** (`mindmap.php`) strukturierst du Ideen, Projekte, Reisen oder Lernthemen visuell auf einer interaktiven Zeichenfläche:\n\n"
+                . "- **Tastatur-Turbo:** `Tab` legt einen Unterknoten an, `Enter` einen Geschwisterknoten, `Entf` löscht einen Knoten und per Doppelklick bearbeitest du den Text.\n"
+                . "- **Auto-Layout & Vorlagen:** Wähle zwischen Radial- und Baum-Layout sowie Vorlagen für *Brainstorming, Projektplanung, Reise & Wissen*.\n"
+                . "- **1-Klick-Übergabe & Export:** Wandle jeden Knoten per Klick direkt in eine **📋 Aufgabe** (`tasks.php`) oder **📌 Haftnotiz** (`notes.php`) um oder speichere die Mind-Map als SVG/PNG/Markdown in deinen Cloud-Dateien!",
+            'actions'  => [
+                ['label' => '🧠 Mind-Map-Editor', 'url' => 'mindmap.php'],
+            ],
+            'followups' => [
+                $pack['q_tasks'],
+                $pack['q_notes'],
+            ],
+        ],
+        [
+            'id'       => 'budget_planner',
+            'title'    => 'Haushaltsplaner & Finanz-Übersicht',
+            'icon'     => '💰',
+            'keywords' => [
+                'haushaltsplaner', 'haushaltsbuch', 'finanzen', 'budget', 'ausgaben', 'einnahmen', 'fixkosten', 'abo', 'abos', 'sparziel', 'kassensturz', 'kostenausgleich',
+                'finance', 'expenses', 'income', 'presupuesto', 'bilancio', 'huishoudboek', 'budzet', 'orcamento', 'rozpocet', 'butce', 'бюджет', 'фінанси',
+            ],
+            'answer'   => "Der **💰 Haushaltsplaner** (`budget.php`) unterstützt dich bei deiner persönlichen oder gemeinsamen Finanzplanung (Familie, Paar, WG oder Verein):\n\n"
+                . "- **📊 Einnahmen, Ausgaben & Kategorien:** Monatliche Bilanz, 6-Monats-Trend, Kategorie-Balken und direkte **Beleg-Verknüpfung** mit deinen Cloud-Dateien.\n"
+                . "- **🔄 Fixkosten & Abos:** Hinterlege Miete, Strom, Versicherungen oder Streaming-Abos einmalig und übernimm alle fälligen Posten per **1-Klick** in den aktuellen Monat.\n"
+                . "- **🐷 Sparziele & 👥 Kostenausgleich:** Verfolge Sparziele mit Fortschrittsbalken und lass bei geteilten Haushaltsbüchern automatisch berechnen, wer wem wie viel ausgleichen muss.",
+            'actions'  => [
+                ['label' => '💰 Haushaltsplaner', 'url' => 'budget.php'],
+            ],
+            'followups' => [
+                $pack['q_storage'],
+                $pack['q_office'],
+            ],
+        ],
+        [
+            'id'       => 'browser_games',
+            'title'    => 'Browserspiele, Cloud-Highscores & Live-Duelle',
+            'icon'     => '🎮',
+            'keywords' => [
+                'spiele', 'spiel', 'browserspiele', 'pausenraum', '2048', 'sudoku', 'minesweeper', 'wordle', 'wort des tages', 'memory', 'tetris', 'block puzzle', 'snake', 'brick breaker', 'vier gewinnt', 'tic tac toe', 'highscore',
+                'games', 'game', 'jeux', 'juegos', 'giochi', 'spellen', 'gry', 'jogos', 'hry', 'oyunlar', 'ігри',
+            ],
+            'answer'   => "In der **🎮 Spiele-Zentrale** (`games.php`) erwarten dich 9 werbefreie Browserspiele direkt in deiner Cloud:\n\n"
+                . "- **Denk- & Arcade-Klassiker:** *2048*, *Cloud-Sudoku*, *Minesweeper*, *Wort des Tages (Cloud-Wordle)*, *Memory*, *Block-Puzzle*, *Retro-Snake* und *Brick Breaker* (inkl. Auto-Save & Cloud-Bestenlisten).\n"
+                . "- **⚔️ Live-Duelle & KI:** Spiele **Vier Gewinnt** oder **Tic-Tac-Toe** gegen die Computer-KI oder fordere andere Cloud-Mitglieder in Echtzeit heraus!",
+            'actions'  => [
+                ['label' => '🎮 Spiele-Zentrale', 'url' => 'games.php'],
+            ],
+            'followups' => [
+                $pack['q_ebooks'],
+                $pack['q_messages'],
+            ],
+        ],
+        [
             'id'       => 'pwa_app_install',
             'title'    => 'Als App auf Smartphone, Tablet oder PC installieren (PWA)',
             'icon'     => '📱',
@@ -1478,12 +1573,12 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
     if ($isAdmin) {
         $kb[] = [
             'id'       => 'admin_features',
-            'title'    => 'Administration, Modul-Statistik, Backup & GitHub-Update',
+            'title'    => 'Administration, Benutzersperre, Teil-Admins, Statistik & Update',
             'icon'     => '🛠️',
-            'keywords' => ['admin', 'administration', 'benutzer anlegen', 'kontingent', 'quota', 'smtp', 'mail', 'impressum', 'logo', 'backup', 'datenbank', 'update', 'github', 'modul statistik', 'audit log', 'statistics'],
+            'keywords' => ['admin', 'administration', 'benutzer anlegen', 'benutzer sperren', 'entsperren', 'sperre', 'teil admin', 'teil-admin', 'adminrechte uebertragen', 'kontingent', 'quota', 'smtp', 'mail', 'impressum', 'logo', 'backup', 'datenbank', 'update', 'github', 'modul statistik', 'audit log', 'statistics'],
             'answer'   => "Als **Administrator** stehen dir unter **🛠️ Admin** (`admin.php`) 5 Verwaltungsbereiche zur Verfügung:\n\n"
-                . "1. **👥 Benutzer & Gruppen:** Konten anlegen, Speicherkontingente (Quota) vergeben, Gruppen & Gruppenordner-Rechte verwalten (inkl. Live-Suchfilter).\n"
-                . "2. **🧩 Module & Statistik:** Alle 15 Zusatzmodule einzeln ein-/ausschalten sowie die **📊 Modul-Nutzungsstatistik** (Heute / 7 Tage / 30 Tage / Gesamt + Datenbestand) einsehen.\n"
+                . "1. **👥 Benutzer, Sperren & Teil-Admin-Rechte:** Konten anlegen, Quotas vergeben, einzelne Benutzer per **🔒 Sperren / 🔓 Entsperren** sofort sperren (inkl. Sperrgrund) sowie einzelne Verwaltungsbereiche (**🛡️ Teil-Rechte**) gezielt an andere Benutzer delegieren.\n"
+                . "2. **🧩 Module & Statistik:** Alle 18 Cloud-Module einzeln ein-/ausschalten sowie die **📊 Modul-Nutzungsstatistik** (Heute / 7 Tage / 30 Tage / Gesamt + Datenbestand) einsehen.\n"
                 . "3. **🎨 Darstellung & Impressum:** Cloud-Name, eigenes Logo und Impressum anpassen.\n"
                 . "4. **✉️ E-Mail & SMTP:** Versand für 2FA-Codes, Einladungen und Passwort-Reset konfigurieren.\n"
                 . "5. **🖥️ System, Backup & GitHub-Updater:** Server-Auslastung, Sicherheits-Audit-Log, 1-Klick-SQL-Backup und direktes Online-Update von GitHub.",

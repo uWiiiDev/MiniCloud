@@ -8,6 +8,7 @@ require_once __DIR__ . '/includes/functions.php';
 redirectIfLoggedIn();
 
 $pdo = getDB();
+ensureUserSecurityColumns($pdo);
 $appSettings = getAppSettings($pdo);
 
 $errors      = [];
@@ -26,7 +27,7 @@ if ($uidParam > 0 && $tokenParam !== '') {
         $errors[] = 'Der aufgerufene Link zum Zurücksetzen des Passworts ist ungültig.';
     } else {
         $stmtToken = $pdo->prepare(
-            'SELECT id, username, reset_token_hash,
+            'SELECT id, username, is_locked, reset_token_hash,
                     (reset_expires_at IS NOT NULL AND reset_expires_at >= NOW()) AS token_valid
              FROM users
              WHERE id = :id
@@ -38,6 +39,7 @@ if ($uidParam > 0 && $tokenParam !== '') {
         $expectedHash = hash('sha256', $tokenParam);
         if (
             $uRow &&
+            (int)($uRow['is_locked'] ?? 0) === 0 &&
             !empty($uRow['reset_token_hash']) &&
             (int)$uRow['token_valid'] === 1 &&
             hash_equals((string)$uRow['reset_token_hash'], $expectedHash)
@@ -132,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['pw_reset_attempts'][] = time();
 
             $stmtFind = $pdo->prepare(
-                'SELECT id, username, email
+                'SELECT id, username, email, is_locked
                  FROM users
                  WHERE username = :u
                     OR (email IS NOT NULL AND email <> \'\' AND LOWER(email) = LOWER(:em))
@@ -146,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $foundUser = $stmtFind->fetch();
 
-            if ($foundUser && filter_var(trim((string)($foundUser['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false) {
+            if ($foundUser && (int)($foundUser['is_locked'] ?? 0) === 0 && filter_var(trim((string)($foundUser['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false) {
                 $rawToken  = bin2hex(random_bytes(32));
                 $tokenHash = hash('sha256', $rawToken);
 

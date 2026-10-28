@@ -37,16 +37,20 @@ if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+    header("Content-Security-Policy: frame-ancestors 'self'");
+    header('Permissions-Policy: geolocation=(), payment=(), usb=()');
 }
 
 /**
  * Stellt sicher, dass die Spalten für Kontosperrung (`is_locked`, `lock_reason`)
  * und delegierte Admin-Einzelrechte (`admin_permissions`) in der Tabelle `users` existieren.
+ * Wird pro Sitzung gecacht, um unnötige SHOW-COLUMNS-Abfragen bei jedem Seitenaufruf zu vermeiden.
  */
 function ensureUserSecurityColumns(PDO $pdo): void
 {
     static $checked = false;
-    if ($checked) {
+    if ($checked || (!empty($_SESSION['_mc_user_sec_cols_ok']) && $_SESSION['_mc_user_sec_cols_ok'] === 1)) {
+        $checked = true;
         return;
     }
     $checked = true;
@@ -65,6 +69,9 @@ function ensureUserSecurityColumns(PDO $pdo): void
         }
         if (!isset($cols['admin_permissions'])) {
             $pdo->exec("ALTER TABLE `users` ADD COLUMN `admin_permissions` VARCHAR(255) NOT NULL DEFAULT '' AFTER `lock_reason`");
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_user_sec_cols_ok'] = 1;
         }
     } catch (Throwable) {
         // Ignorieren falls DB noch im Aufbau

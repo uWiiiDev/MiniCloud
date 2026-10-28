@@ -16,6 +16,7 @@ $appSubtitle = $appSettings['app_subtitle'];
 $appLogoUri  = $appSettings['logo_data_uri'];
 
 $pageTitle = isset($pageTitle) ? $pageTitle . ' – ' . $appTitle : $appTitle . ' – Sicherer Cloud-Speicher';
+$currentScript = basename((string)($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
 $flashes = getFlashes();
 $currentTheme = getCurrentTheme();
 $isDarkLike = in_array($currentTheme, ['dusk', 'mocha', 'petrol', 'plum', 'dark', 'ocean', 'forest', 'obsidian'], true);

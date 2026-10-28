@@ -41,7 +41,8 @@ $isAdmin  = isAdmin();
 function ensureGamesSchema(PDO $pdo): void
 {
     static $done = false;
-    if ($done) {
+    if ($done || (!empty($_SESSION['_mc_games_schema_ok']) && $_SESSION['_mc_games_schema_ok'] === 1)) {
+        $done = true;
         return;
     }
     $done = true;
@@ -90,6 +91,9 @@ function ensureGamesSchema(PDO $pdo): void
                 KEY `idx_updated` (`updated_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_games_schema_ok'] = 1;
+        }
     } catch (Throwable) {
     }
 }

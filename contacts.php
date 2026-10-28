@@ -30,11 +30,12 @@ if (isset($_GET['vcf_token']) && is_string($_GET['vcf_token'])) {
         exit('Ungültiges Adressbuch-Token.');
     }
 
-    $stmtTokenUser = $pdo->prepare('SELECT id, username, contacts_token FROM users WHERE contacts_token = :t LIMIT 1');
+    ensureUserSecurityColumns($pdo);
+    $stmtTokenUser = $pdo->prepare('SELECT id, username, is_locked, contacts_token FROM users WHERE contacts_token = :t LIMIT 1');
     $stmtTokenUser->execute([':t' => $token]);
     $tokenUser = $stmtTokenUser->fetch();
 
-    if (!$tokenUser || !hash_equals((string)$tokenUser['contacts_token'], $token)) {
+    if (!$tokenUser || (int)($tokenUser['is_locked'] ?? 0) === 1 || !hash_equals((string)$tokenUser['contacts_token'], $token)) {
         http_response_code(404);
         exit('Adressbuch-Feed nicht gefunden.');
     }

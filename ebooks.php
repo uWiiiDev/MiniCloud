@@ -33,7 +33,8 @@ $isAdmin = isAdmin();
 function ensureEbooksSchema(PDO $pdo): void
 {
     static $done = false;
-    if ($done) {
+    if ($done || (!empty($_SESSION['_mc_ebooks_schema_ok']) && $_SESSION['_mc_ebooks_schema_ok'] === 1)) {
+        $done = true;
         return;
     }
     $done = true;
@@ -83,6 +84,9 @@ function ensureEbooksSchema(PDO $pdo): void
                 PRIMARY KEY (`file_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_ebooks_schema_ok'] = 1;
+        }
     } catch (Throwable) {
         // Ignorieren falls DB-Rechte eingeschränkt
     }

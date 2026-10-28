@@ -1,138 +1,124 @@
-# ☁️ MiniCloud – Leichtgewichtiger, sicherer Cloud-Speicher (PHP 8.2+ & MySQL)
+# ☁️ MiniCloud — Fast, Secure & Self-Hosted Cloud Workspace (PHP 8.2+ & MySQL)
 
-**🇩🇪 Deutsch:** Eine schnelle, sichere und ressourcenschonende Nextcloud-Alternative für eigene Server und Standard-Webspaces (z. B. STRATO, IONOS, All-Inkl, Netcup) auf Basis von **PHP 8.2+** und **MySQL / MariaDB** – **100 % DSGVO-konform**, inklusive Datei- & Ordnerverwaltung, Tresor-Verschlüsselung (AES-256), Kalender mit `.ics`-Abo, integriertem Messenger mit System-Benachrichtigungen und **1-Klick-GitHub-Updater**.  
-**🇬🇧 English:** A fast, secure, and lightweight self-hosted cloud storage, calendar, and messenger suite built with **PHP 8.2+** and **MySQL / MariaDB** — featuring AES-256 Vault encryption, 3-level folder/calendar sharing, iCal/ICS feed subscriptions, real-time chat with system notifications, 2FA via Email or Google Authenticator (RFC 6238 TOTP with local offline QR code), password reset, 1-Click GitHub Updater, 13 color themes, PWA support (Android & iOS), and **6 built-in languages** (🇩🇪 DE, 🇬🇧 EN, 🇫🇷 FR, 🇪🇸 ES, 🇮🇹 IT, 🇳🇱 NL). *(See [English Quickstart Guide](#-english-quickstart--installation-guide) below).*
+**MiniCloud** is a fast, lightweight, and privacy-first self-hosted cloud storage and collaboration suite built with **PHP 8.2+** and **MySQL / MariaDB**. Designed as a zero-bloat alternative to heavy cloud suites, it runs effortlessly on standard shared web hosting (e.g., STRATO, IONOS, All-Inkl, Netcup, cPanel) as well as any Linux VPS or Raspberry Pi — **100% GDPR-compliant**, zero external CDNs, and **Zero-Click Auto-Migration**.
 
----
-
-## ✨ Kernfunktionen im Überblick
-
-1. **Dateiverwaltung, MiniCloud Office Light, ZIP-Entpacker, Tresor-Modus & Direkt-Vorschau (`index.php`, `office.php`, `vault_action.php`)**
-   - **📥 Direkte Ordner-Drag-&-Drop-Zonen, 📋 `Strg+V` Zwischenablage-Upload & kompakte Schnell-Buttons:** Jede Ordner-Zeile und Ordner-Kachel ist eine direkte Drop-Zone – ziehen Sie Dateien oder ganze Ordner vom Computer direkt auf einen Ordner, um sie ohne vorheriges Öffnen sofort dorthin hochzuladen (oder ziehen Sie vorhandene Cloud-Dateien per Drag & Drop in einen Unterordner). Screenshots und kopierte Bilder lassen sich jederzeit direkt per **`Strg+V`** in den geöffneten Ordner einfügen. Kompakte Buttons (`+ Dateien`, `📁+ Ordner`, `📄+ Office`) direkt in der Kopfzeile der Dateiliste sparen insbesondere auf Smartphones wertvollen Platz.
-   - **📦 ZIP-Archive direkt im Browser inspizieren & entpacken:** Im Vorschau-Fenster jeder `.zip`-Datei zeigt der integrierte **ZIP-Archiv-Inspektor** alle enthaltenen Dateien samt Größe an und entpackt das Archiv per 1-Klick direkt auf dem Server (wahlweise in einen eigenen Unterordner oder direkt in das aktuelle Verzeichnis).
-   - **📄 MiniCloud Office Light (Word `.docx`, Excel `.xlsx`, `.csv`, `.txt`, `.md`) inkl. 👥 Live-Team-Zusammenarbeit:** Direkt im Browser ohne externe Server neue Word-Dokumente, Excel-Tabellen oder Notizen anlegen sowie bestehende `.docx`- und `.xlsx`-Dateien online öffnen, bearbeiten (inkl. Rich-Text-Formatierung, Tabellen, mehreren Excel-Tabellenblättern und Live-Formeln wie `=SUMME(A1:A10)` / `=MITTELWERT(...)`) und per `Strg+S` oder `⚡ Auto-Save` speichern. Arbeiten mehrere Personen gleichzeitig an einer freigegebenen Datei, zeigt die **🟢 Live-Team-Leiste** alle aktiven Bearbeiter samt Position und schützt fokussierte Excel-Zellen bzw. Word-Absätze konfliktfrei vor versehentlichem Überschreiben, während Änderungen live auf allen Bildschirmen erscheinen.
-   - **🕓 Automatische Dateiversionierung („Zeitreise“) & 💬 Datei-Kommentare:** Beim Speichern in Office Light, beim erneuten Hochladen einer gleichnamigen Datei oder via WebDAV werden automatisch bis zu 5 frühere Versionen aufbewahrt (jederzeit per 1-Klick herunterladbar oder wiederherstellbar). Über das **`💬`-Symbol** können zudem direkt an jeder Datei Kommentare und Team-Notizen hinterlegt werden.
-   - **🔒 Tresor-Modus (AES-256-GCM Zero-Knowledge):** Sensible Einzeldateien jederzeit mit einem persönlichen Tresor-Passwort verschlüsseln (Schlüssel wird niemals auf dem Server gespeichert).
-   - **🖼️ Foto-Galerie / Kachel-Ansicht, ⭐ Favoriten & 🔎 Globale Suche:** Nahtloser Wechsel zwischen Tabellenansicht (`📋 Liste`) und Kachel-Ansicht (`🖼️ Kacheln`) mit Live-Bild-Thumbnails, Anheften wichtiger Dateien per Stern (`⭐ Favoriten`) sowie ordnerübergreifende Volltextsuche über alle Unterordner hinweg.
-   - **☑️ Mehrfachauswahl (Sammel-/Batch-Aktionen):** Mehrere Dateien gleichzeitig per Checkbox auswählen und über die schwebende Aktionsleiste gemeinsam als `.zip` herunterladen, verschieben/kopieren oder in den Papierkorb legen.
-   - Integriertes Vorschau-Modal für Bilder, PDFs, Videos, Audio, Text-/Codedateien und ZIP-Archive (inkl. Tastaturnavigation und Touch-Wischgesten auf Smartphones).
-   - **⭐ Flexibel anheftbare & frei verschiebbare Favoriten-Icons in Kopfzeile & Dateiliste:** Sowohl im **`⊞ Module`-App-Launcher** der Kopfzeile als auch im **`⋯`-Datei-Aktionsmenü** (auch per **Rechtsklick** auf jede Zeile erreichbar) kann jedes Modul bzw. jede Datei-Aktion per Klick auf **`⭐` / `☆`** individuell nach außen gelegt oder wieder ins Menü aufgeräumt werden. Zudem lassen sich die Module sowohl im `⊞ Module`-Menü als auch oben in der Kopfleiste per **Drag & Drop (`⠿`)** frei anordnen.
-   - Verschieben, Kopieren und Umbenennen von Dateien und Unterordnern sowie Download ganzer Ordner als `.zip`-Archiv.
-2. **Öffentliche Freigabelinks, 📱 Lokaler QR-Code, 🔥 Selbstzerstörung („Burn after reading“), 📥 Digitaler Briefkasten & 3-stufige Direktfreigaben (`share.php`, `share_action.php`)**
-   - Kryptografisch sichere Freigabelinks (`bin2hex(random_bytes(16))`), optionaler BCRYPT-Passwortschutz, Ablaufdatum, **🔥 Download-Limit / Selbstzerstörung** (Link löscht sich z. B. nach `1×`, `3×`, `5×` oder `10×` Downloads automatisch selbst) sowie **📱 100 % lokal generierter SVG-QR-Code** zum direkten Scannen mit dem Smartphone.
-   - **📥 Digitaler Briefkasten (File-Drop) für Ordner-Links:** Für öffentliche Ordner-Links wählbar zwischen **👁️ Nur Download**, **📤 Digitaler Briefkasten / Nur Hochladen** (Gäste können Dateien/Fotos ohne eigenes Konto zusenden, ohne andere Dateien im Ordner zu sehen) und **🔄 Download & Upload**.
-   - Direktfreigabe einzelner Dateien oder ganzer Ordner an andere Cloud-Benutzer (*„Für mich freigegeben“*) mit **3 Berechtigungsstufen** für Ordner: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** (eigene Dateien hochladen & Unterordner anlegen) oder **🗑️ Lesen, Schreiben & Löschen**.
-   - **Datenschutz-Standard (`allow_user_sharing = 0`):** Benutzer sind standardmäßig in der Teilen- und Chat-Auswahl anderer Nutzer verborgen und können ihre Sichtbarkeit selbst in den Einstellungen freigeben.
-3. **Kalender, Terminserien, 2-Wege-CalDAV-Server & Smartphone-.ics-Abo (`calendar.php`, `caldav.php`)**
-   - Übersichtliche Monats- und Listenansicht für Einzel- und Ganztagestermine mit Farbkodierung, Wiederholungen (täglich, wöchentlich, monatlich, jährlich) und verknüpften Cloud-Dateien.
-   - **Kalender teilen (3 Berechtigungsstufen):** Eigenen Kalender für sichtbare Benutzer oder Benutzergruppen freigeben (*Nur Lesen*, *Lesen & Bearbeiten*, *Lesen, Bearbeiten & Löschen*) – private Termine (`🔒 Privat`) bleiben geschützt.
-   - **📡 Nativer 2-Wege-CalDAV-Server (`caldav.php`) & `.ics`-Abo:** Termine direkt in der nativen Kalender-App auf iPhone/iPad (iOS), macOS Kalender, Mozilla Thunderbird oder Android (*DAVx⁵*) anlegen, ändern und löschen – oder per persönlichem `.ics`-Abo-Link abonnieren.
-4. **Integrierter Messenger, 🎙️ Sprachnachrichten, 📋 `Strg+V`-Screenshots, 📎 Dateianhänge & System-Benachrichtigungen (`messages.php`)**
-   - 1:1-Echtzeit-Chat mit sichtbaren Cloud-Benutzern, direkte **🎙️ Sprachnachrichten-Aufnahme** über das Mikrofon (inkl. Inline-Audio-Player in der Sprechblase), sofortiges Einfügen von Screenshots per **`Strg+V`**, Versand von **📎 Datei- und Bildanhängen** sowie offizieller **Admin-Rundnachrichten-Kanal (`📢 Ankündigungen an alle`)**.
-   - Ein-Klick-Funktion **„🗑️ Verlauf leeren“**, automatische **mobile 1-Spalten-Ansicht** auf Smartphones (mit ausgeblendetem Footer und dynamischer Anpassung an die Bildschirmtastatur) sowie konfigurierbare **System-Benachrichtigungen am PC & Mobilgerät** (Web Notifications API & Service Worker).
-5. **🏠 „Mein Tag“-Cockpit (⭐), 📊 Terminfinder & Umfragen, 🎤 Live-Mentimeter, 📄 PDF & Dokumenten-Scanner, 🔐 Passwort-Schlüsselbund, 📋 Aufgaben/Kanban, 📌 Notizwand, 📇 Adressbuch (CardDAV) & 📡 WebDAV (`dashboard.php`, `polls.php`, `menti.php`, `pdf_tools.php`, `passwords.php`, `tasks.php`, `notes.php`, `contacts.php`, `carddav.php`, `webdav.php`)**
-   - **🏠 Persönliches Tages-Cockpit (`dashboard.php`) mit ⭐ Sternchen-Auswahl:** Zeigt auf einen Blick heutige und kommende Termine (14 Tage), anstehende Geburtstage aus dem Adressbuch (inkl. Altersberechnung), offene Aufgaben (mit 1-Klick-Abhaken), aktive Umfragen, Live-Mentimeter, angepinnte Notizen und zuletzt bearbeitete Dateien – jede Kachel lässt sich per **`⭐` / `☆`** individuell ein- und ausblenden.
-   - **📊 Terminfinder & Abstimmungen (`polls.php`):** Selbstgehostete „Doodle“-Alternative für Termin-Umfragen und Abstimmungen (`✅ Ja`, `🤔 Unter Vorbehalt`, `❌ Nein`) – intern im Team oder per **öffentlichem Gäste-Link (`polls.php?token=...`)** ohne Konto-Pflicht, inklusive **1-Klick-Übernahme des Gewinner-Termins (`🏆`) direkt in den Kalender**.
-   - **🎤 Live-Mentimeter & Interaktive Präsentationen (`menti.php`):** Selbstgehostetes Echtzeit-Publikums-Voting per **lokalem SVG-QR-Code & 6-stelligem PIN-Code** (ohne Teilnehmer-Limit & ohne Konto-Pflicht) mit **☁️ Wortwolke (Word Cloud)**, **📊 Live-Balkendiagramm**, **🎚️ Skala (1–10)**, **💬 Offenen Antworten**, **🙋 Q&A mit 👍 Upvoting**, **🏆 Live-Quiz samt Bestenliste** und automatischer Folien-Synchronisation auf allen Smartphones.
-   - **📄 PDF-Werkzeugkasten, Dokumenten-Scanner & DSGVO-Schwärzung (`pdf_tools.php`):** 100 % lokaler **Kamera-/Foto-zu-PDF-Scanner** mit optionalem **S/W-Dokumentenfilter (Hoher Kontrast)** sowie **🔗 PDFs zusammenfügen (Merge)**, **✂️ Seiten extrahieren (Split)**, **🗜️ PDF komprimieren** und **⬛ PDF unwiderruflich schwärzen (Pixel-Redaction ohne Rest-Textlayer)** direkt im eigenen Cloud-Speicher ohne externe Online-Dienste.
-   - **🔐 Passwort-Manager / Schlüsselbund (`passwords.php`):** AES-256-GCM-verschlüsselter Tresor für Logins, WLAN-Passwörter, Server-Zugänge, Lizenzen und PINs – inkl. Passwort-Generator, 1-Klick-Kopieren, Passwort-Alterswarnung (> 180 Tage) und Team-/Gruppen-Freigabe.
-   - **📋 Aufgaben & Kanban-Board (`tasks.php`):** 3-Spalten-Projektboard (*📌 Offen*, *⏳ In Arbeit*, *✅ Erledigt*) mit HTML5 Drag & Drop, Prioritäten, Fälligkeitsdaten, interaktiven Unteraufgaben-Checklisten, Cloud-Dateianhängen und Teilen mit Benutzern oder Gruppen.
-   - **📌 Notizwand / Pinboard (`notes.php`):** Farbige digitale Haftnotizen mit Anpinnen, `#Tags`, Live-Suche, Teilen im Team und 1-Klick-Export als Markdown-Datei (`.md`) direkt in den Cloud-Ordner `Notizen`.
-   - **📇 Adressbuch, CardDAV-Server & `.vcf`-Abo (`contacts.php`, `carddav.php`):** Persönliche und geteilte Kontakte inkl. vCard (`.vcf`) Import/Export, automatischer Synchronisation von Kontakt-Geburtstagen (`🎂`) in den Kalender, **nativem CardDAV-Server (`carddav.php`)** für 2-Wege-Synchronisation mit iPhone/iPad, macOS, Thunderbird & Android (*DAVx⁵*) sowie **persönlichem `.vcf`-Abo-Link samt lokalem QR-Code**.
-   - **📡 WebDAV-Schnittstelle (`webdav.php`) & 🔑 Separate App-Passwörter (`settings.php`):** Nativer WebDAV-Server-Endpunkt zum direkten Einbinden der Cloud als Netzlaufwerk unter Windows Explorer, macOS Finder, Linux und auf Smartphones – abgesichert durch **separate, pro Gerät einzeln widerrufbare App-Passwörter (`mc-xxxx-xxxx-xxxx-xxxx`)** für WebDAV, CardDAV und CalDAV.
-6. **Papierkorb mit 30 Tagen Aufbewahrung (`trash.php`)**
-   - Gelöschte Dateien wandern zunächst für 30 Tage in den Papierkorb und können jederzeit mit einem Klick wiederhergestellt werden.
-6. **Passwort-Wiederherstellung, 2FA (E-Mail & Google Authenticator), Einstellungen & Optionale Registrierung (`forgot_password.php`, `login.php`, `settings.php`, `register.php`)**
-   - **Passwort vergessen / Selbst-Reset (`forgot_password.php`):** Benutzer mit hinterlegter E-Mail-Adresse können auf der Login-Seite einen 30 Minuten gültigen, kryptografisch gesicherten Einmal-Link zum Zurücksetzen ihres Passworts anfordern.
-   - **Zwei-Faktor-Authentifizierung (2FA) nach Wahl:** Pro Benutzer optional aktivierbarer 2FA-Schutz – wahlweise **per 6-stelligem E-Mail-Code** (lokales `mail()` oder externer SMTP-Server inkl. Test-E-Mail-Button) oder **per Authenticator-App (Google Authenticator, Microsoft Authenticator, Authy, Bitwarden nach RFC 6238 TOTP)** mit 100 % lokal auf dem eigenen Server erzeugtem SVG-QR-Code.
-   - Individuelle Benutzereinstellungen für **Sitzungs-Timeout**, **Anzeigedauer von Statusmeldungen** (1–300 Sek. oder manuell), **Chat-Benachrichtigungsmodus** und **Teilen-Sichtbarkeit**.
-   - Optional durch den Administrator zuschaltbare Selbstregistrierung mit **Einladungs-Code** und frei wählbarem Start-Speicherkontingent.
-7. **1-Klick-GitHub-Updater, Rollback / Zeitreise, 💾 Datenbank-Backup (`.sql`), 📜 Sicherheits-Audit-Log & Live-Server-Monitoring (`admin.php`)**
-   - Direkt in der Administration prüft MiniCloud auf neue Commits im GitHub-Repository und aktualisiert alle Programmdateien per 1-Klick-Update, während `uploads/` und die Datenbank-Zugangsdaten in `config/database.php` vollständig erhalten bleiben.
-   - **🛡️ Automatischer Rollback & freie Versionsauswahl:** Vor jedem Update legt MiniCloud automatisch einen lokalen Sicherungspunkt (`uploads/.system_backups/`) an, sodass ein Update jederzeit per 1-Klick rückgängig gemacht werden kann. Zusätzlich lässt sich in der GitHub-Versionshistorie jeder beliebige frühere Stand gezielt auswählen und installieren (*„⏮️ Diesen Stand installieren“*).
-   - **💾 1-Klick Datenbank-Backup (`.sql`) & 📜 Sicherheits- & Aktivitätsprotokoll (Audit-Log):** Vollständiger SQL-Export sämtlicher 15 Datenbanktabellen direkt im Admin-Bereich ohne phpMyAdmin sowie DSGVO-konformes Audit-Log (Logins, Freigaben, Selbstzerstörung, ZIP-Entpackung, Backups) mit anonymisierten IP-Adressen.
-   - Echtzeit-Monitoring für CPU-Auslastung, Arbeitsspeicher (RAM), Festplattenspeicher und Cloud-Belegung.
-8. **Smartphone-App (PWA), 6 Sprachen, 13 Farbthemes & 100 % DSGVO-konform**
-   - Als Vollbild-App (PWA) auf Android, iPhone/iPad und Desktop installierbar.
-   - **6 Sprachen integriert:** 🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇮🇹 Italiano, 🇳🇱 Nederlands.
-   - **13 augenschonende Farbthemes** (5 sanfte helle, 4 halbdunkle und 4 dunkle Designs inkl. *🌌 Mitternacht*).
-   - Keine Google Fonts, keine externen CDNs (Tailwind CSS liegt lokal unter `assets/tailwind.js`) und keine Tracking-Cookies.
+🌍 **11 Built-in Languages:** 🇩🇪 Deutsch · 🇬🇧 English · 🇫🇷 Français · 🇪🇸 Español · 🇮🇹 Italiano · 🇳🇱 Nederlands · 🇵🇱 Polski · 🇹🇷 Türkçe · 🇺🇦 Українська · 🇸🇦 العربية (RTL) · 🇷🇺 Русский  
+🎨 **13 Eye-Friendly Color Themes:** 5 Soft Light, 4 Balanced Mid-Tone & 4 Dark/Obsidian themes  
+📱 **Installable Progressive Web App (PWA):** Works on Android, iOS (iPhone/iPad), Windows, macOS & Linux
 
 ---
 
-## 🛠️ Technische Voraussetzungen
+## ✨ Complete Feature Suite (19 Integrated Modules)
 
-Die Anforderungen sind bewusst minimal gehalten, damit MiniCloud auf nahezu jedem günstigen Webspace und jedem kleinen Server (selbst auf einem Raspberry Pi) flüssig läuft:
+### 1. 📁 File Manager, AES-256 Vault, ZIP Inspector & Smart Sharing (`index.php`, `vault_action.php`, `share.php`)
+- **Direct Folder Drag & Drop, `Ctrl+V` Clipboard Upload & Action Toolbar:** Drop files or entire folder hierarchies directly onto any subfolder row or onto the page. Paste screenshots straight from your clipboard via `Ctrl+V`.
+- **🔒 AES-256-GCM Zero-Knowledge Vault:** Encrypt sensitive individual files with a personal Vault password (`PBKDF2-HMAC-SHA256`, 100,000 iterations + 96-bit IV + 128-bit Auth Tag). Your encryption password is never stored on the server.
+- **📦 In-Browser ZIP Inspector & Server-Side Extractor:** Inspect the contents of any `.zip` archive in the preview modal and extract it directly on the server with full Zip-Slip & quota protection.
+- **🕓 Automatic File Versioning ("Time Travel" up to 5 versions) & 💬 File Comments:** Overwriting files via upload, Office Light, or WebDAV automatically preserves up to 5 previous snapshots that can be restored or downloaded with 1 click.
+- **🔗 Public Share Links with Local SVG QR Code, 🔥 Self-Destruct ("Burn after reading") & 📥 File-Drop Mailbox:** Share files or folders via cryptographically secure links (`random_bytes(16)`), optional BCRYPT password, expiration date, maximum download limit, and 3 folder modes (*Download Only*, *Digital Mailbox / Upload Only*, or *Read & Write*).
+- **👥 3-Tier Internal User & Group Sharing:** Share folders and files with other users or groups using granular permissions (*Read Only*, *Read & Write*, or *Read, Write & Delete*).
 
-| Komponente | Voraussetzung | Hinweis für Einsteiger |
+### 2. 📄 MiniCloud Office Light with Live Team Collaboration (`office.php`)
+- **100% Local Document Processing:** Create and edit **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV (`.csv`)**, **Markdown (`.md`)**, and **Text (`.txt`)** files directly in the browser without external servers (no Microsoft 365 or Google Docs required).
+- **🟢 Real-Time Team Presence & Cell/Paragraph Locking:** When multiple users edit a shared document simultaneously, Office Light displays active collaborators in real time, locks currently focused Excel cells or Word paragraphs against accidental overwrites, and streams changes live to all screens.
+
+### 3. 📅 Calendar, Recurring Events, 2-Way CalDAV & `.ics` Feed (`calendar.php`, `caldav.php`)
+- Monthly and agenda views, recurring events, file attachments, automatic contact birthdays (`🎂`), 3-tier calendar sharing, personal `.ics` subscription feeds, and a **native 2-way CalDAV server (`caldav.php`)** for iOS, macOS Calendar, Thunderbird, and Android (*DAVx⁵*).
+
+### 4. 💬 Real-Time Messenger, Voice Messages & System Notifications (`messages.php`)
+- 1:1 instant chat with visible cloud users, **🎙️ microphone voice message recording** with inline audio playback, `Ctrl+V` screenshot pasting, cloud file attachments, official **Admin Broadcast channel (`📢 Announcements`)**, and native Web/Service-Worker desktop & mobile notifications.
+
+### 5. 🏠 "My Day" Cockpit (`dashboard.php`) & ⊞ Dedicated Module Hub (`modules.php`)
+- **My Day Cockpit (`dashboard.php`):** Customizable daily overview of upcoming appointments, birthdays, open Kanban tasks, active polls, pinned notes, and recent files.
+- **Dedicated Module Hub (`modules.php`):** Full-page app directory (`⊞ Module`) with live search, category filters, **sorting by usage frequency (*🔥 Most used*, *🔤 A–Z*, or *✋ Custom Drag & Drop*)**, and **`⭐` pinning** to keep your favorite modules right in the top navigation bar.
+
+### 6. 📋 Kanban Boards (`tasks.php`) & 🚀 Project Management (`projects.php`)
+- **Multi-Board Kanban (`tasks.php`):** Drag-and-drop columns (*To Do*, *In Progress*, *Done*), priorities, due dates, interactive subtask checklists, cloud file attachments, and public/team board sharing.
+- **Project Management (`projects.php`):** Visual **Gantt timeline**, milestones with progress bars, **time & expense tracking** (`hours` / `cost_amount`) against project budgets, and direct linking to Kanban boards and group folders.
+
+### 7. 🧠 Interactive Mind Map Editor (`mindmap.php`)
+- Infinite pan & zoom canvas with smooth cubic Bézier curves, keyboard shortcuts (`Tab` = child node, `Enter` = sibling node, `Del` = delete, `Space` = collapse/expand branch), 8 color palettes, node notes, **direct links to cloud files**, 4 starter templates, team/guest sharing, and **1-click export as `.svg`, `.md` (outline), or `.json` directly to your cloud storage**.
+
+### 8. 💰 Budget & Household Planner (`budget.php`)
+- Manage personal, family, or shared group budget books (`€`, `CHF`, `$`, `£`), log income and expenses across 13 categories with **direct cloud receipt attachment (`📎 PDF/Photo`)**, track **recurring subscriptions & cancellation notice periods (`🔄`)**, monitor **visual savings goals (`🎯`)**, and export monthly reports to **CSV (Excel)** directly into your cloud folder.
+
+### 9. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
+- Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
+
+### 10. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
+- 100% offline-capable HTML5 games with cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
+  - **Solo Classics:** *2048 Cloud*, *Sudoku (4 difficulty levels + pencil notes)*, *Memory*, *Snake Retro*, *Block Fall (Tetris)*, *Minesweeper*, and *Solitaire (Klondike)*.
+  - **👥 Live Multiplayer & AI Duels:** *Chess (with full move validation & AI)*, *Connect Four*, *Battleship*, and *Tic-Tac-Toe*.
+
+### 11. 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
+- **Polls & Date Finder (`polls.php`):** Self-hosted Doodle alternative with guest voting links and 1-click calendar transfer.
+- **Live Mentimeter (`menti.php`):** Real-time audience voting via QR code & 6-digit PIN (Word Cloud, Bar Chart, Scale, Q&A with Upvoting, Live Quiz Leaderboard).
+- **PDF Toolbox & Document Scanner (`pdf_tools.php`):** Camera/photo-to-PDF scanner with high-contrast B/W filter, PDF Merge, Split, Compression, and **irreversible GDPR Pixel Redaction (`⬛`)**.
+- **Password Keychain (`passwords.php`):** Server-side AES-256-GCM encrypted password vault with password generator, age warnings, and team sharing.
+- **Smart Help Assistant (`assistant.php`):** Instant offline Q&A assistant answering questions about all MiniCloud features in **11 languages**.
+
+### 12. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
+- **Account Lockout (`🔒 Lock / 🔓 Unlock`):** Immediately lock compromised or inactive user accounts (with an optional lock reason). Locked users are blocked in real time across web sessions, login, password reset, `.ics`/`.vcf` feeds, and WebDAV/CardDAV/CalDAV.
+- **🛡️ Delegated Partial Admin Permissions (`admin_permissions`):** Grant trusted non-admin users granular access to specific admin tabs (*👥 Users & Groups*, *🧩 Modules & Registration*, *🎨 Branding & Imprint*, *✉️ Email & SMTP*, or *🔄 Updates, Backup & System*) without granting full root administrator rights.
+- **1-Click GitHub Updater & Instant Rollback Snapshots:** Update directly from GitHub while preserving `uploads/` and `config/database.php`, with automatic local `.zip` snapshots (`uploads/.system_backups/`) for 1-click rollback.
+
+---
+
+## 🛠️ System Requirements
+
+MiniCloud is engineered to run smoothly on any affordable shared web hosting plan or Linux server:
+
+| Component | Requirement | Notes |
 | :--- | :--- | :--- |
-| **PHP** | **PHP 8.2** oder neuer (8.2, 8.3, 8.4) | Bei Hostern wie STRATO / IONOS im Kundenmenü einfach auf PHP 8.2+ einstellbar. |
-| **PHP-Erweiterungen** | `pdo_mysql`, `mbstring`, `fileinfo`, `gd`, `zip`, `openssl` | Auf Standard-Webspaces bereits ab Werk aktiviert. |
-| **Datenbank** | **MySQL 5.7+ / 8.0+** oder **MariaDB 10.3+** | Eine einzige leere Datenbank genügt (Tabellen werden automatisch angelegt!). |
-| **Webserver** | **Apache** (mit `.htaccess`) oder **Nginx** | HTTPS (SSL-Zertifikat, z. B. Let’s Encrypt) wird für die Smartphone-App (PWA) empfohlen. |
+| **PHP** | **PHP 8.2** or newer (8.2, 8.3, 8.4) | Standard on modern shared hosting (STRATO, IONOS, cPanel, Plesk) and Linux distributions. |
+| **PHP Extensions** | `pdo_mysql`, `mbstring`, `fileinfo`, `gd`, `zip`, `openssl` | Enabled by default on almost all web hosts. |
+| **Database** | **MySQL 5.7+ / 8.0+** or **MariaDB 10.3+** | A single empty database is sufficient — all tables are created automatically on first run! |
+| **Web Server** | **Apache** (with `.htaccess`) or **Nginx** | HTTPS (e.g., Let's Encrypt) is recommended for PWA installation and Web Notifications. |
 
 ---
 
-## 🚀 Schritt-für-Schritt-Installation (für Einsteiger)
+## 🚀 Quickstart & Installation Guide
 
-Du brauchst **keine Programmierkenntnisse** und musst **keine Datenbank-Tabellen von Hand importieren**. MiniCloud erkennt beim ersten Aufruf automatisch, wenn die Datenbank noch leer ist, und legt alle 10 Tabellen sowie das erste Admin-Konto von selbst an (*Zero-Click-Setup*).
+You do **not** need to manually import any SQL files. On the very first request, MiniCloud automatically detects an empty database and creates all tables as well as the initial administrator account (*Zero-Click Setup*).
 
----
+### Option A: Shared Web Hosting (e.g., STRATO, IONOS, All-Inkl, cPanel)
 
-### Variante A: Installation auf einem normalen Webspace (z. B. STRATO, IONOS, All-Inkl)
-
-#### Schritt 1: Neue Datenbank beim Hoster anlegen
-1. Melde dich im Kundenmenü deines Webhosters (z. B. STRATO oder IONOS) an.
-2. Gehe auf **Datenbanken / MySQL** und klicke auf **Neue Datenbank erstellen**.
-3. Notiere dir diese **4 Angaben**, die dir dein Hoster anzeigt:
-   - **Datenbank-Server / Hostname** *(bei STRATO z. B. `rdbms.strato.de`, bei vielen anderen `localhost` oder `127.0.0.1`)*
-   - **Datenbank-Name** *(z. B. `dbs1234567`)*
-   - **Benutzername** *(z. B. `dbu1234567`)*
-   - **Passwort** *(das von dir vergebene Datenbank-Passwort)*
-
-#### Schritt 2: Projekt herunterladen & Datenbank-Zugangsdaten eintragen
-1. Lade dieses Projekt oben auf GitHub über den grünen Button **`<> Code` $\rightarrow$ `Download ZIP`** herunter und entpacke die ZIP-Datei auf deinem Computer.
-2. Öffne die Datei **`config/database.php`** mit einem einfachen Texteditor (z. B. Editor / Notepad) und trage in **Zeile 11 bis 16** deine 4 Daten aus Schritt 1 ein:
+1. **Create a MySQL/MariaDB database** in your hosting control panel and note down your 4 credentials:
+   - **Database Host** *(e.g., `localhost`, `127.0.0.1`, or `rdbms.strato.de`)*
+   - **Database Name**
+   - **Database Username**
+   - **Database Password**
+2. **Download MiniCloud** (`<> Code` $\rightarrow$ `Download ZIP`), extract it, and open **`config/database.php`** in a text editor to enter your credentials in lines 11–16:
    ```php
-   define('DB_HOST', getenv('MINICLOUD_DB_HOST') ?: 'rdbms.strato.de'); // Dein Datenbank-Host
+   define('DB_HOST', getenv('MINICLOUD_DB_HOST') ?: 'localhost');
    define('DB_PORT', getenv('MINICLOUD_DB_PORT') ?: '3306');
    define('DB_SOCKET', getenv('MINICLOUD_DB_SOCKET') ?: $defaultSocket);
-   define('DB_NAME', getenv('MINICLOUD_DB_NAME') ?: 'dein_datenbankname');
-   define('DB_USER', getenv('MINICLOUD_DB_USER') ?: 'dein_datenbankbenutzer');
-   define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'dein_datenbankpasswort');
+   define('DB_NAME', getenv('MINICLOUD_DB_NAME') ?: 'your_database_name');
+   define('DB_USER', getenv('MINICLOUD_DB_USER') ?: 'your_database_user');
+   define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'your_database_password');
    ```
-3. Speichere die Datei `config/database.php`.
-
-#### Schritt 3: Dateien auf deinen Webspace hochladen
-1. Verbinde dich mit einem kostenlosen Programm wie **FileZilla** (per SFTP) mit deinem Webspace.
-2. Lade alle Dateien und Ordner aus dem `MiniCloud`-Ordner in das gewünschte Verzeichnis deines Webspaces hoch (z. B. in einen Unterordner `/cloud/` oder direkt ins Hauptverzeichnis).
-   - *Wichtig:* Achte darauf, dass der Ordner `uploads/` inklusive der Schutzdatei `uploads/.htaccess` mit hochgeladen wird.
-
-#### Schritt 4: Im Browser öffnen – Fertig! 🎉
-Öffne deine Webadresse im Browser (z. B. `https://deine-domain.de/cloud/`).  
-MiniCloud richtet die Datenbank jetzt im Hintergrund komplett automatisch ein und zeigt dir direkt die Anmeldeseite!
+3. **Upload all files via SFTP** (e.g., using FileZilla) to your webspace (including `uploads/.htaccess`).
+4. **Open your URL in the browser** — MiniCloud automatically sets up all tables and presents the login screen!
 
 ---
 
-### Variante B: Installation auf einem eigenen Linux-Server / VPS (Debian / Ubuntu)
+### Option B: Linux VPS / Dedicated Server (Debian 12/13 or Ubuntu 22.04/24.04)
 
-Wenn du einen eigenen virtuellen Server (VPS) mit **Debian 12/13** oder **Ubuntu 22.04/24.04** nutzt, kannst du folgende Befehle direkt per Copy & Paste als `root` ausführen:
-
-#### 1. Benötigte Pakete installieren (PHP, MariaDB, Git, Webserver)
+#### 1. Install Required Packages
 ```bash
 apt update && apt install -y nginx mariadb-server git \
-  php-fpm php-mysql php-mbstring php-gd php-zip php-xml php-curl
+  php-fpm php-mysql php-mbstring php-gd php-zip php-xml php-curl qpdf ghostscript
 ```
 
-#### 2. Datenbank und Datenbank-Benutzer anlegen
-*(Ersetze `StarkesPasswortHier!` durch ein eigenes sicheres Passwort)*
+#### 2. Create Database & User
+*(Replace `StrongPasswordHere!` with your own secure password)*
 ```bash
 mysql -e "CREATE DATABASE minicloud CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -e "CREATE USER 'minicloud_user'@'localhost' IDENTIFIED BY 'StarkesPasswortHier!';"
+mysql -e "CREATE USER 'minicloud_user'@'localhost' IDENTIFIED BY 'StrongPasswordHere!';"
 mysql -e "GRANT ALL PRIVILEGES ON minicloud.* TO 'minicloud_user'@'localhost'; FLUSH PRIVILEGES;"
 ```
 
-#### 3. MiniCloud herunterladen und Berechtigungen setzen
+#### 3. Clone Repository & Set Permissions
 ```bash
 cd /var/www/html
 git clone https://github.com/uWiiiMiniCloud/MiniCloud.git cloud
@@ -140,22 +126,19 @@ chown -R www-data:www-data /var/www/html/cloud
 chmod 750 /var/www/html/cloud/uploads
 ```
 
-#### 4. Datenbank-Passwort in `config/database.php` eintragen
-Öffne `/var/www/html/cloud/config/database.php` (z. B. mit `nano /var/www/html/cloud/config/database.php`) und trage dein gewähltes Datenbank-Passwort bei `DB_PASS` ein.
+#### 4. Configure `config/database.php`
+Edit `/var/www/html/cloud/config/database.php` and set `DB_NAME`, `DB_USER`, and `DB_PASS`.
 
-#### 5. Wichtig bei Nutzung von Nginx (Upload-Ordner schützen & WebDAV/CardDAV aktivieren)
-Wenn du **Nginx** statt Apache verwendest, füge in deiner Nginx-Konfiguration (`/etc/nginx/sites-available/...`) diese beiden Anpassungen ein:
-
-1. **Upload-Ordner direkt sperren:**
+#### 5. Nginx Configuration (Protect `uploads/` & Enable `PATH_INFO` for WebDAV/CardDAV/CalDAV)
+If you use **Nginx** instead of Apache, add these two blocks inside your `server { ... }` block:
 ```nginx
+# 1. Block direct web access to uploaded binary files
 location ^~ /cloud/uploads/ {
     deny all;
     return 403;
 }
-```
-2. **PHP-Block für WebDAV (`webdav.php/...`) & CardDAV (`carddav.php/...`) mit `PATH_INFO` erweitern:**
-Damit Nginx auch Unterpfade hinter `.php` (z. B. `/cloud/webdav.php/Dokument.pdf` oder `/cloud/carddav.php/addressbooks/...`) an PHP-FPM weiterleitet und nicht auf die Startseite umleitet, ersetze `location ~ \.php$` durch:
-```nginx
+
+# 2. Pass PATH_INFO and HTTP_AUTHORIZATION for WebDAV, CardDAV & CalDAV
 location ~ [^/]\.php(/|$) {
     fastcgi_split_path_info ^(.+?\.php)(/.*)$;
     if (!-f $document_root$fastcgi_script_name) {
@@ -165,115 +148,39 @@ location ~ [^/]\.php(/|$) {
     fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     fastcgi_param PATH_INFO $fastcgi_path_info;
     fastcgi_param HTTP_AUTHORIZATION $http_authorization;
-    fastcgi_pass unix:/run/php/php-fpm.sock; # Pfad ggf. an deine PHP-FPM-Version anpassen (z. B. php8.2-fpm.sock)
+    fastcgi_pass unix:/run/php/php-fpm.sock; # Adjust socket path if needed (e.g. php8.2-fpm.sock)
 }
 ```
-*(Bei Apache erledigen die mitgelieferten Dateien `.htaccess` und `uploads/.htaccess` beides bereits automatisch.)*
+*(On Apache, the included `.htaccess` and `uploads/.htaccess` files handle both automatically.)*
 
 ---
 
-## 🔐 Erste Schritte nach der Installation (Wichtig!)
+## 🔐 First Steps After Installation
 
-1. **Erster Login als Administrator:**
-   Beim allerersten Start legt MiniCloud automatisch folgendes Standard-Administratorkonto an:
-   - **Benutzername:** `admin`
-   - **Initial-Passwort:** `Admin1234!`
-2. **Sofort das Admin-Passwort ändern:**
-   - Klicke oben rechts auf **Admin**.
-   - Scrolle zum Abschnitt **„Bestehende Benutzer verwalten“**.
-   - Gib in der Zeile von `admin` im Feld *„Neues Passwort (optional)“* dein eigenes, sicheres Passwort ein und klicke auf **Speichern**.
-3. **Eigenen Namen, Logo & 2FA (Google Authenticator oder E-Mail) einrichten:**
-   - Im übersichtlichen **5-Reiter-Admin-Bereich** kannst du unter **„🎨 Darstellung & Impressum“** deiner Cloud einen eigenen Namen und ein eigenes Logo geben.
-   - Jeder Benutzer kann in seinen **Einstellungen (⚙️)** die **Zwei-Faktor-Authentifizierung (2FA) per Google Authenticator / TOTP-App** direkt über einen **lokal erzeugten QR-Code** aktivieren – ganz ohne E-Mail-Server!
-   - Wenn du zusätzlich die **2FA per E-Mail** oder die **Passwort-vergessen-Funktion** nutzen möchtest, wähle im Admin-Reiter **„✉️ E-Mail & SMTP“** entweder den lokalen Server oder **Externer SMTP-Server** (und trage z. B. dein Postfach bei STRATO, IONOS oder Gmail ein).
-   - Mit dem Button **„✉️ Test-E-Mail senden“** kannst du sofort prüfen, ob die E-Mail-Zustellung klappt!
-4. **Große Dateien hochladen (Upload-Limit erhöhen):**
-   - Im Projekt liegt bereits eine fertige Datei **`.user.ini`** (`upload_max_filesize = 512M`, `post_max_size = 512M`), die von den meisten Webhostern automatisch erkannt wird.
-
----
-
-## 🌍 English Quickstart & Installation Guide
-
-### System Requirements
-- **PHP 8.2+** with standard extensions: `pdo_mysql`, `mbstring`, `fileinfo`, `gd`, `zip`, `openssl`
-- **MySQL 5.7+ / 8.0+** or **MariaDB 10.3+**
-- **Apache** (with `.htaccess`) or **Nginx** (HTTPS recommended for PWA support)
-
-### 3-Minute Setup
-1. **Create an empty MySQL/MariaDB database** on your hosting panel or server.
-2. **Configure database credentials** in `config/database.php` (lines 11–16: `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`).
-3. **Upload all files** to your web server and ensure the web server user (`www-data`) has write permissions on the `uploads/` directory.
-4. **Open the URL in your browser:** MiniCloud automatically creates all required database tables on the first visit (*Zero-Click Auto-Migration*) and creates the initial admin account:
+1. **Sign in with the initial Administrator account:**
    - **Username:** `admin`
-   - **Initial Password:** `Admin1234!` *(Please change immediately in the **Admin** panel!)*
-5. **Switch Language:** Use the language selector in the top navigation bar to switch between **🇩🇪 Deutsch, 🇬🇧 English, 🇫🇷 Français, 🇪🇸 Español, 🇮🇹 Italiano, and 🇳🇱 Nederlands**.
+   - **Initial Password:** `Admin1234!`
+2. **Change the Admin Password Immediately:**
+   - Open **Admin** in the top navigation bar $\rightarrow$ tab **👥 Users & Groups**, enter a strong new password for `admin`, and click **Save**.
+3. **Enable Two-Factor Authentication (2FA):**
+   - Go to **Settings (`⚙️`)** to enable **TOTP Authenticator App 2FA** (Google Authenticator, Authy, Bitwarden, etc. via locally generated SVG QR code) or **Email 2FA**.
+4. **Customize Language, Theme & Modules:**
+   - Switch between **11 languages** and **13 color themes** in the header or user settings, and click **`⊞ Module`** (`modules.php`) to pin your favorite tools to the top bar with a star (`⭐`).
 
 ---
 
-## 📂 Projektstruktur
+## 🔒 Security & Performance Architecture
 
-```text
-MiniCloud/
-├── assets/
-│   └── tailwind.js           # Lokal eingebundenes Tailwind CSS (100 % DSGVO-konform ohne externe CDN-Aufrufe)
-├── config/
-│   └── database.php          # PDO-Datenbankverbindung, Auto-Migration aller 14 Tabellen & Konstanten
-├── includes/
-│   ├── auth.php              # Session-Management, Timeout, Admin-/Login-Guards, 13 Themes & CSRF-Schutz
-│   ├── functions.php         # Hilfsfunktionen (Quota, 3-Stufen-Freigaben, AES-256-Tresor, TOTP/QR-Code, 2FA-Mail/SMTP)
-│   ├── office_functions.php  # OpenXML-Parser & -Generator für Word (.docx), Excel (.xlsx) und CSV ohne Zusatz-Server
-│   ├── i18n.php              # Mehrsprachigkeits-Modul für 6 Sprachen (DE, EN, FR, ES, IT, NL)
-│   ├── header.php            # Responsives Layout, 13 Farbthemes, Sprachwahl, Statusmeldungen & PWA-Header
-│   └── footer.php            # Footer mit Versionsanzeige, PWA-Dialog, Theme-Umschalter & Chat-System-Benachrichtigungen
-├── sql/
-│   └── schema.sql            # Vollständige MySQL-Datenbankstruktur (wird beim Erststart automatisch angelegt)
-├── uploads/
-│   ├── .htaccess             # Verhindert direkten Web-Zugriff & Skriptausführung auf Apache
-│   └── index.php             # 403-Fallback-Schutz
-├── index.php                 # Geschütztes Datei-Dashboard (Uploads, Office-Light-Start, Vorschau-Modal, Tresor, Freigaben)
-├── dashboard.php             # Persönliches Tages-Cockpit „Mein Tag“ mit per ⭐ ein-/ausblendbaren Kacheln
-├── office.php                # MiniCloud Office Light (Online-Editor für Word .docx, Excel .xlsx, .csv, .txt & .md)
-├── calendar.php              # Kalender-Modul (Monats-/Listenansicht, Serien, 3-Stufen-Kalender-Freigabe, .ics-Abo)
-├── caldav.php                # Nativer CalDAV-Server (RFC 4791) für 2-Wege-Kalender-Synchronisation (iOS, macOS, Thunderbird, DAVx⁵)
-├── messages.php              # Integrierter Messenger (1:1-Chat, Sprachnachrichten, Admin-Rundnachrichten, Mobil-Ansicht)
-├── tasks.php                 # Aufgaben & Kanban-Board (Drag & Drop, Prioritäten, Checklisten, Dateianhänge, Teilen)
-├── notes.php                 # Digitale Haftnotizwand / Pinboard (Farben, #Tags, Anpinnen, .md-Cloud-Export)
-├── contacts.php              # Adressbuch & Kontakte (vCard Import/Export, .vcf-Abo mit QR-Code, Kalender-Geburtstage)
-├── carddav.php               # Nativer CardDAV-Server (RFC 6352) für 2-Wege-Sync mit iOS, macOS, Thunderbird & Android
-├── polls.php                 # Terminfinder & Abstimmungen (interne & öffentliche Umfragen inkl. 1-Klick-Kalenderübernahme)
-├── menti.php                 # Live-Mentimeter & Publikums-Voting (Wortwolke, Live-Balken, Skala, Q&A, Quiz per QR & PIN)
-├── passwords.php             # AES-256-GCM-verschlüsselter Passwort-Manager & Schlüsselbund inkl. Passwort-Generator
-├── pdf_tools.php             # PDF-Werkzeugkasten & Dokumenten-Scanner (Kamera/Foto -> PDF mit S/W-Filter, Merge, Split, Kompression)
-├── webdav.php                # Nativer WebDAV-Server zum Einbinden als Netzlaufwerk (Windows, macOS, Linux, Mobil)
-├── settings.php              # Benutzereinstellungen (Sprache, 13 Themes, Timeout, Meldungsdauer, 2FA per E-Mail & Google Auth)
-├── trash.php                 # Papierkorb mit 30 Tagen Aufbewahrungsfrist
-├── folder_action.php         # Ordner erstellen, verschieben, kopieren und umbenennen
-├── vault_action.php          # Einzeldatei-Verschlüsselung & Entschlüsselung mit AES-256-GCM (Zero-Knowledge)
-├── share.php                 # Öffentliche Freigabe-Seite (optionaler BCRYPT-Passwortschutz & Ablaufdatum)
-├── share_action.php          # API-Endpunkt für öffentliche Freigabelinks & 3-stufige Benutzer-Direktfreigaben
-├── admin.php                 # 5-Reiter-Administration (Benutzer, Module, Branding, SMTP, 1-Klick-GitHub-Updater & Monitor)
-├── login.php                 # Login mit Brute-Force-Schutz, Passwort-vergessen-Link & 2FA (E-Mail oder Google Authenticator)
-├── forgot_password.php       # Passwort-Wiederherstellung per 30-Minuten-Einmal-Link (SHA-256-Token)
-├── logout.php                # Sicheres Beenden der PHP-Session (CSRF-geschützt)
-├── register.php              # Optionale Selbstregistrierung (standardmäßig aus, optional mit Einladungs-Code)
-├── upload.php                # Upload-Controller (Einzeldatei, Mehrfachdateien, ganze Ordner, freigegebene Ordner)
-├── download.php              # Geschützter Datei- & Ordner-ZIP-Download mit Berechtigungs- & Tresor-Prüfung
-├── delete.php                # Soft-Delete in den Papierkorb & Löschen von Ordnern (inkl. 3-Stufen-Rechteprüfung)
-├── theme.php                 # Speichert das gewählte Farbschema pro Benutzer
-├── lang.php                  # Speichert die gewählte Sprache (DE, EN, FR, ES, IT, NL)
-├── help.php                  # Integriertes Benutzer- und Administratorenhandbuch (6-sprachig)
-├── impressum.php             # Im Admin-Bereich frei konfigurierbares Impressum
-├── manifest.php              # Dynamisches Web-App-Manifest (PWA für Android & iOS)
-├── app-icon.php              # Dynamischer PNG-Icon-Generator (180x180, 192x192, 512x512 & Maskable)
-├── sw.js                     # Service Worker für PWA-Installation & native Chat-System-Benachrichtigungen
-├── Datenverzeichnis.md       # Vollständige Dokumentation aller Datenbanktabellen und Felder
-├── IT-Sicherheitskonzept.md  # Sicherheitsarchitektur, Kryptografie und Ergebnisse des Security Audits
-├── LICENSE                   # MIT Open-Source-Lizenz
-└── start.sh                  # Lokales Startskript für MariaDB + PHP-Entwicklungsserver
-```
+- **Strict SQL Injection Prevention:** 100% native PDO prepared statements (`PDO::ATTR_EMULATE_PREPARES => false`).
+- **Pseudonymized Storage & Zero-Knowledge Vault:** Uploaded files are stored outside direct web reach as `uploads/mc_<uniqid>_<hex16>.bin` (`0640`) protected by `.htaccess` (`Require all denied`), with optional AES-256-GCM encryption.
+- **Hardened Security Headers & CSRF Tokens:** Every state-changing request verifies a 256-bit session CSRF token; responses enforce `Content-Security-Policy: frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`.
+- **Real-Time Lockout & Rate Limiting:** IP-based brute-force protection (`login_attempts`, max 5 failed attempts per 5 minutes) across web login, 2FA, Mentimeter PINs, and WebDAV/CardDAV/CalDAV endpoints, plus instant account lockout enforcement (`is_locked`).
+- **High-Performance Request & Session Caching:** Global settings (`getAppSettings()`) are cached per request, and schema migration checks are cached per session so AJAX polling endpoints execute with minimal database overhead.
+
+For full technical details, see [`IT-Sicherheitskonzept.md`](IT-Sicherheitskonzept.md), [`Datenverzeichnis.md`](Datenverzeichnis.md), and [`sql/schema.sql`](sql/schema.sql).
 
 ---
 
-## 📜 Lizenz / License
+## 📜 License
 
-Dieses Projekt steht unter der **[MIT-Lizenz](LICENSE)** (Copyright (c) 2026 Uwe Benzelrath).
+Released under the **[MIT License](LICENSE)** — Copyright (c) 2026 Uwe Benzelrath.

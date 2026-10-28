@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS `users` (
     `reset_token_hash` VARCHAR(255) DEFAULT NULL COMMENT 'SHA-256-Hash des einmaligen Passwort-Reset-Tokens',
     `reset_expires_at` DATETIME DEFAULT NULL COMMENT 'Ablaufzeitpunkt des Passwort-Reset-Tokens (30 Min.)',
     `is_admin` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Administrator, 0 = Standardbenutzer',
+    `is_locked` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Konto vom Administrator gesperrt (Login, Session, DAV & Feeds blockiert)',
+    `lock_reason` VARCHAR(255) DEFAULT NULL COMMENT 'Optionaler Sperrgrund für den Benutzer',
+    `admin_permissions` VARCHAR(255) DEFAULT NULL COMMENT 'Kommagetrennte Teil-Admin-Bereiche: users, modules, branding, smtp, system',
     `theme` VARCHAR(24) NOT NULL DEFAULT 'light' COMMENT '13 Farbthemes inkl. light, dark, ocean, forest, obsidian',
     `session_timeout` INT UNSIGNED NOT NULL DEFAULT 30 COMMENT 'Inaktivitäts-Timeout in Minuten (0 = Nie)',
     `flash_duration` SMALLINT UNSIGNED NOT NULL DEFAULT 5 COMMENT 'Anzeigedauer für Statusmeldungen in Sekunden (0 = manuell schließen)',
@@ -646,4 +649,183 @@ CREATE TABLE IF NOT EXISTS `project_entries` (
     CONSTRAINT `fk_pe_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pe_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pe_milestone` FOREIGN KEY (`milestone_id`) REFERENCES `project_milestones` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 28. Tabellen für die E-Book-Bibliothek & den integrierten E-Reader (ebooks.php)
+CREATE TABLE IF NOT EXISTS `ebook_progress` (
+    `user_id` INT UNSIGNED NOT NULL,
+    `file_id` INT UNSIGNED NOT NULL,
+    `progress_percent` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    `current_page` INT UNSIGNED NOT NULL DEFAULT 1,
+    `total_pages` INT UNSIGNED NOT NULL DEFAULT 1,
+    `chapter_index` INT UNSIGNED NOT NULL DEFAULT 0,
+    `scroll_ratio` DECIMAL(6,4) NOT NULL DEFAULT 0.0000,
+    `font_size` SMALLINT UNSIGNED NOT NULL DEFAULT 18,
+    `reader_theme` VARCHAR(20) NOT NULL DEFAULT 'sepia',
+    `last_read_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`, `file_id`),
+    KEY `idx_ebp_last` (`user_id`, `last_read_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ebook_bookmarks` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `file_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(190) NOT NULL DEFAULT '',
+    `chapter_index` INT UNSIGNED NOT NULL DEFAULT 0,
+    `page_num` INT UNSIGNED NOT NULL DEFAULT 1,
+    `scroll_ratio` DECIMAL(6,4) NOT NULL DEFAULT 0.0000,
+    `note_text` VARCHAR(500) NOT NULL DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ebb_user_file` (`user_id`, `file_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ebook_metadata_cache` (
+    `file_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(255) NOT NULL DEFAULT '',
+    `author` VARCHAR(255) NOT NULL DEFAULT '',
+    `language` VARCHAR(32) NOT NULL DEFAULT '',
+    `description` TEXT DEFAULT NULL,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`file_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 29. Tabelle für den interaktiven Mind-Map-Editor & Ideensammler (mindmap.php)
+CREATE TABLE IF NOT EXISTS `mindmaps` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(190) NOT NULL,
+    `description` VARCHAR(500) NOT NULL DEFAULT '',
+    `icon` VARCHAR(16) NOT NULL DEFAULT '🧠',
+    `map_json` MEDIUMTEXT NOT NULL,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `share_token` VARCHAR(64) DEFAULT NULL,
+    `share_mode` VARCHAR(16) NOT NULL DEFAULT 'disabled',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_mm_token` (`share_token`),
+    KEY `idx_mm_user` (`user_id`, `updated_at`),
+    KEY `idx_mm_shared` (`shared_user_id`),
+    KEY `idx_mm_group` (`group_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 30. Tabellen für den Haushaltsplaner & die Finanz-Übersicht (budget.php)
+CREATE TABLE IF NOT EXISTS `budget_books` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `icon` VARCHAR(16) NOT NULL DEFAULT '💰',
+    `currency` VARCHAR(8) NOT NULL DEFAULT '€',
+    `monthly_budget` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `shared_user_id` INT UNSIGNED DEFAULT NULL,
+    `group_id` INT UNSIGNED DEFAULT NULL,
+    `share_token` VARCHAR(64) DEFAULT NULL,
+    `share_mode` VARCHAR(16) NOT NULL DEFAULT 'disabled',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `idx_bb_token` (`share_token`),
+    KEY `idx_bb_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `budget_entries` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `book_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `entry_type` VARCHAR(16) NOT NULL DEFAULT 'expense',
+    `category` VARCHAR(64) NOT NULL DEFAULT 'Sonstiges',
+    `title` VARCHAR(190) NOT NULL,
+    `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `entry_date` DATE NOT NULL,
+    `payment_method` VARCHAR(40) NOT NULL DEFAULT '',
+    `notes` VARCHAR(500) NOT NULL DEFAULT '',
+    `file_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_be_book_date` (`book_id`, `entry_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `budget_subscriptions` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `book_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `entry_type` VARCHAR(16) NOT NULL DEFAULT 'expense',
+    `category` VARCHAR(64) NOT NULL DEFAULT 'Verträge & Abos',
+    `title` VARCHAR(190) NOT NULL,
+    `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `billing_cycle` VARCHAR(16) NOT NULL DEFAULT 'monthly',
+    `next_due_date` DATE DEFAULT NULL,
+    `notice_period_days` INT UNSIGNED NOT NULL DEFAULT 30,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `notes` VARCHAR(500) NOT NULL DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_bs_book` (`book_id`, `is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `budget_goals` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `book_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `icon` VARCHAR(16) NOT NULL DEFAULT '🎯',
+    `target_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `current_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `target_date` DATE DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_bg_book` (`book_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 31. Tabellen für Browserspiele, Spielstände & Live-Mehrspieler-Duelle (games.php)
+CREATE TABLE IF NOT EXISTS `game_scores` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` INT UNSIGNED NOT NULL,
+    `username` VARCHAR(64) NOT NULL,
+    `game_key` VARCHAR(32) NOT NULL,
+    `score` INT UNSIGNED NOT NULL DEFAULT 0,
+    `level_reached` INT UNSIGNED NOT NULL DEFAULT 1,
+    `duration_sec` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_gs_game_score` (`game_key`, `score` DESC),
+    KEY `idx_gs_user_game` (`user_id`, `game_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `game_saves` (
+    `user_id` INT UNSIGNED NOT NULL,
+    `game_key` VARCHAR(32) NOT NULL,
+    `state_json` MEDIUMTEXT NOT NULL,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`, `game_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `game_matches` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `game_key` VARCHAR(32) NOT NULL,
+    `player1_id` INT UNSIGNED NOT NULL,
+    `player1_name` VARCHAR(64) NOT NULL,
+    `player2_id` INT UNSIGNED DEFAULT NULL,
+    `player2_name` VARCHAR(64) DEFAULT NULL,
+    `current_turn` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    `winner_id` INT UNSIGNED DEFAULT NULL,
+    `state_json` MEDIUMTEXT NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_gm_status` (`status`, `updated_at`),
+    KEY `idx_gm_players` (`player1_id`, `player2_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 32. Tabelle für Modul-Nutzungsstatistiken (modules.php – Sortierung nach Häufigkeit)
+CREATE TABLE IF NOT EXISTS `module_usage_stats` (
+    `user_id` INT UNSIGNED NOT NULL,
+    `module_key` VARCHAR(32) NOT NULL,
+    `visit_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `last_visited_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`, `module_key`),
+    KEY `idx_mus_user_count` (`user_id`, `visit_count` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

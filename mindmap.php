@@ -29,6 +29,13 @@ if (($appSettings['enable_mindmap'] ?? '1') !== '1' && !isAdmin()) {
  */
 function ensureMindmapSchema(PDO $pdo): void
 {
+    static $done = false;
+    if ($done || (!empty($_SESSION['_mc_mindmap_schema_ok']) && $_SESSION['_mc_mindmap_schema_ok'] === 1)) {
+        $done = true;
+        return;
+    }
+    $done = true;
+
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS `mindmaps` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -44,6 +51,10 @@ function ensureMindmapSchema(PDO $pdo): void
             KEY `idx_mindmaps_updated` (`updated_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_mc_mindmap_schema_ok'] = 1;
+    }
 }
 
 ensureMindmapSchema($pdo);
@@ -351,9 +362,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $content = (string)($_POST['content'] ?? '');
         $title   = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_\- ]/u', '', trim((string)($_POST['title'] ?? 'Mind-Map'))) ?: 'Mind-Map';
 
-        if ($content === '') {
-            echo json_encode(['ok' => false, 'error' => 'Keine Export-Daten übergeben.']);
+        if ($content === '' || strlen($content) > 10 * 1024 * 1024) {
+            echo json_encode(['ok' => false, 'error' => 'Ungültige oder zu große Export-Daten.']);
             exit;
+        }
+
+        if ($format === 'svg') {
+            // Sicherheits-Sanitisierung: keine ausführbaren Skripte oder Event-Handler in exportierten SVGs zulassen
+            $content = (string)preg_replace('#<script\b[^>]*>.*?</script>#is', '', $content);
+            $content = (string)preg_replace('/\bon[a-z]+\s*=\s*(["\']).*?\1/i', '', $content);
+            $content = (string)preg_replace('/javascript\s*:/i', '', $content);
         }
 
         $ext  = $format === 'svg' ? 'svg' : ($format === 'json' ? 'json' : 'md');

@@ -266,11 +266,12 @@ if (isset($_GET['ics_token']) && is_string($_GET['ics_token'])) {
         exit('Ungültiges Kalender-Token.');
     }
 
-    $stmtTokenUser = $pdo->prepare('SELECT id, username, calendar_token FROM users WHERE calendar_token = :t LIMIT 1');
+    ensureUserSecurityColumns($pdo);
+    $stmtTokenUser = $pdo->prepare('SELECT id, username, is_locked, calendar_token FROM users WHERE calendar_token = :t LIMIT 1');
     $stmtTokenUser->execute([':t' => $token]);
     $tokenUser = $stmtTokenUser->fetch();
 
-    if (!$tokenUser || !hash_equals((string)$tokenUser['calendar_token'], $token)) {
+    if (!$tokenUser || (int)($tokenUser['is_locked'] ?? 0) === 1 || !hash_equals((string)$tokenUser['calendar_token'], $token)) {
         http_response_code(404);
         exit('Kalender-Feed nicht gefunden.');
     }

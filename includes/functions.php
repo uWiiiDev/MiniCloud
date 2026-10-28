@@ -702,8 +702,12 @@ function getUploadErrorMessage(int $errorCode): string
  *
  * @return array{app_title: string, app_subtitle: string, logo_data_uri: string, imprint_text: string, mail_from: string, mail_transport: string, smtp_host: string, smtp_port: string, smtp_encryption: string, smtp_user: string, smtp_pass: string}
  */
-function getAppSettings(?PDO $pdo = null): array
+function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
 {
+    if (!$forceRefresh && isset($GLOBALS['_mc_app_settings_cache']) && is_array($GLOBALS['_mc_app_settings_cache'])) {
+        return $GLOBALS['_mc_app_settings_cache'];
+    }
+
     $defaults = [
         'app_title'                     => APP_NAME,
         'app_subtitle'                  => 'Private Cloud',
@@ -772,6 +776,7 @@ function getAppSettings(?PDO $pdo = null): array
         $defaults['github_repo'] = 'uWiiiMiniCloud/MiniCloud';
     }
 
+    $GLOBALS['_mc_app_settings_cache'] = $defaults;
     return $defaults;
 }
 
@@ -790,6 +795,9 @@ function saveAppSetting(PDO $pdo, string $key, string $value): void
         ':v_ins' => $value,
         ':v_upd' => $value,
     ]);
+    if (isset($GLOBALS['_mc_app_settings_cache']) && is_array($GLOBALS['_mc_app_settings_cache'])) {
+        $GLOBALS['_mc_app_settings_cache'][$key] = $value;
+    }
 }
 
 /**
@@ -2559,12 +2567,16 @@ function verifyDavBasicAuth(PDO $pdo, string $username, string $password, string
         return null;
     }
 
-    $stmtUser = $pdo->prepare("SELECT `id`, `username`, `password_hash` FROM `users` WHERE `username` = :u LIMIT 1");
+    if (function_exists('ensureUserSecurityColumns')) {
+        ensureUserSecurityColumns($pdo);
+    }
+
+    $stmtUser = $pdo->prepare("SELECT `id`, `username`, `password_hash`, `is_locked` FROM `users` WHERE `username` = :u LIMIT 1");
     $stmtUser->execute([':u' => $cleanUser]);
     $userRow = $stmtUser->fetch();
 
-    if (!$userRow) {
-        // Timing-Schutz
+    if (!$userRow || (int)($userRow['is_locked'] ?? 0) === 1) {
+        // Timing-Schutz & Sperrprüfung
         password_verify($password, '$2y$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW');
         return null;
     }
@@ -2900,7 +2912,8 @@ function getAccessibleCalendarEventsForDav(PDO $pdo, int $userId): array
 function ensureModuleUsageSchema(PDO $pdo): void
 {
     static $ensured = false;
-    if ($ensured) {
+    if ($ensured || (!empty($_SESSION['_mc_mod_usage_schema_ok']) && $_SESSION['_mc_mod_usage_schema_ok'] === 1)) {
+        $ensured = true;
         return;
     }
     $ensured = true;
@@ -2916,6 +2929,9 @@ function ensureModuleUsageSchema(PDO $pdo): void
                 KEY `idx_stat_date` (`stat_date`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_mod_usage_schema_ok'] = 1;
+        }
     } catch (Throwable) {
         // Ignorieren falls DB-Rechte eingeschränkt
     }
