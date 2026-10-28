@@ -17,6 +17,7 @@ function getOfficeEditorType(string $filename): ?string
         'docx' => 'word',
         'xlsx', 'csv' => 'sheet',
         'pptx' => 'slides',
+        'drawio', 'vsdx', 'diagram' => 'visio',
         'txt', 'md', 'html', 'htm' => 'text',
         default => null,
     };
@@ -32,6 +33,7 @@ function getOfficeMimeType(string $filename): string
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'drawio', 'diagram' => 'image/svg+xml',
         'csv'  => 'text/csv',
         'md'   => 'text/markdown',
         'html', 'htm' => 'text/html',
@@ -1582,6 +1584,236 @@ function writePptxData(array $deckData, string $targetPath): bool
             return false;
         }
         @unlink($tmpFile);
+    }
+    @chmod($targetPath, 0640);
+    return true;
+}
+
+// ============================================================================
+// 5. VISIO LIGHT (.DRAWIO / SVG-DIAGRAMME) LESEN & SCHREIBEN
+// ============================================================================
+
+/**
+ * Liest eine Visio-Light-Diagrammdatei (.drawio / SVG mit eingebetteten Metadaten)
+ * und gibt das strukturierte Diagramm-Array (theme, grid, nodes, edges) zurück.
+ *
+ * @return array{theme: string, grid: bool, nodes: array<int, array<string, mixed>>, edges: array<int, array<string, mixed>>}
+ */
+function readVisioData(string $filePath): array
+{
+    $defaultDiagram = [
+        'theme' => 'light',
+        'grid'  => true,
+        'nodes' => [
+            ['id' => 'n1', 'shape' => 'stadium', 'x' => 120, 'y' => 160, 'w' => 160, 'h' => 64, 'text' => 'Start', 'subtext' => 'Auslöser', 'color' => 'emerald'],
+            ['id' => 'n2', 'shape' => 'rect',    'x' => 380, 'y' => 160, 'w' => 190, 'h' => 74, 'text' => 'Erster Prozessschritt', 'subtext' => 'Bearbeitung', 'color' => 'blue'],
+        ],
+        'edges' => [
+            ['id' => 'e1', 'from' => 'n1', 'to' => 'n2', 'label' => '', 'style' => 'solid', 'routing' => 'curved'],
+        ],
+    ];
+
+    if (!is_file($filePath)) {
+        return $defaultDiagram;
+    }
+
+    $raw = @file_get_contents($filePath);
+    if (!is_string($raw) || trim($raw) === '') {
+        return $defaultDiagram;
+    }
+
+    // 1. Eingebettetes JSON im <desc id="minicloud-visio-data"> Element prüfen
+    if (preg_match('#<desc[^>]*id=["\']minicloud-visio-data["\'][^>]*>(.*?)</desc>#is', $raw, $m)) {
+        $jsonStr = html_entity_decode(trim($m[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+        $decoded = json_decode($jsonStr, true);
+        if (is_array($decoded) && isset($decoded['nodes']) && is_array($decoded['nodes'])) {
+            return [
+                'theme' => in_array(($decoded['theme'] ?? 'light'), ['light', 'blueprint', 'dark', 'plain'], true) ? (string)$decoded['theme'] : 'light',
+                'grid'  => (bool)($decoded['grid'] ?? true),
+                'nodes' => array_values($decoded['nodes']),
+                'edges' => isset($decoded['edges']) && is_array($decoded['edges']) ? array_values($decoded['edges']) : [],
+            ];
+        }
+    }
+
+    // 2. Fallback: Datei ist direkt JSON
+    $decodedRaw = json_decode($raw, true);
+    if (is_array($decodedRaw) && isset($decodedRaw['nodes']) && is_array($decodedRaw['nodes'])) {
+        return [
+            'theme' => in_array(($decodedRaw['theme'] ?? 'light'), ['light', 'blueprint', 'dark', 'plain'], true) ? (string)$decodedRaw['theme'] : 'light',
+            'grid'  => (bool)($decodedRaw['grid'] ?? true),
+            'nodes' => array_values($decodedRaw['nodes']),
+            'edges' => isset($decodedRaw['edges']) && is_array($decodedRaw['edges']) ? array_values($decodedRaw['edges']) : [],
+        ];
+    }
+
+    return $defaultDiagram;
+}
+
+/**
+ * Speichert ein Visio-Light-Diagramm als eigenständige, standardkonforme SVG-Vektorgrafik (.drawio)
+ * inklusive verlustfreier JSON-Metadaten (<desc id="minicloud-visio-data">).
+ *
+ * @param array<string, mixed> $diagramData
+ */
+function writeVisioData(array $diagramData, string $targetPath): bool
+{
+    $theme = in_array(($diagramData['theme'] ?? 'light'), ['light', 'blueprint', 'dark', 'plain'], true)
+        ? (string)$diagramData['theme']
+        : 'light';
+    $grid  = (bool)($diagramData['grid'] ?? true);
+
+    $rawNodes = isset($diagramData['nodes']) && is_array($diagramData['nodes']) ? $diagramData['nodes'] : [];
+    $rawEdges = isset($diagramData['edges']) && is_array($diagramData['edges']) ? $diagramData['edges'] : [];
+
+    $allowedShapes = ['rect', 'round', 'diamond', 'stadium', 'person', 'cylinder', 'cloud', 'note'];
+    $allowedColors = ['blue', 'emerald', 'amber', 'rose', 'violet', 'slate'];
+
+    $cleanNodes = [];
+    $nodeMap = [];
+    foreach ($rawNodes as $idx => $n) {
+        if (!is_array($n)) {
+            continue;
+        }
+        $id = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($n['id'] ?? ('n' . ($idx + 1)))) ?: ('n' . ($idx + 1));
+        $shape = in_array(($n['shape'] ?? 'rect'), $allowedShapes, true) ? (string)$n['shape'] : 'rect';
+        $color = in_array(($n['color'] ?? 'blue'), $allowedColors, true) ? (string)$n['color'] : 'blue';
+        $x = max(10, min(4000, (int)round((float)($n['x'] ?? 100))));
+        $y = max(10, min(3000, (int)round((float)($n['y'] ?? 100))));
+        $w = max(80, min(600, (int)round((float)($n['w'] ?? 170))));
+        $h = max(44, min(400, (int)round((float)($n['h'] ?? 72))));
+        $text = mb_substr(trim((string)($n['text'] ?? 'Knoten')), 0, 200);
+        $subtext = mb_substr(trim((string)($n['subtext'] ?? '')), 0, 200);
+
+        $item = [
+            'id'      => $id,
+            'shape'   => $shape,
+            'x'       => $x,
+            'y'       => $y,
+            'w'       => $w,
+            'h'       => $h,
+            'text'    => $text,
+            'subtext' => $subtext,
+            'color'   => $color,
+        ];
+        $cleanNodes[] = $item;
+        $nodeMap[$id] = $item;
+    }
+
+    $cleanEdges = [];
+    foreach ($rawEdges as $idx => $e) {
+        if (!is_array($e)) {
+            continue;
+        }
+        $from = (string)($e['from'] ?? '');
+        $to   = (string)($e['to'] ?? '');
+        if ($from === '' || $to === '' || $from === $to || !isset($nodeMap[$from], $nodeMap[$to])) {
+            continue;
+        }
+        $cleanEdges[] = [
+            'id'      => preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($e['id'] ?? ('e' . ($idx + 1)))) ?: ('e' . ($idx + 1)),
+            'from'    => $from,
+            'to'      => $to,
+            'label'   => mb_substr(trim((string)($e['label'] ?? '')), 0, 120),
+            'style'   => (($e['style'] ?? 'solid') === 'dashed') ? 'dashed' : 'solid',
+            'routing' => in_array(($e['routing'] ?? 'curved'), ['curved', 'straight', 'ortho'], true) ? (string)$e['routing'] : 'curved',
+        ];
+    }
+
+    $palettes = [
+        'blue'    => ['fill' => '#EFF6FF', 'stroke' => '#2563EB', 'text' => '#1E3A8A', 'sub' => '#3B82F6'],
+        'emerald' => ['fill' => '#ECFDF5', 'stroke' => '#059669', 'text' => '#064E3B', 'sub' => '#10B981'],
+        'amber'   => ['fill' => '#FFFBEB', 'stroke' => '#D97706', 'text' => '#78350F', 'sub' => '#D97706'],
+        'rose'    => ['fill' => '#FFF1F2', 'stroke' => '#E11D48', 'text' => '#881337', 'sub' => '#F43F5E'],
+        'violet'  => ['fill' => '#F5F3FF', 'stroke' => '#7C3AED', 'text' => '#4C1D95', 'sub' => '#8B5CF6'],
+        'slate'   => ['fill' => '#F8FAFC', 'stroke' => '#475569', 'text' => '#0F172A', 'sub' => '#64748B'],
+    ];
+
+    $bgColor = match ($theme) {
+        'blueprint' => '#0F172A',
+        'dark'      => '#18181B',
+        default     => '#F8FAFC',
+    };
+    $edgeColor = ($theme === 'blueprint' || $theme === 'dark') ? '#94A3B8' : '#475569';
+
+    $maxX = 1100;
+    $maxY = 720;
+    foreach ($cleanNodes as $n) {
+        $maxX = max($maxX, $n['x'] + $n['w'] + 80);
+        $maxY = max($maxY, $n['y'] + $n['h'] + 80);
+    }
+
+    $jsonPayload = htmlspecialchars(json_encode([
+        'theme' => $theme,
+        'grid'  => $grid,
+        'nodes' => $cleanNodes,
+        'edges' => $cleanEdges,
+    ], JSON_UNESCAPED_UNICODE), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+    $svg = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+        . '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $maxX . ' ' . $maxY . '" width="' . $maxX . '" height="' . $maxY . '" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">' . "\n"
+        . '<desc id="minicloud-visio-data">' . $jsonPayload . '</desc>' . "\n"
+        . '<defs>'
+        . '<marker id="visio-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+        . '<path d="M 0 1 L 10 5 L 0 9 z" fill="' . $edgeColor . '"/>'
+        . '</marker>'
+        . '<filter id="visio-shadow" x="-8%" y="-8%" width="116%" height="120%">'
+        . '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.10"/>'
+        . '</filter>'
+        . '</defs>'
+        . '<rect width="100%" height="100%" fill="' . $bgColor . '"/>';
+
+    foreach ($cleanEdges as $e) {
+        $n1 = $nodeMap[$e['from']];
+        $n2 = $nodeMap[$e['to']];
+        $x1 = $n1['x'] + ($n1['w'] / 2);
+        $y1 = $n1['y'] + ($n1['h'] / 2);
+        $x2 = $n2['x'] + ($n2['w'] / 2);
+        $y2 = $n2['y'] + ($n2['h'] / 2);
+        $dash = $e['style'] === 'dashed' ? ' stroke-dasharray="6,5"' : '';
+        $svg .= '<line x1="' . round($x1, 1) . '" y1="' . round($y1, 1) . '" x2="' . round($x2, 1) . '" y2="' . round($y2, 1) . '" stroke="' . $edgeColor . '" stroke-width="2.2"' . $dash . ' marker-end="url(#visio-arrow)"/>';
+        if ($e['label'] !== '') {
+            $mx = round(($x1 + $x2) / 2, 1);
+            $my = round(($y1 + $y2) / 2 - 6, 1);
+            $escLbl = htmlspecialchars($e['label'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $svg .= '<text x="' . $mx . '" y="' . $my . '" text-anchor="middle" font-size="11" font-weight="bold" fill="' . $edgeColor . '">' . $escLbl . '</text>';
+        }
+    }
+
+    foreach ($cleanNodes as $n) {
+        $pal = $palettes[$n['color']] ?? $palettes['blue'];
+        $x = $n['x'];
+        $y = $n['y'];
+        $w = $n['w'];
+        $h = $n['h'];
+        $cx = round($x + $w / 2, 1);
+        $cy = round($y + $h / 2, 1);
+
+        if ($n['shape'] === 'diamond') {
+            $pts = $cx . ',' . $y . ' ' . ($x + $w) . ',' . $cy . ' ' . $cx . ',' . ($y + $h) . ' ' . $x . ',' . $cy;
+            $svg .= '<polygon points="' . $pts . '" fill="' . $pal['fill'] . '" stroke="' . $pal['stroke'] . '" stroke-width="2.2" filter="url(#visio-shadow)"/>';
+        } elseif ($n['shape'] === 'stadium') {
+            $r = round($h / 2, 1);
+            $svg .= '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" rx="' . $r . '" fill="' . $pal['fill'] . '" stroke="' . $pal['stroke'] . '" stroke-width="2.2" filter="url(#visio-shadow)"/>';
+        } else {
+            $rx = ($n['shape'] === 'round' || $n['shape'] === 'person') ? 14 : 6;
+            $svg .= '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" rx="' . $rx . '" fill="' . $pal['fill'] . '" stroke="' . $pal['stroke'] . '" stroke-width="2.2" filter="url(#visio-shadow)"/>';
+        }
+
+        $escTitle = htmlspecialchars($n['text'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        $escSub   = htmlspecialchars($n['subtext'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        if ($escSub !== '') {
+            $svg .= '<text x="' . $cx . '" y="' . ($cy - 4) . '" text-anchor="middle" font-size="13" font-weight="bold" fill="' . $pal['text'] . '">' . $escTitle . '</text>';
+            $svg .= '<text x="' . $cx . '" y="' . ($cy + 14) . '" text-anchor="middle" font-size="11" fill="' . $pal['sub'] . '">' . $escSub . '</text>';
+        } else {
+            $svg .= '<text x="' . $cx . '" y="' . ($cy + 5) . '" text-anchor="middle" font-size="13" font-weight="bold" fill="' . $pal['text'] . '">' . $escTitle . '</text>';
+        }
+    }
+
+    $svg .= '</svg>';
+
+    if (@file_put_contents($targetPath, $svg) === false) {
+        return false;
     }
     @chmod($targetPath, 0640);
     return true;

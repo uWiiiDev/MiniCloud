@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $groupFolderId  = isset($_POST['group_folder_id']) ? (int)$_POST['group_folder_id'] : 0;
     $sharedFolderId = isset($_POST['shared_folder_id']) ? (int)$_POST['shared_folder_id'] : 0;
 
-    if (!in_array($docType, ['docx', 'xlsx', 'pptx', 'csv', 'txt', 'md'], true)) {
+    if (!in_array($docType, ['docx', 'xlsx', 'pptx', 'drawio', 'csv', 'txt', 'md'], true)) {
         $docType = 'docx';
     }
 
@@ -144,12 +144,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     // Dateiname bereinigen und passende Endung sicherstellen
     if ($rawDocName === '') {
         $rawDocName = match ($docType) {
-            'xlsx' => 'Neue_Tabelle_' . date('Y-m-d'),
-            'pptx' => 'Neue_Praesentation_' . date('Y-m-d'),
-            'csv'  => 'Neue_Liste_' . date('Y-m-d'),
-            'txt'  => 'Neue_Notiz_' . date('Y-m-d'),
-            'md'   => 'Neues_Protokoll_' . date('Y-m-d'),
-            default => 'Neues_Dokument_' . date('Y-m-d'),
+            'xlsx'   => 'Neue_Tabelle_' . date('Y-m-d'),
+            'pptx'   => 'Neue_Praesentation_' . date('Y-m-d'),
+            'drawio' => 'Neues_Diagramm_' . date('Y-m-d'),
+            'csv'    => 'Neue_Liste_' . date('Y-m-d'),
+            'txt'    => 'Neue_Notiz_' . date('Y-m-d'),
+            'md'     => 'Neues_Protokoll_' . date('Y-m-d'),
+            default  => 'Neues_Dokument_' . date('Y-m-d'),
         };
     }
 
@@ -299,6 +300,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             ];
         }
         $createdOk = writePptxData($starterDeck, $physicalPath);
+    } elseif ($docType === 'drawio') {
+        if ($templateKey === 'orgchart_visio') {
+            $starterVisio = [
+                'theme' => 'light',
+                'grid'  => true,
+                'nodes' => [
+                    ['id' => 'n1', 'shape' => 'person', 'x' => 380, 'y' => 50,  'w' => 200, 'h' => 76, 'text' => '1. Vorsitzende/r', 'subtext' => 'Gesamtleitung & Vertretung', 'color' => 'blue'],
+                    ['id' => 'n2', 'shape' => 'person', 'x' => 110, 'y' => 200, 'w' => 185, 'h' => 72, 'text' => '2. Vorsitzende/r', 'subtext' => 'Stellvertretung', 'color' => 'emerald'],
+                    ['id' => 'n3', 'shape' => 'person', 'x' => 388, 'y' => 200, 'w' => 185, 'h' => 72, 'text' => 'Kassenwart/in', 'subtext' => 'Finanzen & Beiträge', 'color' => 'amber'],
+                    ['id' => 'n4', 'shape' => 'person', 'x' => 665, 'y' => 200, 'w' => 185, 'h' => 72, 'text' => 'Schriftführer/in', 'subtext' => 'Protokolle & Presse', 'color' => 'violet'],
+                    ['id' => 'n5', 'shape' => 'round',  'x' => 240, 'y' => 350, 'w' => 190, 'h' => 68, 'text' => 'Jugend- & Sportwart', 'subtext' => 'Training & Events', 'color' => 'rose'],
+                    ['id' => 'n6', 'shape' => 'round',  'x' => 530, 'y' => 350, 'w' => 190, 'h' => 68, 'text' => 'Geräte- & Hauswart', 'subtext' => 'Inventar & Anlage', 'color' => 'slate'],
+                ],
+                'edges' => [
+                    ['id' => 'e1', 'from' => 'n1', 'to' => 'n2', 'label' => '', 'style' => 'solid', 'routing' => 'ortho'],
+                    ['id' => 'e2', 'from' => 'n1', 'to' => 'n3', 'label' => '', 'style' => 'solid', 'routing' => 'ortho'],
+                    ['id' => 'e3', 'from' => 'n1', 'to' => 'n4', 'label' => '', 'style' => 'solid', 'routing' => 'ortho'],
+                    ['id' => 'e4', 'from' => 'n2', 'to' => 'n5', 'label' => '', 'style' => 'solid', 'routing' => 'ortho'],
+                    ['id' => 'e5', 'from' => 'n3', 'to' => 'n6', 'label' => '', 'style' => 'solid', 'routing' => 'ortho'],
+                ],
+            ];
+        } elseif ($templateKey === 'flowchart_visio') {
+            $starterVisio = [
+                'theme' => 'light',
+                'grid'  => true,
+                'nodes' => [
+                    ['id' => 'n1', 'shape' => 'stadium', 'x' => 80,  'y' => 180, 'w' => 150, 'h' => 64, 'text' => 'Start / Eingang', 'subtext' => 'Neue Anfrage', 'color' => 'emerald'],
+                    ['id' => 'n2', 'shape' => 'rect',    'x' => 290, 'y' => 176, 'w' => 180, 'h' => 72, 'text' => 'Unterlagen prüfen', 'subtext' => 'Vollständigkeit', 'color' => 'blue'],
+                    ['id' => 'n3', 'shape' => 'diamond', 'x' => 535, 'y' => 162, 'w' => 170, 'h' => 100,'text' => 'Freigabe OK?', 'subtext' => 'Prüfergebnis', 'color' => 'amber'],
+                    ['id' => 'n4', 'shape' => 'round',   'x' => 775, 'y' => 95,  'w' => 180, 'h' => 70, 'text' => 'Umsetzung starten', 'subtext' => 'Freigegeben', 'color' => 'emerald'],
+                    ['id' => 'n5', 'shape' => 'note',    'x' => 775, 'y' => 260, 'w' => 180, 'h' => 70, 'text' => 'Rückfrage senden', 'subtext' => 'Korrektur nötig', 'color' => 'rose'],
+                ],
+                'edges' => [
+                    ['id' => 'e1', 'from' => 'n1', 'to' => 'n2', 'label' => '',     'style' => 'solid',  'routing' => 'curved'],
+                    ['id' => 'e2', 'from' => 'n2', 'to' => 'n3', 'label' => '',     'style' => 'solid',  'routing' => 'curved'],
+                    ['id' => 'e3', 'from' => 'n3', 'to' => 'n4', 'label' => 'Ja',   'style' => 'solid',  'routing' => 'curved'],
+                    ['id' => 'e4', 'from' => 'n3', 'to' => 'n5', 'label' => 'Nein', 'style' => 'dashed', 'routing' => 'curved'],
+                ],
+            ];
+        } else {
+            $starterVisio = [
+                'theme' => 'light',
+                'grid'  => true,
+                'nodes' => [
+                    ['id' => 'n1', 'shape' => 'stadium', 'x' => 140, 'y' => 180, 'w' => 160, 'h' => 64, 'text' => 'Start', 'subtext' => 'Auslöser', 'color' => 'emerald'],
+                    ['id' => 'n2', 'shape' => 'rect',    'x' => 390, 'y' => 176, 'w' => 190, 'h' => 72, 'text' => 'Prozessschritt 1', 'subtext' => 'Beschreibung', 'color' => 'blue'],
+                ],
+                'edges' => [
+                    ['id' => 'e1', 'from' => 'n1', 'to' => 'n2', 'label' => '', 'style' => 'solid', 'routing' => 'curved'],
+                ],
+            ];
+        }
+        $createdOk = writeVisioData($starterVisio, $physicalPath);
     } elseif ($docType === 'md') {
         if ($templateKey === 'md_notes') {
             $starterMd = "# 📝 {$docTitle}\n\n_Erstellt am " . date('d.m.Y') . "_\n\n## 🎯 Ziele & Zusammenfassung\n- Punkt 1\n- Punkt 2\n\n## ✅ Checkliste\n- [ ] Erster Schritt\n- [ ] Zweiter Schritt\n\n## 💡 Notizen\nHier Text eingeben...\n";
@@ -440,6 +494,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             exit;
         }
         $writeOk = writePptxData($decodedDeck, $tmpSave);
+    } elseif ($editorType === 'visio') {
+        $visioJson = (string)($_POST['visio_json'] ?? '{}');
+        $decodedVisio = json_decode($visioJson, true);
+        if (!is_array($decodedVisio)) {
+            @unlink($tmpSave);
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Ungültige Diagrammdaten übermittelt.']);
+            exit;
+        }
+        $writeOk = writeVisioData($decodedVisio, $tmpSave);
     } else {
         $textContent = (string)($_POST['text_content'] ?? '');
         $writeOk = (@file_put_contents($tmpSave, $textContent) !== false);
@@ -615,12 +679,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'colla
                 $tKey    = mb_substr(trim((string)($d['target'] ?? '')), 0, 120);
                 $payload = $d['payload'] ?? null;
 
-                if (!in_array($dType, ['sheet_cell', 'sheet_full', 'word_block', 'word_full', 'slides_slide', 'slides_full', 'text_full'], true) || $payload === null) {
+                if (!in_array($dType, ['sheet_cell', 'sheet_full', 'word_block', 'word_full', 'slides_slide', 'slides_full', 'visio_node', 'visio_full', 'text_full'], true) || $payload === null) {
                     continue;
                 }
 
-                // Konfliktprüfung für Einzel-Zelle, Einzel-Absatz oder Einzel-Folie: Ist genau dieses Element gerade von jemand anderem fokussiert?
-                if (in_array($dType, ['sheet_cell', 'word_block', 'slides_slide'], true) && $tKey !== '') {
+                // Konfliktprüfung für Einzel-Zelle, Einzel-Absatz, Einzel-Folie oder Einzel-Knoten: Ist genau dieses Element gerade von jemand anderem fokussiert?
+                if (in_array($dType, ['sheet_cell', 'word_block', 'slides_slide', 'visio_node'], true) && $tKey !== '') {
                     $stmtCheckLock->execute([':fid' => $fileId, ':uid' => $userId, ':ft' => $tKey]);
                     $lockedByUser = $stmtCheckLock->fetchColumn();
                     if ($lockedByUser !== false) {
@@ -824,6 +888,38 @@ if ($fileId <= 0) {
         ];
     }
 
+    // 4. Mind-Maps des Benutzers (und mit ihm geteilte Mind-Maps) direkt in die Office-Zentrale einbinden
+    try {
+        $stmtMm = $pdo->prepare(
+            'SELECT m.id, m.user_id, m.title, m.description, m.map_json, m.updated_at, u.username AS owner_username
+             FROM mindmaps m
+             LEFT JOIN users u ON u.id = m.user_id
+             WHERE m.user_id = :uid OR FIND_IN_SET(:uid_str, m.shared_users) > 0
+             ORDER BY m.updated_at DESC
+             LIMIT 100'
+        );
+        $stmtMm->execute([':uid' => $userId, ':uid_str' => (string)$userId]);
+        foreach ($stmtMm->fetchAll() as $mmRow) {
+            $mmId = (int)$mmRow['id'];
+            $isOwnMm = ((int)$mmRow['user_id'] === $userId);
+            $officeDocs[] = [
+                'id'           => -$mmId,
+                'open_url'     => 'mindmap.php?id=' . $mmId,
+                'name'         => (string)$mmRow['title'],
+                'ext'          => 'mindmap',
+                'editor_type'  => 'mindmap',
+                'folder'       => '🧠 Mind-Map-Editor',
+                'group_folder' => '',
+                'size'         => formatBytes(strlen((string)($mmRow['map_json'] ?? ''))),
+                'date'         => date('d.m.Y H:i', strtotime((string)$mmRow['updated_at']) ?: time()),
+                'owner'        => (string)($mmRow['owner_username'] ?? ''),
+                'is_shared'    => !$isOwnMm,
+                'can_write'    => true,
+                'live_count'   => 0,
+            ];
+        }
+    } catch (Throwable) {}
+
     // Eigene Ordner für die Ordner-Vorschlagsliste laden
     $stmtFolders = $pdo->prepare(
         "SELECT DISTINCT folder_path FROM files WHERE user_id = :uid AND deleted_at IS NULL AND folder_path <> '' ORDER BY folder_path ASC"
@@ -831,11 +927,13 @@ if ($fileId <= 0) {
     $stmtFolders->execute([':uid' => $userId]);
     $myFolders = $stmtFolders->fetchAll(PDO::FETCH_COLUMN);
 
-    $countWord   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'word'));
-    $countSheet  = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'sheet'));
-    $countSlides = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'slides'));
-    $countText   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'text'));
-    $countShared = count(array_filter($officeDocs, static fn(array $d): bool => $d['is_shared']));
+    $countWord    = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'word'));
+    $countSheet   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'sheet'));
+    $countSlides  = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'slides'));
+    $countVisio   = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'visio'));
+    $countMindmap = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'mindmap'));
+    $countText    = count(array_filter($officeDocs, static fn(array $d): bool => $d['editor_type'] === 'text'));
+    $countShared  = count(array_filter($officeDocs, static fn(array $d): bool => $d['is_shared']));
 
     $pageTitle = '📝 Office Light – Zentrale & Vorlagen';
     require_once __DIR__ . '/includes/header.php';
@@ -849,25 +947,30 @@ if ($fileId <= 0) {
                     <span>MiniCloud Office Light</span>
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Word-Dokumente (<code>.docx</code>), Excel-Tabellen (<code>.xlsx</code> / <code>.csv</code>), PowerPoint-Präsentationen (<code>.pptx</code>) und Markdown-Dateien direkt im Browser erstellen, im Team live bearbeiten und präsentieren – 100 % lokal auf deinem Server.
+                    Word (<code>.docx</code>), Excel (<code>.xlsx</code>), PowerPoint (<code>.pptx</code>), Visio-Diagramme (<code>.drawio</code>), Mind-Maps und Markdown direkt im Browser erstellen und im Team live bearbeiten – 100 % lokal auf deinem Server.
                 </p>
             </div>
-            <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors shrink-0">
-                📁 Zur Dateiverwaltung &rarr;
-            </a>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                <a href="mindmap.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800 text-xs sm:text-sm font-semibold transition-colors">
+                    🧠 Mind-Map-Editor &rarr;
+                </a>
+                <a href="index.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors">
+                    📁 Zur Dateiverwaltung &rarr;
+                </a>
+            </div>
         </div>
 
         <!-- 1. Neues Dokument oder Vorlage starten -->
         <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✨ Neues Office-Dokument erstellen</h2>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle eine Schnell-Vorlage oder lege direkt ein leeres Word-, Excel- oder Markdown-Dokument an.</p>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">✨ Neues Office-Dokument, Diagramm oder Mind-Map erstellen</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle eine Schnell-Vorlage für Word, Excel, PowerPoint, Visio-Flussdiagramme/Organigramme oder starte eine neue Mind-Map.</p>
                 </div>
             </div>
 
-            <!-- 8 Schnell-Vorlagen-Kacheln (Word, Excel & PowerPoint) -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+            <!-- 12 Schnell-Vorlagen-Kacheln (Word, Excel, PowerPoint, Visio & Mind-Map) -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
                 <button type="button" onclick="selectOfficePreset('docx', 'blank', 'Neues_Dokument')"
                         class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 text-left transition-all cursor-pointer group">
                     <div class="text-xl mb-1">📘</div>
@@ -923,6 +1026,34 @@ if ($fileId <= 0) {
                     <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-orange-700 dark:group-hover:text-orange-300">Vereins-/Projekt-Pitch</div>
                     <div class="text-[10px] text-slate-500">.pptx 4 Starter-Folien</div>
                 </button>
+
+                <button type="button" onclick="selectOfficePreset('drawio', 'blank', 'Diagramm_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 border border-teal-200 dark:border-teal-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">📐</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">Visio-Diagramm</div>
+                    <div class="text-[10px] text-slate-500">.drawio Formen &amp; Pfeile</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('drawio', 'orgchart_visio', 'Organigramm_' + new Date().getFullYear())"
+                        class="p-3 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 border border-teal-200 dark:border-teal-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">🏛️</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">Organigramm</div>
+                    <div class="text-[10px] text-slate-500">.drawio Vorstand / Team</div>
+                </button>
+
+                <button type="button" onclick="selectOfficePreset('drawio', 'flowchart_visio', 'Ablaufplan_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 border border-teal-200 dark:border-teal-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">🔀</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">Flussdiagramm</div>
+                    <div class="text-[10px] text-slate-500">.drawio Ja/Nein-Prozess</div>
+                </button>
+
+                <a href="mindmap.php"
+                   class="p-3 rounded-xl bg-violet-50/70 dark:bg-violet-950/40 hover:bg-violet-100 dark:hover:bg-violet-900/50 border border-violet-200 dark:border-violet-800/80 text-left transition-all cursor-pointer group block">
+                    <div class="text-xl mb-1">🧠</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-violet-700 dark:group-hover:text-violet-300">Mind-Map</div>
+                    <div class="text-[10px] text-slate-500">Ideen &amp; Strukturbaum</div>
+                </a>
             </div>
 
             <!-- Erstellungs-Formular -->
@@ -937,6 +1068,7 @@ if ($fileId <= 0) {
                         <option value="docx">📘 Word-Dokument (.docx)</option>
                         <option value="xlsx">📗 Excel-Tabelle (.xlsx)</option>
                         <option value="pptx">📙 PowerPoint-Präsentation (.pptx)</option>
+                        <option value="drawio">📐 Visio-Diagramm / Organigramm (.drawio)</option>
                         <option value="csv">📊 CSV-Tabelle (.csv)</option>
                         <option value="md">📒 Markdown (.md)</option>
                         <option value="txt">📄 Textdatei (.txt)</option>
@@ -988,6 +1120,14 @@ if ($fileId <= 0) {
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
                         📙 PowerPoint (<?= $countSlides ?>)
                     </button>
+                    <button type="button" data-office-filter="visio" onclick="filterOfficeHub('visio')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        📐 Visio (<?= $countVisio ?>)
+                    </button>
+                    <button type="button" data-office-filter="mindmap" onclick="filterOfficeHub('mindmap')"
+                            class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
+                        🧠 Mind-Maps (<?= $countMindmap ?>)
+                    </button>
                     <button type="button" data-office-filter="text" onclick="filterOfficeHub('text')"
                             class="office-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer">
                         📒 Text &amp; MD (<?= $countText ?>)
@@ -1011,7 +1151,7 @@ if ($fileId <= 0) {
                 <div class="p-12 text-center space-y-2">
                     <div class="text-3xl">📝</div>
                     <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Noch keine Office-Dokumente vorhanden</h3>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle oben eine Vorlage aus, um dein erstes Word-, Excel- oder Markdown-Dokument anzulegen.</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Wähle oben eine Vorlage aus, um dein erstes Word-, Excel-, PowerPoint-, Visio- oder Mind-Map-Dokument anzulegen.</p>
                 </div>
             <?php else: ?>
                 <div class="overflow-x-auto">
@@ -1028,7 +1168,12 @@ if ($fileId <= 0) {
                         <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800">
                             <?php foreach ($officeDocs as $doc): ?>
                                 <?php
-                                $badge = getFileTypeBadge($doc['name'], '');
+                                if ($doc['editor_type'] === 'mindmap') {
+                                    $badge = ['label' => 'MIND', 'bg' => 'bg-violet-100 dark:bg-violet-950/70', 'text' => 'text-violet-700 dark:text-violet-300'];
+                                } else {
+                                    $badge = getFileTypeBadge($doc['name'], '');
+                                }
+                                $docHref = $doc['open_url'] ?? ('office.php?id=' . (int)$doc['id']);
                                 $searchHay = mb_strtolower($doc['name'] . ' ' . $doc['folder'] . ' ' . $doc['owner'] . ' ' . $doc['ext'], 'UTF-8');
                                 ?>
                                 <tr data-office-doc-row="1"
@@ -1043,7 +1188,7 @@ if ($fileId <= 0) {
                                             </span>
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                                                    <a href="office.php?id=<?= (int)$doc['id'] ?>"
+                                                    <a href="<?= e($docHref) ?>"
                                                        class="font-semibold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[125px] sm:max-w-xs md:max-w-md block">
                                                         <?= e($doc['name']) ?>
                                                     </a>
@@ -1065,7 +1210,9 @@ if ($fileId <= 0) {
                                         </div>
                                     </td>
                                     <td class="py-3 px-4 hidden md:table-cell text-xs text-slate-600 dark:text-slate-300">
-                                        <?php if ($doc['group_folder'] !== ''): ?>
+                                        <?php if ($doc['editor_type'] === 'mindmap'): ?>
+                                            <a href="mindmap.php" class="hover:text-brand-600 hover:underline">🧠 Mind-Map-Editor</a>
+                                        <?php elseif ($doc['group_folder'] !== ''): ?>
                                             👥 <?= e($doc['group_folder']) ?><?= $doc['folder'] !== '' ? ' / ' . e($doc['folder']) : '' ?>
                                         <?php elseif ($doc['folder'] !== ''): ?>
                                             <a href="index.php?folder=<?= rawurlencode($doc['folder']) ?>" class="hover:text-brand-600 hover:underline">📁 <?= e($doc['folder']) ?></a>
@@ -1081,15 +1228,17 @@ if ($fileId <= 0) {
                                     </td>
                                     <td class="py-3 px-3 sm:px-5 text-right whitespace-nowrap">
                                         <div class="inline-flex items-center justify-end gap-1.5">
-                                            <a href="office.php?id=<?= (int)$doc['id'] ?>"
+                                            <a href="<?= e($docHref) ?>"
                                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition-colors">
                                                 <span><?= $doc['can_write'] ? '✏️ Bearbeiten' : '👁️ Öffnen' ?></span>
                                             </a>
-                                            <a href="download.php?id=<?= (int)$doc['id'] ?>"
-                                               class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs transition-colors"
-                                               title="Herunterladen">
-                                                ⬇️
-                                            </a>
+                                            <?php if ($doc['editor_type'] !== 'mindmap'): ?>
+                                                <a href="download.php?id=<?= (int)$doc['id'] ?>"
+                                                   class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs transition-colors"
+                                                   title="Herunterladen">
+                                                    ⬇️
+                                                </a>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                 </tr>
@@ -1139,6 +1288,8 @@ if ($fileId <= 0) {
             if (currentOfficeFilter === 'word') typeMatch = (dType === 'word');
             else if (currentOfficeFilter === 'sheet') typeMatch = (dType === 'sheet');
             else if (currentOfficeFilter === 'slides') typeMatch = (dType === 'slides');
+            else if (currentOfficeFilter === 'visio') typeMatch = (dType === 'visio');
+            else if (currentOfficeFilter === 'mindmap') typeMatch = (dType === 'mindmap');
             else if (currentOfficeFilter === 'text') typeMatch = (dType === 'text');
             else if (currentOfficeFilter === 'shared') typeMatch = dShared;
 
@@ -1193,11 +1344,12 @@ $physicalPath   = UPLOAD_DIR . $storedFilename;
 $isVaultLocked  = ((int)($file['is_encrypted'] ?? 0) === 1) || (is_file($physicalPath) && isVaultEncryptedFile($physicalPath));
 
 // Inhalt je nach Editor-Typ laden
-$wordHtmlContent = '';
-$sheetsData      = [];
-$slidesDeckData  = ['theme' => 'light', 'transition' => 'fade', 'slides' => []];
-$cloudImagesList = [];
-$textContent     = '';
+$wordHtmlContent  = '';
+$sheetsData       = [];
+$slidesDeckData   = ['theme' => 'light', 'transition' => 'fade', 'slides' => []];
+$visioDiagramData = ['theme' => 'light', 'grid' => true, 'nodes' => [], 'edges' => []];
+$cloudImagesList  = [];
+$textContent      = '';
 
 if (!$isVaultLocked && is_file($physicalPath)) {
     if ($editorType === 'word') {
@@ -1216,6 +1368,8 @@ if (!$isVaultLocked && is_file($physicalPath)) {
         );
         $stmtImgs->execute([':uid' => $userId]);
         $cloudImagesList = $stmtImgs->fetchAll();
+    } elseif ($editorType === 'visio') {
+        $visioDiagramData = readVisioData($physicalPath);
     } else {
         $textContent = (string)@file_get_contents($physicalPath);
     }
@@ -1249,6 +1403,7 @@ require_once __DIR__ . '/includes/header.php';
             'word'   => ['icon' => '📄', 'label' => 'Word Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'],
             'sheet'  => ['icon' => '📊', 'label' => 'Calc Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'],
             'slides' => ['icon' => '📙', 'label' => 'PowerPoint Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'],
+            'visio'  => ['icon' => '📐', 'label' => 'Visio Light (.' . strtoupper($ext) . ')', 'cls' => 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800'],
             default  => ['icon' => '📝', 'label' => 'Text-Editor (.' . strtoupper($ext) . ')', 'cls' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'],
         };
         ?>
@@ -1688,6 +1843,152 @@ require_once __DIR__ . '/includes/header.php';
         <div class="px-5 py-2.5 bg-black/60 border-t border-white/10 text-xs text-slate-300 flex items-center justify-between gap-4">
             <span id="pptxPresNotesHint" class="truncate text-slate-400">🎙️ Sprechernotiz: –</span>
             <span class="hidden sm:inline text-slate-500 shrink-0">Pfeiltasten / Leertaste = Weiter · L = Laserpointer · Esc = Beenden</span>
+        </div>
+    </div>
+
+<?php elseif ($editorType === 'visio'): ?>
+    <!-- ================================================================== -->
+    <!-- 2c. VISIO LIGHT EDITOR (.DRAWIO DIAGRAMME & ORGANIGRAMME)          -->
+    <!-- ================================================================== -->
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8">
+        <!-- Obere Formen- & Verbindungs-Werkzeugleiste -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <?php if ($canEdit): ?>
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-0.5">+ Form:</span>
+                    <button type="button" onclick="visioAddNode('rect', 'Prozessschritt', 'Beschreibung')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Rechteck (Prozess / Schritt)">
+                        ▭ Prozess
+                    </button>
+                    <button type="button" onclick="visioAddNode('round', 'Teilbereich', 'Abteilung / Aufgabe')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Abgerundetes Kästchen">
+                        ▢ Abgerundet
+                    </button>
+                    <button type="button" onclick="visioAddNode('diamond', 'Entscheidung?', 'Ja / Nein')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Raute (Entscheidung / Weiche)">
+                        ◇ Entscheidung
+                    </button>
+                    <button type="button" onclick="visioAddNode('stadium', 'Start / Ende', '')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Start- oder Endpunkt">
+                        ◯ Start/Ende
+                    </button>
+                    <button type="button" onclick="visioAddNode('person', 'Person / Rolle', 'Funktion im Team')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Personen-Kachel für Organigramme">
+                        👤 Person/Rolle
+                    </button>
+                    <button type="button" onclick="visioAddNode('note', 'Hinweis / Notiz', 'Details')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/60 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer" title="Notiz- oder Dokument-Box">
+                        📝 Notiz
+                    </button>
+
+                    <span class="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5"></span>
+
+                    <button type="button" id="btnVisioConnectMode" onclick="visioToggleConnectMode()"
+                            class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition cursor-pointer"
+                            title="Aktivieren und nacheinander 2 Kästchen anklicken, um einen Verbindungspfeil zu ziehen">
+                        🔗 Pfeil verbinden
+                    </button>
+
+                    <button type="button" onclick="visioAutoLayout()"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                            title="Elemente automatisch sauber im Raster anordnen">
+                        🪄 Auto-Layout
+                    </button>
+
+                    <select id="visioThemeSelect" onchange="visioChangeTheme(this.value)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <option value="light">☀️ Hell (Mit Punktraster)</option>
+                        <option value="plain">⬜ Reinweiß (Ohne Raster)</option>
+                        <option value="blueprint">📐 Blueprint (Dunkelblau)</option>
+                        <option value="dark">🌙 Nacht-Modus</option>
+                    </select>
+                <?php endif; ?>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+                <button type="button" onclick="visioExportSvgFile()"
+                        class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                    🖼️ Als .SVG Bild
+                </button>
+                <button type="button" onclick="visioPrintDiagram()"
+                        class="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-2xs cursor-pointer">
+                    🖨️ Drucken / PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Eigenschaften-Leiste für das aktuell ausgewählte Kästchen oder den ausgewählten Pfeil -->
+        <?php if ($canEdit): ?>
+        <div id="visioInspectorBar" class="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-2 text-xs">
+            <span id="visioInspectorHint" class="text-slate-400 italic">💡 Klicke ein Kästchen oder einen Pfeil auf der Zeichenfläche an, um Text, Farbe oder Form anzupassen – oder ziehe Kästchen frei mit der Maus.</span>
+
+            <!-- Knoten-Inspektor -->
+            <div id="visioNodeInspector" class="hidden flex-wrap items-center gap-2 w-full">
+                <span class="font-bold text-teal-700 dark:text-teal-400">▭ Element:</span>
+                <input type="text" id="visioInpText" placeholder="Haupttext / Titel…"
+                       class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-900 dark:text-white w-44 sm:w-52">
+                <input type="text" id="visioInpSubtext" placeholder="Untertitel / Rolle / Zusatz…"
+                       class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 w-44 sm:w-52">
+                <select id="visioInpShape" onchange="visioUpdateSelectedNode('shape', this.value)"
+                        class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                    <option value="rect">▭ Prozess (Rechteck)</option>
+                    <option value="round">▢ Abgerundet</option>
+                    <option value="diamond">◇ Entscheidung (Raute)</option>
+                    <option value="stadium">◯ Start / Ende</option>
+                    <option value="person">👤 Person / Organigramm</option>
+                    <option value="note">📝 Notiz / Dokument</option>
+                </select>
+                <select id="visioInpColor" onchange="visioUpdateSelectedNode('color', this.value)"
+                        class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                    <option value="blue">🔵 Blau</option>
+                    <option value="emerald">🟢 Smaragd</option>
+                    <option value="amber">🟠 Gold / Orange</option>
+                    <option value="rose">🔴 Rosé / Rot</option>
+                    <option value="violet">🟣 Violett</option>
+                    <option value="slate">⚫ Schiefer / Grau</option>
+                </select>
+                <button type="button" onclick="visioDuplicateSelectedNode()"
+                        class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer">
+                    📄 Duplizieren
+                </button>
+                <button type="button" onclick="visioDeleteSelected()"
+                        class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-400 font-bold cursor-pointer ml-auto">
+                    🗑️ Löschen (Entf)
+                </button>
+            </div>
+
+            <!-- Pfeil-/Verbindungs-Inspektor -->
+            <div id="visioEdgeInspector" class="hidden flex-wrap items-center gap-2 w-full">
+                <span class="font-bold text-teal-700 dark:text-teal-400">🔗 Verbindungspfeil:</span>
+                <input type="text" id="visioInpEdgeLabel" placeholder="Beschriftung (z.B. Ja / Nein)…"
+                       class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-900 dark:text-white w-48">
+                <select id="visioInpEdgeStyle" onchange="visioUpdateSelectedEdge('style', this.value)"
+                        class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                    <option value="solid">─── Durchgezogen</option>
+                    <option value="dashed">- - - Gestrichelt</option>
+                </select>
+                <select id="visioInpEdgeRouting" onchange="visioUpdateSelectedEdge('routing', this.value)"
+                        class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold">
+                    <option value="curved">↪️ Geschwungen (Bézier)</option>
+                    <option value="ortho">📐 Rechtwinklig (Organigramm)</option>
+                    <option value="straight">📏 Gerade Linie</option>
+                </select>
+                <button type="button" onclick="visioDeleteSelected()"
+                        class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-400 font-bold cursor-pointer ml-auto">
+                    🗑️ Pfeil löschen
+                </button>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Interaktive Visio-Zeichenfläche (SVG + Drag & Drop) -->
+        <div id="visioCanvasWrap" class="relative w-full h-[64vh] overflow-auto select-none bg-slate-50 dark:bg-slate-950">
+            <svg id="visioSvgCanvas" class="w-[1600px] h-[1000px] block" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+
+        <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span id="visioStatsLabel">0 Formen &bull; 0 Verbindungen</span>
+            <span>Format: Vektor-Diagramm (<code>.drawio</code> / <code>.svg</code>) &bull; Klicke auf „🔗 Pfeil verbinden“ zum Verknüpfen zweier Formen</span>
         </div>
     </div>
 
@@ -3042,6 +3343,564 @@ if (OFFICE_EDITOR_TYPE === 'slides') {
 }
 
 // ============================================================================
+// 2c. VISIO LIGHT FUNKTIONEN (.DRAWIO DIAGRAMME, FLUSSDIAGRAMME & ORGANIGRAMME)
+// ============================================================================
+let visioState = <?= $editorType === 'visio' ? json_encode($visioDiagramData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : '{"theme":"light","grid":true,"nodes":[],"edges":[]}' ?>;
+let visioSelectedNodeId = null;
+let visioSelectedEdgeId = null;
+let visioConnectMode    = false;
+let visioConnectFromId  = null;
+let visioDraggingNode   = null;
+let visioDragOffsetX    = 0;
+let visioDragOffsetY    = 0;
+let visioLastTypedAt    = 0;
+let visioInputDebounce  = null;
+
+const VISIO_PALETTES = {
+    blue:    { fill: '#EFF6FF', stroke: '#2563EB', text: '#1E3A8A', sub: '#3B82F6' },
+    emerald: { fill: '#ECFDF5', stroke: '#059669', text: '#064E3B', sub: '#10B981' },
+    amber:   { fill: '#FFFBEB', stroke: '#D97706', text: '#78350F', sub: '#D97706' },
+    rose:    { fill: '#FFF1F2', stroke: '#E11D48', text: '#881337', sub: '#F43F5E' },
+    violet:  { fill: '#F5F3FF', stroke: '#7C3AED', text: '#4C1D95', sub: '#8B5CF6' },
+    slate:   { fill: '#F8FAFC', stroke: '#475569', text: '#0F172A', sub: '#64748B' }
+};
+
+function ensureVisioValid() {
+    if (!visioState || typeof visioState !== 'object') {
+        visioState = { theme: 'light', grid: true, nodes: [], edges: [] };
+    }
+    if (!Array.isArray(visioState.nodes)) visioState.nodes = [];
+    if (!Array.isArray(visioState.edges)) visioState.edges = [];
+    if (!['light', 'plain', 'blueprint', 'dark'].includes(visioState.theme)) {
+        visioState.theme = 'light';
+    }
+}
+
+function getVisioPeerLock(nodeId) {
+    const targetKey = 'vnode:' + nodeId;
+    return collabPeers.find(p => !p.isMe && p.focusTarget === targetKey) || null;
+}
+
+function queueVisioDelta() {
+    if (visioInputDebounce) clearTimeout(visioInputDebounce);
+    visioInputDebounce = setTimeout(() => {
+        queueCollabDelta('visio_full', 'diagram', visioState);
+    }, 220);
+}
+
+function updateVisioInspectorUI() {
+    const hintEl = document.getElementById('visioInspectorHint');
+    const nodeBar = document.getElementById('visioNodeInspector');
+    const edgeBar = document.getElementById('visioEdgeInspector');
+    if (!hintEl || !nodeBar || !edgeBar) return;
+
+    if (visioSelectedNodeId) {
+        const nd = visioState.nodes.find(n => n.id === visioSelectedNodeId);
+        if (nd) {
+            hintEl.classList.add('hidden');
+            edgeBar.classList.add('hidden');
+            edgeBar.classList.remove('flex');
+            nodeBar.classList.remove('hidden');
+            nodeBar.classList.add('flex');
+
+            const tEl = document.getElementById('visioInpText');
+            const sEl = document.getElementById('visioInpSubtext');
+            const shEl = document.getElementById('visioInpShape');
+            const cEl = document.getElementById('visioInpColor');
+            if (tEl && document.activeElement !== tEl) tEl.value = nd.text || '';
+            if (sEl && document.activeElement !== sEl) sEl.value = nd.subtext || '';
+            if (shEl) shEl.value = nd.shape || 'rect';
+            if (cEl) cEl.value = nd.color || 'blue';
+
+            currentFocusTarget = 'vnode:' + nd.id;
+            currentFocusLabel  = 'Form „' + (nd.text || nd.id) + '“';
+            return;
+        }
+    }
+
+    if (visioSelectedEdgeId) {
+        const ed = visioState.edges.find(e => e.id === visioSelectedEdgeId);
+        if (ed) {
+            hintEl.classList.add('hidden');
+            nodeBar.classList.add('hidden');
+            nodeBar.classList.remove('flex');
+            edgeBar.classList.remove('hidden');
+            edgeBar.classList.add('flex');
+
+            const lEl = document.getElementById('visioInpEdgeLabel');
+            const stEl = document.getElementById('visioInpEdgeStyle');
+            const rEl = document.getElementById('visioInpEdgeRouting');
+            if (lEl && document.activeElement !== lEl) lEl.value = ed.label || '';
+            if (stEl) stEl.value = ed.style || 'solid';
+            if (rEl) rEl.value = ed.routing || 'curved';
+
+            currentFocusTarget = 'vedge:' + ed.id;
+            currentFocusLabel  = 'Verbindungspfeil';
+            return;
+        }
+    }
+
+    hintEl.classList.remove('hidden');
+    nodeBar.classList.add('hidden');
+    nodeBar.classList.remove('flex');
+    edgeBar.classList.add('hidden');
+    edgeBar.classList.remove('flex');
+    currentFocusTarget = 'diagram';
+    currentFocusLabel  = 'Zeichenfläche';
+}
+
+function renderVisioCanvas() {
+    if (OFFICE_EDITOR_TYPE !== 'visio') return;
+    ensureVisioValid();
+
+    const svg = document.getElementById('visioSvgCanvas');
+    if (!svg) return;
+
+    const themeSel = document.getElementById('visioThemeSelect');
+    if (themeSel) themeSel.value = visioState.theme || 'light';
+
+    const statsEl = document.getElementById('visioStatsLabel');
+    if (statsEl) {
+        statsEl.textContent = `${visioState.nodes.length} Formen • ${visioState.edges.length} Verbindungen`;
+    }
+
+    const isDark = (visioState.theme === 'blueprint' || visioState.theme === 'dark');
+    const bgFill = visioState.theme === 'blueprint'
+        ? '#0F172A'
+        : (visioState.theme === 'dark' ? '#18181B' : (visioState.theme === 'plain' ? '#FFFFFF' : '#F8FAFC'));
+    const dotColor = visioState.theme === 'blueprint' ? '#1E3A8A' : (isDark ? '#27272A' : '#CBD5E1');
+    const edgeColor = isDark ? '#94A3B8' : '#475569';
+
+    let html = `
+    <defs>
+        <marker id="v-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="${edgeColor}"/>
+        </marker>
+        <marker id="v-arrow-sel" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#0D9488"/>
+        </marker>
+        <pattern id="v-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.2" fill="${dotColor}"/>
+        </pattern>
+        <filter id="v-shadow" x="-10%" y="-10%" width="120%" height="125%">
+            <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-opacity="0.12"/>
+        </filter>
+    </defs>
+    <rect id="visioBgRect" width="100%" height="100%" fill="${bgFill}"/>`;
+
+    if (visioState.theme !== 'plain') {
+        html += `<rect id="visioGridRect" width="100%" height="100%" fill="url(#v-grid)" pointer-events="none"/>`;
+    }
+
+    const nodeMap = {};
+    visioState.nodes.forEach(n => { nodeMap[n.id] = n; });
+
+    // 1. Verbindungspfeile rendern
+    visioState.edges.forEach(ed => {
+        const n1 = nodeMap[ed.from];
+        const n2 = nodeMap[ed.to];
+        if (!n1 || !n2) return;
+
+        const x1 = n1.x + n1.w / 2;
+        const y1 = n1.y + n1.h / 2;
+        const x2 = n2.x + n2.w / 2;
+        const y2 = n2.y + n2.h / 2;
+
+        // Schnittpunkt am Rand des Ziel-Rechtecks berechnen, damit die Pfeilspitze sichtbar am Rand endet
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        let tx = x2, ty = y2;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            const hw = (n2.w / 2) + 6;
+            const hh = (n2.h / 2) + 6;
+            const scaleX = Math.abs(dx) > 0 ? hw / Math.abs(dx) : 9999;
+            const scaleY = Math.abs(dy) > 0 ? hh / Math.abs(dy) : 9999;
+            const scale = Math.min(scaleX, scaleY, 1);
+            tx = x2 - dx * scale;
+            ty = y2 - dy * scale;
+        }
+
+        const isSel = (ed.id === visioSelectedEdgeId);
+        const strokeCol = isSel ? '#0D9488' : edgeColor;
+        const strokeW   = isSel ? 3.2 : 2.2;
+        const dashAttr  = ed.style === 'dashed' ? 'stroke-dasharray="7,5"' : '';
+        const markerUrl = isSel ? 'url(#v-arrow-sel)' : 'url(#v-arrow)';
+
+        let dPath = '';
+        if (ed.routing === 'ortho') {
+            const midY = (y1 + ty) / 2;
+            dPath = `M ${x1} ${y1} L ${x1} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
+        } else if (ed.routing === 'straight') {
+            dPath = `M ${x1} ${y1} L ${tx} ${ty}`;
+        } else {
+            const cx1 = x1 + (tx - x1) * 0.45;
+            const cy1 = y1;
+            const cx2 = tx - (tx - x1) * 0.45;
+            const cy2 = ty;
+            dPath = `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`;
+        }
+
+        const mx = (x1 + tx) / 2;
+        const my = (y1 + ty) / 2;
+
+        html += `
+        <g class="cursor-pointer" onclick="visioSelectEdge('${escapeSheetHtml(ed.id)}', event)">
+            <path d="${dPath}" fill="none" stroke="transparent" stroke-width="14"/>
+            <path d="${dPath}" fill="none" stroke="${strokeCol}" stroke-width="${strokeW}" ${dashAttr} marker-end="${markerUrl}"/>
+            ${ed.label ? `
+                <rect x="${mx - 36}" y="${my - 11}" width="72" height="20" rx="6" fill="${bgFill}" stroke="${strokeCol}" stroke-width="1.2"/>
+                <text x="${mx}" y="${my + 3}" text-anchor="middle" font-size="11" font-weight="700" fill="${strokeCol}">${escapeSheetHtml(ed.label)}</text>
+            ` : ''}
+        </g>`;
+    });
+
+    // 2. Formen / Knoten rendern
+    visioState.nodes.forEach(nd => {
+        const pal = VISIO_PALETTES[nd.color] || VISIO_PALETTES.blue;
+        const isSel = (nd.id === visioSelectedNodeId);
+        const isConnSource = (visioConnectMode && nd.id === visioConnectFromId);
+        const peerLock = getVisioPeerLock(nd.id);
+
+        const x = Number(nd.x) || 100;
+        const y = Number(nd.y) || 100;
+        const w = Number(nd.w) || 180;
+        const h = Number(nd.h) || 72;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+
+        const strokeCol = isConnSource ? '#EA580C' : (isSel ? '#0D9488' : (peerLock ? peerLock.color : pal.stroke));
+        const strokeW   = (isSel || isConnSource || peerLock) ? 3.2 : 2;
+
+        let shapeSvg = '';
+        if (nd.shape === 'diamond') {
+            const pts = `${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}`;
+            shapeSvg = `<polygon points="${pts}" fill="${pal.fill}" stroke="${strokeCol}" stroke-width="${strokeW}" filter="url(#v-shadow)"/>`;
+        } else if (nd.shape === 'stadium') {
+            shapeSvg = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${pal.fill}" stroke="${strokeCol}" stroke-width="${strokeW}" filter="url(#v-shadow)"/>`;
+        } else if (nd.shape === 'note') {
+            shapeSvg = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${pal.fill}" stroke="${strokeCol}" stroke-width="${strokeW}" stroke-dasharray="5,3" filter="url(#v-shadow)"/>`;
+        } else {
+            const rx = (nd.shape === 'round' || nd.shape === 'person') ? 14 : 6;
+            shapeSvg = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${pal.fill}" stroke="${strokeCol}" stroke-width="${strokeW}" filter="url(#v-shadow)"/>`;
+            if (nd.shape === 'person') {
+                shapeSvg += `<rect x="${x}" y="${y}" width="${w}" height="6" rx="3" fill="${pal.stroke}"/>`;
+            }
+        }
+
+        const titleY = nd.subtext ? (cy - 4) : (cy + 5);
+        const lockLabel = peerLock
+            ? `<rect x="${x}" y="${y - 20}" width="110" height="16" rx="8" fill="${peerLock.color}"/>
+               <text x="${x + 55}" y="${y - 9}" text-anchor="middle" font-size="9" font-weight="bold" fill="#ffffff">🔒 ${escapeSheetHtml(peerLock.username)}</text>`
+            : '';
+
+        html += `
+        <g data-visio-node="${escapeSheetHtml(nd.id)}"
+           onmousedown="visioStartDragNode('${escapeSheetHtml(nd.id)}', event)"
+           ondblclick="visioQuickPromptNodeText('${escapeSheetHtml(nd.id)}', event)"
+           class="cursor-move">
+            ${shapeSvg}
+            ${lockLabel}
+            <text x="${cx}" y="${titleY}" text-anchor="middle" font-size="13" font-weight="700" fill="${pal.text}" pointer-events="none">${escapeSheetHtml(nd.text || '')}</text>
+            ${nd.subtext ? `<text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="11" fill="${pal.sub}" pointer-events="none">${escapeSheetHtml(nd.subtext)}</text>` : ''}
+        </g>`;
+    });
+
+    svg.innerHTML = html;
+    updateVisioInspectorUI();
+}
+
+function visioSelectEdge(edgeId, ev) {
+    if (ev) ev.stopPropagation();
+    visioSelectedNodeId = null;
+    visioSelectedEdgeId = edgeId;
+    renderVisioCanvas();
+}
+
+function visioStartDragNode(nodeId, ev) {
+    if (ev) ev.stopPropagation();
+    ensureVisioValid();
+
+    if (visioConnectMode) {
+        if (!visioConnectFromId) {
+            visioConnectFromId = nodeId;
+            visioSelectedNodeId = nodeId;
+            renderVisioCanvas();
+            return;
+        }
+        if (visioConnectFromId !== nodeId) {
+            visioState.edges.push({
+                id: 'e_' + Math.random().toString(36).slice(2, 8),
+                from: visioConnectFromId,
+                to: nodeId,
+                label: '',
+                style: 'solid',
+                routing: 'curved'
+            });
+            markDirty();
+            queueVisioDelta();
+        }
+        visioConnectFromId = null;
+        visioConnectMode = false;
+        const btn = document.getElementById('btnVisioConnectMode');
+        if (btn) btn.className = 'px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition cursor-pointer';
+        visioSelectedNodeId = nodeId;
+        renderVisioCanvas();
+        return;
+    }
+
+    visioSelectedEdgeId = null;
+    visioSelectedNodeId = nodeId;
+    renderVisioCanvas();
+
+    if (!OFFICE_CAN_EDIT) return;
+    const nd = visioState.nodes.find(n => n.id === nodeId);
+    const svg = document.getElementById('visioSvgCanvas');
+    if (!nd || !svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    visioDraggingNode = nd;
+    visioDragOffsetX = (ev.clientX - rect.left) - nd.x;
+    visioDragOffsetY = (ev.clientY - rect.top) - nd.y;
+}
+
+window.addEventListener('mousemove', (ev) => {
+    if (!visioDraggingNode) return;
+    const svg = document.getElementById('visioSvgCanvas');
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const rawX = (ev.clientX - rect.left) - visioDragOffsetX;
+    const rawY = (ev.clientY - rect.top) - visioDragOffsetY;
+    // Sanftes 12px-Raster für saubere Ausrichtung
+    visioDraggingNode.x = Math.max(12, Math.round(rawX / 12) * 12);
+    visioDraggingNode.y = Math.max(12, Math.round(rawY / 12) * 12);
+    slidesLastTypedAt = Date.now();
+    visioLastTypedAt  = Date.now();
+    markDirty();
+    renderVisioCanvas();
+});
+
+window.addEventListener('mouseup', () => {
+    if (visioDraggingNode) {
+        visioDraggingNode = null;
+        queueVisioDelta();
+    }
+});
+
+const visioSvgEl = document.getElementById('visioSvgCanvas');
+if (visioSvgEl) {
+    visioSvgEl.addEventListener('mousedown', (ev) => {
+        if (ev.target.id === 'visioBgRect' || ev.target.id === 'visioGridRect' || ev.target === visioSvgEl) {
+            visioSelectedNodeId = null;
+            visioSelectedEdgeId = null;
+            renderVisioCanvas();
+        }
+    });
+}
+
+function visioQuickPromptNodeText(nodeId, ev) {
+    if (ev) ev.stopPropagation();
+    if (!OFFICE_CAN_EDIT) return;
+    const nd = visioState.nodes.find(n => n.id === nodeId);
+    if (!nd) return;
+    const inp = document.getElementById('visioInpText');
+    if (inp) {
+        inp.focus();
+        inp.select();
+    }
+}
+
+function visioAddNode(shape, defaultTitle, defaultSub) {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureVisioValid();
+    const count = visioState.nodes.length;
+    const defaultColors = { rect: 'blue', round: 'violet', diamond: 'amber', stadium: 'emerald', person: 'blue', note: 'rose' };
+    const newId = 'n_' + Math.random().toString(36).slice(2, 8);
+    const newNode = {
+        id: newId,
+        shape: shape || 'rect',
+        x: 140 + ((count * 48) % 520),
+        y: 120 + ((count * 36) % 340),
+        w: shape === 'diamond' ? 176 : 190,
+        h: shape === 'diamond' ? 96 : 72,
+        text: defaultTitle || 'Neues Element',
+        subtext: defaultSub || '',
+        color: defaultColors[shape] || 'blue'
+    };
+    visioState.nodes.push(newNode);
+    if (visioSelectedNodeId) {
+        visioState.edges.push({
+            id: 'e_' + Math.random().toString(36).slice(2, 8),
+            from: visioSelectedNodeId,
+            to: newId,
+            label: '',
+            style: 'solid',
+            routing: shape === 'person' ? 'ortho' : 'curved'
+        });
+    }
+    visioSelectedNodeId = newId;
+    visioSelectedEdgeId = null;
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+function visioToggleConnectMode() {
+    if (!OFFICE_CAN_EDIT) return;
+    visioConnectMode = !visioConnectMode;
+    visioConnectFromId = visioSelectedNodeId || null;
+    const btn = document.getElementById('btnVisioConnectMode');
+    if (btn) {
+        btn.className = visioConnectMode
+            ? 'px-3 py-1.5 rounded-xl bg-orange-600 text-white text-xs font-bold shadow-xs transition cursor-pointer'
+            : 'px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition cursor-pointer';
+    }
+    renderVisioCanvas();
+}
+
+function visioUpdateSelectedNode(prop, val) {
+    if (!OFFICE_CAN_EDIT || !visioSelectedNodeId) return;
+    const nd = visioState.nodes.find(n => n.id === visioSelectedNodeId);
+    if (!nd) return;
+    nd[prop] = val;
+    if (prop === 'shape' && val === 'diamond' && nd.h < 90) {
+        nd.h = 96;
+    }
+    visioLastTypedAt = Date.now();
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+function visioUpdateSelectedEdge(prop, val) {
+    if (!OFFICE_CAN_EDIT || !visioSelectedEdgeId) return;
+    const ed = visioState.edges.find(e => e.id === visioSelectedEdgeId);
+    if (!ed) return;
+    ed[prop] = val;
+    visioLastTypedAt = Date.now();
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+['visioInpText', 'visioInpSubtext'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+        const prop = id === 'visioInpText' ? 'text' : 'subtext';
+        visioUpdateSelectedNode(prop, el.value);
+    });
+});
+
+const visioEdgeLblEl = document.getElementById('visioInpEdgeLabel');
+if (visioEdgeLblEl) {
+    visioEdgeLblEl.addEventListener('input', () => {
+        visioUpdateSelectedEdge('label', visioEdgeLblEl.value);
+    });
+}
+
+function visioDuplicateSelectedNode() {
+    if (!OFFICE_CAN_EDIT || !visioSelectedNodeId) return;
+    const nd = visioState.nodes.find(n => n.id === visioSelectedNodeId);
+    if (!nd) return;
+    const copy = JSON.parse(JSON.stringify(nd));
+    copy.id = 'n_' + Math.random().toString(36).slice(2, 8);
+    copy.x += 36;
+    copy.y += 36;
+    visioState.nodes.push(copy);
+    visioSelectedNodeId = copy.id;
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+function visioDeleteSelected() {
+    if (!OFFICE_CAN_EDIT) return;
+    if (visioSelectedNodeId) {
+        const delId = visioSelectedNodeId;
+        visioState.nodes = visioState.nodes.filter(n => n.id !== delId);
+        visioState.edges = visioState.edges.filter(e => e.from !== delId && e.to !== delId);
+        visioSelectedNodeId = null;
+        markDirty();
+        renderVisioCanvas();
+        queueVisioDelta();
+    } else if (visioSelectedEdgeId) {
+        visioState.edges = visioState.edges.filter(e => e.id !== visioSelectedEdgeId);
+        visioSelectedEdgeId = null;
+        markDirty();
+        renderVisioCanvas();
+        queueVisioDelta();
+    }
+}
+
+document.addEventListener('keydown', (ev) => {
+    if (OFFICE_EDITOR_TYPE !== 'visio' || !OFFICE_CAN_EDIT) return;
+    const tag = (document.activeElement?.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+        ev.preventDefault();
+        visioDeleteSelected();
+    }
+});
+
+function visioChangeTheme(newTheme) {
+    if (!OFFICE_CAN_EDIT) return;
+    visioState.theme = newTheme;
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+function visioAutoLayout() {
+    if (!OFFICE_CAN_EDIT) return;
+    ensureVisioValid();
+    const cols = Math.max(2, Math.ceil(Math.sqrt(visioState.nodes.length)));
+    visioState.nodes.forEach((nd, i) => {
+        const r = Math.floor(i / cols);
+        const c = i % cols;
+        nd.x = 100 + c * 250;
+        nd.y = 80 + r * 140;
+    });
+    markDirty();
+    renderVisioCanvas();
+    queueVisioDelta();
+}
+
+function visioExportSvgFile() {
+    const svg = document.getElementById('visioSvgCanvas');
+    if (!svg) return;
+    const raw = '<?xml version="1.0" encoding="UTF-8"?>\n' + svg.outerHTML;
+    const blob = new Blob([raw], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (titleInputEl ? titleInputEl.value : 'Diagramm') + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+function visioPrintDiagram() {
+    const svg = document.getElementById('visioSvgCanvas');
+    if (!svg) return;
+    const docName = titleInputEl ? titleInputEl.value : 'Diagramm';
+    const win = window.open('', '_blank', 'width=1024,height=768');
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>${escapeSheetHtml(docName)}</title>
+    <style>body{font-family:system-ui,sans-serif;margin:20px;}svg{max-width:100%;height:auto;border:1px solid #cbd5e1;border-radius:12px;}</style>
+    </head><body><h2 style="margin:0 0 12px 0;">📐 ${escapeSheetHtml(docName)}</h2>${svg.outerHTML}
+    <script>window.onload=()=>{window.print();};<\/script></body></html>`);
+    win.document.close();
+}
+
+if (OFFICE_EDITOR_TYPE === 'visio') {
+    ensureVisioValid();
+    currentFocusTarget = 'diagram';
+    currentFocusLabel  = 'Zeichenfläche';
+    renderVisioCanvas();
+}
+
+// ============================================================================
 // 3. TEXT-EDITOR FUNKTIONEN (inkl. Zeilen-Fokus & Live-Sync)
 // ============================================================================
 const plainTextEl = document.getElementById('plainTextEditor');
@@ -3105,6 +3964,8 @@ async function saveOfficeDocument(isSilentAutoSave = false) {
         formData.append('sheets_json', JSON.stringify(sheetsState));
     } else if (OFFICE_EDITOR_TYPE === 'slides') {
         formData.append('slides_json', JSON.stringify(slidesDeckState));
+    } else if (OFFICE_EDITOR_TYPE === 'visio') {
+        formData.append('visio_json', JSON.stringify(visioState));
     } else if (plainTextEl) {
         formData.append('text_content', plainTextEl.value);
     }
@@ -3268,6 +4129,14 @@ function applyIncomingDeltas(deltas) {
                     renderPptxEditor();
                 }
             }
+        } else if (OFFICE_EDITOR_TYPE === 'visio') {
+            if (d.type === 'visio_full' && d.payload && Array.isArray(d.payload.nodes)) {
+                if (Date.now() - visioLastTypedAt > 1200 && !visioDraggingNode) {
+                    visioState = d.payload;
+                    ensureVisioValid();
+                    renderVisioCanvas();
+                }
+            }
         } else if (plainTextEl && d.type === 'text_full' && typeof d.payload === 'string') {
             // Nur übernehmen, wenn man nicht gerade in den letzten 1,2 Sekunden selbst getippt hat
             if (Date.now() - plainLastTypedAt > 1200) {
@@ -3330,6 +4199,8 @@ async function runCollabSyncTick() {
                     applyWordPeerLocks();
                 } else if (OFFICE_EDITOR_TYPE === 'slides') {
                     renderPptxThumbnails();
+                } else if (OFFICE_EDITOR_TYPE === 'visio') {
+                    renderVisioCanvas();
                 }
             }
         }

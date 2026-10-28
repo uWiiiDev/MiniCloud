@@ -536,7 +536,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             data-nav-item="office"
                             style="display:none;"
                             class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="MiniCloud Office Light (Word, Excel, Markdown &amp; Vorlagen)"
+                            title="MiniCloud Office Light (Word, Excel, PowerPoint, Visio &amp; Mind-Maps)"
                         >
                             <span>📝</span>
                             <span class="hidden md:inline">Office Light</span>

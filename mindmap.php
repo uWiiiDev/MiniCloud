@@ -400,7 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             @mkdir(UPLOAD_DIR, 0755, true);
         }
         $storedName = generateSafeStoredFilename();
-        $destPath = UPLOAD_DIR . '/' . $storedName;
+        $destPath = UPLOAD_DIR . $storedName;
 
         if (@file_put_contents($destPath, $content) === false) {
             echo json_encode(['ok' => false, 'error' => 'Datei konnte nicht gespeichert werden.']);
@@ -408,7 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $stmtFile = $pdo->prepare(
-            "INSERT INTO files (user_id, folder_path, original_name, stored_name, file_size, mime_type)
+            "INSERT INTO files (user_id, folder_path, original_name, filename, file_size, mime_type)
              VALUES (:uid, 'Mind-Maps', :orig, :stored, :size, :mime)"
         );
         $stmtFile->execute([
@@ -504,6 +504,14 @@ require_once __DIR__ . '/includes/header.php';
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <!-- Links: Titel & Auswahl der Mind-Map -->
             <div class="flex flex-wrap items-center gap-3">
+                <a
+                    href="office.php"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold transition-colors shrink-0"
+                    title="Zurück zur Office Light Zentrale (Word, Excel, PowerPoint, Visio &amp; Mind-Maps)"
+                >
+                    <span>&larr;</span>
+                    <span>📝 Office Light</span>
+                </a>
                 <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shrink-0">🧠</div>
                 <div>
                     <div class="flex items-center gap-2">

@@ -651,6 +651,9 @@ function getFileTypeBadge(string $originalName, string $mimeType): array
 {
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
+    if (in_array($ext, ['drawio', 'vsdx', 'diagram'], true)) {
+        return ['label' => 'VISIO', 'bg' => 'bg-teal-100 dark:bg-teal-950/70', 'text' => 'text-teal-700 dark:text-teal-300'];
+    }
     if (str_starts_with($mimeType, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'], true)) {
         return ['label' => strtoupper($ext ?: 'IMG'), 'bg' => 'bg-purple-100 dark:bg-purple-950/70', 'text' => 'text-purple-700 dark:text-purple-300'];
     }

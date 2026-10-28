@@ -1161,17 +1161,18 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'office_light',
-            'title'    => 'Office Light (Word, Excel, PowerPoint, Markdown & Live-Co-Editing)',
+            'title'    => 'Office Light (Word, Excel, PowerPoint, Visio, Mind-Maps & Live-Co-Editing)',
             'icon'     => '📝',
             'keywords' => [
-                'office', 'word', 'excel', 'powerpoint', 'praesentation', 'folien', 'beamer', 'slides', 'pptx', 'tabelle', 'kalkulation', 'docx', 'xlsx', 'csv', 'markdown', 'dokument erstellen', 'vorlage', 'brief', 'protokoll', 'formel', 'gleichzeitig bearbeiten', 'co editing',
+                'office', 'word', 'excel', 'powerpoint', 'visio', 'drawio', 'organigramm', 'flussdiagramm', 'flowchart', 'diagramm', 'praesentation', 'folien', 'beamer', 'slides', 'pptx', 'tabelle', 'kalkulation', 'docx', 'xlsx', 'csv', 'markdown', 'dokument erstellen', 'vorlage', 'brief', 'protokoll', 'formel', 'gleichzeitig bearbeiten', 'co editing',
                 'spreadsheet', 'presentation', 'document', 'tableur', 'hoja de calculo', 'foglio di calcolo', 'arkusz', 'tabulka', 'tablo', 'таблиця', 'документ',
             ],
-            'answer'   => "**📝 Office Light** (`office.php`) ist deine integrierte Büro-Zentrale direkt im Browser – komplett ohne Zusatzsoftware:\n\n"
+            'answer'   => "**📝 Office Light** (`office.php`) ist deine integrierte 5-in-1 Büro-Zentrale direkt im Browser – komplett ohne Zusatzsoftware:\n\n"
                 . "- **📘 Word-Dokumente (`.docx`):** Formatierter Text, Überschriften, Tabellen, Listen, Farben & Druck-/PDF-Ansicht.\n"
                 . "- **📗 Excel-Tabellen (`.xlsx` & `.csv`):** Mehrere Tabellenblätter, Formeln wie `=SUM(A1:A10)`, `=AVERAGE(...)`, `=MIN(...)`, `=MAX(...)`, Spalten-Sortierung und Diagramm-Vorschau.\n"
                 . "- **📙 PowerPoint-Präsentationen (`.pptx`):** Visueller 16:9-Folien-Editor mit 6 Folien-Layouts (inkl. Cloud-Bildern & Kennzahlen), 6 Farbdesigns, Sprechernotizen, Handout-PDF-Druck und **▶️ Vollbild-Beamer-Modus mit Laserpointer**.\n"
-                . "- **✨ 8 Schnellstart-Vorlagen:** Leeres Word-Dokument, Geschäftsbrief, Besprechungsprotokoll, Leere Tabelle, Budget-/Kassenplan, Stundenzettel, Leere Präsentation und Vereins-/Projekt-Pitch.\n"
+                . "- **📐 Visio Light (`.drawio` Diagramme & Organigramme):** Flussdiagramme, Prozesspläne und Vereins-/Team-Organigramme mit 6 Formen, intelligenten Verbindungspfeilen, Auto-Layout und SVG-Vektor-Export.\n"
+                . "- **🧠 Integrierter Mind-Map-Editor:** Direkt in der Office-Zentrale unter dem Reiter **🧠 Mind-Maps** erreichbar.\n"
                 . "- **🟢 Live-Team-Zusammenarbeit:** Wenn mehrere Personen dasselbe Dokument öffnen, seht ihr oben live, wer gerade mitschreibt, und Änderungen werden automatisch synchronisiert!",
             'actions'  => [
                 ['label' => $pack['act_office'], 'url' => 'office.php'],

@@ -2467,6 +2467,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <option value="docx">📄 Word-Dokument (.docx)</option>
                     <option value="xlsx">📊 Excel-Tabelle (.xlsx)</option>
                     <option value="pptx">📙 PowerPoint-Präsentation (.pptx)</option>
+                    <option value="drawio">📐 Visio-Diagramm / Organigramm (.drawio)</option>
                     <option value="csv">📋 CSV-Tabelle (.csv)</option>
                     <option value="txt">📝 Textnotiz (.txt)</option>
                     <option value="md">📑 Markdown-Protokoll (.md)</option>
@@ -3475,12 +3476,13 @@ function updateOfficeDefaultFilename(type) {
     if (!officeCreateNameInput) return;
     const today = <?= json_encode(date('Y-m-d')) ?>;
     const defaults = {
-        docx: 'Neues_Dokument_' + today,
-        xlsx: 'Neue_Tabelle_' + today,
-        pptx: 'Neue_Praesentation_' + today,
-        csv:  'Neue_Liste_' + today,
-        txt:  'Neue_Notiz_' + today,
-        md:   'Neues_Protokoll_' + today
+        docx:   'Neues_Dokument_' + today,
+        xlsx:   'Neue_Tabelle_' + today,
+        pptx:   'Neue_Praesentation_' + today,
+        drawio: 'Neues_Diagramm_' + today,
+        csv:    'Neue_Liste_' + today,
+        txt:    'Neue_Notiz_' + today,
+        md:     'Neues_Protokoll_' + today
     };
     const cur = officeCreateNameInput.value.trim();
     if (cur === '' || cur.startsWith('Neues_') || cur.startsWith('Neue_')) {
