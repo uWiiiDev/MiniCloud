@@ -326,27 +326,29 @@ $themeGroups = [
         </a>
     </div>
 
-    <?php if ($loggedIn && isAdmin()): ?>
-        <!-- Direktzugang zur System-Administration für Admins -->
-        <div class="mc-card bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/70 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+    <?php if ($loggedIn && hasAdminPermission()): ?>
+        <!-- Direktzugang zur System- bzw. Teil-Administration -->
+        <div class="mc-card <?= isAdmin() ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70' : 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800/70' ?> rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
             <div class="flex items-start sm:items-center gap-3.5">
-                <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <div class="w-10 h-10 rounded-xl <?= isAdmin() ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300' ?> flex items-center justify-center shrink-0">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
                 </div>
                 <div>
-                    <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">System-Administration</h2>
+                    <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white"><?= isAdmin() ? 'System-Administration' : '🛡️ Teil-Administration' ?></h2>
                     <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                        Benutzerkonten, 2FA, E-Mail/SMTP-Versand, Gruppenordner, Anwendungstitel, Logo, Impressum &amp; Server-Status verwalten.
+                        <?= isAdmin()
+                            ? 'Benutzerkonten, 2FA, E-Mail/SMTP-Versand, Gruppenordner, Anwendungstitel, Logo, Impressum &amp; Server-Status verwalten.'
+                            : 'Zugriff auf Ihre vom Haupt-Administrator freigeschalteten Verwaltungsbereiche.' ?>
                     </p>
                 </div>
             </div>
             <a
                 href="admin.php"
-                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors shrink-0"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl <?= isAdmin() ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700' ?> text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors shrink-0"
             >
-                <span>Administration öffnen &rarr;</span>
+                <span><?= isAdmin() ? 'Administration öffnen' : 'Teil-Administration öffnen' ?> &rarr;</span>
             </a>
         </div>
     <?php endif; ?>

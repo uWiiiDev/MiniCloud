@@ -291,6 +291,16 @@ require_once __DIR__ . '/includes/header.php';
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                <?php if (hasAdminPermission()): ?>
+                    <a
+                        href="admin.php"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white <?= isAdmin() ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700' ?> shadow-2xs transition-colors"
+                        title="<?= isAdmin() ? 'System-Administration öffnen' : 'Teil-Administration öffnen' ?>"
+                    >
+                        <span>🛡️</span>
+                        <span><?= isAdmin() ? 'System-Administration' : 'Teil-Administration' ?></span>
+                    </a>
+                <?php endif; ?>
                 <div class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-xs font-medium text-amber-800 dark:text-amber-300">
                     <span>⭐ In Kopfzeile angeheftet:</span>
                     <strong id="pinnedModuleCounter" class="font-bold">0</strong>

@@ -579,6 +579,18 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     <span class="hidden sm:inline text-xs font-semibold">Module</span>
                 </a>
 
+                <?php if (hasAdminPermission()): ?>
+                    <!-- 🛡️ Direkt-Button zur System- bzw. Teil-Administration -->
+                    <a
+                        href="admin.php"
+                        class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors <?= $currentScript === 'admin.php' ? 'bg-indigo-600 text-white shadow-2xs border border-indigo-600' : (isAdmin() ? 'bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80' : 'bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80') ?>"
+                        title="<?= isAdmin() ? 'System-Administration öffnen' : 'Teil-Administration öffnen (übertragene Verwaltungsbereiche)' ?>"
+                    >
+                        <span>🛡️</span>
+                        <span class="hidden md:inline"><?= isAdmin() ? 'Admin' : 'Teil-Administration' ?></span>
+                    </a>
+                <?php endif; ?>
+
                 <!-- 👤 Konto, Speicherplatz, Einstellungen, Admin & Abmelden -->
                 <div class="relative">
                     <button
@@ -605,7 +617,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                 <p class="text-[11px] text-slate-500 dark:text-slate-400"><?= isAdmin() ? '🛡️ Administrator' : (hasAdminPermission() ? '🛡️ Teil-Administrator' : 'Cloud-Benutzer') ?></p>
                             </div>
                             <?php if (hasAdminPermission()): ?>
-                                <a href="admin.php" class="text-[11px] font-bold uppercase px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition-colors">Admin</a>
+                                <a href="admin.php" class="text-[11px] font-bold uppercase px-2 py-1 rounded-lg <?= isAdmin() ? 'bg-brand-600 hover:bg-brand-700' : 'bg-indigo-600 hover:bg-indigo-700' ?> text-white transition-colors">
+                                    <?= isAdmin() ? 'Admin' : 'Teil-Admin' ?>
+                                </a>
                             <?php endif; ?>
                         </div>
 
@@ -627,9 +641,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 
                         <div class="space-y-1">
                             <?php if (hasAdminPermission()): ?>
-                                <a href="admin.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors">
+                                <a href="admin.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold <?= isAdmin() ? 'text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/50' : 'text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50' ?> transition-colors">
                                     <span>🛡️</span>
-                                    <span>System-Administration</span>
+                                    <span><?= isAdmin() ? 'System-Administration' : 'Teil-Administration' ?></span>
                                 </a>
                             <?php endif; ?>
                             <a href="settings.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">

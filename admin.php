@@ -955,6 +955,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password         = (string)($_POST['password'] ?? '');
         $quotaMb          = max(1, (int)($_POST['quota_mb'] ?? 100));
         $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
+        $rawCreatePerms   = isset($_POST['admin_permissions']) && is_array($_POST['admin_permissions']) ? $_POST['admin_permissions'] : [];
+        $createPermsStr   = implode(',', parseAdminPermissionsString(implode(',', array_map('strval', $rawCreatePerms))));
+        if (isset($_POST['is_admin']) && $_POST['is_admin'] === 'partial') {
+            $makeAdmin = 0;
+        } elseif ($makeAdmin === 1) {
+            $createPermsStr = '';
+        }
         $twoFactor        = isset($_POST['two_factor_enabled']) ? max(0, min(2, (int)$_POST['two_factor_enabled'])) : 0;
         $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
 
@@ -974,15 +981,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
                 $stmtIns = $pdo->prepare(
-                    'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, theme, allow_user_sharing, storage_quota)
-                     VALUES (:u, :em, :h, :tfa, :adm, :theme, :aus, :q)'
+                    'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, admin_permissions, theme, allow_user_sharing, storage_quota)
+                     VALUES (:u, :em, :h, :tfa, :adm, :perms, :theme, :aus, :q)'
                 );
                 $stmtIns->execute([
                     ':u'     => $username,
                     ':em'    => $email !== '' ? $email : null,
                     ':h'     => $hash,
                     ':tfa'   => $twoFactor,
-                    ':adm'   => $makeAdmin,
+                    ':adm'   => isFullAdmin() ? $makeAdmin : 0,
+                    ':perms' => (isFullAdmin() && $makeAdmin === 0) ? $createPermsStr : '',
                     ':theme' => 'light',
                     ':aus'   => $allowUserSharing,
                     ':q'     => $quotaMb * 1024 * 1024,
@@ -1084,8 +1092,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
         $twoFactor        = isset($_POST['two_factor_enabled']) ? max(0, min(2, (int)$_POST['two_factor_enabled'])) : 0;
         $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
-        $rawPerms         = isset($_POST['admin_perms']) && is_array($_POST['admin_perms']) ? $_POST['admin_perms'] : [];
-        $cleanPermsStr    = implode(',', parseAdminPermissionsString(implode(',', array_map('strval', $rawPerms))));
+        $rawPerms = [];
+        if (isset($_POST['admin_permissions']) && is_array($_POST['admin_permissions'])) {
+            $rawPerms = $_POST['admin_permissions'];
+        } elseif (isset($_POST['admin_perms']) && is_array($_POST['admin_perms'])) {
+            $rawPerms = $_POST['admin_perms'];
+        }
+        $cleanPermsStr = implode(',', parseAdminPermissionsString(implode(',', array_map('strval', $rawPerms))));
+        // Falls Teil-Admin-Rechte ausgewählt wurden, ist das Konto ein Teil-Admin (is_admin = 0)
+        if ($cleanPermsStr !== '' && $targetUserId !== $currentAdminId) {
+            $makeAdmin = 0;
+        }
 
         $stmtExisting = $pdo->prepare('SELECT is_admin, admin_permissions FROM users WHERE id = :id LIMIT 1');
         $stmtExisting->execute([':id' => $targetUserId]);
@@ -1993,13 +2010,39 @@ $localSnapshots  = getLocalAppSnapshots();
                         <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Rolle</label>
                         <select
                             name="is_admin"
+                            onchange="const box = document.getElementById('createUserPartialPermsBox'); if (box) box.classList.toggle('hidden', this.value !== 'partial');"
                             class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         >
                             <option value="0">Standardbenutzer</option>
-                            <option value="1">Administrator</option>
+                            <?php if (isFullAdmin()): ?>
+                                <option value="partial">🛡️ Teil-Administrator (Bereiche wählen)</option>
+                                <option value="1">Voll-Administrator (Alle Rechte)</option>
+                            <?php endif; ?>
                         </select>
                     </div>
                 </div>
+
+                <?php if (isFullAdmin()): ?>
+                    <div id="createUserPartialPermsBox" class="hidden p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-1.5">
+                        <p class="text-xs font-bold text-indigo-900 dark:text-indigo-200 pb-1 border-b border-indigo-200/70 dark:border-indigo-800">
+                            🛡️ Teil-Admin-Bereiche auswählen:
+                        </p>
+                        <?php foreach ($availableAdminPerms as $pKey => $pMeta): ?>
+                            <label class="flex items-start gap-2 p-1 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="admin_permissions[]"
+                                    value="<?= e($pKey) ?>"
+                                    class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                >
+                                <span class="leading-tight">
+                                    <span class="font-semibold"><?= $pMeta['icon'] ?> <?= e($pMeta['label']) ?></span>
+                                    <span class="block text-[10px] text-slate-500 dark:text-slate-400"><?= e($pMeta['desc']) ?></span>
+                                </span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
 
                 <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
                     <input type="checkbox" name="two_factor_enabled" value="1" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
@@ -2021,7 +2064,7 @@ $localSnapshots  = getLocalAppSnapshots();
         </div>
 
         <!-- Liste aller Benutzer -->
-        <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+        <div class="lg:col-span-2 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
             <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                     <h2 class="text-base font-bold text-slate-900 dark:text-white">Registrierte Cloud-Benutzer</h2>
@@ -2041,7 +2084,7 @@ $localSnapshots  = getLocalAppSnapshots();
                 </div>
             </div>
 
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto pb-52 -mb-52">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
                         <tr class="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
@@ -2162,17 +2205,24 @@ $localSnapshots  = getLocalAppSnapshots();
                                         </label>
                                         <?php if (isFullAdmin()): ?>
                                             <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Voll-Administrator (alle Rechte)">
-                                                <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>
+                                                <input
+                                                    type="checkbox"
+                                                    name="is_admin"
+                                                    value="1"
+                                                    <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?>
+                                                    <?= $uId === $currentAdminId ? 'disabled' : '' ?>
+                                                    onchange="if (this.checked) { this.form.querySelectorAll('.partial-perm-cb').forEach(cb => cb.checked = false); const badge = this.form.querySelector('.partial-perm-label'); if (badge) badge.textContent = '🛡️ Teil-Rechte'; }"
+                                                >
                                                 <span>Voll-Admin</span>
                                             </label>
-                                            <?php if ($uId !== $currentAdminId && (int)$u['is_admin'] === 0): ?>
+                                            <?php if ($uId !== $currentAdminId): ?>
                                                 <details class="relative inline-block">
-                                                    <summary class="list-none inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none <?= !empty($uAdminPerms) ? 'bg-indigo-50 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100' ?>" title="Einzelne Admin-Bereiche an diesen Benutzer übertragen">
-                                                        <span>🛡️ Teil-Rechte<?= !empty($uAdminPerms) ? ' (' . count($uAdminPerms) . ')' : '' ?></span>
+                                                    <summary class="list-none inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer select-none <?= !empty($uAdminPerms) ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs' : 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60' ?>" title="Einzelne Admin-Bereiche an diesen Benutzer übertragen (Teil-Administration)">
+                                                        <span class="partial-perm-label">🛡️ Teil-Rechte<?= !empty($uAdminPerms) ? ' (' . count($uAdminPerms) . ')' : '' ?></span>
                                                     </summary>
-                                                    <div class="absolute right-0 sm:left-0 mt-1.5 w-64 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl z-30 space-y-1.5">
+                                                    <div class="absolute right-0 sm:left-0 mt-1.5 w-68 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl z-40 space-y-1.5">
                                                         <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 pb-1 border-b border-slate-200 dark:border-slate-800">
-                                                            🛡️ Admin-Rechte übertragen:
+                                                            🛡️ Teil-Administration übertragen:
                                                         </p>
                                                         <?php foreach ($availableAdminPerms as $pKey => $pMeta): ?>
                                                             <label class="flex items-start gap-2 p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/70 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
@@ -2181,7 +2231,8 @@ $localSnapshots  = getLocalAppSnapshots();
                                                                     name="admin_permissions[]"
                                                                     value="<?= e($pKey) ?>"
                                                                     <?= in_array($pKey, $uAdminPerms, true) ? 'checked' : '' ?>
-                                                                    class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                                    onchange="const form = this.form; const checkedCount = form.querySelectorAll('.partial-perm-cb:checked').length; if (checkedCount > 0) { const fullAdm = form.querySelector('input[name=is_admin]'); if (fullAdm && !fullAdm.disabled) fullAdm.checked = false; } const badge = form.querySelector('.partial-perm-label'); if (badge) badge.textContent = checkedCount > 0 ? ('🛡️ Teil-Rechte (' + checkedCount + ')') : '🛡️ Teil-Rechte';"
+                                                                    class="partial-perm-cb mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                                                 >
                                                                 <span class="leading-tight">
                                                                     <span class="font-semibold"><?= $pMeta['icon'] ?> <?= e($pMeta['label']) ?></span>
@@ -2189,9 +2240,12 @@ $localSnapshots  = getLocalAppSnapshots();
                                                                 </span>
                                                             </label>
                                                         <?php endforeach; ?>
-                                                        <p class="text-[10px] text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-800">
-                                                            Nach Auswahl auf „Speichern“ klicken.
-                                                        </p>
+                                                        <div class="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                                                            <span class="text-[10px] text-slate-400">Direkt übernehmen:</span>
+                                                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer">
+                                                                ✓ Teil-Rechte speichern
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </details>
                                             <?php endif; ?>

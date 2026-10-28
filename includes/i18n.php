@@ -307,6 +307,20 @@ function getTranslationDictionary(): array
             'nl' => '🛡️ Deelbeheerder',
             'it' => '🛡️ Amministratore delegato',
         ],
+        'Teil-Administration' => [
+            'en' => 'Delegated Admin',
+            'fr' => 'Administration déléguée',
+            'es' => 'Administración delegada',
+            'nl' => 'Deelbeheer',
+            'it' => 'Amministrazione delegata',
+        ],
+        '🛡️ Teil-Administration' => [
+            'en' => '🛡️ Delegated Administration',
+            'fr' => '🛡️ Administration déléguée',
+            'es' => '🛡️ Administración delegada',
+            'nl' => '🛡️ Deelbeheer',
+            'it' => '🛡️ Amministrazione delegata',
+        ],
         '🔒 Gesperrt' => [
             'en' => '🔒 Locked',
             'fr' => '🔒 Verrouillé',
