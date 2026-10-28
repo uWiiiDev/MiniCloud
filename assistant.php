@@ -147,8 +147,25 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin): array
                 ['label' => '📝 Office Light Zentrale öffnen', 'url' => 'office.php'],
             ],
             'followups' => [
+                'Wie funktioniert der E-Book-Reader (.epub)?',
                 'Wie kann ich ein PDF bearbeiten oder ausfüllen?',
-                'Wie funktioniert die OCR-Texterkennung?',
+            ],
+        ],
+        [
+            'id'       => 'ebook_reader_epub',
+            'title'    => 'E-Book-Reader & Bibliothek (.epub)',
+            'icon'     => '📚',
+            'keywords' => ['ebook', 'e book', 'ebooks', 'epub', 'buch', 'buecher', 'lesen', 'lesezeichen', 'buecherregal', 'kapitel', 'sepia'],
+            'answer'   => "Mit dem **📚 E-Book-Reader** (`ebooks.php`) liest du alle **`.epub`-Bücher** deiner Cloud bequem im Browser:\n\n"
+                . "- **📚 Automatisches Bücherregal:** Findet alle `.epub`-Dateien aus deinen Ordnern, Gruppenordnern und Freigaben und zeigt automatisch **Buchcover, Titel, Autor und Klappentext** an.\n"
+                . "- **🔖 Synchronisierter Lesefortschritt:** Die Cloud merkt sich automatisch dein aktuelles Kapitel und deine Scroll-Position (`% gelesen`), sodass du am Smartphone nahtlos dort weiterlesen kannst, wo du am PC aufgehört hast!\n"
+                . "- **🎨 Augenkomfort & Suche:** Wähle zwischen *☀️ Papier*, *📜 Sepia*, *🌆 Schiefer* und *🌙 Nachtmodus*, passe Schriftgröße & Schriftart an, setze **Lesezeichen mit Notiz** und durchsuche das gesamte Buch im Volltext.",
+            'actions'  => [
+                ['label' => '📚 E-Book-Bibliothek öffnen', 'url' => 'ebooks.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert Office Light?',
+                'Wie viel Speicherplatz habe ich noch frei?',
             ],
         ],
         [
@@ -819,7 +836,9 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
                     $fName = (string)$f['original_name'];
                     $fFolder = trim((string)($f['folder_path'] ?? '')) !== '' ? ' (Ordner: `' . $f['folder_path'] . '`)' : ' (Hauptverzeichnis)';
                     $foundLines[] = "- 📄 **Datei:** " . htmlspecialchars($fName, ENT_QUOTES, 'UTF-8') . $fFolder . ' · ' . formatBytes((int)$f['file_size']);
-                    if (isOfficeEditableFile($fName)) {
+                    if (strtolower(pathinfo($fName, PATHINFO_EXTENSION)) === 'epub') {
+                        $actions[] = ['label' => '📖 ' . mb_substr($fName, 0, 24) . ' im E-Book-Reader lesen', 'url' => 'ebooks.php?id=' . (int)$f['id']];
+                    } elseif (isOfficeEditableFile($fName)) {
                         $actions[] = ['label' => '📝 ' . mb_substr($fName, 0, 24) . ' in Office öffnen', 'url' => 'office.php?id=' . (int)$f['id']];
                     } else {
                         $actions[] = ['label' => '⬇️ ' . mb_substr($fName, 0, 24) . ' herunterladen', 'url' => 'download.php?id=' . (int)$f['id']];

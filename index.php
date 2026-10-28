@@ -1344,6 +1344,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </a>
                                     <?php endif; ?>
 
+                                    <?php if (!$isEncrypted && strtolower(pathinfo($origName, PATHINFO_EXTENSION)) === 'epub' && (($appSettings['enable_ebooks'] ?? '1') === '1')): ?>
+                                        <!-- E-BOOK LESEN BUTTON (.epub) -->
+                                        <a
+                                            href="ebooks.php?id=<?= $fId ?>"
+                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 transition-colors"
+                                            title="Im E-Book-Reader lesen (.epub)"
+                                            aria-label="Im E-Book-Reader lesen"
+                                        >
+                                            <span class="text-xs leading-none">📖</span>
+                                        </a>
+                                    <?php endif; ?>
+
                                     <!-- HERUNTERLADEN-BUTTON -->
                                     <?php if ($isEncrypted): ?>
                                         <button

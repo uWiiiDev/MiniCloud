@@ -649,6 +649,9 @@ function getFileTypeBadge(string $originalName, string $mimeType): array
     if ($mimeType === 'application/pdf' || $ext === 'pdf') {
         return ['label' => 'PDF', 'bg' => 'bg-red-100 dark:bg-red-950/70', 'text' => 'text-red-700 dark:text-red-300'];
     }
+    if ($ext === 'epub' || $mimeType === 'application/epub+zip') {
+        return ['label' => 'EPUB', 'bg' => 'bg-amber-100 dark:bg-amber-950/70', 'text' => 'text-amber-800 dark:text-amber-300'];
+    }
     if (in_array($ext, ['zip', 'tar', 'gz', '7z', 'rar'], true)) {
         return ['label' => strtoupper($ext), 'bg' => 'bg-amber-100 dark:bg-amber-950/70', 'text' => 'text-amber-800 dark:text-amber-300'];
     }
@@ -721,6 +724,7 @@ function getAppSettings(?PDO $pdo = null): array
         'enable_projects'               => '1',
         'enable_office'                 => '1',
         'enable_assistant'              => '1',
+        'enable_ebooks'                 => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3012,6 +3016,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_assistant',
             'color'       => 'bg-purple-600',
         ],
+        'ebooks' => [
+            'icon'        => '📚',
+            'label'       => 'E-Book-Reader & Bibliothek (.epub)',
+            'url'         => 'ebooks.php',
+            'setting_key' => 'enable_ebooks',
+            'color'       => 'bg-amber-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3050,6 +3061,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'polls.php'     => 'polls',
         'menti.php'     => 'menti',
         'assistant.php' => 'assistant',
+        'ebooks.php'    => 'ebooks',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3166,6 +3178,13 @@ function getModuleInventorySummary(PDO $pdo): array
     $summary['menti'] = $mentiCount . ' Live-' . ($mentiCount === 1 ? 'Präsentation' : 'Präsentationen');
 
     $summary['assistant'] = 'Live-Kontodaten & Handbuch';
+
+    $epubCount = $safeCount(
+        "SELECT COUNT(*) FROM `files`
+         WHERE `deleted_at` IS NULL
+           AND LOWER(SUBSTRING_INDEX(`original_name`, '.', -1)) = 'epub'"
+    );
+    $summary['ebooks'] = $epubCount . ' E-' . ($epubCount === 1 ? 'Book (.epub)' : 'Books (.epub)');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
