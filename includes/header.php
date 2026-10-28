@@ -538,231 +538,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     </a>
                 </div>
 
-                <!-- ⊞ App-Launcher (Alle Module + ⭐ Favoriten-Pin für die Kopfzeile) -->
-                <div class="relative">
-                    <button
-                        type="button"
-                        id="appLauncherBtn"
-                        onclick="toggleHeaderPopover('appLauncherMenu')"
-                        class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
-                        title="Alle Module &amp; Kopfzeilen-Favoriten (⭐)"
-                        aria-label="Alle Module"
-                    >
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                        </svg>
-                        <span class="hidden sm:inline text-xs font-semibold">Module</span>
-                    </button>
-
-                    <div
-                        id="appLauncherMenu"
-                        class="hidden fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full sm:mt-2 w-[calc(100vw-1rem)] max-w-[350px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 z-50"
-                    >
-                        <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-200/80 dark:border-slate-800">
-                            <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🧩 Cloud-Module</span>
-                            <span class="text-[11px] text-slate-400 dark:text-slate-500">⠿ Ziehen · ⭐ Anheften</span>
-                        </div>
-
-                        <div id="appLauncherGrid" class="grid grid-cols-2 gap-2">
-                            <!-- Dateien -->
-                            <div data-launcher-item="files" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="index.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📁</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Dateien</span>
-                                </a>
-                                <button type="button" data-nav-star="files" onclick="toggleHeaderNavFavorite('files', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">⭐</button>
-                            </div>
-
-                            <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="calendar" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="calendar.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📅</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kalender</span>
-                                </a>
-                                <button type="button" data-nav-star="calendar" onclick="toggleHeaderNavFavorite('calendar', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="chat" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="messages.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">💬</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Chat</span>
-                                    <?php if ($headerUnreadChat > 0): ?>
-                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white"><?= $headerUnreadChat ?></span>
-                                    <?php endif; ?>
-                                </a>
-                                <button type="button" data-nav-star="chat" onclick="toggleHeaderNavFavorite('chat', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">⭐</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="tasks" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="tasks.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📋</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Aufgaben</span>
-                                </a>
-                                <button type="button" data-nav-star="tasks" onclick="toggleHeaderNavFavorite('tasks', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="notes" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="notes.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📌</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Notizen</span>
-                                </a>
-                                <button type="button" data-nav-star="notes" onclick="toggleHeaderNavFavorite('notes', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="contacts" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="contacts.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📇</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Kontakte</span>
-                                </a>
-                                <button type="button" data-nav-star="contacts" onclick="toggleHeaderNavFavorite('contacts', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_dashboard'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="dashboard" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="dashboard.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🏠</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Mein Tag</span>
-                                </a>
-                                <button type="button" data-nav-star="dashboard" onclick="toggleHeaderNavFavorite('dashboard', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_polls'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="polls" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="polls.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📊</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Umfragen</span>
-                                </a>
-                                <button type="button" data-nav-star="polls" onclick="toggleHeaderNavFavorite('polls', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_menti'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="menti" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="menti.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🎤</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Mentimeter</span>
-                                </a>
-                                <button type="button" data-nav-star="menti" onclick="toggleHeaderNavFavorite('menti', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_passwords'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="passwords" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="passwords.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🔐</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Schlüsselbund</span>
-                                </a>
-                                <button type="button" data-nav-star="passwords" onclick="toggleHeaderNavFavorite('passwords', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_pdf_tools'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="pdf_tools" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="pdf_tools.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📄</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">PDF &amp; Scan</span>
-                                </a>
-                                <button type="button" data-nav-star="pdf_tools" onclick="toggleHeaderNavFavorite('pdf_tools', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_projects'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="projects" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="projects.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🚀</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Projekte</span>
-                                </a>
-                                <button type="button" data-nav-star="projects" onclick="toggleHeaderNavFavorite('projects', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_office'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="office" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="office.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📝</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Office Light</span>
-                                </a>
-                                <button type="button" data-nav-star="office" onclick="toggleHeaderNavFavorite('office', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_assistant'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="assistant" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="assistant.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🤖</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">KI-Assistent</span>
-                                </a>
-                                <button type="button" data-nav-star="assistant" onclick="toggleHeaderNavFavorite('assistant', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_ebooks'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="ebooks" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="ebooks.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">📚</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">E-Books</span>
-                                </a>
-                                <button type="button" data-nav-star="ebooks" onclick="toggleHeaderNavFavorite('ebooks', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php if (($appSettings['enable_games'] ?? '1') === '1'): ?>
-                            <div data-launcher-item="games" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="games.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🎮</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Spiele</span>
-                                </a>
-                                <button type="button" data-nav-star="games" onclick="toggleHeaderNavFavorite('games', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                            <?php endif; ?>
-
-                            <div data-launcher-item="trash" draggable="true" class="relative group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-all cursor-grab active:cursor-grabbing">
-                                <span class="text-slate-300 dark:text-slate-600 group-hover:text-slate-400 text-xs mr-1 select-none" title="Ziehen zum Verschieben">⠿</span>
-                                <a href="trash.php" draggable="false" class="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <span class="text-lg">🗑️</span>
-                                    <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">Papierkorb</span>
-                                    <?php if ($trashCountBadge > 0): ?>
-                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= $trashCountBadge ?></span>
-                                    <?php endif; ?>
-                                </a>
-                                <button type="button" data-nav-star="trash" onclick="toggleHeaderNavFavorite('trash', event)" class="text-sm px-1 hover:scale-125 transition-transform cursor-pointer" title="In Kopfzeile anheften / lösen">☆</button>
-                            </div>
-                        </div>
-
-                        <div class="mt-2.5 pt-2 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
-                            <span>Tipp: Auch oben in der Leiste ziehbar!</span>
-                            <button type="button" onclick="resetHeaderNavAndOrder(event)" class="text-brand-600 dark:text-brand-400 font-semibold hover:underline cursor-pointer">
-                                🔄 Standard
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <!-- ⊞ Modul-Übersicht (eigene Seite modules.php + ⭐ Favoriten-Pin für die Kopfzeile) -->
+                <a
+                    href="modules.php"
+                    id="appLauncherBtn"
+                    class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl <?= $currentScript === 'modules.php' ? 'bg-brand-600 text-white shadow-2xs border border-brand-600' : 'text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80' ?> transition-colors"
+                    title="Alle Cloud-Module anzeigen &amp; Kopfzeilen-Favoriten (⭐) verwalten"
+                    aria-label="Alle Module"
+                >
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                    <span class="hidden sm:inline text-xs font-semibold">Module</span>
+                </a>
 
                 <!-- 👤 Konto, Speicherplatz, Einstellungen, Admin & Abmelden -->
                 <div class="relative">
@@ -911,6 +699,32 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             btn.textContent = isFav ? '⭐' : '☆';
                             btn.title = isFav ? 'Aus Kopfzeile lösen' : 'Oben in Kopfzeile anheften';
                         });
+
+                        document.querySelectorAll('[data-pin-status]').forEach(el => {
+                            const key = el.getAttribute('data-pin-status');
+                            const isFav = pinned.includes(key);
+                            el.textContent = isFav ? '⭐ In Kopfzeile angeheftet' : '☆ Oben anheften';
+                            el.className = isFav
+                                ? 'inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer select-none'
+                                : 'inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer select-none';
+                        });
+
+                        const countEl = document.getElementById('pinnedModuleCounter');
+                        if (countEl) {
+                            let visiblePinnedCount = 0;
+                            if (navBar) {
+                                pinned.forEach(k => {
+                                    if (navBar.querySelector(`[data-nav-item="${k}"]`)) visiblePinnedCount++;
+                                });
+                            } else {
+                                visiblePinnedCount = pinned.length;
+                            }
+                            countEl.textContent = String(visiblePinnedCount);
+                        }
+
+                        if (typeof window.applyModulePageFilters === 'function') {
+                            window.applyModulePageFilters();
+                        }
                     }
 
                     function applyLauncherOrder() {
@@ -1101,6 +915,12 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     applyPinnedNav();
                     initPinnedNavDragAndDrop();
                     initLauncherGridDragAndDrop();
+
+                    document.addEventListener('DOMContentLoaded', function() {
+                        applyLauncherOrder();
+                        applyPinnedNav();
+                        initLauncherGridDragAndDrop();
+                    });
                 })();
                 </script>
             <?php else: ?>
