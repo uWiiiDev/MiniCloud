@@ -601,9 +601,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80 dark:border-slate-800">
                             <div class="min-w-0">
                                 <p class="text-xs font-bold text-slate-900 dark:text-white truncate">👤 <?= e((string)$_SESSION['username']) ?></p>
-                                <p class="text-[11px] text-slate-500 dark:text-slate-400"><?= isAdmin() ? '🛡️ Administrator' : 'Cloud-Benutzer' ?></p>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400"><?= isAdmin() ? '🛡️ Administrator' : (hasAdminPermission() ? '🛡️ Teil-Administrator' : 'Cloud-Benutzer') ?></p>
                             </div>
-                            <?php if (isAdmin()): ?>
+                            <?php if (hasAdminPermission()): ?>
                                 <a href="admin.php" class="text-[11px] font-bold uppercase px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition-colors">Admin</a>
                             <?php endif; ?>
                         </div>
@@ -625,7 +625,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         <?php endif; ?>
 
                         <div class="space-y-1">
-                            <?php if (isAdmin()): ?>
+                            <?php if (hasAdminPermission()): ?>
                                 <a href="admin.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors">
                                     <span>🛡️</span>
                                     <span>System-Administration</span>

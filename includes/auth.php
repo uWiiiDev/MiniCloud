@@ -40,8 +40,93 @@ if (!headers_sent()) {
 }
 
 /**
- * Prüft, ob ein Benutzer eingeloggt ist, synchronisiert Rolle, Theme & Timeout aus der Datenbank
- * und prüft das vom Benutzer gewählte Inaktivitäts-Timeout.
+ * Stellt sicher, dass die Spalten für Kontosperrung (`is_locked`, `lock_reason`)
+ * und delegierte Admin-Einzelrechte (`admin_permissions`) in der Tabelle `users` existieren.
+ */
+function ensureUserSecurityColumns(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $cols = [];
+        $stmt = $pdo->query('SHOW COLUMNS FROM `users`');
+        foreach ($stmt->fetchAll() as $r) {
+            $cols[strtolower((string)$r['Field'])] = true;
+        }
+        if (!isset($cols['is_locked'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_locked` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_admin`");
+        }
+        if (!isset($cols['lock_reason'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `lock_reason` VARCHAR(255) NOT NULL DEFAULT '' AFTER `is_locked`");
+        }
+        if (!isset($cols['admin_permissions'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `admin_permissions` VARCHAR(255) NOT NULL DEFAULT '' AFTER `lock_reason`");
+        }
+    } catch (Throwable) {
+        // Ignorieren falls DB noch im Aufbau
+    }
+}
+
+/**
+ * Liefert alle einzeln übertragbaren Administrations-Rechte (Teil-Admin-Bereiche).
+ *
+ * @return array<string, array{label: string, short: string, icon: string, desc: string}>
+ */
+function getAvailableAdminPermissions(): array
+{
+    return [
+        'users' => [
+            'label' => 'Benutzer, Gruppen & Kontingente',
+            'short' => 'Benutzer & Gruppen',
+            'icon'  => '👥',
+            'desc'  => 'Benutzer anlegen, Quotas ändern, Konten sperren, Selbstregistrierung, Gruppen & Gruppenordner verwalten',
+        ],
+        'modules' => [
+            'label' => 'Module & Nutzungsstatistik',
+            'short' => 'Module',
+            'icon'  => '🧩',
+            'desc'  => 'Cloud-Module aktivieren/deaktivieren und anonymisierte Nutzungsstatistik einsehen',
+        ],
+        'branding' => [
+            'label' => 'Darstellung, Logo & Impressum',
+            'short' => 'Branding',
+            'icon'  => '🎨',
+            'desc'  => 'Anwendungstitel, Untertitel, eigenes Logo und Impressum bearbeiten',
+        ],
+        'mail' => [
+            'label' => 'E-Mail & SMTP-Konfiguration',
+            'short' => 'E-Mail',
+            'icon'  => '✉️',
+            'desc'  => 'E-Mail-Versand (PHP mail / SMTP) einrichten und Test-E-Mails senden',
+        ],
+        'system' => [
+            'label' => 'System, Updates, Backup & Audit-Log',
+            'short' => 'System & Log',
+            'icon'  => '🖥️',
+            'desc'  => 'GitHub-Updates, lokale Sicherungspunkte, Datenbank-Backup, Server-Status & Sicherheitsprotokoll',
+        ],
+    ];
+}
+
+/**
+ * Zerlegt den gespeicherten Berechtigungs-String in gültige Berechtigungsschlüssel.
+ *
+ * @return array<int, string>
+ */
+function parseAdminPermissionsString(string $raw): array
+{
+    $validKeys = array_keys(getAvailableAdminPermissions());
+    $parts = array_filter(array_map('trim', explode(',', strtolower($raw))));
+    return array_values(array_unique(array_intersect($parts, $validKeys)));
+}
+
+/**
+ * Prüft, ob ein Benutzer eingeloggt ist, synchronisiert Rolle, Sperrstatus, Teil-Admin-Rechte,
+ * Theme & Timeout aus der Datenbank und prüft das vom Benutzer gewählte Inaktivitäts-Timeout.
  */
 function isLoggedIn(): bool
 {
@@ -54,10 +139,26 @@ function isLoggedIn(): bool
         $verifiedThisRequest = true;
         try {
             $pdo = getDB();
-            $stmt = $pdo->prepare('SELECT username, is_admin, theme, session_timeout, flash_duration, chat_notify_mode FROM users WHERE id = :id LIMIT 1');
+            ensureUserSecurityColumns($pdo);
+            $stmt = $pdo->prepare(
+                'SELECT username, is_admin, is_locked, lock_reason, admin_permissions, theme, session_timeout, flash_duration, chat_notify_mode
+                 FROM users
+                 WHERE id = :id
+                 LIMIT 1'
+            );
             $stmt->execute([':id' => $_SESSION['user_id']]);
             $row = $stmt->fetch();
             if ($row) {
+                if ((int)($row['is_locked'] ?? 0) === 1) {
+                    $reason = trim((string)($row['lock_reason'] ?? ''));
+                    $_SESSION = [];
+                    setFlash(
+                        'error',
+                        'Ihr Benutzerkonto wurde vom Administrator gesperrt' . ($reason !== '' ? ' (Grund: ' . $reason . ')' : '') . '.'
+                    );
+                    return false;
+                }
+
                 $timeoutMin     = isset($row['session_timeout']) ? (int)$row['session_timeout'] : 30;
                 $flashSec       = isset($row['flash_duration']) ? max(0, min(300, (int)$row['flash_duration'])) : 10;
                 $chatNotifyMode = isset($row['chat_notify_mode']) ? max(0, min(3, (int)$row['chat_notify_mode'])) : 1;
@@ -68,13 +169,14 @@ function isLoggedIn(): bool
                         return false;
                     }
                 }
-                $_SESSION['username']         = (string)$row['username'];
-                $_SESSION['is_admin']         = ((int)$row['is_admin'] === 1);
-                $_SESSION['theme']            = (string)($row['theme'] ?: 'light');
-                $_SESSION['session_timeout']  = $timeoutMin;
-                $_SESSION['flash_duration']   = $flashSec;
-                $_SESSION['chat_notify_mode'] = $chatNotifyMode;
-                $_SESSION['last_activity']    = time();
+                $_SESSION['username']          = (string)$row['username'];
+                $_SESSION['is_admin']          = ((int)$row['is_admin'] === 1);
+                $_SESSION['admin_permissions'] = parseAdminPermissionsString((string)($row['admin_permissions'] ?? ''));
+                $_SESSION['theme']             = (string)($row['theme'] ?: 'light');
+                $_SESSION['session_timeout']   = $timeoutMin;
+                $_SESSION['flash_duration']    = $flashSec;
+                $_SESSION['chat_notify_mode']  = $chatNotifyMode;
+                $_SESSION['last_activity']     = time();
                 if (function_exists('recordModuleUsage')) {
                     recordModuleUsage($pdo);
                 }
@@ -84,12 +186,13 @@ function isLoggedIn(): bool
                 return false;
             }
         } catch (Throwable) {
-            $_SESSION['is_admin']         = $_SESSION['is_admin'] ?? false;
-            $_SESSION['theme']            = $_SESSION['theme'] ?? 'light';
-            $_SESSION['session_timeout']  = $_SESSION['session_timeout'] ?? 30;
-            $_SESSION['flash_duration']   = $_SESSION['flash_duration'] ?? 10;
-            $_SESSION['chat_notify_mode'] = $_SESSION['chat_notify_mode'] ?? 1;
-            $_SESSION['last_activity']    = time();
+            $_SESSION['is_admin']          = $_SESSION['is_admin'] ?? false;
+            $_SESSION['admin_permissions'] = $_SESSION['admin_permissions'] ?? [];
+            $_SESSION['theme']             = $_SESSION['theme'] ?? 'light';
+            $_SESSION['session_timeout']   = $_SESSION['session_timeout'] ?? 30;
+            $_SESSION['flash_duration']    = $_SESSION['flash_duration'] ?? 10;
+            $_SESSION['chat_notify_mode']  = $_SESSION['chat_notify_mode'] ?? 1;
+            $_SESSION['last_activity']     = time();
         }
     }
 
@@ -153,7 +256,7 @@ function getCurrentChatNotifyMode(): int
 }
 
 /**
- * Prüft, ob der aktuell eingeloggte Benutzer Administrator-Rechte besitzt.
+ * Prüft, ob der aktuell eingeloggte Benutzer Voll-Administrator (`is_admin = 1`) ist.
  */
 function isAdmin(): bool
 {
@@ -161,6 +264,36 @@ function isAdmin(): bool
         return false;
     }
     return !empty($_SESSION['is_admin']);
+}
+
+/**
+ * Alias für Voll-Administrator-Prüfung.
+ */
+function isFullAdmin(): bool
+{
+    return isAdmin();
+}
+
+/**
+ * Prüft, ob der aktuelle Benutzer entweder Voll-Admin ist oder ein bestimmtes
+ * delegiertes Einzelrecht (`users`, `modules`, `branding`, `mail`, `system`) besitzt.
+ * Wird `$perm = null` übergeben, gibt die Funktion `true` zurück, sobald mindestens ein Admin-Recht vorliegt.
+ */
+function hasAdminPermission(?string $perm = null): bool
+{
+    if (!isLoggedIn()) {
+        return false;
+    }
+    if (!empty($_SESSION['is_admin'])) {
+        return true;
+    }
+    $perms = isset($_SESSION['admin_permissions']) && is_array($_SESSION['admin_permissions'])
+        ? $_SESSION['admin_permissions']
+        : [];
+    if ($perm === null || $perm === '') {
+        return !empty($perms);
+    }
+    return in_array($perm, $perms, true);
 }
 
 /**
@@ -176,12 +309,12 @@ function requireLogin(): void
 }
 
 /**
- * Schützt Administrationsseiten strikt vor Nicht-Administratoren.
+ * Schützt Administrationsseiten strikt vor Benutzern ohne Admin- bzw. Teil-Admin-Rechte.
  */
-function requireAdmin(): void
+function requireAdmin(?string $requiredPerm = null): void
 {
     requireLogin();
-    if (!isAdmin()) {
+    if (!hasAdminPermission($requiredPerm)) {
         setFlash('error', 'Zugriff verweigert: Für diesen Bereich sind Administrator-Rechte erforderlich.');
         header('Location: index.php');
         exit;

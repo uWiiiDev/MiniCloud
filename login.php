@@ -50,8 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Bitte geben Sie den 6-stelligen Zahlencode ein.';
         } else {
             $pdo = getDB();
+            ensureUserSecurityColumns($pdo);
             $stmt = $pdo->prepare(
-                'SELECT id, username, email, is_admin, theme, two_factor_enabled, totp_secret,
+                'SELECT id, username, email, is_admin, is_locked, lock_reason, admin_permissions, theme, two_factor_enabled, totp_secret,
                         two_factor_code_hash, two_factor_attempts,
                         (two_factor_expires_at IS NOT NULL AND two_factor_expires_at >= NOW()) AS code_not_expired
                  FROM users
@@ -61,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $pendingUserId]);
             $user = $stmt->fetch();
 
-            if (!$user) {
+            if (!$user || (int)($user['is_locked'] ?? 0) === 1) {
                 unset(
                     $_SESSION['pending_2fa_user_id'],
                     $_SESSION['pending_2fa_username'],
@@ -69,7 +70,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['pending_2fa_email_masked'],
                     $_SESSION['pending_2fa_last_sent']
                 );
-                $errors[] = 'Die 2FA-Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.';
+                if ($user && (int)($user['is_locked'] ?? 0) === 1) {
+                    $reason = trim((string)($user['lock_reason'] ?? ''));
+                    $errors[] = 'Dieses Benutzerkonto wurde vom Administrator gesperrt' . ($reason !== '' ? ' (Grund: ' . $reason . ')' : '') . '.';
+                } else {
+                    $errors[] = 'Die 2FA-Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.';
+                }
             } elseif ((int)$user['two_factor_attempts'] >= 5) {
                 $errors[] = $pendingMode === 'totp'
                     ? 'Zu viele ungültige Code-Eingaben. Bitte melden Sie sich erneut an oder fordern Sie unten einen E-Mail-Code an.'
@@ -99,12 +105,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['pending_2fa_email_masked'],
                         $_SESSION['pending_2fa_last_sent']
                     );
-                    $_SESSION['user_id']       = (int)$user['id'];
-                    $_SESSION['username']      = (string)$user['username'];
-                    $_SESSION['is_admin']      = ((int)$user['is_admin'] === 1);
-                    $_SESSION['theme']         = (string)($user['theme'] ?: 'light');
-                    $_SESSION['last_activity'] = time();
-                    $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
+                    $_SESSION['user_id']           = (int)$user['id'];
+                    $_SESSION['username']          = (string)$user['username'];
+                    $_SESSION['is_admin']          = ((int)$user['is_admin'] === 1);
+                    $_SESSION['admin_permissions'] = parseAdminPermissionsString((string)($user['admin_permissions'] ?? ''));
+                    $_SESSION['theme']             = (string)($user['theme'] ?: 'light');
+                    $_SESSION['last_activity']     = time();
+                    $_SESSION['csrf_token']        = bin2hex(random_bytes(32));
 
                     logAuditEvent(
                         $pdo,
@@ -206,8 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             $pdo = getDB();
+            ensureUserSecurityColumns($pdo);
             $stmt = $pdo->prepare(
-                'SELECT id, username, email, password_hash, two_factor_enabled, totp_secret, is_admin, theme
+                'SELECT id, username, email, password_hash, two_factor_enabled, totp_secret, is_admin, is_locked, lock_reason, admin_permissions, theme
                  FROM users
                  WHERE username = :username
                  LIMIT 1'
@@ -220,69 +228,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hashToVerify = $user ? (string)$user['password_hash'] : $dummyHash;
 
             if ($user && password_verify($password, $hashToVerify)) {
-                unset($_SESSION['login_attempts']);
-                $userEmail  = trim((string)($user['email'] ?? ''));
-                $totpSecret = trim((string)($user['totp_secret'] ?? ''));
-                $tfaMode    = (int)($user['two_factor_enabled'] ?? 0);
-                $hasValidEmail = (filter_var($userEmail, FILTER_VALIDATE_EMAIL) !== false);
-
-                if ($tfaMode === 2 && $totpSecret !== '') {
-                    // 2FA per Authenticator-App (Google Authenticator / TOTP)
-                    $pdo->prepare('UPDATE users SET two_factor_attempts = 0 WHERE id = :id')
-                        ->execute([':id' => (int)$user['id']]);
-
-                    $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
-                    $_SESSION['pending_2fa_username']     = (string)$user['username'];
-                    $_SESSION['pending_2fa_mode']         = 'totp';
-                    $_SESSION['pending_2fa_email_masked'] = $hasValidEmail ? maskEmailAddress($userEmail) : '';
-                    $_SESSION['pending_2fa_last_sent']    = 0;
-                } elseif ($tfaMode === 1 && $hasValidEmail) {
-                    // 6-stelligen E-Mail-Code erzeugen und versenden
-                    $otpCode  = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-                    $codeHash = password_hash($otpCode, PASSWORD_BCRYPT, ['cost' => 10]);
-
-                    $stmtOtp = $pdo->prepare(
-                        'UPDATE users
-                         SET two_factor_code_hash = :h,
-                             two_factor_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE),
-                             two_factor_attempts = 0
-                         WHERE id = :id'
-                    );
-                    $stmtOtp->execute([
-                        ':h'  => $codeHash,
-                        ':id' => (int)$user['id'],
-                    ]);
-
-                    if (sendTwoFactorEmail($pdo, $userEmail, (string)$user['username'], $otpCode)) {
-                        $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
-                        $_SESSION['pending_2fa_username']     = (string)$user['username'];
-                        $_SESSION['pending_2fa_mode']         = 'email';
-                        $_SESSION['pending_2fa_email_masked'] = maskEmailAddress($userEmail);
-                        $_SESSION['pending_2fa_last_sent']    = time();
-                        $infoMessage = 'Ein 6-stelliger Bestätigungscode wurde an ' . $_SESSION['pending_2fa_email_masked'] . ' gesendet.';
-                    } else {
-                        $errors[] = 'Der 2FA-Sicherheitscode konnte nicht per E-Mail gesendet werden. Bitte kontaktieren Sie den Administrator.';
-                    }
-                } else {
-                    // Direkter Login ohne 2FA
-                    session_regenerate_id(true);
-                    $_SESSION['user_id']    = (int)$user['id'];
-                    $_SESSION['username']   = (string)$user['username'];
-                    $_SESSION['is_admin']   = ((int)$user['is_admin'] === 1);
-                    $_SESSION['theme']      = (string)($user['theme'] ?: 'light');
-                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
+                if ((int)($user['is_locked'] ?? 0) === 1) {
+                    $reason = trim((string)($user['lock_reason'] ?? ''));
                     logAuditEvent(
                         $pdo,
-                        'login_success',
-                        'Erfolgreiche Anmeldung (Benutzername & Passwort)',
+                        'login_failed',
+                        'Anmeldeversuch für gesperrtes Benutzerkonto blockiert',
                         (int)$user['id'],
                         (string)$user['username']
                     );
+                    $errors[] = 'Ihr Benutzerkonto wurde vom Administrator gesperrt' . ($reason !== '' ? ' (Grund: ' . $reason . ')' : '') . '.';
+                } else {
+                    unset($_SESSION['login_attempts']);
+                    $userEmail  = trim((string)($user['email'] ?? ''));
+                    $totpSecret = trim((string)($user['totp_secret'] ?? ''));
+                    $tfaMode    = (int)($user['two_factor_enabled'] ?? 0);
+                    $hasValidEmail = (filter_var($userEmail, FILTER_VALIDATE_EMAIL) !== false);
 
-                    setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
-                    header('Location: index.php');
-                    exit;
+                    if ($tfaMode === 2 && $totpSecret !== '') {
+                        // 2FA per Authenticator-App (Google Authenticator / TOTP)
+                        $pdo->prepare('UPDATE users SET two_factor_attempts = 0 WHERE id = :id')
+                            ->execute([':id' => (int)$user['id']]);
+
+                        $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
+                        $_SESSION['pending_2fa_username']     = (string)$user['username'];
+                        $_SESSION['pending_2fa_mode']         = 'totp';
+                        $_SESSION['pending_2fa_email_masked'] = $hasValidEmail ? maskEmailAddress($userEmail) : '';
+                        $_SESSION['pending_2fa_last_sent']    = 0;
+                    } elseif ($tfaMode === 1 && $hasValidEmail) {
+                        // 6-stelligen E-Mail-Code erzeugen und versenden
+                        $otpCode  = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                        $codeHash = password_hash($otpCode, PASSWORD_BCRYPT, ['cost' => 10]);
+
+                        $stmtOtp = $pdo->prepare(
+                            'UPDATE users
+                             SET two_factor_code_hash = :h,
+                                 two_factor_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE),
+                                 two_factor_attempts = 0
+                             WHERE id = :id'
+                        );
+                        $stmtOtp->execute([
+                            ':h'  => $codeHash,
+                            ':id' => (int)$user['id'],
+                        ]);
+
+                        if (sendTwoFactorEmail($pdo, $userEmail, (string)$user['username'], $otpCode)) {
+                            $_SESSION['pending_2fa_user_id']      = (int)$user['id'];
+                            $_SESSION['pending_2fa_username']     = (string)$user['username'];
+                            $_SESSION['pending_2fa_mode']         = 'email';
+                            $_SESSION['pending_2fa_email_masked'] = maskEmailAddress($userEmail);
+                            $_SESSION['pending_2fa_last_sent']    = time();
+                            $infoMessage = 'Ein 6-stelliger Bestätigungscode wurde an ' . $_SESSION['pending_2fa_email_masked'] . ' gesendet.';
+                        } else {
+                            $errors[] = 'Der 2FA-Sicherheitscode konnte nicht per E-Mail gesendet werden. Bitte kontaktieren Sie den Administrator.';
+                        }
+                    } else {
+                        // Direkter Login ohne 2FA
+                        session_regenerate_id(true);
+                        $_SESSION['user_id']           = (int)$user['id'];
+                        $_SESSION['username']          = (string)$user['username'];
+                        $_SESSION['is_admin']          = ((int)$user['is_admin'] === 1);
+                        $_SESSION['admin_permissions'] = parseAdminPermissionsString((string)($user['admin_permissions'] ?? ''));
+                        $_SESSION['theme']             = (string)($user['theme'] ?: 'light');
+                        $_SESSION['csrf_token']        = bin2hex(random_bytes(32));
+
+                        logAuditEvent(
+                            $pdo,
+                            'login_success',
+                            'Erfolgreiche Anmeldung (Benutzername & Passwort)',
+                            (int)$user['id'],
+                            (string)$user['username']
+                        );
+
+                        setFlash('success', 'Willkommen zurück, ' . $user['username'] . '!');
+                        header('Location: index.php');
+                        exit;
+                    }
                 }
             } else {
                 $_SESSION['login_attempts'][] = time();

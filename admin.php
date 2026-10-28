@@ -5,11 +5,13 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-// Strikter Schutz: Nur eingeloggte Administratoren dürfen auf admin.php zugreifen
+// Strikter Schutz: Nur eingeloggte Administratoren (oder Teil-Administratoren) dürfen auf admin.php zugreifen
 requireAdmin();
 
 $pdo = getDB();
+ensureUserSecurityColumns($pdo);
 $currentAdminId = (int)$_SESSION['user_id'];
+$availableAdminPerms = getAvailableAdminPermissions();
 
 /**
  * Ermittelt kompakte System- und Server-Kennzahlen (Speicherplatz, RAM, CPU, Netzwerk, Uptime).
@@ -886,6 +888,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = (string)($_POST['action'] ?? '');
 
+    // Berechtigungsprüfung für delegierte Teil-Administratoren je nach Aktion
+    $actionPermMap = [
+        'create_user'                     => 'users',
+        'delete_user'                     => 'users',
+        'update_user'                     => 'users',
+        'toggle_lock_user'                => 'users',
+        'update_registration_settings'    => 'users',
+        'create_group'                    => 'users',
+        'delete_group'                    => 'users',
+        'add_group_member'                => 'users',
+        'remove_group_member'             => 'users',
+        'create_group_folder'             => 'users',
+        'delete_group_folder'             => 'users',
+        'grant_group_folder_permission'   => 'users',
+        'revoke_group_folder_permission'  => 'users',
+        'update_modules_settings'         => 'modules',
+        'reset_module_stats'              => 'modules',
+        'update_branding_only'            => 'branding',
+        'update_mail_settings'            => 'mail',
+        'send_test_email'                 => 'mail',
+        'download_db_backup'              => 'system',
+        'clear_audit_log'                 => 'system',
+        'run_github_update'               => 'system',
+        'create_local_snapshot'           => 'system',
+        'restore_local_snapshot'          => 'system',
+        'delete_local_snapshot'           => 'system',
+    ];
+    if (isset($actionPermMap[$action]) && !hasAdminPermission($actionPermMap[$action])) {
+        setFlash('error', 'Keine Berechtigung für diesen Administrations-Bereich.');
+        header('Location: admin.php');
+        exit;
+    }
+
     // --- 0. 1-Klick Datenbank-Backup (.sql) herunterladen ---
     if ($action === 'download_db_backup') {
         logAuditEvent($pdo, 'db_backup', 'Vollständiges SQL-Datenbank-Backup heruntergeladen');
@@ -991,7 +1026,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 3. Benutzer Passwort / Quota / E-Mail / 2FA / Teilen-Sichtbarkeit aktualisieren ---
+    // --- 2b. Benutzerkonto sperren / entsperren ---
+    if ($action === 'toggle_lock_user') {
+        $targetUserId = (int)($_POST['user_id'] ?? 0);
+        $lockReason   = mb_substr(trim((string)($_POST['lock_reason'] ?? '')), 0, 250);
+
+        if ($targetUserId === $currentAdminId) {
+            setFlash('error', 'Sie können Ihr eigenes Konto nicht sperren.');
+        } elseif ($targetUserId > 0) {
+            $stmtTarget = $pdo->prepare('SELECT username, is_admin, is_locked FROM users WHERE id = :id LIMIT 1');
+            $stmtTarget->execute([':id' => $targetUserId]);
+            $targetRow = $stmtTarget->fetch();
+
+            if ($targetRow) {
+                if ((int)$targetRow['is_admin'] === 1 && !isFullAdmin()) {
+                    setFlash('error', 'Nur Voll-Administratoren können andere Administratoren sperren.');
+                } else {
+                    $newLockState = ((int)$targetRow['is_locked'] === 1) ? 0 : 1;
+                    $pdo->prepare('UPDATE users SET is_locked = :l, lock_reason = :r WHERE id = :id')
+                        ->execute([
+                            ':l'  => $newLockState,
+                            ':r'  => $newLockState === 1 ? $lockReason : '',
+                            ':id' => $targetUserId,
+                        ]);
+
+                    logAuditEvent(
+                        $pdo,
+                        $newLockState === 1 ? 'user_lock' : 'user_unlock',
+                        sprintf(
+                            'Benutzerkonto „%s“ %s%s',
+                            (string)$targetRow['username'],
+                            $newLockState === 1 ? 'gesperrt' : 'entsperrt',
+                            ($newLockState === 1 && $lockReason !== '') ? (' (Grund: ' . $lockReason . ')') : ''
+                        )
+                    );
+                    setFlash(
+                        'success',
+                        sprintf(
+                            'Benutzer „%s“ wurde %s.',
+                            (string)$targetRow['username'],
+                            $newLockState === 1 ? 'gesperrt (aktive Sitzungen werden sofort beendet)' : 'wieder entsperrt'
+                        )
+                    );
+                }
+            }
+        }
+        header('Location: admin.php#tab-users');
+        exit;
+    }
+
+    // --- 3. Benutzer Passwort / Quota / E-Mail / 2FA / Teilen-Sichtbarkeit / Teil-Admin-Rechte aktualisieren ---
     if ($action === 'update_user') {
         $targetUserId     = (int)($_POST['user_id'] ?? 0);
         $email            = trim((string)($_POST['email'] ?? ''));
@@ -1000,12 +1084,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $makeAdmin        = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
         $twoFactor        = isset($_POST['two_factor_enabled']) ? max(0, min(2, (int)$_POST['two_factor_enabled'])) : 0;
         $allowUserSharing = isset($_POST['allow_user_sharing']) && $_POST['allow_user_sharing'] === '1' ? 1 : 0;
+        $rawPerms         = isset($_POST['admin_perms']) && is_array($_POST['admin_perms']) ? $_POST['admin_perms'] : [];
+        $cleanPermsStr    = implode(',', parseAdminPermissionsString(implode(',', array_map('strval', $rawPerms))));
 
-        if ($targetUserId === $currentAdminId) {
-            $makeAdmin = 1; // Eigenen Admin-Status nicht entziehen
+        $stmtExisting = $pdo->prepare('SELECT is_admin, admin_permissions FROM users WHERE id = :id LIMIT 1');
+        $stmtExisting->execute([':id' => $targetUserId]);
+        $existingUser = $stmtExisting->fetch();
+
+        if (!isFullAdmin() && $existingUser) {
+            // Teil-Admins dürfen keinen Voll-Admin bearbeiten oder Admin-Rollen/Teil-Rechte verändern
+            if ((int)$existingUser['is_admin'] === 1) {
+                setFlash('error', 'Nur Voll-Administratoren dürfen Konten von Voll-Administratoren bearbeiten.');
+                header('Location: admin.php#tab-users');
+                exit;
+            }
+            $makeAdmin     = (int)$existingUser['is_admin'];
+            $cleanPermsStr = (string)($existingUser['admin_permissions'] ?? '');
         }
 
-        if ($targetUserId > 0) {
+        if ($targetUserId === $currentAdminId) {
+            $makeAdmin = isFullAdmin() ? 1 : (int)($existingUser['is_admin'] ?? 0);
+        }
+
+        if ($targetUserId > 0 && $existingUser) {
             if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
                 setFlash('error', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.');
                 header('Location: admin.php#tab-users');
@@ -1031,17 +1132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          allow_user_sharing = :aus,
                          password_hash = :h,
                          storage_quota = :q,
-                         is_admin = :adm
+                         is_admin = :adm,
+                         admin_permissions = :perms
                      WHERE id = :id'
                 );
                 $stmtUpd->execute([
-                    ':em'  => $email !== '' ? $email : null,
-                    ':tfa' => $twoFactor,
-                    ':aus' => $allowUserSharing,
-                    ':h'   => $hash,
-                    ':q'   => $quotaMb * 1024 * 1024,
-                    ':adm' => $makeAdmin,
-                    ':id'  => $targetUserId,
+                    ':em'    => $email !== '' ? $email : null,
+                    ':tfa'   => $twoFactor,
+                    ':aus'   => $allowUserSharing,
+                    ':h'     => $hash,
+                    ':q'     => $quotaMb * 1024 * 1024,
+                    ':adm'   => $makeAdmin,
+                    ':perms' => $makeAdmin === 1 ? '' : $cleanPermsStr,
+                    ':id'    => $targetUserId,
                 ]);
             } else {
                 $stmtUpd = $pdo->prepare(
@@ -1050,19 +1153,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          two_factor_enabled = :tfa,
                          allow_user_sharing = :aus,
                          storage_quota = :q,
-                         is_admin = :adm
+                         is_admin = :adm,
+                         admin_permissions = :perms
                      WHERE id = :id'
                 );
                 $stmtUpd->execute([
-                    ':em'  => $email !== '' ? $email : null,
-                    ':tfa' => $twoFactor,
-                    ':aus' => $allowUserSharing,
-                    ':q'   => $quotaMb * 1024 * 1024,
-                    ':adm' => $makeAdmin,
-                    ':id'  => $targetUserId,
+                    ':em'    => $email !== '' ? $email : null,
+                    ':tfa'   => $twoFactor,
+                    ':aus'   => $allowUserSharing,
+                    ':q'     => $quotaMb * 1024 * 1024,
+                    ':adm'   => $makeAdmin,
+                    ':perms' => $makeAdmin === 1 ? '' : $cleanPermsStr,
+                    ':id'    => $targetUserId,
                 ]);
             }
-            setFlash('success', 'Benutzer-Einstellungen wurden aktualisiert.');
+            setFlash('success', 'Benutzer-Einstellungen und Berechtigungen wurden aktualisiert.');
         }
         header('Location: admin.php#tab-users');
         exit;
@@ -1576,7 +1681,8 @@ $currentSettings = getAppSettings($pdo);
 
 // Daten für die Admin-Übersicht laden
 $allUsers = $pdo->query(
-    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.totp_secret, u.allow_user_sharing, u.is_admin, u.theme, u.storage_quota, u.created_at,
+    'SELECT u.id, u.username, u.email, u.two_factor_enabled, u.totp_secret, u.allow_user_sharing,
+            u.is_admin, u.is_locked, u.lock_reason, u.admin_permissions, u.theme, u.storage_quota, u.created_at,
             COALESCE(SUM(f.file_size), 0) AS used_bytes, COUNT(f.id) AS file_count
      FROM users u
      LEFT JOIN files f ON f.user_id = u.id
@@ -1643,8 +1749,29 @@ $localSnapshots  = getLocalAppSnapshots();
     </a>
 </div>
 
+<?php if (!isFullAdmin()): ?>
+    <div class="mb-4 p-3.5 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-900 dark:text-indigo-200">
+        <div class="flex items-center gap-2">
+            <span class="text-base">🛡️</span>
+            <span>
+                <strong>Teil-Administrator-Zugang:</strong> Ihnen wurden vom Haupt-Administrator folgende Verwaltungsbereiche übertragen:
+            </span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+            <?php foreach ($availableAdminPerms as $pKey => $pMeta): ?>
+                <?php if (hasAdminPermission($pKey)): ?>
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold bg-indigo-600 text-white text-[11px]">
+                        <?= $pMeta['icon'] ?> <?= e($pMeta['label']) ?>
+                    </span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- THEMATISCHE BEREICHS-NAVIGATION (TABS) -->
 <nav aria-label="Administrations-Bereiche" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-xs mb-6 flex flex-wrap items-center gap-1.5">
+    <?php if (hasAdminPermission('users')): ?>
     <button
         type="button"
         data-admin-tab-btn="tab-users"
@@ -1655,7 +1782,9 @@ $localSnapshots  = getLocalAppSnapshots();
         <span>Benutzer &amp; Registrierung</span>
         <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><?= count($allUsers) ?></span>
     </button>
+    <?php endif; ?>
 
+    <?php if (hasAdminPermission('modules')): ?>
     <button
         type="button"
         data-admin-tab-btn="tab-modules"
@@ -1665,7 +1794,9 @@ $localSnapshots  = getLocalAppSnapshots();
         <span>🧩</span>
         <span>Module &amp; Funktionen</span>
     </button>
+    <?php endif; ?>
 
+    <?php if (hasAdminPermission('branding')): ?>
     <button
         type="button"
         data-admin-tab-btn="tab-branding"
@@ -1675,7 +1806,9 @@ $localSnapshots  = getLocalAppSnapshots();
         <span>🎨</span>
         <span>Darstellung &amp; Impressum</span>
     </button>
+    <?php endif; ?>
 
+    <?php if (hasAdminPermission('mail')): ?>
     <button
         type="button"
         data-admin-tab-btn="tab-mail"
@@ -1685,7 +1818,9 @@ $localSnapshots  = getLocalAppSnapshots();
         <span>✉️</span>
         <span>E-Mail &amp; SMTP</span>
     </button>
+    <?php endif; ?>
 
+    <?php if (hasAdminPermission('system')): ?>
     <button
         type="button"
         data-admin-tab-btn="tab-system"
@@ -1695,13 +1830,14 @@ $localSnapshots  = getLocalAppSnapshots();
         <span>🖥️</span>
         <span>System, Update &amp; Status</span>
     </button>
+    <?php endif; ?>
 
     <button
         type="button"
         data-admin-tab-btn="all"
         onclick="switchAdminTab('all')"
         class="admin-tab-btn sm:ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-        title="Alle Bereiche untereinander einblenden"
+        title="Alle freigeschalteten Bereiche untereinander einblenden"
     >
         <span>📋</span>
         <span>Alle Bereiche</span>
@@ -1711,6 +1847,7 @@ $localSnapshots  = getLocalAppSnapshots();
 <!-- ======================================================================= -->
 <!-- TAB 1: BENUTZER & REGISTRIERUNG                                         -->
 <!-- ======================================================================= -->
+<?php if (hasAdminPermission('users')): ?>
 <div id="tab-users" data-admin-tab-panel="tab-users" class="space-y-6 mb-10">
     <!-- 1a. Öffentliche Selbstregistrierung -->
     <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
@@ -1923,21 +2060,40 @@ $localSnapshots  = getLocalAppSnapshots();
                             $u2faMode = (int)($u['two_factor_enabled'] ?? 0);
                             $uHasTotp = trim((string)($u['totp_secret'] ?? '')) !== '';
                             $uShareVis = (int)($u['allow_user_sharing'] ?? 0) === 1;
+                            $uLocked = (int)($u['is_locked'] ?? 0) === 1;
+                            $uLockReason = trim((string)($u['lock_reason'] ?? ''));
+                            $uAdminPerms = parseAdminPermissionsString((string)($u['admin_permissions'] ?? ''));
                             $uSearchText = mb_strtolower(
                                 (string)$u['username'] . ' ' .
                                 $uEmail . ' #' . $uId . ' ' .
-                                (((int)$u['is_admin'] === 1) ? 'admin administrator' : 'standard') . ' ' .
+                                (((int)$u['is_admin'] === 1) ? 'admin administrator' : (!empty($uAdminPerms) ? 'teil-admin teiladmin ' . implode(' ', $uAdminPerms) : 'standard')) . ' ' .
+                                ($uLocked ? 'gesperrt sperre locked ' . $uLockReason : 'aktiv') . ' ' .
                                 ($uShareVis ? 'teilen sichtbar' : 'verborgen') . ' ' .
                                 ($u2faMode > 0 ? '2fa totp' : ''),
                                 'UTF-8'
                             );
                             ?>
-                            <tr data-admin-user-row="1" data-user-search="<?= e($uSearchText) ?>" class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                            <tr data-admin-user-row="1" data-user-search="<?= e($uSearchText) ?>" class="<?= $uLocked ? 'bg-red-50/40 dark:bg-red-950/20' : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40' ?>">
                                 <td class="py-3 px-4">
                                     <div class="font-semibold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
-                                        <span><?= e((string)$u['username']) ?></span>
+                                        <span class="<?= $uLocked ? 'line-through text-red-700 dark:text-red-300' : '' ?>"><?= e((string)$u['username']) ?></span>
+                                        <?php if ($uLocked): ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-600 text-white" title="<?= e($uLockReason !== '' ? 'Gesperrt: ' . $uLockReason : 'Konto vom Administrator gesperrt') ?>">🔒 Gesperrt</span>
+                                        <?php endif; ?>
                                         <?php if ((int)$u['is_admin'] === 1): ?>
-                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white">Admin</span>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-600 text-white" title="Voll-Administrator mit allen Rechten">Admin</span>
+                                        <?php elseif (!empty($uAdminPerms)): ?>
+                                            <?php
+                                            $permNames = [];
+                                            foreach ($uAdminPerms as $pk) {
+                                                if (isset($availableAdminPerms[$pk])) {
+                                                    $permNames[] = $availableAdminPerms[$pk]['label'];
+                                                }
+                                            }
+                                            ?>
+                                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-600 text-white" title="<?= e('Übertragene Admin-Rechte: ' . implode(', ', $permNames)) ?>">
+                                                🛡️ Teil-Admin (<?= count($uAdminPerms) ?>)
+                                            </span>
                                         <?php endif; ?>
                                         <?php if ($u2faMode === 2 && $uHasTotp): ?>
                                             <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white" title="2FA per Authenticator-App (Google Authenticator / TOTP) aktiviert">📱 TOTP</span>
@@ -1948,6 +2104,11 @@ $localSnapshots  = getLocalAppSnapshots();
                                             <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600 text-white" title="Sichtbar in der Teilen-Auswahl anderer Benutzer">👁️ Teilen</span>
                                         <?php endif; ?>
                                     </div>
+                                    <?php if ($uLocked && $uLockReason !== ''): ?>
+                                        <div class="text-[11px] font-medium text-red-600 dark:text-red-400 truncate max-w-[220px]" title="<?= e($uLockReason) ?>">
+                                            ⛔ Grund: <?= e($uLockReason) ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]" title="<?= e($uEmail !== '' ? $uEmail : 'Keine E-Mail-Adresse hinterlegt') ?>">
                                         <?= $uEmail !== '' ? '✉️ ' . e($uEmail) : '<span class="italic text-slate-400">Keine E-Mail</span>' ?>
                                     </div>
@@ -1999,27 +2160,93 @@ $localSnapshots  = getLocalAppSnapshots();
                                             <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?>>
                                             <span>Teilen</span>
                                         </label>
-                                        <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                                            <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>
-                                            <span>Admin</span>
-                                        </label>
+                                        <?php if (isFullAdmin()): ?>
+                                            <label class="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer" title="Voll-Administrator (alle Rechte)">
+                                                <input type="checkbox" name="is_admin" value="1" <?= (int)$u['is_admin'] === 1 ? 'checked' : '' ?> <?= $uId === $currentAdminId ? 'disabled' : '' ?>>
+                                                <span>Voll-Admin</span>
+                                            </label>
+                                            <?php if ($uId !== $currentAdminId && (int)$u['is_admin'] === 0): ?>
+                                                <details class="relative inline-block">
+                                                    <summary class="list-none inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium cursor-pointer select-none <?= !empty($uAdminPerms) ? 'bg-indigo-50 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100' ?>" title="Einzelne Admin-Bereiche an diesen Benutzer übertragen">
+                                                        <span>🛡️ Teil-Rechte<?= !empty($uAdminPerms) ? ' (' . count($uAdminPerms) . ')' : '' ?></span>
+                                                    </summary>
+                                                    <div class="absolute right-0 sm:left-0 mt-1.5 w-64 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl z-30 space-y-1.5">
+                                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 pb-1 border-b border-slate-200 dark:border-slate-800">
+                                                            🛡️ Admin-Rechte übertragen:
+                                                        </p>
+                                                        <?php foreach ($availableAdminPerms as $pKey => $pMeta): ?>
+                                                            <label class="flex items-start gap-2 p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/70 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    name="admin_permissions[]"
+                                                                    value="<?= e($pKey) ?>"
+                                                                    <?= in_array($pKey, $uAdminPerms, true) ? 'checked' : '' ?>
+                                                                    class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                                >
+                                                                <span class="leading-tight">
+                                                                    <span class="font-semibold"><?= $pMeta['icon'] ?> <?= e($pMeta['label']) ?></span>
+                                                                    <span class="block text-[10px] text-slate-400"><?= e($pMeta['desc']) ?></span>
+                                                                </span>
+                                                            </label>
+                                                        <?php endforeach; ?>
+                                                        <p class="text-[10px] text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-800">
+                                                            Nach Auswahl auf „Speichern“ klicken.
+                                                        </p>
+                                                    </div>
+                                                </details>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
                                         <button type="submit" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-brand-600 hover:text-white text-xs font-medium transition-colors cursor-pointer">
                                             Speichern
                                         </button>
                                     </form>
                                 </td>
-                                <td class="py-3 px-4 text-right">
-                                    <?php if ($uId !== $currentAdminId): ?>
-                                        <form action="admin.php" method="post" onsubmit="return confirm('Benutzer &quot;<?= e(addslashes((string)$u['username'])) ?>&quot; samt Dateien wirklich löschen?');">
-                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                            <input type="hidden" name="action" value="delete_user">
-                                            <input type="hidden" name="user_id" value="<?= $uId ?>">
-                                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
-                                                Löschen
-                                            </button>
-                                        </form>
+                                <td class="py-3 px-4 text-right whitespace-nowrap">
+                                    <?php if ($uId !== $currentAdminId && (isFullAdmin() || (int)$u['is_admin'] === 0)): ?>
+                                        <div class="inline-flex items-center justify-end gap-1.5">
+                                            <!-- Benutzer sperren / entsperren -->
+                                            <form
+                                                action="admin.php"
+                                                method="post"
+                                                class="inline"
+                                                onsubmit="return handleLockUserSubmit(this, <?= $uLocked ? 'true' : 'false' ?>, <?= e((string)json_encode((string)$u['username'])) ?>);"
+                                            >
+                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                                <input type="hidden" name="action" value="toggle_lock_user">
+                                                <input type="hidden" name="user_id" value="<?= $uId ?>">
+                                                <input type="hidden" name="lock_state" value="<?= $uLocked ? '0' : '1' ?>">
+                                                <input type="hidden" name="lock_reason" value="">
+                                                <?php if ($uLocked): ?>
+                                                    <button
+                                                        type="submit"
+                                                        title="Benutzerkonto wieder entsperren"
+                                                        class="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70 text-xs font-medium cursor-pointer"
+                                                    >
+                                                        🔓 Entsperren
+                                                    </button>
+                                                <?php else: ?>
+                                                    <button
+                                                        type="submit"
+                                                        title="Benutzerkonto sperren (sofortiger Logout & Login-Sperre)"
+                                                        class="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70 text-xs font-medium cursor-pointer"
+                                                    >
+                                                        🔒 Sperren
+                                                    </button>
+                                                <?php endif; ?>
+                                            </form>
+
+                                            <!-- Benutzer löschen -->
+                                            <form action="admin.php" method="post" class="inline" onsubmit="return confirm('Benutzer &quot;<?= e(addslashes((string)$u['username'])) ?>&quot; samt Dateien wirklich löschen?');">
+                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <input type="hidden" name="user_id" value="<?= $uId ?>">
+                                                <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
+                                                    Löschen
+                                                </button>
+                                            </form>
+                                        </div>
                                     <?php else: ?>
-                                        <span class="text-xs text-slate-400">Aktuell</span>
+                                        <span class="text-xs text-slate-400"><?= $uId === $currentAdminId ? 'Aktuell' : 'Geschützt' ?></span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -2035,10 +2262,12 @@ $localSnapshots  = getLocalAppSnapshots();
         </div>
     </section>
 </div>
+<?php endif; ?>
 
 <!-- ======================================================================= -->
 <!-- TAB 2: MODULE & FUNKTIONEN (inkl. Modul-Nutzungsstatistik)              -->
 <!-- ======================================================================= -->
+<?php if (hasAdminPermission('modules')): ?>
 <?php
 $moduleUsageStats = getModuleUsageStatistics($pdo, $currentSettings);
 $modTotals        = $moduleUsageStats['totals'];
@@ -2975,10 +3204,12 @@ foreach ($modList as $mItem) {
         </form>
     </section>
 </div>
+<?php endif; ?>
 
 <!-- ======================================================================= -->
 <!-- TAB 3: DARSTELLUNG, LOGO & IMPRESSUM (BRANDING)                         -->
 <!-- ======================================================================= -->
+<?php if (hasAdminPermission('branding')): ?>
 <div id="tab-branding" data-admin-tab-panel="tab-branding" class="hidden space-y-6 mb-10">
     <section id="branding" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
@@ -3100,10 +3331,12 @@ foreach ($modList as $mItem) {
         </form>
     </section>
 </div>
+<?php endif; ?>
 
 <!-- ======================================================================= -->
 <!-- TAB 4: E-MAIL & SMTP (Passwort-Reset & 2FA)                             -->
 <!-- ======================================================================= -->
+<?php if (hasAdminPermission('mail')): ?>
 <div id="tab-mail" data-admin-tab-panel="tab-mail" class="hidden space-y-6 mb-10">
     <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-200 dark:border-slate-800">
@@ -3304,10 +3537,12 @@ foreach ($modList as $mItem) {
         </div>
     </section>
 </div>
+<?php endif; ?>
 
 <!-- ======================================================================= -->
 <!-- TAB 5: SYSTEM, UPDATE & SERVER-STATUS                                   -->
 <!-- ======================================================================= -->
+<?php if (hasAdminPermission('system')): ?>
 <div id="tab-system" data-admin-tab-panel="tab-system" class="hidden space-y-6 mb-10">
     <!-- 5a. SYSTEM-UPDATE, VERSIONSWAHL & ROLLBACK ÜBER GITHUB / LOKALE SNAPSHOTS -->
     <section id="system-update" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
@@ -3766,6 +4001,8 @@ foreach ($modList as $mItem) {
                 'db_backup'          => ['label' => '💾 SQL-Backup',      'cls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'],
                 'user_create'        => ['label' => '👤 Konto angelegt',  'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
                 'user_delete'        => ['label' => '🚫 Konto gelöscht',  'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
+                'user_lock'          => ['label' => '🔒 Konto gesperrt',  'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
+                'user_unlock'        => ['label' => '🔓 Konto entsperrt', 'cls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'],
                 'system_update'      => ['label' => '⬆️ System-Update',   'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
                 'snapshot_restore'   => ['label' => '⏪ Rollback',        'cls' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'],
                 'audit_clear'        => ['label' => '🧹 Log geleert',     'cls' => 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'],
@@ -3817,8 +4054,27 @@ foreach ($modList as $mItem) {
         <?php endif; ?>
     </section>
 </div>
+<?php endif; ?>
 
 <script>
+function handleLockUserSubmit(form, isCurrentlyLocked, username) {
+    if (isCurrentlyLocked) {
+        return confirm(`Möchten Sie das Benutzerkonto „${username}“ wieder entsperren?`);
+    }
+    const reason = prompt(
+        `Benutzerkonto „${username}“ jetzt sperren?\n\nDer Benutzer wird sofort abgemeldet und kann sich nicht mehr einloggen.\nOptionaler Sperrgrund (wird beim Anmeldeversuch angezeigt):`,
+        ''
+    );
+    if (reason === null) {
+        return false;
+    }
+    const reasonInput = form.querySelector('input[name="lock_reason"]');
+    if (reasonInput) {
+        reasonInput.value = reason.trim();
+    }
+    return true;
+}
+
 function switchAdminTab(tabId, updateHash = true) {
     const panels = document.querySelectorAll('[data-admin-tab-panel]');
     const buttons = document.querySelectorAll('[data-admin-tab-btn]');
@@ -3858,8 +4114,14 @@ function switchAdminTab(tabId, updateHash = true) {
 
 (() => {
     const initialHash = (window.location.hash || '').replace(/^#/, '');
+    const availablePanels = Array.from(document.querySelectorAll('[data-admin-tab-panel]')).map(el => el.getAttribute('data-admin-tab-panel'));
+    const defaultTab = availablePanels[0] || 'all';
     const validTabs = ['tab-users', 'tab-modules', 'tab-branding', 'tab-mail', 'tab-system', 'all', 'branding', 'system-update', 'server-status', 'users'];
-    switchAdminTab(validTabs.includes(initialHash) ? initialHash : 'tab-users', false);
+    const requestedTab = validTabs.includes(initialHash) ? initialHash : defaultTab;
+    const hashMap = { 'branding': 'tab-branding', 'system-update': 'tab-system', 'server-status': 'tab-system', 'audit-log': 'tab-system', 'users': 'tab-users' };
+    const resolvedReq = hashMap[requestedTab] || requestedTab;
+    const finalInitialTab = (resolvedReq === 'all' || availablePanels.includes(resolvedReq)) ? requestedTab : defaultTab;
+    switchAdminTab(finalInitialTab, false);
 
     const transportSel = document.getElementById('mailTransportSelect');
     const smtpBox = document.getElementById('smtpSettingsBox');

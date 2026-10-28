@@ -459,8 +459,6 @@ $pageTitle = $activeGroupFolder
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!-- ORDNER-VERWALTUNG: Neuen Ordner anlegen & Ordner-Übersicht (bei eigenen Dateien oder im Gruppenordner) -->
-<?php if ($activeSharedFolder === null): ?>
 <?php
 $activeFolderMeta = null;
 if ($currentFolder !== '') {
@@ -473,148 +471,6 @@ if ($currentFolder !== '') {
 }
 $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroupFolder['id'] : '';
 ?>
-<section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-xs mb-5">
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <!-- Links: Ordner-Dropdown + Aktionen für den aktuell gewählten Ordner -->
-        <div class="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-            <label for="folderNavSelect" class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 shrink-0">
-                <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                </svg>
-                <span>Ordner (<?= count($userFolders) ?>):</span>
-            </label>
-
-            <select
-                id="folderNavSelect"
-                onchange="window.location.href = this.value"
-                class="w-full sm:w-auto sm:min-w-[260px] max-w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
-            >
-                <option value="index.php<?= $baseGfQuery !== '' ? '?' . $baseGfQuery : '' ?>" <?= ($currentFolder === '' && !$showAllFolders) ? 'selected' : '' ?>>
-                    🏠 <?= ($activeGroupFolder !== null ? e((string)$activeGroupFolder['name']) . ' – Hauptverzeichnis' : 'Hauptverzeichnis') . ' (' . $rootFileCount . ' • ' . e(formatBytes($rootFolderSize)) . ')' ?>
-                </option>
-                <?php foreach ($userFolders as $folderRow): ?>
-                    <?php
-                    $fPath = (string)$folderRow['folder_path'];
-                    $depth = substr_count($fPath, '/');
-                    $indent = $depth > 0 ? str_repeat('— ', $depth) : '';
-                    $folderUrl = 'index.php?' . ($baseGfQuery !== '' ? $baseGfQuery . '&' : '') . 'folder=' . rawurlencode($fPath);
-                    $fLinkShares = (int)($folderShareCounts[$fPath]['links'] ?? 0);
-                    $fUserShares = (int)($folderShareCounts[$fPath]['users'] ?? 0);
-                    $shareIndicator = '';
-                    if ($fLinkShares > 0) {
-                        $shareIndicator .= ' 🔗' . $fLinkShares;
-                    }
-                    if ($fUserShares > 0) {
-                        $shareIndicator .= ' 👤' . $fUserShares;
-                    }
-                    ?>
-                    <option value="<?= e($folderUrl) ?>" <?= $currentFolder === $fPath ? 'selected' : '' ?>>
-                        <?= e($indent . '📁 ' . $fPath . ' (' . (int)$folderRow['file_count'] . ' • ' . formatBytes((int)$folderRow['folder_size']) . ')' . $shareIndicator) ?>
-                    </option>
-                <?php endforeach; ?>
-                <?php if (!empty($userFolders)): ?>
-                    <option value="index.php?<?= $baseGfQuery !== '' ? $baseGfQuery . '&amp;' : '' ?>folder=__all__" <?= $showAllFolders ? 'selected' : '' ?>>
-                        📂 Alle Dateien anzeigen (Ordnerübergreifend)
-                    </option>
-                <?php endif; ?>
-            </select>
-
-            <?php if ($currentFolder !== ''): ?>
-                <!-- Aktions-Buttons & Verschieben/Kopieren-Auswahl für den aktuell gewählten Ordner -->
-                <?php
-                $activeGfIdOrNull = $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : null;
-                ?>
-                <div class="inline-flex flex-wrap items-center gap-1.5">
-                    <?php if ($activeGroupFolder === null && $activeFolderMeta !== null && (int)$activeFolderMeta['file_count'] > 0): ?>
-                        <a
-                            href="download.php?folder=<?= rawurlencode($currentFolder) ?>"
-                            title="Ordner als ZIP herunterladen"
-                            aria-label="Ordner als ZIP herunterladen"
-                            class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800/60 transition-colors"
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                            </svg>
-                        </a>
-                    <?php endif; ?>
-
-                    <button
-                        type="button"
-                        onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
-                        title="Ordner verschieben oder kopieren"
-                        aria-label="Ordner verschieben oder kopieren"
-                        class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                        </svg>
-                    </button>
-
-                    <?php if ($activeGroupFolder === null): ?>
-                        <button
-                            type="button"
-                            onclick="openShareModal(0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>)"
-                            title="Ordner teilen"
-                            aria-label="Ordner teilen"
-                            class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors cursor-pointer"
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
-                            </svg>
-                        </button>
-                    <?php endif; ?>
-
-                    <?php if ($canUploadHere && $activeGroupFolder === null): ?>
-                        <form action="delete.php" method="post" class="inline" onsubmit="return confirm('Möchten Sie den Ordner &quot;<?= e(addslashes($currentFolder)) ?>&quot; <?= ($activeFolderMeta && (int)$activeFolderMeta['file_count'] > 0) ? 'inklusive aller darin enthaltenen Dateien ' : '' ?>in den Papierkorb verschieben?');">
-                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                            <input type="hidden" name="delete_folder" value="<?= e($currentFolder) ?>">
-                            <button
-                                type="submit"
-                                title="Ordner löschen"
-                                aria-label="Ordner löschen"
-                                class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 border border-red-200/70 dark:border-red-800/60 transition-colors cursor-pointer"
-                            >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                            </button>
-                        </form>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-        </div>
-
-        <?php if ($canUploadHere): ?>
-            <!-- Rechts: Formular zum Anlegen eines neuen Ordners / Unterordners -->
-            <form action="folder_action.php" method="post" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="create_folder">
-                <?php if ($activeGroupFolder !== null): ?>
-                    <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
-                <?php endif; ?>
-                <input type="hidden" name="parent_folder" value="<?= e($currentFolder) ?>">
-
-                <input
-                    type="text"
-                    name="folder_name"
-                    required
-                    placeholder="<?= $currentFolder !== '' ? 'Neuer Unterordner in ' . e($currentFolder) . '...' : 'Neuer Ordnername (z.B. Projekte)...' ?>"
-                    class="w-full sm:w-56 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                <button
-                    type="submit"
-                    class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer shrink-0"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    <span>Ordner anlegen</span>
-                </button>
-            </form>
-        <?php endif; ?>
-    </div>
-</section>
-<?php endif; ?>
 
 <!-- Haupt-Dateitabelle (Eigene Dateien, aktiver Gruppenordner oder geöffneter freigegebener Ordner) -->
 <section id="mainFilesSection" class="mc-card relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8 transition-all">
@@ -632,7 +488,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         Freigegebener Ordner: <span class="text-blue-600 dark:text-blue-400">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
                         <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(von <?= e((string)$activeSharedFolder['owner_username']) ?>)</span>
                     <?php elseif ($currentFolder !== ''): ?>
-                        Ordner: <span class="text-brand-600 dark:text-brand-400"><?= e($currentFolder) ?></span>
+                        Ordner: <span class="text-brand-600 dark:text-brand-400">📁 <?= e($currentFolder) ?></span>
                     <?php else: ?>
                         Meine hochgeladenen Dateien
                     <?php endif; ?>
@@ -640,17 +496,101 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     <?= count($directSubfolders) > 0 ? count($directSubfolders) . ' Ordner &bull; ' : '' ?><?= count($files) ?> <?= count($files) === 1 ? 'Datei' : 'Dateien' ?>
                 </span>
+
+                <?php if ($activeSharedFolder === null && $currentFolder !== ''): ?>
+                    <!-- Kompakte Ordner-Aktionen für den aktuell geöffneten Ordner -->
+                    <div class="inline-flex flex-wrap items-center gap-1 ml-1">
+                        <?php if ($activeGroupFolder === null && $activeFolderMeta !== null && (int)$activeFolderMeta['file_count'] > 0): ?>
+                            <a
+                                href="download.php?folder=<?= rawurlencode($currentFolder) ?>"
+                                title="Diesen Ordner als ZIP herunterladen"
+                                aria-label="Ordner als ZIP herunterladen"
+                                class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800/60 transition-colors"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
+                                </svg>
+                            </a>
+                        <?php endif; ?>
+
+                        <button
+                            type="button"
+                            onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
+                            title="Diesen Ordner verschieben oder kopieren"
+                            aria-label="Ordner verschieben oder kopieren"
+                            class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                            </svg>
+                        </button>
+
+                        <?php if ($activeGroupFolder === null): ?>
+                            <button
+                                type="button"
+                                onclick="openShareModal(0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>)"
+                                title="Diesen Ordner teilen"
+                                aria-label="Ordner teilen"
+                                class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors cursor-pointer"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                                </svg>
+                            </button>
+                        <?php endif; ?>
+
+                        <?php if ($canUploadHere && $activeGroupFolder === null): ?>
+                            <form action="delete.php" method="post" class="inline" onsubmit="return confirm('Möchten Sie den Ordner &quot;<?= e(addslashes($currentFolder)) ?>&quot; <?= ($activeFolderMeta && (int)$activeFolderMeta['file_count'] > 0) ? 'inklusive aller darin enthaltenen Dateien ' : '' ?>in den Papierkorb verschieben?');">
+                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                <input type="hidden" name="delete_folder" value="<?= e($currentFolder) ?>">
+                                <button
+                                    type="submit"
+                                    title="Diesen Ordner löschen"
+                                    aria-label="Ordner löschen"
+                                    class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 border border-red-200/70 dark:border-red-800/60 transition-colors cursor-pointer"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
             <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $showAllFolders || $onlyFavorites): ?>
-                <div class="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span><?= $searchQuery !== '' ? 'Ordnerübergreifende Suche aktiv' : 'Gefilterte Ansicht aktiv' ?></span>
-                    <span>&bull;</span>
+                <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <a
                         href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
                         data-drop-folder=""
                         data-drop-folder-label="Hauptverzeichnis"
                         class="text-brand-600 dark:text-brand-400 hover:underline font-semibold rounded px-1 -mx-1 transition-all"
-                    >&larr; Zurück zum Hauptverzeichnis</a>
+                    >🏠 Hauptverzeichnis</a>
+                    <?php if ($currentFolder !== ''): ?>
+                        <?php
+                        $crumbParts = explode('/', $currentFolder);
+                        $crumbAccum = '';
+                        foreach ($crumbParts as $cIdx => $cSegment):
+                            $crumbAccum = $crumbAccum === '' ? $cSegment : $crumbAccum . '/' . $cSegment;
+                            $crumbUrl = 'index.php?' . ($baseGfQuery !== '' ? $baseGfQuery . '&' : '') . 'folder=' . rawurlencode($crumbAccum);
+                            $isLastCrumb = ($cIdx === count($crumbParts) - 1);
+                        ?>
+                            <span class="text-slate-400">/</span>
+                            <?php if ($isLastCrumb): ?>
+                                <span class="font-semibold text-slate-700 dark:text-slate-200"><?= e($cSegment) ?></span>
+                            <?php else: ?>
+                                <a
+                                    href="<?= e($crumbUrl) ?>"
+                                    data-drop-folder="<?= e($crumbAccum) ?>"
+                                    data-drop-folder-label="<?= e($crumbAccum) ?>"
+                                    class="text-brand-600 dark:text-brand-400 hover:underline font-medium rounded px-1 -mx-1 transition-all"
+                                ><?= e($cSegment) ?></a>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <span>&bull;</span>
+                        <span><?= $searchQuery !== '' ? 'Ordnerübergreifende Suche aktiv' : 'Gefilterte Ansicht aktiv' ?></span>
+                    <?php endif; ?>
                 </div>
             <?php else: ?>
                 <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
@@ -659,10 +599,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             <?php endif; ?>
         </div>
 
-        <!-- Rechts: Kompakte Upload-Buttons, Favoriten-Filter, Ansicht-Umschalter (Liste / Kacheln) & Globale Suche -->
+        <!-- Rechts: Kompakte Upload-Buttons, Neuer-Ordner-Button, Favoriten-Filter, Ansicht-Umschalter & Globale Suche -->
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <?php if ($canUploadHere): ?>
-                <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data" class="inline-flex items-center gap-1.5">
+                <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data" class="inline-flex flex-wrap items-center gap-1.5">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                     <input type="hidden" id="target_folder" name="target_folder" value="<?= e($currentFolder) ?>">
                     <?php if ($activeSharedFolder !== null): ?>
@@ -688,12 +628,24 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <button
                         type="button"
                         id="btnSelectFolder"
-                        title="Kompletten Ordner samt Unterordnern hochladen"
+                        title="Kompletten Ordner samt Unterordnern vom Gerät hochladen"
                         class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
                     >
-                        <span>📁+</span>
-                        <span class="hidden sm:inline">Ordner</span>
+                        <span>📁↑</span>
+                        <span class="hidden sm:inline">Ordner-Upload</span>
                     </button>
+
+                    <?php if ($activeSharedFolder === null): ?>
+                        <button
+                            type="button"
+                            onclick="toggleNewFolderBar()"
+                            title="Neuen Ordner im aktuellen Verzeichnis anlegen"
+                            class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                            <span>📁+</span>
+                            <span class="hidden sm:inline">Neuer Ordner</span>
+                        </button>
+                    <?php endif; ?>
 
                     <button
                         type="button"
@@ -783,6 +735,59 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             </form>
         </div>
     </div>
+
+    <?php if ($canUploadHere && $activeSharedFolder === null): ?>
+        <!-- Ausklappbare Schnellleiste: Neuen Ordner / Unterordner anlegen -->
+        <div id="newFolderInlineBar" class="hidden px-4 sm:px-6 py-3 bg-amber-50/70 dark:bg-amber-950/30 border-b border-amber-200/80 dark:border-amber-800/70">
+            <form action="folder_action.php" method="post" class="flex flex-col sm:flex-row sm:items-center gap-2">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="create_folder">
+                <?php if ($activeGroupFolder !== null): ?>
+                    <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+                <?php endif; ?>
+                <input type="hidden" name="parent_folder" value="<?= e($currentFolder) ?>">
+
+                <span class="text-xs font-bold text-amber-900 dark:text-amber-300 shrink-0">
+                    📁 <?= $currentFolder !== '' ? 'Neuer Unterordner in „' . e($currentFolder) . '“:' : 'Neuen Ordner anlegen:' ?>
+                </span>
+                <input
+                    type="text"
+                    id="newFolderInlineInput"
+                    name="folder_name"
+                    required
+                    placeholder="<?= $currentFolder !== '' ? 'Name des Unterordners...' : 'Ordnername (z.B. Projekte, Rechnungen)...' ?>"
+                    class="flex-1 sm:max-w-xs px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                <div class="flex items-center gap-1.5">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer"
+                    >
+                        <span>Anlegen</span>
+                    </button>
+                    <button
+                        type="button"
+                        onclick="toggleNewFolderBar(false)"
+                        class="px-2.5 py-1.5 rounded-xl bg-white/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                    >
+                        Abbrechen
+                    </button>
+                </div>
+            </form>
+        </div>
+        <script>
+        function toggleNewFolderBar(forceShow) {
+            const bar = document.getElementById('newFolderInlineBar');
+            const inp = document.getElementById('newFolderInlineInput');
+            if (!bar) return;
+            const show = typeof forceShow === 'boolean' ? forceShow : bar.classList.contains('hidden');
+            bar.classList.toggle('hidden', !show);
+            if (show && inp) {
+                setTimeout(() => inp.focus(), 30);
+            }
+        }
+        </script>
+    <?php endif; ?>
 
     <?php if ($canUploadHere): ?>
         <!-- Schlanker Drag-&-Drop-Hinweis & Fortschrittsbalken (erscheint nur bei aktivem Drag & Drop oder Upload) -->
