@@ -1144,16 +1144,17 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
         ],
         [
             'id'       => 'group_folders',
-            'title'    => 'Gruppenordner & Team-Laufwerke',
+            'title'    => 'Ordner mit Gruppen & Teams teilen',
             'icon'     => '👥',
             'keywords' => [
                 'gruppenordner', 'teamordner', 'gemeinsamer ordner', 'abteilung', 'verein', 'gruppe',
                 'group folder', 'shared folder', 'team folder', 'dossier de groupe', 'carpeta de grupo', 'cartella di gruppo', 'groepsmap', 'folder grupowy', 'pasta de grupo', 'skupinova slozka', 'grup klasoru', 'групова папка',
             ],
-            'answer'   => "**👥 Gruppenordner** sind gemeinsame Team-Bereiche (z. B. für Familie, Projekte, Vereine oder Abteilungen):\n\n"
-                . "- Sie erscheinen direkt unterhalb deiner eigenen Dateien in **📂 Dateien** sowie im **WebDAV-Netzlaufwerk** unter `/Gruppenordner/`.\n"
-                . "- Je nach Berechtigung (*Nur Lesen* oder *Lesen & Schreiben*) können alle berechtigten Mitglieder dort gemeinsam Dateien ablegen, Ordner anlegen und Dokumente in **📝 Office Light** bearbeiten.\n"
-                . "- Neue Gruppenordner und deren Zugriffsrechte werden vom **Administrator** unter *⚙️ Admin → Gruppen & Gruppenordner* eingerichtet.",
+            'answer'   => "Gemeinsame **👥 Team- & Gruppen-Ordner** (z. B. für Familie, Projekte, Vereine oder Abteilungen) richtest du ganz flexibel direkt über das **Teilen-Menü (`🔗`)** ein:\n\n"
+                . "1. Lege in **📂 Dateien** (`index.php`) einen beliebigen Ordner an und klicke auf das **🔗 Teilen-Symbol**.\n"
+                . "2. Wähle unter *„Mit Cloud-Benutzern oder Gruppen teilen“* entweder einzelne Mitglieder oder eine komplette **👥 Benutzergruppe** aus.\n"
+                . "3. Lege die gewünschte **3-stufige Berechtigung** fest: **👁️ Nur Lesen**, **✏️ Lesen & Schreiben** oder **🗑️ Lesen, Schreiben & Löschen**.\n"
+                . "4. Der geteilte Ordner erscheint bei allen berechtigten Mitgliedern sofort unter *„Für mich freigegeben“* (sowie per WebDAV) und unterstützt die gemeinsame Live-Bearbeitung in **📝 Office Light**!",
             'actions'  => [
                 ['label' => $pack['act_files'], 'url' => 'index.php'],
             ],

@@ -1515,18 +1515,17 @@ if ($bookFileId > 0) {
 // ANSICHT B: BÜCHERREGAL / E-BOOK-BIBLIOTHEK (`ebooks.php`)
 // =============================================================================
 
-// 1. Alle für den Benutzer zugänglichen .epub-Dateien laden (eigene, Gruppenordner, direkt geteilte)
+// 1. Alle für den Benutzer zugänglichen .epub-Dateien laden (eigene & direkt geteilte)
 $stmtEpubs = $pdo->prepare(
-    "SELECT f.*, u.username AS owner_username, gf.name AS group_folder_name,
+    "SELECT f.*, u.username AS owner_username, '' AS group_folder_name,
             CASE
-                WHEN f.group_folder_id IS NOT NULL THEN 'group'
                 WHEN f.user_id = :uid1 THEN 'own'
                 ELSE 'shared'
             END AS source_kind
      FROM `files` f
      LEFT JOIN `users` u ON u.id = f.user_id
-     LEFT JOIN `group_folders` gf ON gf.id = f.group_folder_id
      WHERE f.deleted_at IS NULL
+       AND f.group_folder_id IS NULL
        AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) = 'epub'
        AND (
            f.user_id = :uid2
@@ -1538,27 +1537,13 @@ $stmtEpubs = $pdo->prepare(
                      OR (us.folder_path IS NOT NULL AND us.owner_id = f.user_id AND (f.folder_path = us.folder_path OR f.folder_path LIKE CONCAT(us.folder_path, '/%')))
                  )
            )
-           OR (
-               f.group_folder_id IS NOT NULL AND (
-                   :is_admin = 1
-                   OR EXISTS (
-                       SELECT 1 FROM `group_folder_permissions` gfp
-                       LEFT JOIN `group_members` gm ON gm.group_id = gfp.group_id AND gm.user_id = :uid4
-                       WHERE gfp.group_folder_id = f.group_folder_id
-                         AND (gfp.user_id = :uid5 OR gm.user_id IS NOT NULL)
-                   )
-               )
-           )
        )
      ORDER BY f.upload_date DESC, f.id DESC"
 );
 $stmtEpubs->execute([
-    ':uid1'     => $userId,
-    ':uid2'     => $userId,
-    ':uid3'     => $userId,
-    ':is_admin' => $isAdmin ? 1 : 0,
-    ':uid4'     => $userId,
-    ':uid5'     => $userId,
+    ':uid1' => $userId,
+    ':uid2' => $userId,
+    ':uid3' => $userId,
 ]);
 $rawEpubFiles = $stmtEpubs->fetchAll();
 

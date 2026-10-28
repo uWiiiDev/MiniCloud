@@ -712,37 +712,24 @@ if ($albumToken !== '') {
     }
 }
 
-// Alle eigenen & über Gruppenordner zugänglichen Bilder laden
+// Alle eigenen persönlichen Bilder des angemeldeten Benutzers laden
 $allCloudPhotos = [];
 $photoFolders   = [];
 if ($userId > 0) {
-    $accGroupFolders = getAccessibleGroupFolders($pdo, $userId, isAdmin());
-    $accessibleGfIds = array_map(static fn($gf) => (int)$gf['id'], $accGroupFolders);
-
-    $sqlImg = "SELECT f.*, u.username AS owner_name, gf.name AS group_folder_name
+    $sqlImg = "SELECT f.*, u.username AS owner_name, '' AS group_folder_name
                FROM files f
                INNER JOIN users u ON u.id = f.user_id
-               LEFT JOIN group_folders gf ON gf.id = f.group_folder_id
                WHERE f.deleted_at IS NULL
                  AND f.is_encrypted = 0
+                 AND f.group_folder_id IS NULL
+                 AND f.user_id = :uid
                  AND (
                      LOWER(f.original_name) REGEXP '\\\\.(jpg|jpeg|png|gif|webp|bmp)$'
                      OR f.mime_type LIKE 'image/%'
                  )
-                 AND (f.user_id = :uid";
-    $imgParams = [':uid' => $userId];
-    if (!empty($accessibleGfIds)) {
-        $gfPh = [];
-        foreach ($accessibleGfIds as $i => $gfId) {
-            $key = ':gf' . $i;
-            $gfPh[] = $key;
-            $imgParams[$key] = $gfId;
-        }
-        $sqlImg .= ' OR f.group_folder_id IN (' . implode(',', $gfPh) . ')';
-    }
-    $sqlImg .= ') ORDER BY f.upload_date DESC, f.id DESC';
+               ORDER BY f.upload_date DESC, f.id DESC";
     $stmtImg = $pdo->prepare($sqlImg);
-    $stmtImg->execute($imgParams);
+    $stmtImg->execute([':uid' => $userId]);
     $allCloudPhotos = $stmtImg->fetchAll();
 
     foreach ($allCloudPhotos as $p) {

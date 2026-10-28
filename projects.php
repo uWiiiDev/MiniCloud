@@ -579,18 +579,7 @@ if ($userId > 0) {
     $stmtKb->execute([':u1' => $userId, ':u2' => $userId, ':u3' => $userId]);
     $myKanbanBoards = $stmtKb->fetchAll();
 
-    $stmtGf = $pdo->prepare(
-        $isAdmin
-            ? 'SELECT id, name FROM group_folders ORDER BY name ASC'
-            : 'SELECT DISTINCT gf.id, gf.name
-               FROM group_folders gf
-               INNER JOIN group_folder_permissions gfp ON gfp.group_folder_id = gf.id
-               LEFT JOIN group_members gm ON gm.group_id = gfp.group_id
-               WHERE gfp.user_id = :u1 OR gm.user_id = :u2
-               ORDER BY gf.name ASC'
-    );
-    $stmtGf->execute($isAdmin ? [] : [':u1' => $userId, ':u2' => $userId]);
-    $myGroupFolders = $stmtGf->fetchAll();
+    $myGroupFolders = [];
 
     $stmtSu = $pdo->prepare(
         'SELECT id, username FROM users WHERE id <> :uid AND (allow_user_sharing = 1 OR :adm = 1) ORDER BY username ASC'
@@ -1879,28 +1868,18 @@ $costPct      = $budgetAmount > 0 ? min(100, (int)round(($projectStats['logged_c
                 <textarea name="description" id="projFormDesc" rows="2" placeholder="Ziele, Rahmenbedingungen, Ansprechpartner..." class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"></textarea>
             </div>
 
-            <!-- Verknüpfung mit Kanban-Board & Gruppenordner -->
+            <!-- Verknüpfung mit Kanban-Board -->
             <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
                 <div class="font-bold text-slate-900 dark:text-white">🔗 Verknüpfung mit MiniCloud-Modulen</div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">📋 Kanban-Board verknüpfen</label>
-                        <select name="kanban_board_id" id="projFormBoardId" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700">
-                            <option value="0">— Kein bestehendes Board —</option>
-                            <?php foreach ($myKanbanBoards as $kb): ?>
-                                <option value="<?= (int)$kb['id'] ?>"><?= e((string)$kb['icon']) ?> <?= e((string)$kb['title']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">📂 Gruppenordner verknüpfen</label>
-                        <select name="group_folder_id" id="projFormFolderId" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700">
-                            <option value="0">— Kein Gruppenordner —</option>
-                            <?php foreach ($myGroupFolders as $gf): ?>
-                                <option value="<?= (int)$gf['id'] ?>">📂 <?= e((string)$gf['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">📋 Kanban-Board verknüpfen</label>
+                    <select name="kanban_board_id" id="projFormBoardId" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700">
+                        <option value="0">— Kein bestehendes Board —</option>
+                        <?php foreach ($myKanbanBoards as $kb): ?>
+                            <option value="<?= (int)$kb['id'] ?>"><?= e((string)$kb['icon']) ?> <?= e((string)$kb['title']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="hidden" name="group_folder_id" id="projFormFolderId" value="0">
                 </div>
                 <div id="projAutoCreateBoardWrap">
                     <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
