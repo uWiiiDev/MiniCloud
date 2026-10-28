@@ -46,9 +46,11 @@
 ### 8. 💰 Budget & Household Planner (`budget.php`)
 - Manage personal, family, or shared group budget books (`€`, `CHF`, `$`, `£`), log income and expenses across 13 categories with **direct cloud receipt attachment (`📎 PDF/Photo`)**, track **recurring subscriptions & cancellation notice periods (`🔄`)**, monitor **visual savings goals (`🎯`)**, and export monthly reports to **CSV (Excel)** directly into your cloud folder.
 
-### 9. 🏛️ Club Management & Board Role Delegation (`club.php`)
+### 9. 🏛️ Club Management, Statistics & Board Role Delegation (`club.php`)
 - Complete digital club & association administration with **granular multi-user board role delegation** (*1st Chairman = Full Access*, *Secretary = Member Directory & Minutes*, *Treasurer = Fee Tiers, Yearly Fee Generator & 1-Click Sync to `budget.php`*, *Equipment Manager = Volunteer Work Hours & Key/Equipment Lending*, *Auditor = Read-Only Inspection*).
 - Manage active/passive/honorary members, SEPA mandate references, yearly fee runs, volunteer work hour quotas, club inventory & key handovers, and cloud-linked board minutes/bylaws with 1-click CSV export to your cloud storage.
+- **📊 Club Statistics & Analytics:** Visual age distribution (7 age brackets + average/min/max age), department sizes, status & fee-tier breakdown, 5-year join/leave balance, and automatic member birthday & jubilee/anniversary lists (5, 10, 25, 40, 50+ years).
+- **📤 Multi-Source Member Import:** Import members via CSV/Excel upload (auto-detects `;`/`,`/tab delimiters, German `Windows-1252` encoding, and `DD.MM.YYYY` dates), direct spreadsheet Copy & Paste (`Ctrl+V`), or 1-click sync from Cloud Contacts (`contacts.php`).
 
 ### 10. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
 - Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
@@ -87,7 +89,7 @@ MiniCloud is engineered to run smoothly on any affordable shared web hosting pla
 
 ## 🚀 Quickstart & Installation Guide
 
-You do **not** need to manually import any SQL files. On the very first request, MiniCloud automatically detects an empty database and creates all tables as well as the initial administrator account (*Zero-Click Setup*).
+You do **not** need to manually import any SQL files or edit PHP files by hand. When you open MiniCloud for the first time without configured database credentials, it automatically launches the interactive **Web Installer (`setup.php`)**!
 
 ### Option A: Shared Web Hosting (e.g., STRATO, IONOS, All-Inkl, cPanel)
 
@@ -96,17 +98,10 @@ You do **not** need to manually import any SQL files. On the very first request,
    - **Database Name**
    - **Database Username**
    - **Database Password**
-2. **Download MiniCloud** (`<> Code` $\rightarrow$ `Download ZIP`), extract it, and open **`config/database.php`** in a text editor to enter your credentials in lines 11–16:
-   ```php
-   define('DB_HOST', getenv('MINICLOUD_DB_HOST') ?: 'localhost');
-   define('DB_PORT', getenv('MINICLOUD_DB_PORT') ?: '3306');
-   define('DB_SOCKET', getenv('MINICLOUD_DB_SOCKET') ?: $defaultSocket);
-   define('DB_NAME', getenv('MINICLOUD_DB_NAME') ?: 'your_database_name');
-   define('DB_USER', getenv('MINICLOUD_DB_USER') ?: 'your_database_user');
-   define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'your_database_password');
-   ```
-3. **Upload all files via SFTP** (e.g., using FileZilla) to your webspace (including `uploads/.htaccess`).
-4. **Open your URL in the browser** — MiniCloud automatically sets up all tables and presents the login screen!
+2. **Download MiniCloud** (`<> Code` $\rightarrow$ `Download ZIP`), extract it, and **upload all files via SFTP** (e.g., using FileZilla) to your webspace (including `uploads/.htaccess` and `config/.htaccess`).
+3. **Open your URL in the browser** — MiniCloud automatically redirects to the **First-Run Web Installer (`setup.php`)**:
+   - Click **🔌 Test Connection**, enter your desired **Cloud Name** and **Administrator username & password**, and click **🚀 Install & Start**.
+   - MiniCloud saves your credentials in `config/db_credentials.php` (protected from web access and future updates), initializes all tables, and locks the installer automatically.
 
 ---
 
