@@ -866,12 +866,22 @@ function generateDatabaseSqlDump(PDO $pdo): string
 
 if (isset($_GET['ajax_server_stats']) && $_GET['ajax_server_stats'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
+    if (!hasAdminPermission('system')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für System-Kennzahlen.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     echo json_encode(getServerDashboardMetrics($pdo), JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 if (isset($_GET['ajax_check_update']) && $_GET['ajax_check_update'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
+    if (!hasAdminPermission('system')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für System-Updates.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     $settings = getAppSettings($pdo);
     $repo = trim((string)($settings['github_repo'] ?? 'uWiiiMiniCloud/MiniCloud')) ?: 'uWiiiMiniCloud/MiniCloud';
     echo json_encode(checkGitHubUpdates($pdo, $repo), JSON_UNESCAPED_UNICODE);
@@ -1009,26 +1019,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($targetUserId === $currentAdminId) {
             setFlash('error', 'Sie können Ihr eigenes Administratorkonto nicht löschen.');
         } elseif ($targetUserId > 0) {
-            $stmtTargetUser = $pdo->prepare('SELECT username FROM users WHERE id = :id LIMIT 1');
+            $stmtTargetUser = $pdo->prepare('SELECT username, is_admin, admin_permissions FROM users WHERE id = :id LIMIT 1');
             $stmtTargetUser->execute([':id' => $targetUserId]);
-            $deletedUsername = (string)($stmtTargetUser->fetchColumn() ?: ('ID #' . $targetUserId));
+            $targetRow = $stmtTargetUser->fetch();
 
-            // Physische Dateien (und Versionsstände) des Benutzers vor dem Löschen entfernen
-            $stmtFiles = $pdo->prepare('SELECT id, filename, stored_name FROM files WHERE user_id = :uid');
-            $stmtFiles->execute([':uid' => $targetUserId]);
-            foreach ($stmtFiles->fetchAll() as $f) {
-                deletePhysicalFileVersions($pdo, (int)$f['id']);
-                $sn = !empty($f['stored_name']) ? (string)$f['stored_name'] : (string)($f['filename'] ?? '');
-                if ($sn !== '') {
-                    $p = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename($sn);
-                    if (is_file($p)) {
-                        @unlink($p);
+            if ($targetRow) {
+                $targetIsPrivileged = ((int)$targetRow['is_admin'] === 1) || (trim((string)($targetRow['admin_permissions'] ?? '')) !== '');
+                if ($targetIsPrivileged && !isFullAdmin()) {
+                    setFlash('error', 'Nur Voll-Administratoren können Konten von Administratoren oder Teil-Administratoren löschen.');
+                    header('Location: admin.php#tab-users');
+                    exit;
+                }
+
+                $deletedUsername = (string)$targetRow['username'];
+
+                // Physische Dateien (und Versionsstände) des Benutzers vor dem Löschen entfernen
+                $stmtFiles = $pdo->prepare('SELECT id, filename, stored_name FROM files WHERE user_id = :uid');
+                $stmtFiles->execute([':uid' => $targetUserId]);
+                foreach ($stmtFiles->fetchAll() as $f) {
+                    deletePhysicalFileVersions($pdo, (int)$f['id']);
+                    $sn = !empty($f['stored_name']) ? (string)$f['stored_name'] : (string)($f['filename'] ?? '');
+                    if ($sn !== '') {
+                        $p = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . basename($sn);
+                        if (is_file($p)) {
+                            @unlink($p);
+                        }
                     }
                 }
+                $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $targetUserId]);
+                logAuditEvent($pdo, 'user_delete', sprintf('Benutzerkonto „%s“ inklusive Dateien gelöscht', $deletedUsername));
+                setFlash('success', 'Benutzerkonto und zugehörige Dateien wurden gelöscht.');
             }
-            $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $targetUserId]);
-            logAuditEvent($pdo, 'user_delete', sprintf('Benutzerkonto „%s“ inklusive Dateien gelöscht', $deletedUsername));
-            setFlash('success', 'Benutzerkonto und zugehörige Dateien wurden gelöscht.');
         }
         header('Location: admin.php#tab-users');
         exit;
@@ -1042,13 +1063,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($targetUserId === $currentAdminId) {
             setFlash('error', 'Sie können Ihr eigenes Konto nicht sperren.');
         } elseif ($targetUserId > 0) {
-            $stmtTarget = $pdo->prepare('SELECT username, is_admin, is_locked FROM users WHERE id = :id LIMIT 1');
+            $stmtTarget = $pdo->prepare('SELECT username, is_admin, admin_permissions, is_locked FROM users WHERE id = :id LIMIT 1');
             $stmtTarget->execute([':id' => $targetUserId]);
             $targetRow = $stmtTarget->fetch();
 
             if ($targetRow) {
-                if ((int)$targetRow['is_admin'] === 1 && !isFullAdmin()) {
-                    setFlash('error', 'Nur Voll-Administratoren können andere Administratoren sperren.');
+                $targetIsPrivileged = ((int)$targetRow['is_admin'] === 1) || (trim((string)($targetRow['admin_permissions'] ?? '')) !== '');
+                if ($targetIsPrivileged && !isFullAdmin()) {
+                    setFlash('error', 'Nur Voll-Administratoren können andere Administratoren oder Teil-Administratoren sperren.');
                 } else {
                     $newLockState = ((int)$targetRow['is_locked'] === 1) ? 0 : 1;
                     $pdo->prepare('UPDATE users SET is_locked = :l, lock_reason = :r WHERE id = :id')
@@ -1109,9 +1131,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existingUser = $stmtExisting->fetch();
 
         if (!isFullAdmin() && $existingUser) {
-            // Teil-Admins dürfen keinen Voll-Admin bearbeiten oder Admin-Rollen/Teil-Rechte verändern
-            if ((int)$existingUser['is_admin'] === 1) {
-                setFlash('error', 'Nur Voll-Administratoren dürfen Konten von Voll-Administratoren bearbeiten.');
+            // Teil-Admins dürfen keinen Voll-Admin oder Teil-Admin bearbeiten oder Admin-Rollen/Teil-Rechte verändern
+            $existingIsPrivileged = ((int)$existingUser['is_admin'] === 1) || (trim((string)($existingUser['admin_permissions'] ?? '')) !== '');
+            if ($existingIsPrivileged && $targetUserId !== $currentAdminId) {
+                setFlash('error', 'Nur Voll-Administratoren dürfen Konten von Administratoren oder Teil-Administratoren bearbeiten.');
                 header('Location: admin.php#tab-users');
                 exit;
             }

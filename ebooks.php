@@ -593,12 +593,13 @@ function renderEpubChapterSafeHtml(string $physicalPath, int $fileId, array $all
         $bodyHtml = $rawHtml;
     }
 
-    // Unsichere Tags (<script>, <iframe>, <object>, <embed>, <style>, <link>, <meta>) entfernen
-    $bodyHtml = preg_replace('#<(script|iframe|object|embed|style|link|meta|head)\b[^>]*>.*?</\1>#is', '', $bodyHtml) ?? $bodyHtml;
-    $bodyHtml = preg_replace('#<(script|iframe|object|embed|link|meta)\b[^>]*/?>#is', '', $bodyHtml) ?? $bodyHtml;
+    // Unsichere Tags (<script>, <iframe>, <object>, <embed>, <style>, <link>, <meta>, <form>, <base>) entfernen
+    $bodyHtml = preg_replace('#<(script|iframe|object|embed|style|link|meta|head|form|base)\b[^>]*>.*?</\1>#is', '', $bodyHtml) ?? $bodyHtml;
+    $bodyHtml = preg_replace('#<(script|iframe|object|embed|link|meta|form|base)\b[^>]*/?>#is', '', $bodyHtml) ?? $bodyHtml;
 
-    // Inline Event-Handler (onclick, onload, onerror ...) entfernen
+    // Inline Event-Handler (onclick, onload, onerror ...) und javascript:-URIs entfernen
     $bodyHtml = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $bodyHtml) ?? $bodyHtml;
+    $bodyHtml = preg_replace('/(href|src|xlink:href|action|formaction)\s*=\s*(["\']?)\s*(?:javascript|vbscript|data\s*:\s*text\/html)\s*:[^"\'\s>]*/iu', '$1=$2#', $bodyHtml) ?? $bodyHtml;
 
     // Zuordnung von ZIP-Pfad -> Kapitel-Index für interne Buch-Links
     $pathToChapterIdx = [];
@@ -706,7 +707,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'asset') {
         default        => 'application/octet-stream',
     };
 
+    if ($ext === 'svg') {
+        $rawAsset = preg_replace('#<script\b[^>]*>.*?</script>#is', '', $rawAsset) ?? $rawAsset;
+        $rawAsset = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $rawAsset) ?? $rawAsset;
+        $rawAsset = preg_replace('/(href|xlink:href)\s*=\s*(["\']?)\s*javascript:[^"\'\s>]*/iu', '$1=$2#', $rawAsset) ?? $rawAsset;
+    }
+
     header('Content-Type: ' . $mime);
+    header('X-Content-Type-Options: nosniff');
+    header("Content-Security-Policy: default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
     header('Cache-Control: private, max-age=86400');
     header('Content-Length: ' . strlen($rawAsset));
     echo $rawAsset;

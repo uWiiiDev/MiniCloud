@@ -344,7 +344,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         $gameKey   = (string)($_POST['game_key'] ?? '');
         $stateJson = trim((string)($_POST['state_json'] ?? ''));
 
-        if (!isset($catalog[$gameKey])) {
+        if (!isset($catalog[$gameKey]) || strlen($stateJson) > 262144) {
             echo json_encode(['ok' => false]);
             exit;
         }
@@ -353,6 +353,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
             $stmtDel = $pdo->prepare("DELETE FROM `game_saves` WHERE `user_id` = :uid AND `game_key` = :gk");
             $stmtDel->execute([':uid' => $userId, ':gk' => $gameKey]);
             echo json_encode(['ok' => true]);
+            exit;
+        }
+
+        if (json_decode($stateJson, true) === null) {
+            echo json_encode(['ok' => false]);
             exit;
         }
 
@@ -377,6 +382,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
 
         if ($opponentId <= 0 || $opponentId === $userId) {
             echo json_encode(['ok' => false, 'error' => 'Bitte wähle einen anderen Cloud-Benutzer als Mitspieler aus.']);
+            exit;
+        }
+
+        $stmtOpp = $pdo->prepare('SELECT id FROM users WHERE id = :id AND allow_user_sharing = 1 AND is_locked = 0 LIMIT 1');
+        $stmtOpp->execute([':id' => $opponentId]);
+        if (!$stmtOpp->fetchColumn()) {
+            echo json_encode(['ok' => false, 'error' => 'Dieser Benutzer ist für Einladungen nicht freigegeben oder gesperrt.']);
             exit;
         }
 

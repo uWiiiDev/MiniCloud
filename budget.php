@@ -256,7 +256,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $curr  = mb_substr(trim((string)($_POST['currency'] ?? '€')), 0, 8) ?: '€';
         $limit = max(0.0, (float)str_replace(',', '.', (string)($_POST['monthly_limit'] ?? '2000')));
         $sharedArr = isset($_POST['shared_users']) && is_array($_POST['shared_users']) ? $_POST['shared_users'] : [];
-        $cleanShared = implode(',', array_unique(array_filter(array_map('intval', $sharedArr), static fn(int $id): bool => $id > 0 && $id !== $userId)));
+        $candIds   = array_values(array_unique(array_filter(array_map('intval', $sharedArr), static fn(int $id): bool => $id > 0 && $id !== $userId)));
+        $validIds  = [];
+        if (!empty($candIds)) {
+            $placeholders = implode(',', array_fill(0, count($candIds), '?'));
+            $stmtVis = $pdo->prepare("SELECT id FROM users WHERE id IN ($placeholders) AND allow_user_sharing = 1 AND is_locked = 0");
+            $stmtVis->execute($candIds);
+            $validIds = array_map('intval', $stmtVis->fetchAll(PDO::FETCH_COLUMN));
+        }
+        $cleanShared = implode(',', $validIds);
 
         $pdo->prepare(
             'UPDATE budget_books SET title = :t, currency = :c, monthly_limit = :l, shared_users = :s WHERE id = :id'

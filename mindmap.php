@@ -210,6 +210,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = mb_substr(trim((string)($_POST['title'] ?? '')), 0, 180);
         $desc  = mb_substr(trim((string)($_POST['description'] ?? '')), 0, 480);
         $rawJson = (string)($_POST['map_json'] ?? '');
+        if ($rawJson === '' || strlen($rawJson) > 5 * 1024 * 1024) {
+            echo json_encode(['ok' => false, 'error' => 'Mind-Map-Daten sind leer oder zu groß (max. 5 MB).']);
+            exit;
+        }
         $sharedUsersRaw = (string)($_POST['shared_users'] ?? '');
 
         $stmt = $pdo->prepare('SELECT * FROM mindmaps WHERE id = :id LIMIT 1');
@@ -230,11 +234,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title = (string)$row['title'];
         }
 
-        // Nur der Eigentümer darf die Freigabe-Liste ändern
+        // Nur der Eigentümer darf die Freigabe-Liste ändern (Prüfung auf allow_user_sharing = 1 & is_locked = 0)
         $sharedClean = (string)$row['shared_users'];
         if ((int)$row['user_id'] === $userId && isset($_POST['shared_users'])) {
-            $ids = array_unique(array_filter(array_map('intval', explode(',', $sharedUsersRaw)), static fn(int $id): bool => $id > 0 && $id !== $userId));
-            $sharedClean = implode(',', $ids);
+            $candIds = array_values(array_unique(array_filter(array_map('intval', explode(',', $sharedUsersRaw)), static fn(int $id): bool => $id > 0 && $id !== $userId)));
+            $validIds = [];
+            if (!empty($candIds)) {
+                $placeholders = implode(',', array_fill(0, count($candIds), '?'));
+                $stmtVis = $pdo->prepare("SELECT id FROM users WHERE id IN ($placeholders) AND allow_user_sharing = 1 AND is_locked = 0");
+                $stmtVis->execute($candIds);
+                $validIds = array_map('intval', $stmtVis->fetchAll(PDO::FETCH_COLUMN));
+            }
+            $sharedClean = implode(',', $validIds);
         }
 
         $stmtUpd = $pdo->prepare(
