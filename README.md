@@ -25,8 +25,12 @@
 ### 3. 📅 Calendar, Recurring Events, 2-Way CalDAV & `.ics` Feed (`calendar.php`, `caldav.php`)
 - Monthly and agenda views, recurring events, file attachments, automatic contact birthdays (`🎂`), 3-tier calendar sharing, personal `.ics` subscription feeds, and a **native 2-way CalDAV server (`caldav.php`)** for iOS, macOS Calendar, Thunderbird, and Android (*DAVx⁵*).
 
-### 4. 💬 Real-Time Messenger, Voice Messages & System Notifications (`messages.php`)
-- 1:1 instant chat with visible cloud users, **🎙️ microphone voice message recording** with inline audio playback, `Ctrl+V` screenshot pasting, cloud file attachments, official **Admin Broadcast channel (`📢 Announcements`)**, and native Web/Service-Worker desktop & mobile notifications.
+### 4. 💬 Real-Time Messenger, 1:1 & Group Voice Calls (WebRTC + Push-to-Talk) & Notifications (`messages.php`)
+- **📞 1:1 Voice Calls & 🎧 Group Voice Rooms (STRATO-Optimized Hybrid):**
+  - **⚡ Direct WebRTC-Mesh Audio & 🖥️ Screen Sharing:** Zero-latency peer-to-peer voice calls for 1:1 chats, user groups (`👥`), club boards (`🏛️`), and the open Cloud Lounge (`🌐`) with live speaking indicators (`🟢`) and zero audio bandwidth load on your PHP server.
+  - **📻 Push-to-Talk ("Walkie-Talkie") Fallback:** 100% firewall-safe & large-group radio mode (hold button or `Spacebar` to transmit compact Opus audio packets to all room members).
+  - **🔔 Global Incoming Call Ringing Banner:** Piggybacks onto the existing header poll with 0 extra HTTP requests and rings across all pages of MiniCloud.
+- **Instant Chat & Voice Notes:** 1:1 instant chat with visible cloud users, **🎙️ microphone voice message recording** with inline audio playback, `Ctrl+V` screenshot pasting, cloud file attachments, official **Admin Broadcast channel (`📢 Announcements`)**, and native Web/Service-Worker desktop & mobile notifications.
 
 ### 5. 🏠 "My Day" Cockpit (`dashboard.php`) & ⊞ Dedicated Module Hub (`modules.php`)
 - **My Day Cockpit (`dashboard.php`):** Customizable daily overview of upcoming appointments, birthdays, open Kanban tasks, active polls, pinned notes, and recent files.

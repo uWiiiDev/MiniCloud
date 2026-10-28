@@ -344,11 +344,114 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
         }
     };
 
+    const csrfTokenGlobal = <?= json_encode(getCsrfToken()) ?>;
+    let activeCallBannerSigId = 0;
+
+    const playIncomingRingChime = () => {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            const ctx = new Ctx();
+            [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.14);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime + idx * 0.14);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.14 + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + idx * 0.14);
+                osc.stop(ctx.currentTime + idx * 0.14 + 0.26);
+            });
+        } catch (_) {}
+    };
+
+    const renderIncomingCallBanner = (call) => {
+        let banner = document.getElementById('mcGlobalIncomingCallBanner');
+        if (!call) {
+            if (banner) banner.remove();
+            activeCallBannerSigId = 0;
+            return;
+        }
+        if (activeCallBannerSigId !== Number(call.sig_id)) {
+            activeCallBannerSigId = Number(call.sig_id);
+            playIncomingRingChime();
+        } else {
+            // Sanft nachklingeln solange der Anruf aktiv ist
+            playIncomingRingChime();
+            if (banner) return;
+        }
+
+        if (banner) banner.remove();
+        banner = document.createElement('div');
+        banner.id = 'mcGlobalIncomingCallBanner';
+        banner.className = 'fixed top-16 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-slate-900 text-white border-2 border-emerald-500 rounded-2xl p-4 shadow-2xl space-y-3';
+
+        const topRow = document.createElement('div');
+        topRow.className = 'flex items-center gap-3';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg animate-bounce shrink-0';
+        iconSpan.textContent = call.mode === 'ptt' ? '📻' : '📞';
+
+        const textWrap = document.createElement('div');
+        textWrap.className = 'min-w-0 flex-1';
+        const titleEl = document.createElement('p');
+        titleEl.className = 'text-xs font-bold text-emerald-400 uppercase tracking-wider';
+        titleEl.textContent = call.mode === 'ptt' ? 'Eingehender Funk-Ruf' : 'Eingehender Sprachanruf';
+        const callerEl = document.createElement('p');
+        callerEl.className = 'text-sm font-bold text-white truncate';
+        callerEl.textContent = `${call.caller_username} ruft an…`;
+        textWrap.appendChild(titleEl);
+        textWrap.appendChild(callerEl);
+        topRow.appendChild(iconSpan);
+        topRow.appendChild(textWrap);
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'grid grid-cols-2 gap-2';
+
+        const acceptBtn = document.createElement('button');
+        acceptBtn.type = 'button';
+        acceptBtn.className = 'px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer';
+        acceptBtn.textContent = '🟢 Annehmen';
+        acceptBtn.onclick = () => {
+            banner.remove();
+            const callTitle = `1:1 Sprachanruf mit ${call.caller_username}`;
+            if (typeof window.joinVoiceCallRoom === 'function') {
+                window.joinVoiceCallRoom(call.room_key, callTitle, call.mode || 'webrtc', false);
+            } else {
+                window.location.href = `messages.php?channel=${encodeURIComponent(call.caller_id)}&autocall=1&room=${encodeURIComponent(call.room_key)}&mode=${encodeURIComponent(call.mode || 'webrtc')}&title=${encodeURIComponent(callTitle)}`;
+            }
+        };
+
+        const declineBtn = document.createElement('button');
+        declineBtn.type = 'button';
+        declineBtn.className = 'px-3 py-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white text-xs font-bold transition-colors cursor-pointer';
+        declineBtn.textContent = '🔴 Ablehnen';
+        declineBtn.onclick = async () => {
+            banner.remove();
+            const fd = new FormData();
+            fd.append('csrf_token', csrfTokenGlobal);
+            fd.append('room_key', call.room_key);
+            try {
+                await fetch('messages.php?ajax=voice_leave', { method: 'POST', body: fd });
+            } catch (_) {}
+        };
+
+        btnRow.appendChild(acceptBtn);
+        btnRow.appendChild(declineBtn);
+        banner.appendChild(topRow);
+        banner.appendChild(btnRow);
+        document.body.appendChild(banner);
+    };
+
     const checkUnreadMessages = async () => {
         try {
             const res = await fetch(`messages.php?ajax=check_unread&since_id=${sinceId}`);
             const data = await res.json();
             if (!data || !data.success) return;
+
+            renderIncomingCallBanner(data.incoming_call || null);
 
             const badge = document.getElementById('headerUnreadChatBadge');
             if (badge) {

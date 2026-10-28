@@ -87,6 +87,193 @@ function markBroadcastsAsRead(PDO $pdo, int $userId): void
     }
 }
 
+/**
+ * Stellt sicher, dass die Tabellen für den 1:1- & Gruppen-Sprachchat (WebRTC-Mesh + Push-to-Talk) existieren.
+ * Sitzungs-gecacht für minimale Datenbanklast auf STRATO / Shared Hosting.
+ */
+function ensureVoiceCallSchema(PDO $pdo): void
+{
+    if (!empty($_SESSION['mc_voice_schema_v1'])) {
+        return;
+    }
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `voice_room_peers` (
+            `room_key` VARCHAR(64) NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `username` VARCHAR(64) NOT NULL,
+            `is_muted` TINYINT(1) NOT NULL DEFAULT 0,
+            `is_speaking` TINYINT(1) NOT NULL DEFAULT 0,
+            `is_sharing_screen` TINYINT(1) NOT NULL DEFAULT 0,
+            `mode` VARCHAR(16) NOT NULL DEFAULT 'webrtc',
+            `joined_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `last_seen` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`room_key`, `user_id`),
+            KEY `idx_vrp_seen` (`last_seen`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `voice_signals` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `room_key` VARCHAR(64) NOT NULL,
+            `from_user_id` INT UNSIGNED NOT NULL,
+            `from_username` VARCHAR(64) NOT NULL DEFAULT '',
+            `to_user_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `sig_type` VARCHAR(24) NOT NULL,
+            `payload` MEDIUMTEXT NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_vs_room_to` (`room_key`, `to_user_id`, `id`),
+            KEY `idx_vs_to_type` (`to_user_id`, `sig_type`, `created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $_SESSION['mc_voice_schema_v1'] = true;
+}
+
+/**
+ * Entfernt abgelaufene Teilnehmer (> 25 Sek. ohne Heartbeat) und alte Signale (> 60 Sek.).
+ */
+function cleanupStaleVoicePeersAndSignals(PDO $pdo): void
+{
+    try {
+        $pdo->exec("DELETE FROM `voice_room_peers` WHERE `last_seen` < (NOW() - INTERVAL 25 SECOND)");
+        $pdo->exec("DELETE FROM `voice_signals` WHERE `created_at` < (NOW() - INTERVAL 60 SECOND)");
+    } catch (Throwable) {
+    }
+}
+
+/**
+ * Liefert alle Gruppen- und Treffpunkt-Sprachräume, auf die der Benutzer Zugriff hat.
+ *
+ * @return array<string, array{key: string, title: string, subtitle: string, icon: string, category: string}>
+ */
+function getAvailableVoiceRooms(PDO $pdo, int $userId, bool $isAdmin): array
+{
+    $rooms = [];
+
+    // 1. Offener Cloud-Treffpunkt (für alle sichtbaren Benutzer & Admins)
+    $rooms['lobby_all'] = [
+        'key'      => 'lobby_all',
+        'title'    => 'Cloud-Treffpunkt',
+        'subtitle' => 'Offener Sprachraum für alle Mitglieder',
+        'icon'     => '🌐',
+        'category' => 'lobby',
+    ];
+
+    // 2. Sprachräume für Benutzergruppen
+    try {
+        if ($isAdmin) {
+            $stmtG = $pdo->query('SELECT id, name, description FROM `groups` ORDER BY name ASC');
+            $groupRows = $stmtG->fetchAll();
+        } else {
+            $stmtG = $pdo->prepare(
+                'SELECT g.id, g.name, g.description
+                 FROM `groups` g
+                 INNER JOIN `group_members` gm ON gm.group_id = g.id
+                 WHERE gm.user_id = :uid
+                 ORDER BY g.name ASC'
+            );
+            $stmtG->execute([':uid' => $userId]);
+            $groupRows = $stmtG->fetchAll();
+        }
+        foreach ($groupRows as $gr) {
+            $gid = (int)$gr['id'];
+            $rKey = 'group_' . $gid;
+            $rooms[$rKey] = [
+                'key'      => $rKey,
+                'title'    => 'Gruppe: ' . (string)$gr['name'],
+                'subtitle' => trim((string)($gr['description'] ?? '')) !== '' ? (string)$gr['description'] : 'Gruppen-Sprachkanal',
+                'icon'     => '👥',
+                'category' => 'group',
+            ];
+        }
+    } catch (Throwable) {
+    }
+
+    // 3. Sprachräume für Vereinsvorstände (falls club.php genutzt wird)
+    try {
+        if ($isAdmin) {
+            $stmtC = $pdo->query('SELECT id, name FROM `clubs` ORDER BY name ASC');
+            $clubRows = $stmtC->fetchAll();
+        } else {
+            $stmtC = $pdo->prepare(
+                'SELECT DISTINCT c.id, c.name
+                 FROM `clubs` c
+                 LEFT JOIN `club_roles` cr ON cr.club_id = c.id AND cr.user_id = :uid1
+                 WHERE c.owner_id = :uid2 OR cr.id IS NOT NULL
+                 ORDER BY c.name ASC'
+            );
+            $stmtC->execute([':uid1' => $userId, ':uid2' => $userId]);
+            $clubRows = $stmtC->fetchAll();
+        }
+        foreach ($clubRows as $cl) {
+            $cid = (int)$cl['id'];
+            $rKey = 'club_' . $cid;
+            $rooms[$rKey] = [
+                'key'      => $rKey,
+                'title'    => 'Vorstand: ' . (string)$cl['name'],
+                'subtitle' => 'Vorstands- & Vereinsbesprechung',
+                'icon'     => '🏛️',
+                'category' => 'club',
+            ];
+        }
+    } catch (Throwable) {
+    }
+
+    return $rooms;
+}
+
+/**
+ * Prüft streng, ob $userId dem Sprachraum $roomKey beitreten bzw. dort Signale senden darf.
+ *
+ * @return array{allowed: bool, title: string, partner_id: int}
+ */
+function canAccessVoiceRoom(PDO $pdo, int $userId, bool $isAdmin, string $roomKey): array
+{
+    $roomKey = trim($roomKey);
+    if ($roomKey === '') {
+        return ['allowed' => false, 'title' => '', 'partner_id' => 0];
+    }
+
+    // Fall A: 1:1 Direkt-Anruf (dm_<minId>_<maxId>)
+    if (preg_match('/^dm_(\d+)_(\d+)$/', $roomKey, $m)) {
+        $uA = (int)$m[1];
+        $uB = (int)$m[2];
+        if ($uA <= 0 || $uB <= 0 || $uA === $uB) {
+            return ['allowed' => false, 'title' => '', 'partner_id' => 0];
+        }
+        if ($userId !== $uA && $userId !== $uB) {
+            return ['allowed' => false, 'title' => '', 'partner_id' => 0];
+        }
+        $otherId = ($userId === $uA) ? $uB : $uA;
+        $partner = getAllowedChatPartner($pdo, $userId, $otherId, $isAdmin);
+        if (!$partner) {
+            return ['allowed' => false, 'title' => '', 'partner_id' => 0];
+        }
+        return [
+            'allowed'    => true,
+            'title'      => '1:1 Sprachchat mit ' . (string)$partner['username'],
+            'partner_id' => $otherId,
+        ];
+    }
+
+    // Fall B: Gruppen- / Vorstands- / Lobby-Raum
+    $rooms = getAvailableVoiceRooms($pdo, $userId, $isAdmin);
+    if (isset($rooms[$roomKey])) {
+        return [
+            'allowed'    => true,
+            'title'      => $rooms[$roomKey]['title'],
+            'partner_id' => 0,
+        ];
+    }
+
+    return ['allowed' => false, 'title' => '', 'partner_id' => 0];
+}
+
+ensureVoiceCallSchema($pdo);
+
 // --- 1. AJAX-Endpunkte für Live-Polling & globale Benachrichtigungen ---
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'check_unread') {
     header('Content-Type: application/json; charset=utf-8');
@@ -133,13 +320,304 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'check_unread') {
         }
     }
 
+    // Huckepack-Prüfung für eingehende 1:1-Sprachanrufe (0 zusätzliche Requests auf STRATO!)
+    $incomingCall = null;
+    try {
+        $stmtRing = $pdo->prepare(
+            "SELECT s.id, s.room_key, s.from_user_id, s.from_username, s.payload
+             FROM `voice_signals` s
+             INNER JOIN `voice_room_peers` p ON p.room_key = s.room_key AND p.user_id = s.from_user_id
+             WHERE s.to_user_id = :uid
+               AND s.sig_type = 'ring'
+               AND s.created_at >= (NOW() - INTERVAL 28 SECOND)
+               AND p.last_seen >= (NOW() - INTERVAL 25 SECOND)
+             ORDER BY s.id DESC
+             LIMIT 1"
+        );
+        $stmtRing->execute([':uid' => $userId]);
+        $ringRow = $stmtRing->fetch();
+        if ($ringRow) {
+            // Prüfen, ob Benutzer nicht schon selbst in diesem Raum ist oder bereits abgelehnt hat
+            $stmtSelfInRoom = $pdo->prepare('SELECT 1 FROM `voice_room_peers` WHERE `room_key` = :rk AND `user_id` = :uid LIMIT 1');
+            $stmtSelfInRoom->execute([':rk' => (string)$ringRow['room_key'], ':uid' => $userId]);
+            $stmtDeclined = $pdo->prepare(
+                "SELECT 1 FROM `voice_signals`
+                 WHERE `room_key` = :rk AND `from_user_id` = :uid AND `sig_type` = 'hangup' AND `id` > :ring_id
+                 LIMIT 1"
+            );
+            $stmtDeclined->execute([
+                ':rk'      => (string)$ringRow['room_key'],
+                ':uid'     => $userId,
+                ':ring_id' => (int)$ringRow['id'],
+            ]);
+            if (!$stmtSelfInRoom->fetch() && !$stmtDeclined->fetch()) {
+                $incomingCall = [
+                    'sig_id'          => (int)$ringRow['id'],
+                    'room_key'        => (string)$ringRow['room_key'],
+                    'caller_id'       => (int)$ringRow['from_user_id'],
+                    'caller_username' => (string)$ringRow['from_username'],
+                    'mode'            => ((string)$ringRow['payload'] === 'ptt') ? 'ptt' : 'webrtc',
+                ];
+            }
+        }
+    } catch (Throwable) {
+    }
+
     echo json_encode([
         'success'       => true,
         'unread_total'  => getUnreadMessagesCount($pdo, $userId),
         'max_id'        => $maxId,
         'latest_unread' => $latestUnread,
+        'incoming_call' => $incomingCall,
     ], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// --- 1b. STRATO-optimierte Voice-Chat-Endpunkte (WebRTC-Mesh Signaling + Push-to-Talk Funk-Fallback) ---
+if (isset($_GET['ajax']) && in_array((string)$_GET['ajax'], ['voice_join', 'voice_leave', 'voice_signal', 'voice_ptt', 'voice_poll'], true)) {
+    header('Content-Type: application/json; charset=utf-8');
+    $vAction = (string)$_GET['ajax'];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null);
+        if (!verifyCsrfToken(is_string($csrfHeader) ? $csrfHeader : null)) {
+            echo json_encode(['success' => false, 'error' => 'Ungültiges Sicherheits-Token (CSRF).']);
+            exit;
+        }
+    }
+
+    cleanupStaleVoicePeersAndSignals($pdo);
+
+    $roomKey = trim((string)($_POST['room_key'] ?? $_GET['room_key'] ?? ''));
+
+    // A) Sprachraum beitreten (1:1 oder Gruppen-Sprachraum)
+    if ($vAction === 'voice_join' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $acc = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
+        if (!$acc['allowed']) {
+            echo json_encode(['success' => false, 'error' => 'Kein Zugriff auf diesen Sprachraum.']);
+            exit;
+        }
+
+        $mode = ((string)($_POST['mode'] ?? 'webrtc') === 'ptt') ? 'ptt' : 'webrtc';
+        $ringPartner = isset($_POST['ring']) && $_POST['ring'] === '1';
+
+        // Aus evtl. anderen Sprachräumen austreten, damit man immer nur in einem aktiven Raum ist
+        $pdo->prepare('DELETE FROM `voice_room_peers` WHERE `user_id` = :uid AND `room_key` <> :rk')
+            ->execute([':uid' => $userId, ':rk' => $roomKey]);
+
+        $stmtJoin = $pdo->prepare(
+            "INSERT INTO `voice_room_peers` (`room_key`, `user_id`, `username`, `is_muted`, `is_speaking`, `is_sharing_screen`, `mode`, `joined_at`, `last_seen`)
+             VALUES (:rk, :uid, :uname, 0, 0, 0, :mode, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE
+                `username` = VALUES(`username`),
+                `mode` = VALUES(`mode`),
+                `last_seen` = NOW()"
+        );
+        $stmtJoin->execute([
+            ':rk'    => $roomKey,
+            ':uid'   => $userId,
+            ':uname' => $username,
+            ':mode'  => $mode,
+        ]);
+
+        // Bei 1:1-Anruf Klingel-Signal an den Gesprächspartner senden
+        if ($ringPartner && $acc['partner_id'] > 0) {
+            $stmtRingIns = $pdo->prepare(
+                "INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
+                 VALUES (:rk, :fuid, :fname, :tuid, 'ring', :mode)"
+            );
+            $stmtRingIns->execute([
+                ':rk'    => $roomKey,
+                ':fuid'  => $userId,
+                ':fname' => $username,
+                ':tuid'  => $acc['partner_id'],
+                ':mode'  => $mode,
+            ]);
+        }
+
+        $maxSigId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM `voice_signals`')->fetchColumn();
+        $stmtPeers = $pdo->prepare(
+            'SELECT `user_id`, `username`, `is_muted`, `is_speaking`, `is_sharing_screen`, `mode`
+             FROM `voice_room_peers`
+             WHERE `room_key` = :rk AND `last_seen` >= (NOW() - INTERVAL 25 SECOND)
+             ORDER BY `joined_at` ASC'
+        );
+        $stmtPeers->execute([':rk' => $roomKey]);
+
+        echo json_encode([
+            'success'     => true,
+            'room_key'    => $roomKey,
+            'room_title'  => $acc['title'],
+            'partner_id'  => $acc['partner_id'],
+            'last_sig_id' => $maxSigId,
+            'peers'       => $stmtPeers->fetchAll(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // B) Sprachraum verlassen / Anruf ablehnen
+    if ($vAction === 'voice_leave' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($roomKey !== '') {
+            $pdo->prepare('DELETE FROM `voice_room_peers` WHERE `room_key` = :rk AND `user_id` = :uid')
+                ->execute([':rk' => $roomKey, ':uid' => $userId]);
+            $stmtHang = $pdo->prepare(
+                "INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
+                 VALUES (:rk, :fuid, :fname, 0, 'hangup', '')"
+            );
+            $stmtHang->execute([
+                ':rk'    => $roomKey,
+                ':fuid'  => $userId,
+                ':fname' => $username,
+            ]);
+        } else {
+            $pdo->prepare('DELETE FROM `voice_room_peers` WHERE `user_id` = :uid')
+                ->execute([':uid' => $userId]);
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    // C) WebRTC-Signaling (SDP Offer, SDP Answer, ICE-Kandidat) übermitteln
+    if ($vAction === 'voice_signal' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $acc = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
+        if (!$acc['allowed']) {
+            echo json_encode(['success' => false, 'error' => 'Kein Zugriff.']);
+            exit;
+        }
+        $toUserId = max(0, (int)($_POST['to_user_id'] ?? 0));
+        $sigType  = trim((string)($_POST['sig_type'] ?? ''));
+        $payload  = (string)($_POST['payload'] ?? '');
+
+        if (!in_array($sigType, ['offer', 'answer', 'ice', 'ring', 'hangup'], true) || strlen($payload) > 65536) {
+            echo json_encode(['success' => false, 'error' => 'Ungültiges Signal.']);
+            exit;
+        }
+
+        $stmtSig = $pdo->prepare(
+            'INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
+             VALUES (:rk, :fuid, :fname, :tuid, :stype, :pay)'
+        );
+        $stmtSig->execute([
+            ':rk'    => $roomKey,
+            ':fuid'  => $userId,
+            ':fname' => $username,
+            ':tuid'  => $toUserId,
+            ':stype' => $sigType,
+            ':pay'   => $payload,
+        ]);
+
+        echo json_encode(['success' => true, 'sig_id' => (int)$pdo->lastInsertId()]);
+        exit;
+    }
+
+    // D) Push-to-Talk (Funkgerät-Modus): Kurzes komprimiertes Sprachpaket an alle im Raum senden
+    if ($vAction === 'voice_ptt' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $acc = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
+        if (!$acc['allowed']) {
+            echo json_encode(['success' => false, 'error' => 'Kein Zugriff auf diesen Sprachraum.']);
+            exit;
+        }
+        $audioDataUri = trim((string)($_POST['audio_data'] ?? ''));
+        if ($audioDataUri === '' || !str_starts_with($audioDataUri, 'data:audio/') || strlen($audioDataUri) > 450000) {
+            echo json_encode(['success' => false, 'error' => 'Ungültiges oder zu großes Funk-Sprachpaket (max. ~300 KB).']);
+            exit;
+        }
+
+        $stmtPtt = $pdo->prepare(
+            "INSERT INTO `voice_signals` (`room_key`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`)
+             VALUES (:rk, :fuid, :fname, 0, 'ptt_audio', :pay)"
+        );
+        $stmtPtt->execute([
+            ':rk'    => $roomKey,
+            ':fuid'  => $userId,
+            ':fname' => $username,
+            ':pay'   => $audioDataUri,
+        ]);
+
+        echo json_encode(['success' => true, 'sig_id' => (int)$pdo->lastInsertId()]);
+        exit;
+    }
+
+    // E) Heartbeat & Signal-Abruf für aktiven Sprachraum + Raum-Teilnehmerzahlen für Seitenleiste
+    if ($vAction === 'voice_poll') {
+        $sinceSigId = max(0, (int)($_POST['since_sig_id'] ?? $_GET['since_sig_id'] ?? 0));
+        $peers      = [];
+        $signals    = [];
+
+        if ($roomKey !== '') {
+            $acc = canAccessVoiceRoom($pdo, $userId, $isAdmin, $roomKey);
+            if ($acc['allowed']) {
+                $isMuted   = isset($_POST['is_muted']) && $_POST['is_muted'] === '1' ? 1 : 0;
+                $isSpeak   = isset($_POST['is_speaking']) && $_POST['is_speaking'] === '1' ? 1 : 0;
+                $isScreen  = isset($_POST['is_sharing_screen']) && $_POST['is_sharing_screen'] === '1' ? 1 : 0;
+                $mode      = ((string)($_POST['mode'] ?? 'webrtc') === 'ptt') ? 'ptt' : 'webrtc';
+
+                $stmtHb = $pdo->prepare(
+                    'UPDATE `voice_room_peers`
+                     SET `is_muted` = :m, `is_speaking` = :sp, `is_sharing_screen` = :sc, `mode` = :md, `last_seen` = NOW()
+                     WHERE `room_key` = :rk AND `user_id` = :uid'
+                );
+                $stmtHb->execute([
+                    ':m'   => $isMuted,
+                    ':sp'  => $isSpeak,
+                    ':sc'  => $isScreen,
+                    ':md'  => $mode,
+                    ':rk'  => $roomKey,
+                    ':uid' => $userId,
+                ]);
+
+                $stmtPeers = $pdo->prepare(
+                    'SELECT `user_id`, `username`, `is_muted`, `is_speaking`, `is_sharing_screen`, `mode`
+                     FROM `voice_room_peers`
+                     WHERE `room_key` = :rk AND `last_seen` >= (NOW() - INTERVAL 25 SECOND)
+                     ORDER BY `joined_at` ASC'
+                );
+                $stmtPeers->execute([':rk' => $roomKey]);
+                $peers = $stmtPeers->fetchAll();
+
+                $stmtSigs = $pdo->prepare(
+                    'SELECT `id`, `from_user_id`, `from_username`, `to_user_id`, `sig_type`, `payload`
+                     FROM `voice_signals`
+                     WHERE `room_key` = :rk
+                       AND `id` > :since_id
+                       AND `from_user_id` <> :self_uid
+                       AND (`to_user_id` = :to_uid OR `to_user_id` = 0)
+                     ORDER BY `id` ASC
+                     LIMIT 60'
+                );
+                $stmtSigs->execute([
+                    ':rk'       => $roomKey,
+                    ':since_id' => $sinceSigId,
+                    ':self_uid' => $userId,
+                    ':to_uid'   => $userId,
+                ]);
+                $signals = $stmtSigs->fetchAll();
+            }
+        }
+
+        // Aktive Teilnehmerzahlen je Raum für die linke Seitenleiste
+        $roomCounts = [];
+        try {
+            $stmtCnt = $pdo->query(
+                'SELECT `room_key`, COUNT(*) AS `cnt`
+                 FROM `voice_room_peers`
+                 WHERE `last_seen` >= (NOW() - INTERVAL 25 SECOND)
+                 GROUP BY `room_key`'
+            );
+            foreach ($stmtCnt->fetchAll() as $rRow) {
+                $roomCounts[(string)$rRow['room_key']] = (int)$rRow['cnt'];
+            }
+        } catch (Throwable) {
+        }
+
+        echo json_encode([
+            'success'     => true,
+            'peers'       => $peers,
+            'signals'     => $signals,
+            'room_counts' => $roomCounts,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'poll') {
@@ -638,6 +1116,22 @@ foreach ($chatMessages as $cm) {
     }
 }
 
+cleanupStaleVoicePeersAndSignals($pdo);
+$availableVoiceRooms = getAvailableVoiceRooms($pdo, $userId, $isAdmin);
+$initialVoiceRoomCounts = [];
+try {
+    $stmtVCnt = $pdo->query(
+        'SELECT `room_key`, COUNT(*) AS `cnt`
+         FROM `voice_room_peers`
+         WHERE `last_seen` >= (NOW() - INTERVAL 25 SECOND)
+         GROUP BY `room_key`'
+    );
+    foreach ($stmtVCnt->fetchAll() as $vRow) {
+        $initialVoiceRoomCounts[(string)$vRow['room_key']] = (int)$vRow['cnt'];
+    }
+} catch (Throwable) {
+}
+
 $pageTitle = 'Chat & Nachrichten';
 $hideFooterOnMobile = true;
 require_once __DIR__ . '/includes/header.php';
@@ -704,6 +1198,44 @@ require_once __DIR__ . '/includes/header.php';
                     </select>
                 </div>
             <?php endif; ?>
+        </div>
+
+        <!-- 🎧 Live-Sprachräume & Gruppen-Talk (STRATO-optimiert: WebRTC-Mesh + Push-to-Talk) -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                    <span>🎧</span>
+                    <span>Gruppen-Sprachräume</span>
+                </span>
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-100 dark:bg-indigo-900/70 text-indigo-700 dark:text-indigo-200">
+                    WebRTC + Funk
+                </span>
+            </div>
+            <div class="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                <?php foreach ($availableVoiceRooms as $vrKey => $vrMeta): ?>
+                    <?php $vrCnt = (int)($initialVoiceRoomCounts[$vrKey] ?? 0); ?>
+                    <button
+                        type="button"
+                        onclick="joinVoiceCallRoom(<?= e(json_encode($vrKey)) ?>, <?= e(json_encode($vrMeta['title'])) ?>, 'webrtc', false)"
+                        data-voice-room-btn="<?= e($vrKey) ?>"
+                        class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 border border-slate-200/80 dark:border-slate-700/80 text-left transition-colors cursor-pointer group"
+                        title="<?= e($vrMeta['subtitle']) ?> – Klicken zum Beitreten"
+                    >
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-sm shrink-0"><?= e($vrMeta['icon']) ?></span>
+                            <span class="text-xs font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-300 truncate">
+                                <?= e($vrMeta['title']) ?>
+                            </span>
+                        </div>
+                        <span
+                            data-voice-room-badge="<?= e($vrKey) ?>"
+                            class="px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 <?= $vrCnt > 0 ? 'bg-emerald-600 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300' ?>"
+                        >
+                            <?= $vrCnt > 0 ? ('🟢 ' . $vrCnt . ' live') : 'Beitreten' ?>
+                        </span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
         </div>
 
         <!-- Konversations-Liste -->
@@ -809,6 +1341,104 @@ require_once __DIR__ . '/includes/header.php';
 
     <!-- RECHTE SPALTE: Aktiver Chat-Verlauf & Eingabeleiste (8 Spalten) -->
     <div id="chatConversationPane" class="lg:col-span-8 <?= $mobileShowList ? 'hidden lg:flex' : 'flex' ?> flex-col h-[calc(100dvh-6.2rem)] lg:h-full bg-white dark:bg-slate-900">
+        <!-- 🎧 Live-Sprachkonferenz & Gruppen-Talk Cockpit (WebRTC-Mesh + Push-to-Talk Funk-Fallback) -->
+        <div id="voiceCallCockpit" class="hidden border-b border-indigo-200 dark:border-indigo-800/80 bg-gradient-to-r from-indigo-50/90 via-slate-50 to-emerald-50/80 dark:from-indigo-950/60 dark:via-slate-900 dark:to-emerald-950/40 p-3 sm:p-4 shrink-0 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shadow-2xs animate-pulse shrink-0">🎧</span>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <h3 id="voiceCallRoomTitle" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">Sprachraum</h3>
+                            <span id="voiceCallModeBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200">⚡ WebRTC-Direkt</span>
+                            <span id="voiceCallTimerBadge" class="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400">00:00</span>
+                        </div>
+                        <p id="voiceCallStatusSub" class="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                            Ende-zu-Ende Audio aktiv – STRATO-schonender Direktmodus
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Steuerleiste oben rechts im Sprach-Cockpit -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button
+                        type="button"
+                        id="btnVoiceMuteToggle"
+                        onclick="toggleVoiceMute()"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Mikrofon stummschalten / aktivieren"
+                    >
+                        <span id="voiceMuteIcon">🎤</span>
+                        <span id="voiceMuteLabel" class="hidden sm:inline">Mikro an</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="btnVoiceScreenShare"
+                        onclick="toggleVoiceScreenShare()"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Bildschirm oder Fenster für die Teilnehmer im Raum freigeben"
+                    >
+                        <span>🖥️</span>
+                        <span id="voiceScreenLabel" class="hidden md:inline">Bildschirm</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="btnVoiceSwitchMode"
+                        onclick="switchVoiceTransportMode()"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/70 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-800 dark:text-indigo-200 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Zwischen ⚡ WebRTC-Direktverbindung und 📻 Push-to-Talk (Firewall-/Großgruppen-Funk) umschalten"
+                    >
+                        <span id="voiceSwitchModeIcon">📻</span>
+                        <span id="voiceSwitchModeLabel" class="hidden sm:inline">Auf Funk umschalten</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onclick="leaveVoiceCallRoom()"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+                        title="Sprachraum verlassen / Auflegen"
+                    >
+                        <span>☎️</span>
+                        <span>Auflegen</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Teilnehmer-Kacheln im Sprachraum -->
+            <div id="voicePeersGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+
+            <!-- Push-to-Talk (Funkgerät) Sprechtasten-Leiste -->
+            <div id="voicePttControls" class="hidden items-center justify-between gap-3 p-2.5 rounded-xl bg-indigo-950/90 text-white border border-indigo-700">
+                <div class="text-xs min-w-0">
+                    <span class="font-bold text-indigo-200">📻 Funk-Modus (Push-to-Talk – 100 % Firewall- &amp; STRATO-sicher):</span>
+                    <p id="voicePttHint" class="text-[11px] text-slate-300 truncate">
+                        Halte den Button rechts (oder die <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px]">Leertaste</kbd>) gedrückt, während du sprichst.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    id="btnPushToTalkHold"
+                    onmousedown="startPttTransmission(event)"
+                    onmouseup="stopPttTransmission(event)"
+                    onmouseleave="stopPttTransmission(event)"
+                    ontouchstart="startPttTransmission(event)"
+                    ontouchend="stopPttTransmission(event)"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-red-600 text-white text-xs font-bold shadow-md select-none cursor-pointer shrink-0 transition-all"
+                >
+                    🎙️ Gedrückt halten zum Sprechen
+                </button>
+            </div>
+
+            <!-- Optionale Bildschirmfreigabe-Vorschau im Sprachraum -->
+            <div id="voiceScreenShareWrap" class="hidden relative rounded-xl overflow-hidden bg-slate-950 border border-slate-700">
+                <video id="voiceRemoteScreenVideo" autoplay playsinline controls class="w-full max-h-72 object-contain"></video>
+            </div>
+
+            <!-- Versteckter Container für eingehende WebRTC-Audio-Streams -->
+            <div id="voiceRemoteAudioContainer" class="hidden"></div>
+        </div>
+
         <?php if ($activeChannelType === 'none'): ?>
             <div class="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <div class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl mb-3">
@@ -873,8 +1503,35 @@ require_once __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                 </div>
 
-                <!-- Rechte Aktionsbuttons im Chat-Header (System-Benachrichtigungen freigeben & Verlauf leeren) -->
+                <!-- Rechte Aktionsbuttons im Chat-Header (1:1 Sprachanruf, System-Benachrichtigungen & Verlauf leeren) -->
                 <div class="flex items-center gap-1.5 shrink-0">
+                    <?php if ($activeChannelType === 'user' && $activePartner): ?>
+                        <?php
+                        $dmMin = min($userId, (int)$activePartner['id']);
+                        $dmMax = max($userId, (int)$activePartner['id']);
+                        $dmRoomKey = 'dm_' . $dmMin . '_' . $dmMax;
+                        $dmTitle = '1:1 Sprachanruf mit ' . (string)$activePartner['username'];
+                        ?>
+                        <button
+                            type="button"
+                            onclick="joinVoiceCallRoom(<?= e(json_encode($dmRoomKey)) ?>, <?= e(json_encode($dmTitle)) ?>, 'webrtc', true)"
+                            class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                            title="Direkten 1:1 Live-Sprachanruf (WebRTC) mit <?= e((string)$activePartner['username']) ?> starten"
+                        >
+                            <span>📞</span>
+                            <span class="hidden sm:inline">Anrufen</span>
+                        </button>
+                        <button
+                            type="button"
+                            onclick="joinVoiceCallRoom(<?= e(json_encode($dmRoomKey)) ?>, <?= e(json_encode($dmTitle)) ?>, 'ptt', true)"
+                            class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-xs font-semibold transition-colors cursor-pointer"
+                            title="100 % Firewall-sicherer Walkie-Talkie / Funk-Modus (Push-to-Talk) mit <?= e((string)$activePartner['username']) ?>"
+                        >
+                            <span>📻</span>
+                            <span class="hidden md:inline">Funk</span>
+                        </button>
+                    <?php endif; ?>
+
                     <button
                         type="button"
                         id="btnQuickEnablePush"
@@ -1613,6 +2270,706 @@ require_once __DIR__ . '/includes/header.php';
                 // Netzwerkfehler beim Hintergrund-Polling ignorieren
             }
         }, 4000);
+    }
+
+    // =========================================================================
+    // 🎧 STRATO-OPTIMIERTER 1:1 & GRUPPEN-VOICE-CHAT (WebRTC-Mesh + Push-to-Talk)
+    // =========================================================================
+    const csrfToken = <?= json_encode(getCsrfToken()) ?>;
+    const selfUserId = <?= (int)$userId ?>;
+    const selfUsername = <?= json_encode($username) ?>;
+
+    let activeVoiceRoom = '';
+    let activeVoiceTitle = '';
+    let voiceTransportMode = 'webrtc'; // 'webrtc' oder 'ptt'
+    let voiceLocalStream = null;
+    let voiceScreenStream = null;
+    let voiceMuted = false;
+    let voiceSpeaking = false;
+    let voiceLastSigId = 0;
+    let voicePollTimer = null;
+    let voiceCallClockTimer = null;
+    let voiceCallStartedAt = 0;
+    let voiceAudioCtx = null;
+    let voiceAnalyser = null;
+    let voiceLevelTimer = null;
+
+    // PeerConnections pro Remote-User-ID (für WebRTC-Mesh bis ~8 Personen)
+    const peerConnections = new Map(); // userId -> RTCPeerConnection
+    const pendingIceCandidates = new Map(); // userId -> RTCIceCandidateInit[]
+
+    // Push-to-Talk (Funk-Modus) Recorder
+    let pttRecorder = null;
+    let pttChunks = [];
+    let isPttRecording = false;
+
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' }
+        ]
+    };
+
+    function playVoiceTone(freq1 = 587, freq2 = 880, durationMs = 140) {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            const ctx = new Ctx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq1, ctx.currentTime);
+            osc.frequency.setValueAtTime(freq2, ctx.currentTime + (durationMs / 2000));
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (durationMs / 1000));
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + (durationMs / 1000));
+        } catch (_) {}
+    }
+
+    function updateSidebarRoomBadges(roomCounts) {
+        if (!roomCounts || typeof roomCounts !== 'object') return;
+        document.querySelectorAll('[data-voice-room-badge]').forEach((badge) => {
+            const rk = badge.getAttribute('data-voice-room-badge') || '';
+            const cnt = Number(roomCounts[rk] || 0);
+            if (cnt > 0) {
+                badge.textContent = `🟢 ${cnt} live`;
+                badge.className = 'px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-600 text-white animate-pulse';
+            } else {
+                badge.textContent = 'Beitreten';
+                badge.className = 'px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300';
+            }
+        });
+    }
+
+    function renderVoicePeers(peers) {
+        const grid = document.getElementById('voicePeersGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        (peers || []).forEach((p) => {
+            const uid = Number(p.user_id);
+            const isSelf = (uid === selfUserId);
+            const isSpk = isSelf ? voiceSpeaking : (Number(p.is_speaking) === 1);
+            const isMut = isSelf ? voiceMuted : (Number(p.is_muted) === 1);
+            const isScr = Number(p.is_sharing_screen) === 1;
+            const pMode = p.mode === 'ptt' ? '📻 Funk' : '⚡ Live';
+            const initial = String(p.username || '?').trim().charAt(0).toUpperCase() || '?';
+
+            const card = document.createElement('div');
+            card.className = `flex items-center gap-2.5 p-2 rounded-xl border transition-all ${
+                isSpk
+                    ? 'bg-emerald-50/90 dark:bg-emerald-950/60 border-emerald-500 ring-2 ring-emerald-500/40'
+                    : 'bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+            }`;
+
+            card.innerHTML = `
+                <div class="w-8 h-8 rounded-xl ${isSpk ? 'bg-emerald-600 ring-2 ring-emerald-300' : 'bg-indigo-600'} text-white flex items-center justify-center text-xs font-bold shrink-0 transition-all">
+                    ${escapeHtml(initial)}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(p.username)}${isSelf ? ' (Ich)' : ''}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                        <span>${isMut ? '🔇 Stumm' : (isSpk ? '🟢 Spricht' : '🎤 Bereit')}</span>
+                        <span>&bull;</span>
+                        <span>${pMode}</span>
+                        ${isScr ? '<span class="text-indigo-600 dark:text-indigo-400 font-bold">🖥️</span>' : ''}
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    }
+
+    async function setupLocalAudioAnalysis(stream) {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            if (voiceAudioCtx) {
+                try { await voiceAudioCtx.close(); } catch (_) {}
+            }
+            voiceAudioCtx = new Ctx();
+            const source = voiceAudioCtx.createMediaStreamSource(stream);
+            voiceAnalyser = voiceAudioCtx.createAnalyser();
+            voiceAnalyser.fftSize = 256;
+            source.connect(voiceAnalyser);
+            const dataArr = new Uint8Array(voiceAnalyser.frequencyBinCount);
+
+            if (voiceLevelTimer) clearInterval(voiceLevelTimer);
+            voiceLevelTimer = setInterval(() => {
+                if (!voiceAnalyser || voiceMuted || (voiceTransportMode === 'ptt' && !isPttRecording)) {
+                    voiceSpeaking = false;
+                    return;
+                }
+                voiceAnalyser.getByteFrequencyData(dataArr);
+                let sum = 0;
+                for (let i = 0; i < dataArr.length; i++) sum += dataArr[i];
+                const avg = sum / dataArr.length;
+                voiceSpeaking = avg > 16;
+            }, 250);
+        } catch (_) {}
+    }
+
+    async function sendVoiceSignal(toUserId, sigType, payloadObjOrStr) {
+        if (!activeVoiceRoom) return;
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('room_key', activeVoiceRoom);
+        fd.append('to_user_id', String(toUserId));
+        fd.append('sig_type', sigType);
+        fd.append('payload', typeof payloadObjOrStr === 'string' ? payloadObjOrStr : JSON.stringify(payloadObjOrStr));
+        try {
+            await fetch('messages.php?ajax=voice_signal', { method: 'POST', body: fd });
+        } catch (_) {}
+    }
+
+    function closePeerConnection(peerId) {
+        const pc = peerConnections.get(peerId);
+        if (pc) {
+            try { pc.close(); } catch (_) {}
+            peerConnections.delete(peerId);
+        }
+        pendingIceCandidates.delete(peerId);
+        const aud = document.getElementById('voiceRemoteAudio_' + peerId);
+        if (aud) aud.remove();
+    }
+
+    function getOrCreatePeerConnection(peerId) {
+        if (peerConnections.has(peerId)) {
+            return peerConnections.get(peerId);
+        }
+        const pc = new RTCPeerConnection(rtcConfig);
+        peerConnections.set(peerId, pc);
+
+        if (voiceLocalStream) {
+            voiceLocalStream.getTracks().forEach((track) => {
+                pc.addTrack(track, voiceLocalStream);
+            });
+        }
+        if (voiceScreenStream) {
+            voiceScreenStream.getVideoTracks().forEach((vTrack) => {
+                pc.addTrack(vTrack, voiceScreenStream);
+            });
+        }
+
+        pc.onicecandidate = (ev) => {
+            if (ev.candidate) {
+                sendVoiceSignal(peerId, 'ice', ev.candidate);
+            }
+        };
+
+        pc.ontrack = (ev) => {
+            const stream = (ev.streams && ev.streams[0]) ? ev.streams[0] : new MediaStream([ev.track]);
+            if (ev.track.kind === 'video') {
+                const screenWrap = document.getElementById('voiceScreenShareWrap');
+                const screenVid = document.getElementById('voiceRemoteScreenVideo');
+                if (screenWrap && screenVid) {
+                    screenVid.srcObject = stream;
+                    screenWrap.classList.remove('hidden');
+                    ev.track.onended = () => {
+                        screenWrap.classList.add('hidden');
+                    };
+                }
+            } else if (ev.track.kind === 'audio') {
+                let aud = document.getElementById('voiceRemoteAudio_' + peerId);
+                if (!aud) {
+                    aud = document.createElement('audio');
+                    aud.id = 'voiceRemoteAudio_' + peerId;
+                    aud.autoplay = true;
+                    aud.playsInline = true;
+                    const containerEl = document.getElementById('voiceRemoteAudioContainer');
+                    if (containerEl) containerEl.appendChild(aud);
+                }
+                aud.srcObject = stream;
+                aud.play().catch(() => {});
+            }
+        };
+
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                closePeerConnection(peerId);
+            }
+        };
+
+        return pc;
+    }
+
+    async function syncMeshConnectionsWithPeers(peers) {
+        if (voiceTransportMode !== 'webrtc') return;
+        const activeIds = new Set();
+
+        for (const p of (peers || [])) {
+            const pid = Number(p.user_id);
+            if (pid === selfUserId) continue;
+            activeIds.add(pid);
+
+            // Deterministischer Verbindungsaufbau: Die kleinere User-ID sendet das Offer
+            if (!peerConnections.has(pid) && selfUserId < pid) {
+                try {
+                    const pc = getOrCreatePeerConnection(pid);
+                    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+                    await pc.setLocalDescription(offer);
+                    await sendVoiceSignal(pid, 'offer', offer);
+                } catch (_) {}
+            }
+        }
+
+        // Ausgetretene Teilnehmer bereinigen
+        for (const existingPid of Array.from(peerConnections.keys())) {
+            if (!activeIds.has(existingPid)) {
+                closePeerConnection(existingPid);
+            }
+        }
+    }
+
+    async function handleIncomingVoiceSignal(sig) {
+        const fromId = Number(sig.from_user_id);
+        const sType = String(sig.sig_type || '');
+        if (fromId === selfUserId) return;
+
+        if (sType === 'hangup') {
+            closePeerConnection(fromId);
+            return;
+        }
+
+        if (sType === 'ptt_audio') {
+            // 📻 Push-to-Talk Sprachpaket sofort abspielen
+            try {
+                playVoiceTone(740, 880, 70);
+                const audio = new Audio(String(sig.payload || ''));
+                const sub = document.getElementById('voiceCallStatusSub');
+                if (sub) {
+                    sub.textContent = `📻 Funkspruch von ${sig.from_username || 'Teilnehmer'} wird abgespielt...`;
+                }
+                audio.onended = () => {
+                    if (sub) sub.textContent = '📻 Funk-Modus bereit – Sprechtaste gedrückt halten zum Antworten';
+                };
+                await audio.play();
+            } catch (_) {}
+            return;
+        }
+
+        if (sType === 'offer') {
+            try {
+                const offerDesc = JSON.parse(sig.payload);
+                const pc = getOrCreatePeerConnection(fromId);
+                await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+                const queued = pendingIceCandidates.get(fromId) || [];
+                for (const c of queued) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+                }
+                pendingIceCandidates.delete(fromId);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await sendVoiceSignal(fromId, 'answer', answer);
+            } catch (_) {}
+        } else if (sType === 'answer') {
+            try {
+                const ansDesc = JSON.parse(sig.payload);
+                const pc = peerConnections.get(fromId);
+                if (pc && pc.signalingState === 'have-local-offer') {
+                    await pc.setRemoteDescription(new RTCSessionDescription(ansDesc));
+                    const queued = pendingIceCandidates.get(fromId) || [];
+                    for (const c of queued) {
+                        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+                    }
+                    pendingIceCandidates.delete(fromId);
+                }
+            } catch (_) {}
+        } else if (sType === 'ice') {
+            try {
+                const cand = JSON.parse(sig.payload);
+                const pc = peerConnections.get(fromId);
+                if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+                    await pc.addIceCandidate(new RTCIceCandidate(cand));
+                } else {
+                    if (!pendingIceCandidates.has(fromId)) pendingIceCandidates.set(fromId, []);
+                    pendingIceCandidates.get(fromId).push(cand);
+                }
+            } catch (_) {}
+        }
+    }
+
+    async function pollVoiceRoomState() {
+        if (!activeVoiceRoom) return;
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('room_key', activeVoiceRoom);
+        fd.append('since_sig_id', String(voiceLastSigId));
+        fd.append('is_muted', voiceMuted ? '1' : '0');
+        fd.append('is_speaking', voiceSpeaking ? '1' : '0');
+        fd.append('is_sharing_screen', voiceScreenStream ? '1' : '0');
+        fd.append('mode', voiceTransportMode);
+
+        try {
+            const res = await fetch('messages.php?ajax=voice_poll', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data || !data.success) return;
+
+            if (data.room_counts) {
+                updateSidebarRoomBadges(data.room_counts);
+            }
+            if (Array.isArray(data.peers)) {
+                renderVoicePeers(data.peers);
+                await syncMeshConnectionsWithPeers(data.peers);
+            }
+            if (Array.isArray(data.signals)) {
+                for (const s of data.signals) {
+                    const sid = Number(s.id || 0);
+                    if (sid > voiceLastSigId) voiceLastSigId = sid;
+                    await handleIncomingVoiceSignal(s);
+                }
+            }
+        } catch (_) {}
+    }
+
+    function updateVoiceModeUI() {
+        const modeBadge = document.getElementById('voiceCallModeBadge');
+        const pttBar = document.getElementById('voicePttControls');
+        const switchIcon = document.getElementById('voiceSwitchModeIcon');
+        const switchLbl = document.getElementById('voiceSwitchModeLabel');
+        const sub = document.getElementById('voiceCallStatusSub');
+
+        if (voiceTransportMode === 'ptt') {
+            if (modeBadge) {
+                modeBadge.textContent = '📻 Funk (Push-to-Talk)';
+                modeBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200';
+            }
+            if (pttBar) {
+                pttBar.classList.remove('hidden');
+                pttBar.classList.add('flex');
+            }
+            if (switchIcon) switchIcon.textContent = '⚡';
+            if (switchLbl) switchLbl.textContent = 'Auf WebRTC-Live umschalten';
+            if (sub) sub.textContent = '📻 Funk-Modus (100 % Firewall- & STRATO-sicher, ideal auch für große Gruppen)';
+        } else {
+            if (modeBadge) {
+                modeBadge.textContent = '⚡ WebRTC-Direkt';
+                modeBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200';
+            }
+            if (pttBar) {
+                pttBar.classList.add('hidden');
+                pttBar.classList.remove('flex');
+            }
+            if (switchIcon) switchIcon.textContent = '📻';
+            if (switchLbl) switchLbl.textContent = 'Auf Funk umschalten';
+            if (sub) sub.textContent = '⚡ Direktes Browser-zu-Browser Echtzeit-Audio (null STRATO-Serverlast)';
+        }
+    }
+
+    window.joinVoiceCallRoom = async function(roomKey, roomTitle, initialMode = 'webrtc', ringPartner = false) {
+        if (!roomKey) return;
+
+        // Auf Mobilgeräten die rechte Konversationsspalte sichtbar schalten
+        if (convPane && convPane.classList.contains('hidden')) {
+            convPane.classList.remove('hidden');
+            convPane.classList.add('flex');
+            const sidePane = document.getElementById('chatSidebarPane');
+            if (sidePane && window.matchMedia('(max-width: 1023px)').matches) {
+                sidePane.classList.add('hidden');
+            }
+        }
+
+        // Mikrofon anfordern (falls verfügbar)
+        if (!voiceLocalStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                voiceLocalStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                await setupLocalAudioAnalysis(voiceLocalStream);
+            } catch (_) {
+                // Falls kein Mikrofon vorhanden ist, kann man im Raum trotzdem zuhören
+                voiceMuted = true;
+            }
+        }
+
+        voiceTransportMode = (initialMode === 'ptt') ? 'ptt' : 'webrtc';
+        activeVoiceRoom = roomKey;
+        activeVoiceTitle = roomTitle || roomKey;
+
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('room_key', roomKey);
+        fd.append('mode', voiceTransportMode);
+        fd.append('ring', ringPartner ? '1' : '0');
+
+        try {
+            const res = await fetch('messages.php?ajax=voice_join', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data || !data.success) {
+                alert((data && data.error) ? data.error : 'Sprachraum konnte nicht betreten werden.');
+                return;
+            }
+
+            voiceLastSigId = Number(data.last_sig_id || 0);
+            activeVoiceTitle = data.room_title || activeVoiceTitle;
+
+            const cockpit = document.getElementById('voiceCallCockpit');
+            const titleEl = document.getElementById('voiceCallRoomTitle');
+            if (titleEl) titleEl.textContent = activeVoiceTitle;
+            if (cockpit) cockpit.classList.remove('hidden');
+
+            updateVoiceModeUI();
+            renderVoicePeers(data.peers || []);
+            await syncMeshConnectionsWithPeers(data.peers || []);
+            playVoiceTone(523, 784, 150);
+
+            voiceCallStartedAt = Date.now();
+            if (voiceCallClockTimer) clearInterval(voiceCallClockTimer);
+            voiceCallClockTimer = setInterval(() => {
+                const sec = Math.floor((Date.now() - voiceCallStartedAt) / 1000);
+                const badge = document.getElementById('voiceCallTimerBadge');
+                if (badge) badge.textContent = formatRecordSeconds(sec);
+            }, 1000);
+
+            if (voicePollTimer) clearInterval(voicePollTimer);
+            voicePollTimer = setInterval(pollVoiceRoomState, 2200);
+        } catch (_) {
+            alert('Verbindungsfehler beim Betreten des Sprachraums.');
+        }
+    };
+
+    window.leaveVoiceCallRoom = async function() {
+        const prevRoom = activeVoiceRoom;
+        activeVoiceRoom = '';
+        if (voicePollTimer) {
+            clearInterval(voicePollTimer);
+            voicePollTimer = null;
+        }
+        if (voiceCallClockTimer) {
+            clearInterval(voiceCallClockTimer);
+            voiceCallClockTimer = null;
+        }
+        if (voiceLevelTimer) {
+            clearInterval(voiceLevelTimer);
+            voiceLevelTimer = null;
+        }
+        for (const pid of Array.from(peerConnections.keys())) {
+            closePeerConnection(pid);
+        }
+        if (voiceLocalStream) {
+            voiceLocalStream.getTracks().forEach((t) => t.stop());
+            voiceLocalStream = null;
+        }
+        if (voiceScreenStream) {
+            voiceScreenStream.getTracks().forEach((t) => t.stop());
+            voiceScreenStream = null;
+        }
+        const screenWrap = document.getElementById('voiceScreenShareWrap');
+        if (screenWrap) screenWrap.classList.add('hidden');
+        const cockpit = document.getElementById('voiceCallCockpit');
+        if (cockpit) cockpit.classList.add('hidden');
+
+        playVoiceTone(659, 440, 140);
+
+        if (prevRoom) {
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('room_key', prevRoom);
+            try {
+                await fetch('messages.php?ajax=voice_leave', { method: 'POST', body: fd });
+            } catch (_) {}
+        }
+    };
+
+    window.toggleVoiceMute = function() {
+        voiceMuted = !voiceMuted;
+        if (voiceLocalStream) {
+            voiceLocalStream.getAudioTracks().forEach((t) => {
+                t.enabled = !voiceMuted;
+            });
+        }
+        const icon = document.getElementById('voiceMuteIcon');
+        const lbl = document.getElementById('voiceMuteLabel');
+        const btn = document.getElementById('btnVoiceMuteToggle');
+        if (icon) icon.textContent = voiceMuted ? '🔇' : '🎤';
+        if (lbl) lbl.textContent = voiceMuted ? 'Stumm' : 'Mikro an';
+        if (btn) {
+            btn.classList.toggle('bg-red-100', voiceMuted);
+            btn.classList.toggle('text-red-700', voiceMuted);
+        }
+        pollVoiceRoomState();
+    };
+
+    window.toggleVoiceScreenShare = async function() {
+        if (voiceScreenStream) {
+            voiceScreenStream.getTracks().forEach((t) => t.stop());
+            voiceScreenStream = null;
+            const lbl = document.getElementById('voiceScreenLabel');
+            if (lbl) lbl.textContent = 'Bildschirm';
+            pollVoiceRoomState();
+            return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            alert('Bildschirmfreigabe wird von diesem Browser/Gerät nicht unterstützt.');
+            return;
+        }
+        try {
+            voiceScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const vTrack = voiceScreenStream.getVideoTracks()[0];
+            if (vTrack) {
+                const lbl = document.getElementById('voiceScreenLabel');
+                if (lbl) lbl.textContent = 'Teilen beenden';
+                for (const [pid, pc] of peerConnections.entries()) {
+                    try {
+                        pc.addTrack(vTrack, voiceScreenStream);
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendVoiceSignal(pid, 'offer', offer);
+                    } catch (_) {}
+                }
+                vTrack.onended = () => {
+                    voiceScreenStream = null;
+                    if (lbl) lbl.textContent = 'Bildschirm';
+                    pollVoiceRoomState();
+                };
+            }
+            pollVoiceRoomState();
+        } catch (_) {}
+    };
+
+    window.switchVoiceTransportMode = function() {
+        voiceTransportMode = (voiceTransportMode === 'webrtc') ? 'ptt' : 'webrtc';
+        if (voiceTransportMode === 'ptt') {
+            for (const pid of Array.from(peerConnections.keys())) {
+                closePeerConnection(pid);
+            }
+        }
+        updateVoiceModeUI();
+        pollVoiceRoomState();
+    };
+
+    // 📻 Push-to-Talk (Funkgerät): Sprechtaste drücken & loslassen
+    window.startPttTransmission = async function(ev) {
+        if (ev) ev.preventDefault();
+        if (!activeVoiceRoom || isPttRecording) return;
+        if (!voiceLocalStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                voiceLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (_) {
+                alert('Bitte erlauben Sie den Mikrofonzugriff für den Funk-Modus.');
+                return;
+            }
+        }
+        if (!voiceLocalStream || typeof MediaRecorder === 'undefined') return;
+
+        isPttRecording = true;
+        voiceSpeaking = true;
+        pttChunks = [];
+        playVoiceTone(880, 1046, 60);
+
+        const btn = document.getElementById('btnPushToTalkHold');
+        const hint = document.getElementById('voicePttHint');
+        if (btn) {
+            btn.textContent = '🔴 Sende Funkspruch... (Loslassen zum Senden)';
+            btn.classList.add('ring-4', 'ring-red-400', 'bg-red-600');
+        }
+        if (hint) hint.textContent = '🎙️ Du sprichst gerade an alle im Raum...';
+
+        const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+        let chosenMime = '';
+        for (const c of mimeCandidates) {
+            if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) {
+                chosenMime = c;
+                break;
+            }
+        }
+
+        pttRecorder = chosenMime
+            ? new MediaRecorder(voiceLocalStream, { mimeType: chosenMime, audioBitsPerSecond: 24000 })
+            : new MediaRecorder(voiceLocalStream);
+
+        pttRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) pttChunks.push(e.data);
+        };
+
+        pttRecorder.onstop = () => {
+            isPttRecording = false;
+            voiceSpeaking = false;
+            if (btn) {
+                btn.textContent = '🎙️ Gedrückt halten zum Sprechen';
+                btn.classList.remove('ring-4', 'ring-red-400', 'bg-red-600');
+            }
+            if (hint) hint.textContent = 'Funkspruch wird an alle im Raum übertragen...';
+
+            if (pttChunks.length === 0 || !activeVoiceRoom) return;
+            const blob = new Blob(pttChunks, { type: pttRecorder.mimeType || 'audio/webm' });
+            pttChunks = [];
+
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Audio = String(reader.result || '');
+                if (!base64Audio.startsWith('data:audio/')) return;
+                const fd = new FormData();
+                fd.append('csrf_token', csrfToken);
+                fd.append('room_key', activeVoiceRoom);
+                fd.append('audio_data', base64Audio);
+                try {
+                    await fetch('messages.php?ajax=voice_ptt', { method: 'POST', body: fd });
+                    if (hint) hint.textContent = '✅ Funkspruch gesendet! Halte die Taste (oder Leertaste) zum Sprechen.';
+                } catch (_) {}
+            };
+            reader.readAsDataURL(blob);
+        };
+
+        pttRecorder.start();
+    };
+
+    window.stopPttTransmission = function(ev) {
+        if (ev) ev.preventDefault();
+        if (!isPttRecording || !pttRecorder) return;
+        if (pttRecorder.state !== 'inactive') {
+            pttRecorder.stop();
+        }
+    };
+
+    // Leertaste als Push-to-Talk-Taste im Funk-Modus (sofern man nicht gerade im Textfeld tippt)
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && activeVoiceRoom && voiceTransportMode === 'ptt') {
+            const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toLowerCase() : '';
+            if (tag !== 'textarea' && tag !== 'input' && tag !== 'select') {
+                e.preventDefault();
+                if (!isPttRecording) window.startPttTransmission(null);
+            }
+        }
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' && isPttRecording) {
+            e.preventDefault();
+            window.stopPttTransmission(null);
+        }
+    });
+
+    // Beim Schließen des Browser-Tabs sauber aus dem Sprachraum abmelden
+    window.addEventListener('beforeunload', () => {
+        if (activeVoiceRoom && navigator.sendBeacon) {
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('room_key', activeVoiceRoom);
+            navigator.sendBeacon('messages.php?ajax=voice_leave', fd);
+        }
+    });
+
+    // Falls per Klick auf "Anruf annehmen" (?autocall=1&room=...) geöffnet, direkt beitreten!
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autocall') === '1') {
+        const autoRoom = urlParams.get('room') || '';
+        const autoMode = urlParams.get('mode') || 'webrtc';
+        const autoTitle = urlParams.get('title') || 'Sprachanruf';
+        if (autoRoom) {
+            setTimeout(() => {
+                window.joinVoiceCallRoom(autoRoom, autoTitle, autoMode, false);
+            }, 300);
+        }
     }
 })();
 </script>

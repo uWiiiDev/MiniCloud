@@ -953,3 +953,32 @@ CREATE TABLE IF NOT EXISTS `club_documents` (
     PRIMARY KEY (`id`),
     KEY `idx_cd_club` (`club_id`, `doc_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 34. Tabellen für 1:1- & Gruppen-Sprachchat (WebRTC-Mesh Signaling & Push-to-Talk Funk-Fallback in messages.php)
+CREATE TABLE IF NOT EXISTS `voice_room_peers` (
+    `room_key` VARCHAR(64) NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `username` VARCHAR(64) NOT NULL,
+    `is_muted` TINYINT(1) NOT NULL DEFAULT 0,
+    `is_speaking` TINYINT(1) NOT NULL DEFAULT 0,
+    `is_sharing_screen` TINYINT(1) NOT NULL DEFAULT 0,
+    `mode` VARCHAR(16) NOT NULL DEFAULT 'webrtc',
+    `joined_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_seen` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`room_key`, `user_id`),
+    KEY `idx_vrp_seen` (`last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `voice_signals` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `room_key` VARCHAR(64) NOT NULL,
+    `from_user_id` INT UNSIGNED NOT NULL,
+    `from_username` VARCHAR(64) NOT NULL DEFAULT '',
+    `to_user_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `sig_type` VARCHAR(24) NOT NULL,
+    `payload` MEDIUMTEXT NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_vs_room_to` (`room_key`, `to_user_id`, `id`),
+    KEY `idx_vs_to_type` (`to_user_id`, `sig_type`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
