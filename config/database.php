@@ -6,14 +6,43 @@ declare(strict_types=1);
  * Kompatibel mit PHP 8.2+ und MySQL / MariaDB (z.B. STRATO Webspace)
  */
 
+// Lokale Datenbank-Zugangsdaten laden (werden durch setup.php erzeugt und nicht in Git versioniert)
+$localCredsFile = __DIR__ . '/db_credentials.php';
+$legacyLocalFile = __DIR__ . '/database.local.php';
+if (is_file($localCredsFile)) {
+    require_once $localCredsFile;
+} elseif (is_file($legacyLocalFile)) {
+    require_once $legacyLocalFile;
+}
+
 // Datenbank-Zugangsdaten (für STRATO z.B. DB_HOST = 'rdbms.strato.de')
 $defaultSocket = file_exists('/tmp/minicloud_mysql/run/mysqld.sock') ? '/tmp/minicloud_mysql/run/mysqld.sock' : '';
-define('DB_HOST', getenv('MINICLOUD_DB_HOST') ?: '127.0.0.1');
-define('DB_PORT', getenv('MINICLOUD_DB_PORT') ?: '3306');
-define('DB_SOCKET', getenv('MINICLOUD_DB_SOCKET') ?: $defaultSocket);
-define('DB_NAME', getenv('MINICLOUD_DB_NAME') ?: 'minicloud');
-define('DB_USER', getenv('MINICLOUD_DB_USER') ?: 'minicloud_user');
-define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'minicloud_secret');
+if (!defined('DB_HOST')) {
+    define('DB_HOST', getenv('MINICLOUD_DB_HOST') ?: '127.0.0.1');
+}
+if (!defined('DB_PORT')) {
+    define('DB_PORT', getenv('MINICLOUD_DB_PORT') ?: '3306');
+}
+if (!defined('DB_SOCKET')) {
+    define('DB_SOCKET', getenv('MINICLOUD_DB_SOCKET') ?: $defaultSocket);
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', getenv('MINICLOUD_DB_NAME') ?: 'minicloud');
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', getenv('MINICLOUD_DB_USER') ?: 'minicloud_user');
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', getenv('MINICLOUD_DB_PASS') ?: 'minicloud_secret');
+}
+
+// Prüfen, ob bereits individuelle Verbindungsdaten hinterlegt wurden
+if (!defined('DB_CREDENTIALS_CONFIGURED')) {
+    $hasCredFile = is_file($localCredsFile) || is_file($legacyLocalFile);
+    $hasEnvCreds = getenv('MINICLOUD_DB_HOST') !== false || getenv('MINICLOUD_DB_PASS') !== false;
+    $hasCustomPass = (DB_PASS !== 'minicloud_secret' && DB_PASS !== '');
+    define('DB_CREDENTIALS_CONFIGURED', $hasCredFile || $hasEnvCreds || $hasCustomPass || $defaultSocket !== '');
+}
 
 // Speicherplatz- & Papierkorb-Konfiguration
 define('DEFAULT_STORAGE_QUOTA', 100 * 1024 * 1024); // 100 MB pro Benutzer (Standard)
@@ -28,6 +57,38 @@ date_default_timezone_set('Europe/Berlin');
 define('APP_NAME', 'MiniCloud');
 
 /**
+ * Leitet bei einer Erstinstallation ohne hinterlegte Datenbank-Zugangsdaten automatisch zum Setup-Assistenten weiter.
+ */
+function redirectToSetupIfUnconfigured(string $reason = ''): never
+{
+    if (PHP_SAPI !== 'cli') {
+        $currentScript = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        $acceptHeader  = (string)($_SERVER['HTTP_ACCEPT'] ?? '');
+        $xhrHeader     = (string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
+        $isJsonReq     = str_contains($acceptHeader, 'application/json') || strcasecmp($xhrHeader, 'XMLHttpRequest') === 0;
+
+        if (!DB_CREDENTIALS_CONFIGURED && $currentScript !== 'setup.php') {
+            if ($isJsonReq) {
+                http_response_code(503);
+                header('Content-Type: application/json; charset=UTF-8');
+                exit((string)json_encode([
+                    'error'    => 'Erstinstallation erforderlich. Bitte richten Sie zuerst die Datenbankverbindung ein.',
+                    'redirect' => 'setup.php',
+                ]));
+            }
+            header('Location: setup.php');
+            exit;
+        }
+    }
+
+    if ($reason !== '') {
+        error_log('Datenbankverbindungsfehler: ' . $reason);
+    }
+    http_response_code(503);
+    exit('Es konnte momentan keine Verbindung zur Datenbank hergestellt werden. Bitte versuchen Sie es in wenigen Augenblicken erneut oder prüfen Sie die Datenbank-Konfiguration.');
+}
+
+/**
  * Erstellt und gibt eine Singleton-PDO-Datenbankverbindung zurück.
  */
 function getDB(): PDO
@@ -36,6 +97,11 @@ function getDB(): PDO
 
     if ($pdo instanceof PDO) {
         return $pdo;
+    }
+
+    // Falls noch keinerlei Datenbank-Zugangsdaten hinterlegt sind -> direkt zum Installations-Assistenten
+    if (!DB_CREDENTIALS_CONFIGURED) {
+        redirectToSetupIfUnconfigured('Keine Datenbank-Zugangsdaten konfiguriert (Erstinstallation).');
     }
 
     if (DB_SOCKET !== '') {
@@ -54,9 +120,7 @@ function getDB(): PDO
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         ensureSchemaUpdated($pdo);
     } catch (PDOException $e) {
-        error_log('Datenbankverbindungsfehler: ' . $e->getMessage());
-        http_response_code(500);
-        exit('Es konnte keine Verbindung zur Datenbank hergestellt werden. Bitte prüfen Sie die Konfiguration in config/database.php.');
+        redirectToSetupIfUnconfigured($e->getMessage());
     }
 
     return $pdo;

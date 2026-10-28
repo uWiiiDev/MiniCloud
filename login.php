@@ -2,6 +2,10 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config/database.php';
+if (defined('DB_CREDENTIALS_CONFIGURED') && !DB_CREDENTIALS_CONFIGURED) {
+    header('Location: setup.php');
+    exit;
+}
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 

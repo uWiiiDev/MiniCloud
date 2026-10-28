@@ -411,7 +411,9 @@ function createLocalAppSnapshot(PDO $pdo, string $reason = 'Vor System-Update'):
             str_starts_with($relPath, '.github/') ||
             str_starts_with($relPath, '.idea/') ||
             str_starts_with($relPath, '.vscode/') ||
-            $relPath === 'config/database.php'
+            $relPath === 'config/database.php' ||
+            $relPath === 'config/db_credentials.php' ||
+            $relPath === 'config/database.local.php'
         ) {
             continue;
         }
@@ -549,7 +551,9 @@ function restoreLocalAppSnapshot(PDO $pdo, string $snapshotFilename): array
             str_starts_with($relPath, 'uploads/') ||
             str_starts_with($relPath, '.git/') ||
             str_starts_with($relPath, '.github/') ||
-            $relPath === 'config/database.php'
+            $relPath === 'config/database.php' ||
+            $relPath === 'config/db_credentials.php' ||
+            $relPath === 'config/database.local.php'
         ) {
             continue;
         }
@@ -689,7 +693,21 @@ function performGitHubUpdate(
         : sprintf('Automatisch vor Update auf #%s', $shortTarget);
     createLocalAppSnapshot($pdo, $snapReason);
 
-    // Bestehende Datenbank-Zugangsdaten aus config/database.php sichern
+    // Bestehende Datenbank-Zugangsdaten in config/db_credentials.php sichern, falls noch nicht ausgelagert
+    $credFilePath = __DIR__ . '/config/db_credentials.php';
+    if (!is_file($credFilePath) && defined('DB_HOST') && defined('DB_NAME') && defined('DB_USER') && defined('DB_PASS')) {
+        $credPhp = "<?php\ndeclare(strict_types=1);\n\n"
+            . "// Automatisch gesicherte Datenbank-Zugangsdaten\n"
+            . "define('DB_HOST', " . var_export((string)DB_HOST, true) . ");\n"
+            . "define('DB_PORT', " . var_export((string)(defined('DB_PORT') ? DB_PORT : '3306'), true) . ");\n"
+            . "define('DB_NAME', " . var_export((string)DB_NAME, true) . ");\n"
+            . "define('DB_USER', " . var_export((string)DB_USER, true) . ");\n"
+            . "define('DB_PASS', " . var_export((string)DB_PASS, true) . ");\n";
+        if (@file_put_contents($credFilePath, $credPhp) !== false) {
+            @chmod($credFilePath, 0640);
+        }
+    }
+
     $existingDbFile = __DIR__ . '/config/database.php';
     $existingDbContent = is_readable($existingDbFile) ? (string)@file_get_contents($existingDbFile) : '';
     $preservedDefines = [];
@@ -716,11 +734,13 @@ function performGitHubUpdate(
             continue;
         }
 
-        // Benutzerdateien (uploads/) und Git-Metadaten niemals überschreiben
+        // Benutzerdateien (uploads/), lokale Zugangsdaten und Git-Metadaten niemals überschreiben
         if (
             str_starts_with($relPath, 'uploads/') ||
             str_starts_with($relPath, '.git/') ||
-            str_starts_with($relPath, '.github/')
+            str_starts_with($relPath, '.github/') ||
+            $relPath === 'config/db_credentials.php' ||
+            $relPath === 'config/database.local.php'
         ) {
             continue;
         }

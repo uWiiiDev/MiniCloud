@@ -7,6 +7,7 @@ uploads/*
 .env
 .env.local
 config/database.local.php
+config/db_credentials.php
 
 # Temporäre Dateien & Logs
 *.log
