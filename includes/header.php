@@ -548,6 +548,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_club'] ?? '1') === '1'): ?>
+                        <a
+                            href="club.php"
+                            data-nav-item="club"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Vereinsverwaltung &amp; Vorstands-Portal"
+                        >
+                            <span>🏛️</span>
+                            <span class="hidden md:inline">Verein</span>
+                        </a>
+                    <?php endif; ?>
+
                     <a
                         href="trash.php"
                         data-nav-item="trash"

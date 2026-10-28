@@ -829,3 +829,127 @@ CREATE TABLE IF NOT EXISTS `module_usage_stats` (
     PRIMARY KEY (`user_id`, `module_key`),
     KEY `idx_mus_user_count` (`user_id`, `visit_count` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 33. Tabellen für die Vereinsverwaltung & Vorstands-Aufgabenverteilung (club.php)
+CREATE TABLE IF NOT EXISTS `clubs` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_id` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(190) NOT NULL,
+    `subtitle` VARCHAR(190) NOT NULL DEFAULT '',
+    `register_no` VARCHAR(80) NOT NULL DEFAULT '',
+    `currency` VARCHAR(10) NOT NULL DEFAULT '€',
+    `required_work_hours` DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+    `budget_book_id` INT UNSIGNED DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_clubs_owner` (`owner_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_roles` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `user_id` INT UNSIGNED NOT NULL,
+    `role_title` VARCHAR(100) NOT NULL DEFAULT 'Vorstandsmitglied',
+    `permissions` VARCHAR(255) NOT NULL DEFAULT 'readonly',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_club_user` (`club_id`, `user_id`),
+    KEY `idx_club_roles_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_fee_tiers` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(120) NOT NULL,
+    `amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    `billing_cycle` VARCHAR(20) NOT NULL DEFAULT 'yearly',
+    `description` VARCHAR(255) NOT NULL DEFAULT '',
+    PRIMARY KEY (`id`),
+    KEY `idx_cft_club` (`club_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_members` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `member_no` VARCHAR(50) NOT NULL DEFAULT '',
+    `first_name` VARCHAR(100) NOT NULL,
+    `last_name` VARCHAR(100) NOT NULL,
+    `email` VARCHAR(190) NOT NULL DEFAULT '',
+    `phone` VARCHAR(80) NOT NULL DEFAULT '',
+    `address` VARCHAR(255) NOT NULL DEFAULT '',
+    `birth_date` DATE DEFAULT NULL,
+    `join_date` DATE DEFAULT NULL,
+    `leave_date` DATE DEFAULT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+    `department` VARCHAR(120) NOT NULL DEFAULT '',
+    `club_function` VARCHAR(120) NOT NULL DEFAULT '',
+    `fee_tier_id` INT UNSIGNED DEFAULT NULL,
+    `iban` VARCHAR(64) NOT NULL DEFAULT '',
+    `sepa_mandate_ref` VARCHAR(80) NOT NULL DEFAULT '',
+    `linked_user_id` INT UNSIGNED DEFAULT NULL,
+    `notes` VARCHAR(500) NOT NULL DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cm_club_status` (`club_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_fee_payments` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `member_id` INT UNSIGNED NOT NULL,
+    `period_year` SMALLINT UNSIGNED NOT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'open',
+    `paid_at` DATE DEFAULT NULL,
+    `payment_method` VARCHAR(50) NOT NULL DEFAULT 'Überweisung',
+    `synced_to_budget` TINYINT(1) NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cfp_club_year` (`club_id`, `period_year`, `status`),
+    KEY `idx_cfp_member` (`member_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_work_logs` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `member_id` INT UNSIGNED NOT NULL,
+    `work_date` DATE NOT NULL,
+    `hours` DECIMAL(6,2) NOT NULL DEFAULT 1.00,
+    `activity` VARCHAR(255) NOT NULL,
+    `logged_by` INT UNSIGNED NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cwl_club_date` (`club_id`, `work_date`),
+    KEY `idx_cwl_member` (`member_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_inventory` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `item_name` VARCHAR(160) NOT NULL,
+    `category` VARCHAR(80) NOT NULL DEFAULT 'Inventar & Gerät',
+    `serial_or_key_no` VARCHAR(80) NOT NULL DEFAULT '',
+    `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+    `condition_status` VARCHAR(40) NOT NULL DEFAULT 'Gut',
+    `assigned_member_id` INT UNSIGNED DEFAULT NULL,
+    `assigned_since` DATE DEFAULT NULL,
+    `notes` VARCHAR(255) NOT NULL DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ci_club` (`club_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `club_documents` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `club_id` INT UNSIGNED NOT NULL,
+    `title` VARCHAR(190) NOT NULL,
+    `doc_category` VARCHAR(60) NOT NULL DEFAULT 'Vorstandsprotokoll',
+    `doc_date` DATE NOT NULL,
+    `file_id` INT UNSIGNED DEFAULT NULL,
+    `summary` VARCHAR(500) NOT NULL DEFAULT '',
+    `uploaded_by` INT UNSIGNED NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cd_club` (`club_id`, `doc_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

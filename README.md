@@ -8,7 +8,7 @@
 
 ---
 
-## ✨ Complete Feature Suite (19 Integrated Modules)
+## ✨ Complete Feature Suite (20 Integrated Modules)
 
 ### 1. 📁 File Manager, AES-256 Vault, ZIP Inspector & Smart Sharing (`index.php`, `vault_action.php`, `share.php`)
 - **Direct Folder Drag & Drop, `Ctrl+V` Clipboard Upload & Action Toolbar:** Drop files or entire folder hierarchies directly onto any subfolder row or onto the page. Paste screenshots straight from your clipboard via `Ctrl+V`.
@@ -42,22 +42,26 @@
 ### 8. 💰 Budget & Household Planner (`budget.php`)
 - Manage personal, family, or shared group budget books (`€`, `CHF`, `$`, `£`), log income and expenses across 13 categories with **direct cloud receipt attachment (`📎 PDF/Photo`)**, track **recurring subscriptions & cancellation notice periods (`🔄`)**, monitor **visual savings goals (`🎯`)**, and export monthly reports to **CSV (Excel)** directly into your cloud folder.
 
-### 9. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
+### 9. 🏛️ Club Management & Board Role Delegation (`club.php`)
+- Complete digital club & association administration with **granular multi-user board role delegation** (*1st Chairman = Full Access*, *Secretary = Member Directory & Minutes*, *Treasurer = Fee Tiers, Yearly Fee Generator & 1-Click Sync to `budget.php`*, *Equipment Manager = Volunteer Work Hours & Key/Equipment Lending*, *Auditor = Read-Only Inspection*).
+- Manage active/passive/honorary members, SEPA mandate references, yearly fee runs, volunteer work hour quotas, club inventory & key handovers, and cloud-linked board minutes/bylaws with 1-click CSV export to your cloud storage.
+
+### 10. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
 - Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
 
-### 10. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
+### 11. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 100% offline-capable HTML5 games with cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
   - **Solo Classics:** *2048 Cloud*, *Sudoku (4 difficulty levels + pencil notes)*, *Memory*, *Snake Retro*, *Block Fall (Tetris)*, *Minesweeper*, and *Solitaire (Klondike)*.
   - **👥 Live Multiplayer & AI Duels:** *Chess (with full move validation & AI)*, *Connect Four*, *Battleship*, and *Tic-Tac-Toe*.
 
-### 11. 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
+### 12. 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
 - **Polls & Date Finder (`polls.php`):** Self-hosted Doodle alternative with guest voting links and 1-click calendar transfer.
 - **Live Mentimeter (`menti.php`):** Real-time audience voting via QR code & 6-digit PIN (Word Cloud, Bar Chart, Scale, Q&A with Upvoting, Live Quiz Leaderboard).
 - **PDF Toolbox & Document Scanner (`pdf_tools.php`):** Camera/photo-to-PDF scanner with high-contrast B/W filter, PDF Merge, Split, Compression, and **irreversible GDPR Pixel Redaction (`⬛`)**.
 - **Password Keychain (`passwords.php`):** Server-side AES-256-GCM encrypted password vault with password generator, age warnings, and team sharing.
 - **Smart Help Assistant (`assistant.php`):** Instant offline Q&A assistant answering questions about all MiniCloud features in **11 languages**.
 
-### 12. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
+### 13. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
 - **Account Lockout (`🔒 Lock / 🔓 Unlock`):** Immediately lock compromised or inactive user accounts (with an optional lock reason). Locked users are blocked in real time across web sessions, login, password reset, `.ics`/`.vcf` feeds, and WebDAV/CardDAV/CalDAV.
 - **🛡️ Delegated Partial Admin Permissions (`admin_permissions`):** Grant trusted non-admin users granular access to specific admin tabs (*👥 Users & Groups*, *🧩 Modules & Registration*, *🎨 Branding & Imprint*, *✉️ Email & SMTP*, or *🔄 Updates, Backup & System*) without granting full root administrator rights.
 - **1-Click GitHub Updater & Instant Rollback Snapshots:** Update directly from GitHub while preserving `uploads/` and `config/database.php`, with automatic local `.zip` snapshots (`uploads/.system_backups/`) for 1-click rollback.

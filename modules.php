@@ -181,6 +181,18 @@ $allModules = [
         'badgeCls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300',
     ],
     [
+        'key'      => 'club',
+        'enabled'  => ($appSettings['enable_club'] ?? '1') === '1',
+        'title'    => 'Vereinsverwaltung',
+        'icon'     => '🏛️',
+        'url'      => 'club.php',
+        'category' => 'org_team',
+        'catLabel' => 'Organisation & Team',
+        'desc'     => 'Mitgliederdatei, Beitragstarife, Jahresbeitrags-Generator, Kassenwart-Übergabe, Arbeitsstunden, Inventar/Schlüssel und aufteilbare Vorstands-Rollen.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300',
+    ],
+    [
         'key'      => 'contacts',
         'enabled'  => ($appSettings['enable_contacts'] ?? '1') === '1',
         'title'    => 'Kontakte',

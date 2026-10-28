@@ -740,6 +740,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_games'                  => '1',
         'enable_mindmap'                => '1',
         'enable_budget'                 => '1',
+        'enable_club'                   => '1',
         'enable_dashboard'              => '1',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
@@ -3071,6 +3072,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_budget',
             'color'       => 'bg-emerald-600',
         ],
+        'club' => [
+            'icon'        => '🏛️',
+            'label'       => 'Vereinsverwaltung & Vorstands-Portal',
+            'url'         => 'club.php',
+            'setting_key' => 'enable_club',
+            'color'       => 'bg-amber-700',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3113,6 +3121,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'games.php'     => 'games',
         'mindmap.php'   => 'mindmap',
         'budget.php'    => 'budget',
+        'club.php'      => 'club',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3245,6 +3254,9 @@ function getModuleInventorySummary(PDO $pdo): array
 
     $budgetEntryCount = $safeCount("SELECT COUNT(*) FROM `budget_entries`");
     $summary['budget'] = $budgetEntryCount . ' ' . ($budgetEntryCount === 1 ? 'Buchung' : 'Buchungen');
+
+    $clubMemberCount = $safeCount("SELECT COUNT(*) FROM `club_members`");
+    $summary['club'] = $clubMemberCount . ' ' . ($clubMemberCount === 1 ? 'Mitglied' : 'Mitglieder');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
