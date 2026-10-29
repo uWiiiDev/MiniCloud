@@ -3259,7 +3259,7 @@ foreach ($modList as $mItem) {
                             <span>
                                 <strong>Spiele-Zentrale &amp; Cloud-Highscores (<code>games.php</code>) aktivieren</strong><br>
                                 <span class="text-[11px] text-slate-500 dark:text-slate-400">
-                                    15 werbefreie Browserspiele (<em>Gummigeruch Kart-Cup, The Last Ninja, Cloud-Canabalt, Cloud-Invaders, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Block-Puzzle, Snake, Brick Breaker</em> sowie <em>Vier Gewinnt &amp; Tic-Tac-Toe</em> gegen KI oder andere Cloud-Mitglieder) inkl. Highscore-Ranglisten.
+                                    16 werbefreie Browserspiele inkl. Vollbildmodus (<em>Gummigeruch Kart-Cup, Cloud-Lemmings, The Last Ninja, Cloud-Canabalt, Cloud-Invaders, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Block-Puzzle, Snake, Brick Breaker</em> sowie <em>Vier Gewinnt &amp; Tic-Tac-Toe</em>) inkl. Highscore-Ranglisten.
                                 </span>
                             </span>
                         </label>

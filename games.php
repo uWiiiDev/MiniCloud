@@ -5,22 +5,23 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 15 Spiele:
+ * Enthaltene 16 Spiele:
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
- * 2.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
- * 3.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
- * 4.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
- * 5.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 6.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 7.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 8.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 9.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 10. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 11. 🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 12. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 13. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 14. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 15. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 2.  🐹 Cloud-Lemmings (1991 Klassiker: Zerstörbares Pixel-Gelände, 8 Fähigkeiten & 4 Kult-Level)
+ * 3.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
+ * 4.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
+ * 5.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
+ * 6.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 7.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 8.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 9.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 10. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 11. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 12. 🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 13. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 14. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 15. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 16. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -111,7 +112,7 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 15 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 16 Spiele inklusive Metadaten.
  *
  * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
@@ -126,6 +127,15 @@ function getGamesCatalog(): array
             'group'    => 'action',
             'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'lemmings' => [
+            'key'      => 'lemmings',
+            'title'    => 'Cloud-Lemmings (1991)',
+            'icon'     => '🐹',
+            'category' => 'Strategie 1991',
+            'group'    => 'logic',
+            'desc'     => 'Rette die Kolonie mit Digger, Builder, Blocker, Basher, Floater & Bomber durch zerstörbares Pixel-Gelände!',
+            'color'    => 'from-lime-500 to-emerald-700',
         ],
         'lastninja' => [
             'key'      => 'lastninja',
@@ -1031,6 +1041,45 @@ require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
 ?>
 
+<style>
+/* Universal Vollbild- & Smartphone-Theater-Modus für alle 16 Cloud-Spiele */
+#gamesActiveStageCard.mc-game-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: 100vw !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    padding: 8px 12px 14px 12px !important;
+    border-radius: 0 !important;
+    border: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+#gamesActiveStageCard.mc-game-fullscreen canvas {
+    width: auto !important;
+    height: auto !important;
+    max-width: 96vw !important;
+    max-height: calc(100dvh - 185px) !important;
+    object-fit: contain !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+@media (max-width: 640px) {
+    #gamesActiveStageCard.mc-game-fullscreen canvas {
+        width: 96vw !important;
+        max-height: calc(100dvh - 195px) !important;
+    }
+    #gamesActiveStageCard.mc-game-fullscreen .game-panel > div:first-child p {
+        display: none !important;
+    }
+}
+</style>
+
 <div class="space-y-6">
     <!-- KOPFBEREICH & KOMFORT-SPIELAUSWAHL -->
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs space-y-4">
@@ -1077,6 +1126,13 @@ $csrfToken = getCsrfToken();
                         class="px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/70 hover:bg-brand-100 dark:hover:bg-brand-900/70 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 font-bold cursor-pointer transition-colors">
                     🔼 Übersicht einklappen
                 </button>
+
+                <button type="button" onclick="toggleGameFullscreen()"
+                        class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                        title="Aktuelles Spiel im Vollbildmodus öffnen (ideal für Smartphone & Tablet)">
+                    <span>⛶</span>
+                    <span>Vollbild</span>
+                </button>
             </div>
         </div>
 
@@ -1102,7 +1158,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🧠 Logik &amp; Duell (4)
+                        🧠 Logik &amp; Duell (5)
                     </button>
                 </div>
 
@@ -1165,7 +1221,29 @@ $csrfToken = getCsrfToken();
         <!-- =============================================================== -->
         <!-- LINKE SPALTE: AKTIVE SPIELFLÄCHE                                -->
         <!-- =============================================================== -->
-        <div class="lg:col-span-8 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs min-h-[540px]">
+        <div id="gamesActiveStageCard" class="lg:col-span-8 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs min-h-[540px]">
+
+            <!-- KOMPAKTE VOLLBILD- & SCHNELLWAHL-LEISTE DIREKT ÜBER DEM AKTIVEN SPIEL -->
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 text-xs">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-slate-400 dark:text-slate-500 font-semibold hidden sm:inline">Aktives Spiel:</span>
+                    <select id="stageQuickGameSelect" onchange="selectCloudGame(this.value)"
+                            class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer max-w-[230px] sm:max-w-xs truncate">
+                        <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
+                            <option value="<?= e((string)$gKey) ?>" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                <?= $gMeta['icon'] ?> <?= e($gMeta['title']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btnStageFullscreen" onclick="toggleGameFullscreen()"
+                            class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-2xs cursor-pointer transition-colors flex items-center gap-1.5">
+                        <span id="btnStageFullscreenIcon">⛶</span>
+                        <span id="btnStageFullscreenLabel">Vollbild / Handy-Großansicht</span>
+                    </button>
+                </div>
+            </div>
 
             <!-- 1. SPIEL: GUMMIGERUCH KART-CUP & GHOST-DUELLE -->
             <div id="gamePanel-gummigeruch" class="game-panel space-y-4">
@@ -2222,6 +2300,130 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 16. SPIEL: CLOUD-LEMMINGS (1991 ZERSTÖRBARES PIXEL-GELÄNDE & 8 SKILLS) -->
+            <div id="gamePanel-lemmings" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🐹 Cloud-Lemmings (1991 Klassiker)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 border border-lime-300/70 dark:border-lime-800">
+                                ⛏️ Pixel-Tunnelbau &middot; 🪜 Treppenbauer &middot; 4 Kult-Level
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Wähle unten eine <strong>Fähigkeit</strong> (z. B. <em>🕳️ Digger, 🪜 Builder, 🛑 Blocker, 🔨 Basher, ☂️ Floater</em>) und tippe/klicke auf einen laufenden Lemming!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="lemLevelSelect" onchange="lemLoadLevel(parseInt(this.value,10))"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="0">Level 1: Just Dig! (Grabe einfach!)</option>
+                            <option value="1">Level 2: Only Floaters Survive (Klippensprung)</option>
+                            <option value="2">Level 3: Pillars of Hercules (Steinsäulen)</option>
+                            <option value="3">Level 4: Through the Mountain (Bergmassiv)</option>
+                        </select>
+                        <button type="button" onclick="lemStartLevel()"
+                                class="px-3.5 py-1.5 rounded-xl bg-lime-600 hover:bg-lime-700 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Level neu starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Rettungs-Zeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Im Feld (OUT):</span>
+                        <strong id="lemOutCount" class="text-lime-600 dark:text-lime-400 font-extrabold text-sm">0 / 20</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Gerettet (IN):</span>
+                        <strong id="lemSavedPct" class="text-emerald-600 dark:text-emerald-400 font-extrabold">0% (Ziel: 50%)</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Zeit:</span>
+                        <strong id="lemTimeLeft" class="text-amber-600 dark:text-amber-400 font-extrabold">03:00</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="lemScore" class="text-slate-900 dark:text-white font-extrabold">0</strong>
+                    </div>
+                </div>
+
+                <!-- Pixel-Gelände-Spielfeld (Canvas) + Original 8-Skill-Leiste -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="lemCanvas" width="640" height="320"
+                            onclick="lemCanvasClick(event)"
+                            onmousemove="lemCanvasHover(event)"
+                            ontouchstart="lemCanvasTouch(event)"
+                            class="w-full max-w-[760px] h-auto rounded-2xl bg-slate-950 border-2 border-lime-900/80 shadow-xl cursor-crosshair select-none"></canvas>
+
+                    <!-- Klassische Lemmings-Werkzeugleiste (8 Fähigkeiten + Tempo + Nuke) -->
+                    <div class="w-full max-w-[760px] grid grid-cols-5 sm:grid-cols-10 gap-1.5 select-none">
+                        <button type="button" onclick="lemSelectSkill('climber')" id="lemSkillBtn-climber"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">🧗</span>
+                            <span>Climber</span>
+                            <span id="lemSkillCnt-climber" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('floater')" id="lemSkillBtn-floater"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">☂️</span>
+                            <span>Floater</span>
+                            <span id="lemSkillCnt-floater" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('bomber')" id="lemSkillBtn-bomber"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">💣</span>
+                            <span>Bomber</span>
+                            <span id="lemSkillCnt-bomber" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('blocker')" id="lemSkillBtn-blocker"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">🛑</span>
+                            <span>Blocker</span>
+                            <span id="lemSkillCnt-blocker" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('builder')" id="lemSkillBtn-builder"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">🪜</span>
+                            <span>Builder</span>
+                            <span id="lemSkillCnt-builder" class="text-[10px] text-lime-600 dark:text-lime-400">15</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('basher')" id="lemSkillBtn-basher"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">🔨</span>
+                            <span>Basher</span>
+                            <span id="lemSkillCnt-basher" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('miner')" id="lemSkillBtn-miner"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">⛏️</span>
+                            <span>Miner</span>
+                            <span id="lemSkillCnt-miner" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemSelectSkill('digger')" id="lemSkillBtn-digger"
+                                class="lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border-2 border-lime-500 bg-lime-100 dark:bg-lime-950/80 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">🕳️</span>
+                            <span>Digger</span>
+                            <span id="lemSkillCnt-digger" class="text-[10px] text-lime-600 dark:text-lime-400">10</span>
+                        </button>
+                        <button type="button" onclick="lemToggleFastForward()" id="lemFastForwardBtn"
+                                class="flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer">
+                            <span class="text-base">⏩</span>
+                            <span>Tempo</span>
+                            <span id="lemSpeedBadge" class="text-[10px] text-amber-600 dark:text-amber-400">1×</span>
+                        </button>
+                        <button type="button" onclick="lemTriggerNuke()"
+                                class="flex flex-col items-center justify-center p-1.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[11px] font-extrabold cursor-pointer"
+                                title="Oh no! Alle Lemminge sprengen (Nuke)">
+                            <span class="text-base">☢️</span>
+                            <span>Nuke</span>
+                            <span class="text-[10px]">Oh no!</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2374,6 +2576,64 @@ function toggleGamesCatalogCollapse() {
     btn.textContent = isHidden ? '🔽 Spiele-Übersicht öffnen' : '🔼 Übersicht einklappen';
 }
 
+function syncGameFullscreenUi() {
+    const card = document.getElementById('gamesActiveStageCard');
+    const icon = document.getElementById('btnStageFullscreenIcon');
+    const lbl  = document.getElementById('btnStageFullscreenLabel');
+    const btn  = document.getElementById('btnStageFullscreen');
+    if (!card) return;
+    const isFs = card.classList.contains('mc-game-fullscreen') || document.fullscreenElement === card;
+    if (icon) icon.textContent = isFs ? '✕' : '⛶';
+    if (lbl)  lbl.textContent  = isFs ? 'Vollbild beenden' : 'Vollbild / Handy-Großansicht';
+    if (btn) {
+        btn.className = isFs
+            ? 'px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-2xs cursor-pointer transition-colors flex items-center gap-1.5'
+            : 'px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-2xs cursor-pointer transition-colors flex items-center gap-1.5';
+    }
+}
+
+function toggleGameFullscreen() {
+    const card = document.getElementById('gamesActiveStageCard');
+    if (!card) return;
+
+    const isCurrentlyFs = card.classList.contains('mc-game-fullscreen') || document.fullscreenElement === card;
+    if (isCurrentlyFs) {
+        card.classList.remove('mc-game-fullscreen');
+        document.body.style.overflow = '';
+        if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+    } else {
+        card.classList.add('mc-game-fullscreen');
+        document.body.style.overflow = 'hidden';
+        if (card.requestFullscreen) {
+            card.requestFullscreen().catch(() => {});
+        }
+    }
+    syncGameFullscreenUi();
+}
+
+document.addEventListener('fullscreenchange', () => {
+    const card = document.getElementById('gamesActiveStageCard');
+    if (card && !document.fullscreenElement) {
+        // Falls per ESC aus dem nativen Browser-Vollbild gegangen wurde, auch CSS-Overlay beenden
+        card.classList.remove('mc-game-fullscreen');
+        document.body.style.overflow = '';
+    }
+    syncGameFullscreenUi();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const card = document.getElementById('gamesActiveStageCard');
+        if (card && card.classList.contains('mc-game-fullscreen')) {
+            card.classList.remove('mc-game-fullscreen');
+            document.body.style.overflow = '';
+            syncGameFullscreenUi();
+        }
+    }
+});
+
 // =============================================================================
 // ZENTRALE SPIEL-UMSCHALTUNG & HIGHSCORE-API
 // =============================================================================
@@ -2384,6 +2644,10 @@ function selectCloudGame(gameKey) {
     const quickSel = document.getElementById('quickGameSelect');
     if (quickSel && quickSel.value !== gameKey) {
         quickSel.value = gameKey;
+    }
+    const stageSel = document.getElementById('stageQuickGameSelect');
+    if (stageSel && stageSel.value !== gameKey) {
+        stageSel.value = gameKey;
     }
 
     document.querySelectorAll('.game-panel').forEach((el) => el.classList.add('hidden'));
@@ -2429,6 +2693,11 @@ function selectCloudGame(gameKey) {
             ninjaInit();
         }
         ninjaDraw();
+    } else if (gameKey === 'lemmings') {
+        if (!lemInitialized) {
+            lemInit();
+        }
+        lemDraw();
     } else if (gameKey === 'kong') {
         if (!kongInitialized) {
             kongInit();
@@ -10277,10 +10546,871 @@ function ninjaLoop() {
     }
 }
 
+// =============================================================================
+// 16. CLOUD-LEMMINGS (1991 ZERSTÖRBARES PIXEL-GELÄNDE & 8 FÄHIGKEITEN)
+// =============================================================================
+const LEM_W = 640;
+const LEM_H = 320;
+// Pixel-Typen im Gelände-Puffer: 0 = Luft, 1 = Erde (grün/braun, grabbar), 2 = Ziegel/Treppe (grabbar), 3 = Stahl (unzerstörbar)
+let lemTerrain     = new Uint8Array(LEM_W * LEM_H);
+let lemTerrainCvs  = null;
+let lemTerrainCtx  = null;
+
+let lemInitialized = false;
+let lemRunning     = false;
+let lemRafId       = null;
+let lemLevelIdx    = 0;
+let lemFastForward = false;
+let lemActiveSkill = 'digger';
+let lemTick        = 0;
+let lemScore       = 0;
+let lemTimeLeftSec = 180;
+let lemSpawned     = 0;
+let lemSaved       = 0;
+let lemTotal       = 20;
+let lemRequiredPct = 50;
+let lemBannerText  = '';
+let lemHoverPos    = { x: -1, y: -1 };
+
+let lemList        = []; // { id, x, y, dir, state, fallDist, canClimb, canFloat, bombTicks, buildStepsLeft, stepWait, anim }
+let lemParticles   = []; // { x, y, vx, vy, color, life }
+let lemSkillsLeft  = {};
+
+const LEM_LEVELS = [
+    {
+        name: 'Level 1: Just Dig! (Grabe einfach!)',
+        total: 16,
+        requiredPct: 50,
+        timeSec: 180,
+        hatch: { x: 145, y: 42 },
+        exit:  { x: 475, y: 256 },
+        skills: { climber: 5, floater: 5, bomber: 5, blocker: 5, builder: 10, basher: 5, miner: 5, digger: 10 },
+        buildFn: (fillRect, fillSteel) => {
+            // Obere breite Erdschicht (man muss durch sie nach unten zum Ausgang graben!)
+            fillRect(70, 92, 500, 74, '#65a30d', '#3f6212');
+            // Untere Ziel-Ebene
+            fillRect(110, 256, 440, 44, '#854d0e', '#713f12');
+            // Linke & rechte Begrenzungsmauern auf der oberen Ebene, damit niemand herunterfällt
+            fillSteel(70, 62, 18, 32);
+            fillSteel(552, 62, 18, 32);
+            // Untere linke Leitwand
+            fillSteel(110, 224, 18, 34);
+        }
+    },
+    {
+        name: 'Level 2: Only Floaters Survive (Klippensprung)',
+        total: 16,
+        requiredPct: 50,
+        timeSec: 180,
+        hatch: { x: 110, y: 36 },
+        exit:  { x: 520, y: 248 },
+        skills: { climber: 5, floater: 16, bomber: 5, blocker: 5, builder: 12, basher: 5, miner: 5, digger: 5 },
+        buildFn: (fillRect, fillSteel) => {
+            // Hohe Klippe oben links -> tiefer Sturz (erfordert Floater ☂️ oder Builder!)
+            fillRect(60, 78, 120, 24, '#0284c7', '#0369a1');
+            fillSteel(60, 50, 16, 30);
+            // Untere Hauptplattform links
+            fillRect(60, 248, 250, 46, '#65a30d', '#3f6212');
+            fillSteel(60, 218, 16, 32);
+            // Schlucht zwischen x=310 und x=395 -> muss mit 🪜 Builder überbrückt werden!
+            fillRect(395, 248, 180, 46, '#65a30d', '#3f6212');
+        }
+    },
+    {
+        name: 'Level 3: Pillars of Hercules (Steinsäulen)',
+        total: 18,
+        requiredPct: 60,
+        timeSec: 200,
+        hatch: { x: 105, y: 160 },
+        exit:  { x: 545, y: 242 },
+        skills: { climber: 8, floater: 8, bomber: 8, blocker: 8, builder: 14, basher: 12, miner: 8, digger: 8 },
+        buildFn: (fillRect, fillSteel) => {
+            // Durchgehender Boden mit 3 dicken Steinsäulen, durch die man sich mit 🔨 Basher schlagen muss
+            fillRect(50, 242, 540, 52, '#78716c', '#57534e');
+            fillSteel(50, 190, 18, 54);
+            // 3 Säulen
+            fillRect(215, 145, 36, 97, '#d97706', '#b45309');
+            fillRect(325, 145, 36, 97, '#d97706', '#b45309');
+            fillRect(435, 145, 36, 97, '#d97706', '#b45309');
+        }
+    },
+    {
+        name: 'Level 4: Through the Mountain (Bergmassiv)',
+        total: 20,
+        requiredPct: 65,
+        timeSec: 220,
+        hatch: { x: 95, y: 190 },
+        exit:  { x: 548, y: 190 },
+        skills: { climber: 10, floater: 10, bomber: 10, blocker: 10, builder: 15, basher: 12, miner: 12, digger: 10 },
+        buildFn: (fillRect, fillSteel) => {
+            fillRect(45, 250, 550, 46, '#15803d', '#166534');
+            fillSteel(45, 195, 16, 56);
+            // Massiver Berg in der Mitte
+            fillRect(225, 95, 185, 155, '#9333ea', '#6b21a8');
+        }
+    }
+];
+
+function lemEnsureOffscreen() {
+    if (!lemTerrainCvs) {
+        lemTerrainCvs = document.createElement('canvas');
+        lemTerrainCvs.width  = LEM_W;
+        lemTerrainCvs.height = LEM_H;
+        lemTerrainCtx = lemTerrainCvs.getContext('2d');
+    }
+}
+
+function lemGetPixel(x, y) {
+    x = Math.round(x);
+    y = Math.round(y);
+    if (x < 0 || x >= LEM_W || y < 0 || y >= LEM_H) return 0;
+    return lemTerrain[y * LEM_W + x];
+}
+
+function lemCarveRect(x0, y0, w, h) {
+    lemEnsureOffscreen();
+    const sx = Math.max(0, Math.round(x0));
+    const sy = Math.max(0, Math.round(y0));
+    const ex = Math.min(LEM_W, Math.round(x0 + w));
+    const ey = Math.min(LEM_H, Math.round(y0 + h));
+    for (let y = sy; y < ey; y++) {
+        for (let x = sx; x < ex; x++) {
+            const idx = y * LEM_W + x;
+            if (lemTerrain[idx] !== 3) { // Stahl (3) ist unzerstörbar
+                lemTerrain[idx] = 0;
+                lemTerrainCtx.clearRect(x, y, 1, 1);
+            }
+        }
+    }
+}
+
+function lemCarveCircle(cx, cy, radius) {
+    lemEnsureOffscreen();
+    const r2 = radius * radius;
+    const sx = Math.max(0, Math.floor(cx - radius));
+    const sy = Math.max(0, Math.floor(cy - radius));
+    const ex = Math.min(LEM_W - 1, Math.ceil(cx + radius));
+    const ey = Math.min(LEM_H - 1, Math.ceil(cy + radius));
+    for (let y = sy; y <= ey; y++) {
+        for (let x = sx; x <= ex; x++) {
+            if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2) {
+                const idx = y * LEM_W + x;
+                if (lemTerrain[idx] !== 3) {
+                    lemTerrain[idx] = 0;
+                    lemTerrainCtx.clearRect(x, y, 1, 1);
+                }
+            }
+        }
+    }
+}
+
+function lemAddBridgeStep(x0, y0, w, h) {
+    lemEnsureOffscreen();
+    const sx = Math.max(0, Math.round(x0));
+    const sy = Math.max(0, Math.round(y0));
+    const ex = Math.min(LEM_W, Math.round(x0 + w));
+    const ey = Math.min(LEM_H, Math.round(y0 + h));
+    lemTerrainCtx.fillStyle = '#fde047';
+    for (let y = sy; y < ey; y++) {
+        for (let x = sx; x < ex; x++) {
+            const idx = y * LEM_W + x;
+            if (lemTerrain[idx] === 0) {
+                lemTerrain[idx] = 2;
+                lemTerrainCtx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+}
+
+function lemLoadLevel(lvlIdx) {
+    lemEnsureOffscreen();
+    if (lemRafId) cancelAnimationFrame(lemRafId);
+    lemLevelIdx = Math.max(0, Math.min(LEM_LEVELS.length - 1, lvlIdx || 0));
+    const selEl = document.getElementById('lemLevelSelect');
+    if (selEl && parseInt(selEl.value, 10) !== lemLevelIdx) {
+        selEl.value = String(lemLevelIdx);
+    }
+
+    const lvl = LEM_LEVELS[lemLevelIdx];
+    lemTerrain.fill(0);
+    lemTerrainCtx.clearRect(0, 0, LEM_W, LEM_H);
+
+    const fillRect = (x, y, w, h, topCol, bodyCol) => {
+        lemTerrainCtx.fillStyle = bodyCol;
+        lemTerrainCtx.fillRect(x, y, w, h);
+        lemTerrainCtx.fillStyle = topCol;
+        lemTerrainCtx.fillRect(x, y, w, 6);
+        for (let py = y; py < y + h; py++) {
+            for (let px = x; px < x + w; px++) {
+                if (px >= 0 && px < LEM_W && py >= 0 && py < LEM_H) {
+                    lemTerrain[py * LEM_W + px] = 1;
+                }
+            }
+        }
+    };
+
+    const fillSteel = (x, y, w, h) => {
+        lemTerrainCtx.fillStyle = '#64748b';
+        lemTerrainCtx.fillRect(x, y, w, h);
+        lemTerrainCtx.strokeStyle = '#cbd5e1';
+        lemTerrainCtx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        for (let py = y; py < y + h; py++) {
+            for (let px = x; px < x + w; px++) {
+                if (px >= 0 && px < LEM_W && py >= 0 && py < LEM_H) {
+                    lemTerrain[py * LEM_W + px] = 3;
+                }
+            }
+        }
+    };
+
+    lvl.buildFn(fillRect, fillSteel);
+
+    lemTotal       = lvl.total;
+    lemRequiredPct = lvl.requiredPct;
+    lemTimeLeftSec = lvl.timeSec;
+    lemSpawned     = 0;
+    lemSaved       = 0;
+    lemTick        = 0;
+    lemList        = [];
+    lemParticles   = [];
+    lemSkillsLeft  = Object.assign({}, lvl.skills);
+    lemBannerText  = '🐹 ' + lvl.name.toUpperCase();
+    lemRunning     = false;
+    lemUpdateHud();
+    lemDraw();
+}
+
+function lemInit() {
+    if (lemInitialized) return;
+    lemInitialized = true;
+    lemLoadLevel(0);
+    lemSelectSkill('digger');
+}
+
+function lemStartLevel() {
+    lemLoadLevel(lemLevelIdx);
+    lemBannerText = '';
+    lemRunning    = true;
+    lemRafId      = requestAnimationFrame(lemLoop);
+}
+
+function lemSelectSkill(skillKey) {
+    lemActiveSkill = skillKey;
+    document.querySelectorAll('.lem-skill-btn').forEach((btn) => {
+        btn.className = 'lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-extrabold cursor-pointer';
+    });
+    const activeBtn = document.getElementById('lemSkillBtn-' + skillKey);
+    if (activeBtn) {
+        activeBtn.className = 'lem-skill-btn flex flex-col items-center justify-center p-1.5 rounded-xl border-2 border-lime-500 bg-lime-100 dark:bg-lime-950/80 text-[11px] font-extrabold cursor-pointer shadow-xs';
+    }
+}
+
+function lemToggleFastForward() {
+    lemFastForward = !lemFastForward;
+    const b = document.getElementById('lemSpeedBadge');
+    if (b) b.textContent = lemFastForward ? '2×' : '1×';
+}
+
+function lemTriggerNuke() {
+    if (!lemRunning) return;
+    lemSpawned = lemTotal; // Keine weiteren aus der Klappe
+    for (const l of lemList) {
+        if (l.state !== 'dead' && l.state !== 'saved' && l.bombTicks <= 0) {
+            l.bombTicks = 90 + Math.floor(Math.random() * 45);
+        }
+    }
+}
+
+function lemUpdateHud() {
+    const outEl = document.getElementById('lemOutCount');
+    const svEl  = document.getElementById('lemSavedPct');
+    const tmEl  = document.getElementById('lemTimeLeft');
+    const scEl  = document.getElementById('lemScore');
+
+    const activeOut = lemList.filter((l) => l.state !== 'dead' && l.state !== 'saved').length;
+    if (outEl) outEl.textContent = activeOut + ' aktiv (' + lemSpawned + '/' + lemTotal + ')';
+
+    const pct = lemTotal > 0 ? Math.round((lemSaved / lemTotal) * 100) : 0;
+    if (svEl) svEl.textContent = pct + '% (' + lemSaved + '/' + lemTotal + ' · Ziel ' + lemRequiredPct + '%)';
+
+    if (tmEl) {
+        const m = String(Math.floor(lemTimeLeftSec / 60)).padStart(2, '0');
+        const s = String(lemTimeLeftSec % 60).padStart(2, '0');
+        tmEl.textContent = m + ':' + s;
+    }
+    if (scEl) scEl.textContent = lemScore.toLocaleString('de-DE');
+
+    ['climber', 'floater', 'bomber', 'blocker', 'builder', 'basher', 'miner', 'digger'].forEach((k) => {
+        const el = document.getElementById('lemSkillCnt-' + k);
+        if (el) el.textContent = String(lemSkillsLeft[k] ?? 0);
+    });
+}
+
+function lemScreenToCanvasCoords(clientX, clientY) {
+    const cvs = document.getElementById('lemCanvas');
+    if (!cvs) return { x: 0, y: 0 };
+    const rect = cvs.getBoundingClientRect();
+    return {
+        x: ((clientX - rect.left) / rect.width) * LEM_W,
+        y: ((clientY - rect.top) / rect.height) * LEM_H
+    };
+}
+
+function lemCanvasHover(e) {
+    lemHoverPos = lemScreenToCanvasCoords(e.clientX, e.clientY);
+}
+
+function lemCanvasTouch(e) {
+    if (!e.touches || e.touches.length === 0) return;
+    e.preventDefault();
+    const pos = lemScreenToCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+    lemHoverPos = pos;
+    lemAssignSkillAt(pos.x, pos.y);
+}
+
+function lemCanvasClick(e) {
+    const pos = lemScreenToCanvasCoords(e.clientX, e.clientY);
+    lemAssignSkillAt(pos.x, pos.y);
+}
+
+function lemAssignSkillAt(cx, cy) {
+    if (!lemRunning) {
+        lemStartLevel();
+        return;
+    }
+    if ((lemSkillsLeft[lemActiveSkill] || 0) <= 0) return;
+
+    // Finde den nächsten lebenden Lemming im Umkreis von 24 Pixeln
+    let bestLem = null;
+    let bestDist = 24 * 24;
+    for (const l of lemList) {
+        if (l.state === 'dead' || l.state === 'saved') continue;
+        // Wenn man nicht gerade einen Blocker wegsprengen will, bevorzuge laufende Lemminge vor Blockern
+        const dx = l.x - cx;
+        const dy = (l.y - 5) - cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist) {
+            bestDist = d2;
+            bestLem = l;
+        }
+    }
+    if (!bestLem) return;
+
+    const sk = lemActiveSkill;
+    if (sk === 'climber') {
+        if (bestLem.canClimb) return;
+        bestLem.canClimb = true;
+    } else if (sk === 'floater') {
+        if (bestLem.canFloat) return;
+        bestLem.canFloat = true;
+    } else if (sk === 'bomber') {
+        if (bestLem.bombTicks > 0) return;
+        bestLem.bombTicks = 150; // ~5 Sekunden Countdown
+    } else if (sk === 'blocker') {
+        if (bestLem.state === 'blocker' || bestLem.state === 'falling') return;
+        bestLem.state = 'blocker';
+    } else if (sk === 'builder') {
+        if (bestLem.state === 'falling') return;
+        bestLem.state = 'builder';
+        bestLem.buildStepsLeft = 12;
+        bestLem.stepWait = 0;
+    } else if (sk === 'basher') {
+        if (bestLem.state === 'falling') return;
+        bestLem.state = 'basher';
+        bestLem.stepWait = 0;
+    } else if (sk === 'miner') {
+        if (bestLem.state === 'falling') return;
+        bestLem.state = 'miner';
+        bestLem.stepWait = 0;
+    } else if (sk === 'digger') {
+        if (bestLem.state === 'falling') return;
+        bestLem.state = 'digger';
+        bestLem.stepWait = 0;
+    }
+
+    lemSkillsLeft[sk]--;
+    lemUpdateHud();
+}
+
+function lemSpawnSplatter(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+        lemParticles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.7) * 4,
+            color: color,
+            life: 20 + Math.floor(Math.random() * 10)
+        });
+    }
+}
+
+function lemStepSingleTick() {
+    lemTick++;
+    const lvl = LEM_LEVELS[lemLevelIdx];
+
+    // 1. Sekundentakt für Uhrzeit
+    if (lemTick % 35 === 0 && lemTimeLeftSec > 0) {
+        lemTimeLeftSec--;
+        lemUpdateHud();
+        if (lemTimeLeftSec <= 0) {
+            lemFinishCheck();
+            return;
+        }
+    }
+
+    // 2. Neue Lemminge aus der Fallklappe (Hatch) spawnen
+    if (lemSpawned < lemTotal && lemTick % 42 === 10) {
+        lemSpawned++;
+        lemList.push({
+            id: lemSpawned,
+            x: lvl.hatch.x,
+            y: lvl.hatch.y + 12,
+            dir: 1,
+            state: 'falling',
+            fallDist: 0,
+            canClimb: false,
+            canFloat: false,
+            bombTicks: 0,
+            buildStepsLeft: 0,
+            stepWait: 0,
+            anim: 0
+        });
+        lemUpdateHud();
+    }
+
+    // 3. Jeden Lemming bewegen
+    for (const l of lemList) {
+        if (l.state === 'dead' || l.state === 'saved') continue;
+        l.anim++;
+
+        // Bomber-Countdown
+        if (l.bombTicks > 0) {
+            l.bombTicks--;
+            if (l.bombTicks <= 0) {
+                lemCarveCircle(l.x, l.y - 4, 18);
+                lemSpawnSplatter(l.x, l.y - 4, '#f97316');
+                l.state = 'dead';
+                lemUpdateHud();
+                continue;
+            }
+        }
+
+        // Ausgang (Exit-Portal) erreicht?
+        if (Math.abs(l.x - lvl.exit.x) <= 12 && Math.abs(l.y - lvl.exit.y) <= 14) {
+            l.state = 'saved';
+            lemSaved++;
+            lemScore += 150;
+            lemSpawnSplatter(l.x, l.y - 8, '#4ade80');
+            lemUpdateHud();
+            continue;
+        }
+
+        // Aus dem unteren Bildschirmrand gefallen (Lava / Abgrund)?
+        if (l.y >= LEM_H - 4) {
+            l.state = 'dead';
+            lemSpawnSplatter(l.x, LEM_H - 8, '#ef4444');
+            lemUpdateHud();
+            continue;
+        }
+
+        // Blocker dreht andere Lemminge um
+        if (l.state !== 'blocker') {
+            for (const other of lemList) {
+                if (other !== l && other.state === 'blocker') {
+                    if (Math.abs(l.x - other.x) <= 6 && Math.abs(l.y - other.y) <= 10) {
+                        l.dir = (l.x < other.x) ? -1 : 1;
+                    }
+                }
+            }
+        }
+
+        // A) FALLEND / FLOATER
+        if (l.state === 'falling' || l.state === 'floating') {
+            if (l.canFloat && l.fallDist > 16) {
+                l.state = 'floating';
+            }
+            const fallStep = (l.state === 'floating') ? 1 : 2;
+            let hitGround = false;
+            for (let s = 0; s < fallStep; s++) {
+                if (lemGetPixel(l.x, l.y + 1) > 0) {
+                    hitGround = true;
+                    break;
+                }
+                l.y++;
+                l.fallDist++;
+            }
+            if (hitGround) {
+                // Zu tief ohne Schirmchen gefallen? (> 95 Pixel)
+                if (l.fallDist > 95 && !l.canFloat && l.state !== 'floating') {
+                    l.state = 'dead';
+                    lemSpawnSplatter(l.x, l.y, '#fb7185');
+                    lemUpdateHud();
+                } else {
+                    l.state = 'walker';
+                    l.fallDist = 0;
+                }
+            }
+            continue;
+        }
+
+        // Prüfen, ob unter den Füßen der Boden weggebrochen ist
+        if (l.state !== 'climbing' && lemGetPixel(l.x, l.y + 1) === 0 && lemGetPixel(l.x, l.y + 2) === 0) {
+            l.state = 'falling';
+            l.fallDist = 0;
+            continue;
+        }
+
+        // B) BLOCKER
+        if (l.state === 'blocker') {
+            continue;
+        }
+
+        // C) DIGGER (Senkrecht nach unten graben)
+        if (l.state === 'digger') {
+            l.stepWait++;
+            if (l.stepWait >= 6) {
+                l.stepWait = 0;
+                // Prüfen ob Stahl unter uns ist
+                if (lemGetPixel(l.x, l.y + 1) === 3) {
+                    l.state = 'walker';
+                } else {
+                    lemCarveRect(l.x - 6, l.y - 1, 13, 3);
+                    l.y += 2;
+                    if (lemGetPixel(l.x, l.y + 1) === 0 && lemGetPixel(l.x - 4, l.y + 1) === 0 && lemGetPixel(l.x + 4, l.y + 1) === 0) {
+                        l.state = 'falling';
+                        l.fallDist = 0;
+                    }
+                }
+            }
+            continue;
+        }
+
+        // D) BUILDER (12 schräge Stufen nach vorne-oben bauen)
+        if (l.state === 'builder') {
+            l.stepWait++;
+            if (l.stepWait >= 11) {
+                l.stepWait = 0;
+                const bx = l.dir > 0 ? l.x : (l.x - 7);
+                lemAddBridgeStep(bx, l.y - 1, 8, 2);
+                l.x += l.dir * 4;
+                l.y -= 2;
+                l.buildStepsLeft--;
+                // Gegen Decke/Wand gestoßen oder 12 Stufen fertig?
+                if (lemGetPixel(l.x + l.dir * 3, l.y - 6) > 0 || l.buildStepsLeft <= 0) {
+                    l.state = 'walker';
+                }
+            }
+            continue;
+        }
+
+        // E) BASHER (Waagerecht durch Wände graben)
+        if (l.state === 'basher') {
+            l.stepWait++;
+            if (l.stepWait >= 5) {
+                l.stepWait = 0;
+                const checkX = l.x + l.dir * 6;
+                if (lemGetPixel(checkX, l.y - 4) === 3) {
+                    // Stahl! Kehrtmachen
+                    l.dir = -l.dir;
+                    l.state = 'walker';
+                } else {
+                    const rx = l.dir > 0 ? l.x : (l.x - 8);
+                    lemCarveRect(rx, l.y - 11, 8, 12);
+                    l.x += l.dir * 2;
+                    // Wenn vor uns auf Brusthöhe keine Wand mehr ist, wieder normal weiterlaufen
+                    let hasWallAhead = false;
+                    for (let d = 2; d <= 10; d += 2) {
+                        if (lemGetPixel(l.x + l.dir * d, l.y - 5) > 0) {
+                            hasWallAhead = true;
+                            break;
+                        }
+                    }
+                    if (!hasWallAhead) {
+                        l.state = 'walker';
+                    }
+                }
+            }
+            continue;
+        }
+
+        // F) MINER (Schräg nach vorne-unten graben)
+        if (l.state === 'miner') {
+            l.stepWait++;
+            if (l.stepWait >= 7) {
+                l.stepWait = 0;
+                if (lemGetPixel(l.x + l.dir * 4, l.y + 1) === 3) {
+                    l.state = 'walker';
+                } else {
+                    const rx = l.dir > 0 ? l.x - 2 : (l.x - 8);
+                    lemCarveRect(rx, l.y - 9, 10, 12);
+                    l.x += l.dir * 3;
+                    l.y += 2;
+                }
+            }
+            continue;
+        }
+
+        // G) CLIMBING (Senkrechte Wand hochklettern)
+        if (l.state === 'climbing') {
+            l.y -= 1;
+            // Oben auf der Kante angekommen?
+            if (lemGetPixel(l.x + l.dir * 2, l.y - 6) === 0) {
+                l.x += l.dir * 3;
+                l.y -= 2;
+                l.state = 'walker';
+            } else if (lemGetPixel(l.x, l.y - 10) > 0) {
+                // Deckenüberhang -> fällt herunter
+                l.dir = -l.dir;
+                l.state = 'falling';
+                l.fallDist = 0;
+            }
+            continue;
+        }
+
+        // H) WALKER (Normales Laufen mit Stufen-Steigfähigkeit bis 5 Pixel)
+        if (l.anim % 2 === 0) {
+            const nx = l.x + l.dir;
+            // Prüfen wie hoch die Stufe vor uns ist
+            let climbedStep = false;
+            for (let dy = 0; dy <= 5; dy++) {
+                if (lemGetPixel(nx, l.y - dy) === 0 && lemGetPixel(nx, l.y - dy - 4) === 0) {
+                    l.x = nx;
+                    l.y -= dy;
+                    climbedStep = true;
+                    break;
+                }
+            }
+            // Falls eine steile Wand (> 5 Pixel) vor uns steht:
+            if (!climbedStep) {
+                if (l.canClimb) {
+                    l.state = 'climbing';
+                } else {
+                    l.dir = -l.dir;
+                }
+            } else {
+                // Falls eine kleine Stufe nach unten (1..4 Pixel) folgt, sanft hinabsteigen
+                for (let down = 1; down <= 4; down++) {
+                    if (lemGetPixel(l.x, l.y + 1) === 0 && lemGetPixel(l.x, l.y + 2) > 0) {
+                        l.y++;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Prüfen, ob alle Lemminge im Ziel oder tot sind
+    if (lemSpawned >= lemTotal) {
+        const remaining = lemList.filter((l) => l.state !== 'dead' && l.state !== 'saved').length;
+        if (remaining === 0) {
+            lemFinishCheck();
+        }
+    }
+}
+
+function lemFinishCheck() {
+    lemRunning = false;
+    const pct = lemTotal > 0 ? Math.round((lemSaved / lemTotal) * 100) : 0;
+    if (pct >= lemRequiredPct) {
+        const levelBonus = pct * 10 + lemTimeLeftSec * 5 + (lemLevelIdx + 1) * 500;
+        lemScore += levelBonus;
+        lemUpdateHud();
+        submitCloudScore('lemmings', lemScore, 180 - lemTimeLeftSec, 'Level ' + (lemLevelIdx + 1) + ' (' + pct + '% gerettet)');
+        if (lemLevelIdx < LEM_LEVELS.length - 1) {
+            lemBannerText = '🎉 ' + pct + '% GERETTET! WEITER ZU LEVEL ' + (lemLevelIdx + 2) + '...';
+            setTimeout(() => {
+                lemLoadLevel(lemLevelIdx + 1);
+                lemStartLevel();
+            }, 1900);
+        } else {
+            lemBannerText = '🏆 ALLE 4 LEMMINGS-LEVEL GEMEISTERT! (' + pct + '%)';
+        }
+    } else {
+        lemBannerText = '💥 NUR ' + pct + '% GERETTET (ZIEL: ' + lemRequiredPct + '%) – NOCHMAL!';
+    }
+}
+
+function lemDraw() {
+    const cvs = document.getElementById('lemCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+    const lvl = LEM_LEVELS[lemLevelIdx] || LEM_LEVELS[0];
+
+    // 1. Dunkler Untergrund + glühende Lava/Wasser am unteren Bildschirmrand
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, LEM_W, LEM_H);
+
+    // Sternenstaub im Hintergrund
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+    for (let i = 0; i < 28; i++) {
+        ctx.fillRect((i * 89 + 17) % LEM_W, (i * 53 + 11) % (LEM_H - 30), 2, 2);
+    }
+
+    // Feuriger Abgrund ganz unten
+    const lavaGrad = ctx.createLinearGradient(0, LEM_H - 14, 0, LEM_H);
+    lavaGrad.addColorStop(0, 'rgba(239, 68, 68, 0.0)');
+    lavaGrad.addColorStop(1, 'rgba(239, 68, 68, 0.75)');
+    ctx.fillStyle = lavaGrad;
+    ctx.fillRect(0, LEM_H - 14, LEM_W, 14);
+
+    // 2. Zerstörbares Pixel-Gelände aus dem Offscreen-Canvas zeichnen
+    if (lemTerrainCvs) {
+        ctx.drawImage(lemTerrainCvs, 0, 0);
+    }
+
+    // 3. Fallklappe (Hatch) oben & Ziel-Portal (Exit) zeichnen
+    const hx = lvl.hatch.x;
+    const hy = lvl.hatch.y;
+    ctx.fillStyle = '#b45309';
+    ctx.fillRect(hx - 18, hy - 10, 36, 14);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hx - 18, hy - 10, 36, 14);
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('IN / HATCH', hx, hy - 13);
+
+    const ex = lvl.exit.x;
+    const ey = lvl.exit.y;
+    // Leuchtender Tempel-Ausgang mit Fackeln
+    ctx.fillStyle = '#15803d';
+    ctx.fillRect(ex - 16, ey - 24, 32, 24);
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath();
+    ctx.moveTo(ex - 20, ey - 24);
+    ctx.lineTo(ex, ey - 36);
+    ctx.lineTo(ex + 20, ey - 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#020617';
+    ctx.beginPath();
+    ctx.arc(ex, ey - 8, 7, Math.PI, 0, false);
+    ctx.lineTo(ex + 7, ey);
+    ctx.lineTo(ex - 7, ey);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#4ade80';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('EXIT 🏠', ex, ey - 39);
+
+    // 4. Alle Lemminge zeichnen (Blauer Anzug + grüner Haarschopf!)
+    let hoveredLem = null;
+    let bestHovDist = 24 * 24;
+
+    for (const l of lemList) {
+        if (l.state === 'dead' || l.state === 'saved') continue;
+
+        const d2 = (l.x - lemHoverPos.x) ** 2 + ((l.y - 5) - lemHoverPos.y) ** 2;
+        if (d2 < bestHovDist) {
+            bestHovDist = d2;
+            hoveredLem = l;
+        }
+
+        // Fallschirm beim Floater
+        if (l.state === 'floating') {
+            ctx.fillStyle = '#f43f5e';
+            ctx.beginPath();
+            ctx.arc(l.x, l.y - 13, 7, Math.PI, 0, false);
+            ctx.fill();
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(l.x - 6, l.y - 13);
+            ctx.lineTo(l.x, l.y - 7);
+            ctx.moveTo(l.x + 6, l.y - 13);
+            ctx.lineTo(l.x, l.y - 7);
+            ctx.stroke();
+        }
+
+        // Blauer Anzug
+        ctx.fillStyle = l.state === 'blocker' ? '#ef4444' : '#3b82f6';
+        ctx.fillRect(l.x - 2.5, l.y - 7, 5, 6);
+
+        // Ausgestreckte Stopp-Arme beim Blocker
+        if (l.state === 'blocker') {
+            ctx.fillStyle = '#fca5a5';
+            ctx.fillRect(l.x - 6, l.y - 6, 12, 2);
+        }
+
+        // Kopf + grüne Haare
+        ctx.fillStyle = '#fde68a';
+        ctx.fillRect(l.x - 2, l.y - 10, 4, 3);
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(l.x - 2.5, l.y - 12, 5, 2.5);
+
+        // Füße
+        const stepOff = (l.anim % 6 < 3) ? 1 : -1;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(l.x - 2 + stepOff, l.y - 1, 2, 1.5);
+        ctx.fillRect(l.x - stepOff, l.y - 1, 2, 1.5);
+
+        // Bomber-Countdown über dem Kopf
+        if (l.bombTicks > 0) {
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(Math.ceil(l.bombTicks / 30)), l.x, l.y - 15);
+        }
+    }
+
+    // 5. Grünes Ziel-Fadenkreuz um den anvisierten Lemming
+    if (hoveredLem) {
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(hoveredLem.x - 8, hoveredLem.y - 15, 16, 17);
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(hoveredLem.state.toUpperCase(), hoveredLem.x, hoveredLem.y - 18);
+    }
+
+    // 6. Partikel
+    for (let i = lemParticles.length - 1; i >= 0; i--) {
+        const pt = lemParticles[i];
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x, pt.y, 2.5, 2.5);
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.vy += 0.15;
+        pt.life--;
+        if (pt.life <= 0) lemParticles.splice(i, 1);
+    }
+
+    // 7. Start- / Level-Banner
+    if (!lemRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.80)';
+        ctx.fillRect(0, LEM_H / 2 - 44, LEM_W, 88);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#84cc16';
+        ctx.font = 'bold 19px monospace';
+        ctx.fillText(lemBannerText || '🐹 CLOUD-LEMMINGS (1991)', LEM_W / 2, LEM_H / 2 - 8);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Klicke ins Spielfeld oder auf „▶️ Level neu starten“ – Let’s go!', LEM_W / 2, LEM_H / 2 + 18);
+    }
+}
+
+function lemLoop() {
+    if (!lemRunning) {
+        lemDraw();
+        return;
+    }
+    const steps = lemFastForward ? 2 : 1;
+    for (let i = 0; i < steps; i++) {
+        if (lemRunning) lemStepSingleTick();
+    }
+    lemDraw();
+    if (lemRunning) {
+        lemRafId = requestAnimationFrame(lemLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
+    lemInit();
     ninjaInit();
     canabaltInit();
     invadersInit();
