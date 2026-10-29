@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/office_functions.php';
 require_once __DIR__ . '/includes/i18n.php';
 
 requireLogin();
@@ -2159,6 +2160,297 @@ function queryLocalOllamaAssistant(
 }
 
 /**
+ * Wandelt einen Markdown-/Text-Entwurf (des KI-Modells oder Vorlagen-Generators)
+ * in sauberes HTML für writeHtmlAsDocx() um.
+ */
+function convertMarkdownDraftToDocxHtml(string $markdown): string
+{
+    $lines = preg_split('/\r\n|\r|\n/', trim($markdown)) ?: [];
+    $htmlParts = [];
+    $inList = false;
+
+    $formatInline = static function (string $line): string {
+        $safe = htmlspecialchars($line, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $safe = preg_replace('/\*\*(.+?)\*\*/u', '<strong>$1</strong>', $safe) ?? $safe;
+        $safe = preg_replace('/\*(.+?)\*/u', '<em>$1</em>', $safe) ?? $safe;
+        return $safe;
+    };
+
+    foreach ($lines as $rawLine) {
+        $line = trim($rawLine);
+        if ($line === '' || $line === '---') {
+            if ($inList) {
+                $htmlParts[] = '</ul>';
+                $inList = false;
+            }
+            continue;
+        }
+
+        if (preg_match('/^###\s+(.+)$/u', $line, $m)) {
+            if ($inList) {
+                $htmlParts[] = '</ul>';
+                $inList = false;
+            }
+            $htmlParts[] = '<h3>' . $formatInline(trim($m[1], '* ')) . '</h3>';
+        } elseif (preg_match('/^##\s+(.+)$/u', $line, $m)) {
+            if ($inList) {
+                $htmlParts[] = '</ul>';
+                $inList = false;
+            }
+            $htmlParts[] = '<h2>' . $formatInline(trim($m[1], '* ')) . '</h2>';
+        } elseif (preg_match('/^#\s+(.+)$/u', $line, $m)) {
+            if ($inList) {
+                $htmlParts[] = '</ul>';
+                $inList = false;
+            }
+            $htmlParts[] = '<h1>' . $formatInline(trim($m[1], '* ')) . '</h1>';
+        } elseif (preg_match('/^(?:[-*•])\s+(.+)$/u', $line, $m)) {
+            if (!$inList) {
+                $htmlParts[] = '<ul>';
+                $inList = true;
+            }
+            $htmlParts[] = '<li>' . $formatInline($m[1]) . '</li>';
+        } else {
+            if ($inList) {
+                $htmlParts[] = '</ul>';
+                $inList = false;
+            }
+            if (preg_match('/^\*\*Betreff:(.+)\*\*$/iu', $line, $mSubj) || preg_match('/^Betreff:\s*(.+)$/iu', $line, $mSubj)) {
+                $htmlParts[] = '<h2>Betreff: ' . $formatInline(trim($mSubj[1], '* ')) . '</h2>';
+            } else {
+                $htmlParts[] = '<p>' . $formatInline($line) . '</p>';
+            }
+        }
+    }
+
+    if ($inList) {
+        $htmlParts[] = '</ul>';
+    }
+
+    return implode("\n", $htmlParts);
+}
+
+/**
+ * Erstellt auf Wunsch des Benutzers (z. B. "Formuliere mir ein Kündigungsschreiben für den Tennisverein")
+ * automatisch ein fertiges Word-Dokument (.docx) im Cloud-Ordner "Dokumente/" und gibt die Datei-ID
+ * für MiniCloud Office Light (office.php?id=...) zurück.
+ *
+ * @return array{file_id: int, filename: string, draft_markdown: string, used_ai: bool}|null
+ */
+function createAssistantOfficeDocx(
+    PDO $pdo,
+    int $userId,
+    string $username,
+    array $appSettings,
+    string $question
+): ?array {
+    if (($appSettings['enable_office'] ?? '1') !== '1') {
+        return null;
+    }
+
+    $storageStats = getUserStorageStats($pdo, $userId);
+    if ($storageStats['free'] < 65536) {
+        return null;
+    }
+
+    $qNorm = normalizeAssistantText($question);
+    $todayStr = date('d.m.Y');
+
+    // Thema / Empfänger aus der Anfrage extrahieren (z. B. "für den Tennisverein" -> "Tennisverein")
+    $topicLabel = 'Schreiben';
+    if (preg_match('/(?:fuer|für|an|beim|bei|wegen|zum|zur)\s+(?:den|die|das|dem|der|meinen|meine|mein)?\s*([a-zA-ZäöüÄÖÜß0-9\-\s]{3,45})/iu', $question, $mTop)) {
+        $cand = trim((string)preg_replace('/\b(bitte|formulieren|formuliere|schreiben|erstelle|erstellen|entwerfe|mir|ein|eine|einen|als|in|office|word|dokument)\b/iu', '', $mTop[1]), " -,.?!");
+        if (mb_strlen($cand) >= 3) {
+            $topicLabel = ucfirst($cand);
+        }
+    }
+
+    $isCancellation = hasAnyKeyword($qNorm, ['kuendigung', 'kuendigungsschreiben', 'kuendigen', 'abmeldung', 'austritt']);
+    $isInvitation   = hasAnyKeyword($qNorm, ['einladung', 'einladungsschreiben', 'jahreshauptversammlung', 'mitgliederversammlung', 'sommerfest', 'weihnachtsfeier']);
+    $isProtocol     = hasAnyKeyword($qNorm, ['protokoll', 'sitzungsprotokoll', 'besprechungsprotokoll', 'tagesordnung']);
+
+    if ($isCancellation) {
+        $docCategoryTitle = 'Kündigungsschreiben';
+        $filePrefix       = 'Kuendigung_' . ($topicLabel !== 'Schreiben' ? $topicLabel : 'Vertrag');
+    } elseif ($isInvitation) {
+        $docCategoryTitle = 'Einladungsschreiben';
+        $filePrefix       = 'Einladung_' . ($topicLabel !== 'Schreiben' ? $topicLabel : 'Veranstaltung');
+    } elseif ($isProtocol) {
+        $docCategoryTitle = 'Besprechungsprotokoll';
+        $filePrefix       = 'Protokoll_' . ($topicLabel !== 'Schreiben' ? $topicLabel : 'Sitzung');
+    } else {
+        $docCategoryTitle = 'Schreiben';
+        $filePrefix       = 'Dokument_' . ($topicLabel !== 'Schreiben' ? $topicLabel : 'Entwurf');
+    }
+
+    $draftMarkdown = '';
+    $usedAi = false;
+
+    // 1. Versuch: Stufe 2 (Lokales KI-Modell z. B. gemma2:2b via Ollama), falls aktiv
+    if (($appSettings['assistant_use_ollama'] ?? '1') === '1') {
+        $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+        $status = probeLocalOllamaStatus($preferredModel);
+        if ($status['available'] && $status['active_model'] !== '') {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            $docPrompt = "Du bist ein professioneller deutscher Brief- und Dokumenten-Assistent. "
+                . "Verfasse SOFORT und OHNE einleitende Vorrede direkt den fertigen Text für folgenden Wunsch von {$username} (Datum: {$todayStr}):\n"
+                . "„{$question}“\n\n"
+                . "Vorgaben:\n"
+                . "- Beginne mit Absender ({$username}, [Straße], [PLZ Ort]), Empfänger ({$topicLabel}, [Adresse]) und Datum ({$todayStr}).\n"
+                . "- Füge eine fettgedruckte Betreffzeile (**Betreff: ...**), eine höfliche Anrede, alle rechtlich/inhaltlich wichtigen Absätze (bei Kündigungen inkl. Mitglieds-/Vertragsnummer-Platzhalter, Kündigung zum nächstmöglichen Zeitpunkt, Bitte um schriftliche Bestätigung und Widerruf einer evtl. Einzugsermächtigung) sowie „Mit freundlichen Grüßen“ und {$username} ein.";
+
+            $payload = json_encode([
+                'model'      => $status['active_model'],
+                'messages'   => [
+                    ['role' => 'user', 'content' => $docPrompt],
+                ],
+                'stream'     => false,
+                'keep_alive' => '30m',
+                'options'    => [
+                    'temperature' => 0.25,
+                    'num_predict' => 380,
+                    'num_thread'  => 3,
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+
+            if (is_string($payload)) {
+                $ctx = stream_context_create([
+                    'http' => [
+                        'method'        => 'POST',
+                        'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
+                        'content'       => $payload,
+                        'timeout'       => 45.0,
+                        'ignore_errors' => true,
+                    ],
+                ]);
+                $rawResp = @file_get_contents('http://127.0.0.1:11434/api/chat', false, $ctx);
+                if (is_string($rawResp) && $rawResp !== '') {
+                    $decoded = json_decode($rawResp, true);
+                    $aiText  = trim((string)($decoded['message']['content'] ?? ''));
+                    if (mb_strlen($aiText) >= 80) {
+                        $draftMarkdown = $aiText;
+                        $usedAi = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback: Stufe 1 (DIN-5008 Vorlagen-Generator – funktioniert auch auf STRATO ohne KI)
+    if ($draftMarkdown === '') {
+        $recipientName = $topicLabel !== 'Schreiben' ? $topicLabel : '[Name des Vereins / Unternehmens]';
+        if ($isCancellation) {
+            $draftMarkdown = "**Absender:** {$username} · [Straße & Hausnummer] · [PLZ Ort]\n\n"
+                . "**Empfänger:**\n{$recipientName}\n[Straße & Hausnummer]\n[PLZ Ort]\n\n"
+                . "**Datum:** {$todayStr}\n\n"
+                . "**Betreff: Ordentliche Kündigung meiner Mitgliedschaft / meines Vertrags ({$recipientName})**\n"
+                . "**Mitglieds- / Vertragsnummer:** [Nummer eintragen]\n\n"
+                . "Sehr geehrte Damen und Herren,\n\n"
+                . "hiermit kündige ich meine bestehende Mitgliedschaft bzw. meinen Vertrag bei **{$recipientName}** ordentlich und fristgerecht zum nächstmöglichen Zeitpunkt.\n\n"
+                . "Bitte bestätigen Sie mir den Eingang dieser Kündigung sowie das genaue Beendigungsdatum schriftlich oder per E-Mail.\n\n"
+                . "Gleichzeitig widerrufe ich das Ihnen erteilte SEPA-Lastschriftmandat (Einzugsermächtigung) zum Ablauf der regulären Vertragslaufzeit.\n\n"
+                . "Ich bedanke mich für die bisherige Zeit und verbleibe\n\n"
+                . "mit freundlichen Grüßen\n\n"
+                . "**{$username}**";
+        } elseif ($isInvitation) {
+            $draftMarkdown = "# Einladung: {$recipientName}\n\n"
+                . "**Datum des Schreibens:** {$todayStr}\n"
+                . "**Von:** {$username}\n\n"
+                . "Liebe Mitglieder, liebe Kolleginnen und Kollegen,\n\n"
+                . "hiermit lade ich herzlich zu unserer kommenden Veranstaltung / Versammlung (**{$recipientName}**) ein:\n\n"
+                . "- **Datum:** [TT.MM.JJJJ]\n"
+                . "- **Uhrzeit:** [HH:MM] Uhr\n"
+                . "- **Ort:** [Vereinsheim / Konferenzraum / Adresse]\n\n"
+                . "## Geplante Tagesordnung\n"
+                . "- TOP 1: Begrüßung und Feststellung der Beschlussfähigkeit\n"
+                . "- TOP 2: Rückblick und aktueller Stand\n"
+                . "- TOP 3: Wichtige Themen, Abstimmungen & Ausblick\n"
+                . "- TOP 4: Verschiedenes & gemütlicher Ausklang\n\n"
+                . "Über eine kurze Rückmeldung zur Teilnahme bis zum **[Datum]** freue ich mich sehr.\n\n"
+                . "Mit herzlichen Grüßen\n\n"
+                . "**{$username}**";
+        } elseif ($isProtocol) {
+            $draftMarkdown = "# 📋 Besprechungsprotokoll: {$recipientName}\n\n"
+                . "**Datum:** {$todayStr} · **Protokollführung:** {$username}\n\n"
+                . "## 1. Teilnehmer\n"
+                . "- {$username}\n"
+                . "- [Weitere Teilnehmer eintragen]\n\n"
+                . "## 2. Besprochene Tagesordnungspunkte\n"
+                . "- **TOP 1:** Aktueller Status & Rückblick\n"
+                . "- **TOP 2:** Zentrale Entscheidungen & Abstimmungen\n\n"
+                . "## 3. Beschlüsse & Nächste Aufgaben (To-Dos)\n"
+                . "- [ ] Aufgabe 1 – Verantwortlich: [Name] – Frist: [Datum]\n"
+                . "- [ ] Aufgabe 2 – Verantwortlich: [Name] – Frist: [Datum]\n";
+        } else {
+            $draftMarkdown = "**Absender:** {$username} · [Straße & Hausnummer] · [PLZ Ort]\n\n"
+                . "**Empfänger:**\n{$recipientName}\n[Straße & Hausnummer]\n[PLZ Ort]\n\n"
+                . "**Datum:** {$todayStr}\n\n"
+                . "**Betreff: {$recipientName}**\n\n"
+                . "Sehr geehrte Damen und Herren,\n\n"
+                . "ich wende mich heute bezüglich **{$recipientName}** an Sie.\n\n"
+                . "[Hier Ihr konkretes Anliegen ergänzen...]\n\n"
+                . "Für Rückfragen stehe ich Ihnen jederzeit gerne zur Verfügung und danke Ihnen im Voraus für Ihre Unterstützung.\n\n"
+                . "Mit freundlichen Grüßen\n\n"
+                . "**{$username}**";
+        }
+    }
+
+    // 3. Als echtes .docx-Dokument in den Cloud-Ordner "Dokumente/" schreiben
+    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0750, true) && !is_dir(UPLOAD_DIR)) {
+        return null;
+    }
+
+    do {
+        $storedFilename = generateSafeStoredFilename();
+        $physicalPath   = UPLOAD_DIR . $storedFilename;
+    } while (file_exists($physicalPath));
+
+    $safeFileBase = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_\-]/u', '_', $filePrefix) ?: 'Schreiben';
+    $safeFileBase = trim((string)preg_replace('/_+/u', '_', $safeFileBase), '_');
+    $origName     = sanitizeOriginalFilename(mb_substr($safeFileBase, 0, 60) . '_' . date('Y-m-d_Hi') . '.docx');
+
+    $htmlForDocx = convertMarkdownDraftToDocxHtml($draftMarkdown);
+    if (!writeHtmlAsDocx($htmlForDocx, $physicalPath) || !is_file($physicalPath)) {
+        @unlink($physicalPath);
+        return null;
+    }
+
+    $fileSize   = (int)filesize($physicalPath);
+    $mimeType   = getOfficeMimeType($origName);
+    $folderPath = 'Dokumente';
+
+    try {
+        registerFolderHierarchy($pdo, $userId, $folderPath, null);
+        $stmtIns = $pdo->prepare(
+            'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+             VALUES (:uid, NULL, :fn, :orig, :fp, :sz, :mime, 0)'
+        );
+        $stmtIns->execute([
+            ':uid'  => $userId,
+            ':fn'   => $storedFilename,
+            ':orig' => $origName,
+            ':fp'   => $folderPath,
+            ':sz'   => $fileSize,
+            ':mime' => $mimeType,
+        ]);
+        $newFileId = (int)$pdo->lastInsertId();
+    } catch (Throwable) {
+        @unlink($physicalPath);
+        return null;
+    }
+
+    return [
+        'file_id'        => $newFileId,
+        'filename'       => $origName,
+        'draft_markdown' => $draftMarkdown,
+        'used_ai'        => $usedAi,
+    ];
+}
+
+/**
  * Beantwortet eine Frage des Benutzers mehrsprachig in allen 11 angebotenen Sprachen.
  *
  * @return array{
@@ -2345,6 +2637,52 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
                 ];
             } catch (Throwable) {
             }
+        }
+    }
+
+    // =========================================================================
+    // 1b. AUTOMATISCHE OFFICE-LIGHT-DOKUMENTENERSTELLUNG (.docx)
+    //     z. B. "Formuliere mir bitte ein Kündigungsschreiben für den Tennisverein",
+    //           "Schreibe eine Einladung zur Jahreshauptversammlung",
+    //           "Erstelle ein Protokoll für die Vorstandssitzung" oder "Brief: ..."
+    // =========================================================================
+    $hasDraftVerb = hasAnyKeyword($norm, [
+        'formuliere', 'formulieren', 'schreib', 'schreibe', 'schreiben sie', 'verfasse', 'verfassen',
+        'entwirf', 'entwerfe', 'entwerfen', 'erstelle mir ein', 'erstelle ein', 'erstell mir', 'generiere',
+    ]);
+    $hasDocNoun = hasAnyKeyword($norm, [
+        'kuendigung', 'kuendigungsschreiben', 'einladung', 'einladungsschreiben', 'brief', 'anschreiben',
+        'schreiben', 'protokoll', 'besprechungsprotokoll', 'vertrag', 'antrag', 'beschwerde', 'widerspruch',
+        'mahnung', 'entschuldigung', 'vollmacht', 'word dokument', 'office dokument',
+    ]);
+    $isDirectDocPrefix = (bool)preg_match('/^(?:brief|schreiben|kuendigung|kündigung|einladung|protokoll|dokument)\s*:\s*(.+)$/isu', $question);
+
+    if (($isDirectDocPrefix || ($hasDraftVerb && $hasDocNoun))
+        && !hasAnyKeyword($norm, ['wie funktioniert', 'wo finde ich', 'erklaere', 'was ist'])
+    ) {
+        $docRes = createAssistantOfficeDocx($pdo, $userId, $username, $appSettings, $question);
+        if ($docRes !== null) {
+            $officeUrl = 'office.php?id=' . (int)$docRes['file_id'] . '&return_folder=Dokumente';
+            $replyMsg  = "📄 ✅ Ich habe das gewünschte Dokument für dich formuliert und direkt als Word-Datei **`" . htmlspecialchars($docRes['filename'], ENT_QUOTES, 'UTF-8') . "`** in deinem Cloud-Ordner **`Dokumente/`** angelegt!\n\n"
+                . "Du kannst es mit einem Klick unten sofort in **MiniCloud Office Light** öffnen, anpassen, ausdrucken oder als PDF speichern:\n\n"
+                . "---\n"
+                . $docRes['draft_markdown'];
+
+            $docActions = [
+                ['label' => '📝 Jetzt in Office Light öffnen & bearbeiten', 'url' => $officeUrl],
+                ['label' => '📂 Ordner „Dokumente“', 'url' => 'index.php?folder=Dokumente'],
+            ];
+            rememberAssistantTurn($question, $replyMsg, 'office_light', $docActions);
+
+            return [
+                'reply'     => $replyMsg,
+                'actions'   => $docActions,
+                'followups' => [
+                    $pack['q_office'],
+                    $pack['q_storage'],
+                ],
+                'lang'      => $lang,
+            ];
         }
     }
 
