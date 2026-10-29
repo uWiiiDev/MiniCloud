@@ -66,13 +66,14 @@ $catalog = [
     ['title' => 'Papierkorb',                     'sub' => 'Gelöschte Dateien wiederherstellen',          'icon' => '🗑️', 'cat' => 'System', 'url' => 'trash.php',                'kw' => 'papierkorb gelöscht wiederherstellen'],
 ];
 
+$matchedModules = [];
 foreach ($catalog as $mod) {
     if (isset($mod['setting']) && ($appSettings[$mod['setting']] ?? '1') !== '1') {
         continue;
     }
     if ($qLow === '') {
-        if (count($items) < 6) {
-            $items[] = [
+        if (count($matchedModules) < 5) {
+            $matchedModules[] = [
                 'icon'  => $mod['icon'],
                 'title' => $mod['title'],
                 'sub'   => $mod['sub'],
@@ -81,9 +82,9 @@ foreach ($catalog as $mod) {
             ];
         }
     } else {
-        $haystack = mb_strtolower($mod['title'] . ' ' . $mod['sub'] . ' ' . $mod['kw'], 'UTF-8');
-        if (mb_strpos($haystack, $qLow) !== false) {
-            $items[] = [
+        $haystack = mb_strtolower($mod['title'] . ' ' . $mod['kw'], 'UTF-8');
+        if (mb_strpos($haystack, $qLow) !== false && count($matchedModules) < 4) {
+            $matchedModules[] = [
                 'icon'  => $mod['icon'],
                 'title' => $mod['title'],
                 'sub'   => $mod['sub'],
@@ -94,7 +95,7 @@ foreach ($catalog as $mod) {
     }
 }
 
-// Wenn kein Suchbegriff eingegeben wurde: Zuletzt hochgeladene Dateien anhängen und direkt ausgeben
+// Wenn kein Suchbegriff eingegeben wurde: Zuletzt hochgeladene Dateien + Schnellzugriff-Module anzeigen
 if ($qLow === '') {
     try {
         $stmtRec = $pdo->prepare(
@@ -125,6 +126,10 @@ if ($qLow === '') {
             ];
         }
     } catch (Throwable) {
+    }
+
+    foreach ($matchedModules as $m) {
+        $items[] = $m;
     }
 
     echo json_encode(['ok' => true, 'results' => $items], JSON_UNESCAPED_UNICODE);
@@ -368,6 +373,11 @@ if (($appSettings['enable_contacts'] ?? '1') === '1') {
         }
     } catch (Throwable) {
     }
+}
+
+// 9. Passende Cloud-Module anhängen
+foreach ($matchedModules as $m) {
+    $items[] = $m;
 }
 
 echo json_encode([
