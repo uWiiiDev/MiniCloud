@@ -193,29 +193,21 @@ try {
 } catch (Throwable) {
 }
 
-// 3. Dateien durchsuchen (Eigene Dateien, Gruppenordner & für mich freigegebene Dateien)
+// 3. Dateien durchsuchen
 try {
     $stmtFil = $pdo->prepare(
         "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`
          FROM `files` f
          WHERE f.`deleted_at` IS NULL
+           AND f.`user_id` = :uid1
            AND (f.`original_name` LIKE :q1 OR f.`folder_path` LIKE :q2)
-           AND (
-               f.`user_id` = :uid1
-               OR (f.`group_folder_id` IS NOT NULL AND f.`group_folder_id` IN (
-                   SELECT gf.`id` FROM `group_folders` gf
-                   INNER JOIN `group_members` gm ON gm.`group_id` = gf.`group_id`
-                   WHERE gm.`user_id` = :uid2
-               ))
-           )
          ORDER BY f.`upload_date` DESC
-         LIMIT 10"
+         LIMIT 12"
     );
     $stmtFil->execute([
+        ':uid1' => $userId,
         ':q1'   => $like,
         ':q2'   => $like,
-        ':uid1' => $userId,
-        ':uid2' => $userId,
     ]);
     foreach ($stmtFil->fetchAll() as $f) {
         $fp   = trim((string)($f['folder_path'] ?? ''));
