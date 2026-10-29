@@ -32,12 +32,15 @@ $userId   = (int)$_SESSION['user_id'];
 $username = (string)$_SESSION['username'];
 
 ensureWhiteboardSchema($pdo);
-recordModuleUsage($pdo, 'whiteboard');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['ajax'])) {
+    recordModuleUsage($pdo, 'whiteboard');
+}
 
 function ensureWhiteboardSchema(PDO $pdo): void
 {
     static $checked = false;
-    if ($checked) {
+    if ($checked || (!empty($_SESSION['_mc_whiteboard_schema_ok']) && $_SESSION['_mc_whiteboard_schema_ok'] === 1)) {
+        $checked = true;
         return;
     }
     $checked = true;
@@ -69,6 +72,7 @@ function ensureWhiteboardSchema(PDO $pdo): void
                 INDEX `idx_wb_peers_time` (`board_id`, `updated_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        $_SESSION['_mc_whiteboard_schema_ok'] = 1;
     } catch (Throwable) {
     }
 }
@@ -162,28 +166,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             exit;
         }
 
-        try {
-            $stmtPeer = $pdo->prepare(
-                "INSERT INTO `whiteboard_peers` (`board_id`, `user_id`, `username`, `cursor_x`, `cursor_y`)
-                 VALUES (:bid, :uid, :uname, :cx, :cy)
-                 ON DUPLICATE KEY UPDATE `username` = VALUES(`username`), `cursor_x` = VALUES(`cursor_x`), `cursor_y` = VALUES(`cursor_y`), `updated_at` = NOW()"
-            );
-            $stmtPeer->execute([
-                ':bid'   => $boardId,
-                ':uid'   => $userId,
-                ':uname' => $username,
-                ':cx'    => $cx,
-                ':cy'    => $cy,
-            ]);
-        } catch (Throwable) {
-        }
-
-        $stmtB = $pdo->prepare("SELECT `title`, `is_shared`, `bg_style`, `elements_json`, `updated_at` FROM `whiteboards` WHERE `id` = :id LIMIT 1");
+        $stmtB = $pdo->prepare("SELECT `user_id`, `title`, `is_shared`, `bg_style`, `elements_json`, `updated_at` FROM `whiteboards` WHERE `id` = :id LIMIT 1");
         $stmtB->execute([':id' => $boardId]);
         $bRow = $stmtB->fetch();
-        if (!$bRow || ((int)$bRow['is_shared'] !== 1)) {
+        if (!$bRow || ((int)$bRow['user_id'] !== $userId && (int)$bRow['is_shared'] !== 1)) {
+            echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Whiteboard.']);
+            exit;
+        }
+
+        if ((int)$bRow['is_shared'] !== 1) {
             $peers = [];
         } else {
+            try {
+                $stmtPeer = $pdo->prepare(
+                    "INSERT INTO `whiteboard_peers` (`board_id`, `user_id`, `username`, `cursor_x`, `cursor_y`)
+                     VALUES (:bid, :uid, :uname, :cx, :cy)
+                     ON DUPLICATE KEY UPDATE `username` = VALUES(`username`), `cursor_x` = VALUES(`cursor_x`), `cursor_y` = VALUES(`cursor_y`), `updated_at` = NOW()"
+                );
+                $stmtPeer->execute([
+                    ':bid'   => $boardId,
+                    ':uid'   => $userId,
+                    ':uname' => $username,
+                    ':cx'    => $cx,
+                    ':cy'    => $cy,
+                ]);
+            } catch (Throwable) {
+            }
+
             $stmtP = $pdo->prepare(
                 "SELECT `user_id`, `username`, `cursor_x`, `cursor_y`
                  FROM `whiteboard_peers`
@@ -211,6 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         $boardId = (int)($_POST['board_id'] ?? 0);
         $stmtDel = $pdo->prepare("DELETE FROM `whiteboards` WHERE `id` = :id AND `user_id` = :uid");
         $stmtDel->execute([':id' => $boardId, ':uid' => $userId]);
+        $pdo->prepare("DELETE FROM `whiteboard_peers` WHERE `board_id` = :id")->execute([':id' => $boardId]);
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -224,31 +234,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             exit;
         }
         $pngBin = base64_decode($m[1], true);
-        if ($pngBin === false || strlen($pngBin) < 64) {
-            echo json_encode(['ok' => false, 'error' => 'Bilddaten konnten nicht dekodiert werden.']);
+        if ($pngBin === false || strlen($pngBin) < 64 || substr($pngBin, 0, 8) !== "\x89PNG\r\n\x1a\n") {
+            echo json_encode(['ok' => false, 'error' => 'Bilddaten konnten nicht als gültiges PNG dekodiert werden.']);
             exit;
         }
 
+        $size  = strlen($pngBin);
+        $stats = getUserStorageStats($pdo, $userId);
+        if ($size > $stats['free']) {
+            echo json_encode(['ok' => false, 'error' => 'Nicht genügend freier persönlicher Cloud-Speicherplatz verfügbar.']);
+            exit;
+        }
+
+        if (!is_dir(UPLOAD_DIR)) {
+            @mkdir(UPLOAD_DIR, 0750, true);
+        }
         $safeTitle = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_-]+/u', '_', $title) ?: 'Whiteboard';
         $origName  = $safeTitle . '_' . date('Y-m-d_His') . '.png';
-        $stored    = generateUniqueFilename('png');
-        $userDir   = ensureUserUploadDir($userId);
-        $destPath  = $userDir . DIRECTORY_SEPARATOR . $stored;
+        $stored    = generateSafeStoredFilename('png');
+        $destPath  = UPLOAD_DIR . $stored;
 
         if (@file_put_contents($destPath, $pngBin) === false) {
             echo json_encode(['ok' => false, 'error' => 'Datei konnte nicht im Cloud-Verzeichnis gespeichert werden.']);
             exit;
         }
+        @chmod($destPath, 0640);
 
-        $size = (int)filesize($destPath);
         $stmtInsF = $pdo->prepare(
-            "INSERT INTO `files` (`user_id`, `folder_id`, `original_name`, `stored_name`, `file_size`, `mime_type`)
-             VALUES (:uid, NULL, :orig, :stored, :sz, 'image/png')"
+            "INSERT INTO `files` (`user_id`, `group_folder_id`, `filename`, `original_name`, `folder_path`, `file_size`, `mime_type`, `is_encrypted`)
+             VALUES (:uid, NULL, :stored, :orig, '', :sz, 'image/png', 0)"
         );
         $stmtInsF->execute([
             ':uid'    => $userId,
-            ':orig'   => $origName,
             ':stored' => $stored,
+            ':orig'   => $origName,
             ':sz'     => $size,
         ]);
 

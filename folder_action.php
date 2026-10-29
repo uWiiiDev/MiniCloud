@@ -699,17 +699,35 @@ if ($action === 'batch_transfer_files') {
     $processedCount = 0;
     $processedFolderCount = 0;
 
-    // 6a. Ausgewählte Ordner verschieben oder kopieren
+    // 6a. Ausgewählte Ordner verschieben oder kopieren (Überordner vor Unterordnern deduplizieren)
     if (!empty($rawFolders)) {
         $canSourceFolderOp = ($groupFolderId === null)
             || canUserAccessGroupFolder($pdo, $userId, $groupFolderId, $mode === 'move', $isAdmin);
 
         if ($canSourceFolderOp) {
-            foreach ($rawFolders as $rawFolderItem) {
-                $sourceFolder = sanitizeFolderPathInput((string)$rawFolderItem);
-                if ($sourceFolder === '') {
+            $cleanFolders = [];
+            foreach ($rawFolders as $rf) {
+                $sf = sanitizeFolderPathInput((string)$rf);
+                if ($sf !== '') {
+                    $cleanFolders[$sf] = $sf;
+                }
+            }
+            $cleanFolders = array_values($cleanFolders);
+            usort($cleanFolders, static fn(string $a, string $b): int => strlen($a) <=> strlen($b));
+            $handledRoots = [];
+
+            foreach ($cleanFolders as $sourceFolder) {
+                $coveredByParent = false;
+                foreach ($handledRoots as $rootPath) {
+                    if (str_starts_with($sourceFolder, $rootPath . '/')) {
+                        $coveredByParent = true;
+                        break;
+                    }
+                }
+                if ($coveredByParent) {
                     continue;
                 }
+                $handledRoots[] = $sourceFolder;
 
                 $folderBaseName = basename($sourceFolder);
                 $newFolderPath  = $targetFolder !== ''

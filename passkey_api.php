@@ -20,7 +20,8 @@ ensurePasskeySchema($pdo);
 function ensurePasskeySchema(PDO $pdo): void
 {
     static $checked = false;
-    if ($checked) {
+    if ($checked || (!empty($_SESSION['_mc_passkey_schema_ok']) && $_SESSION['_mc_passkey_schema_ok'] === 1)) {
+        $checked = true;
         return;
     }
     $checked = true;
@@ -40,6 +41,7 @@ function ensurePasskeySchema(PDO $pdo): void
                 INDEX `idx_user_passkeys` (`user_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        $_SESSION['_mc_passkey_schema_ok'] = 1;
     } catch (Throwable) {
     }
 }
@@ -199,6 +201,18 @@ if ($action === 'register_verify') {
         echo json_encode(['ok' => false, 'error' => 'Sicherheits-Challenge stimmt nicht überein.']);
         exit;
     }
+    $originHost = strtolower((string)parse_url((string)($clientData['origin'] ?? ''), PHP_URL_HOST));
+    if ($originHost !== '' && $originHost !== getWebAuthnRpId()) {
+        echo json_encode(['ok' => false, 'error' => 'Ungültige Origin-Domain bei der Passkey-Registrierung.']);
+        exit;
+    }
+    if ($authDataB64 !== '') {
+        $regAuthBin = b64urlDecode($authDataB64);
+        if (strlen($regAuthBin) >= 32 && !hash_equals(hash('sha256', getWebAuthnRpId(), true), substr($regAuthBin, 0, 32))) {
+            echo json_encode(['ok' => false, 'error' => 'RP-ID-Hash der Passkey-Registrierung stimmt nicht überein.']);
+            exit;
+        }
+    }
 
     // Public Key im PEM-Format gewinnen (1. direkt per SPKI aus Browser getPublicKey(), 2. Fallback aus AuthenticatorData)
     $pem = null;
@@ -318,6 +332,12 @@ if ($action === 'login_verify') {
         exit;
     }
 
+    $clientIp = getClientIpForRateLimit();
+    if (isLoginIpRateLimited($pdo, $clientIp)) {
+        echo json_encode(['ok' => false, 'error' => 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte warten Sie 15 Minuten.']);
+        exit;
+    }
+
     $expectedChallenge = (string)($_SESSION['webauthn_auth_challenge'] ?? '');
     $expiresAt         = (int)($_SESSION['webauthn_auth_expires'] ?? 0);
     unset($_SESSION['webauthn_auth_challenge'], $_SESSION['webauthn_auth_expires']);
@@ -350,11 +370,16 @@ if ($action === 'login_verify') {
         echo json_encode(['ok' => false, 'error' => 'Sicherheits-Challenge stimmt nicht überein.']);
         exit;
     }
+    $originHost = strtolower((string)parse_url((string)($clientData['origin'] ?? ''), PHP_URL_HOST));
+    if ($originHost !== '' && $originHost !== getWebAuthnRpId()) {
+        echo json_encode(['ok' => false, 'error' => 'Passkey-Antwort stammt von einer fremden Domain (Origin-Konflikt).']);
+        exit;
+    }
 
     // Passkey + zugehörigen Benutzer in der Datenbank suchen
     ensureUserSecurityColumns($pdo);
     $stmtPk = $pdo->prepare(
-        "SELECT pk.`id` AS `pk_id`, pk.`public_key_pem`, pk.`device_name`,
+        "SELECT pk.`id` AS `pk_id`, pk.`public_key_pem`, pk.`device_name`, pk.`sign_count`,
                 u.`id` AS `user_id`, u.`username`, u.`is_admin`, u.`is_locked`, u.`lock_reason`, u.`admin_permissions`, u.`theme`
          FROM `user_passkeys` pk
          INNER JOIN `users` u ON u.`id` = pk.`user_id`
@@ -402,13 +427,24 @@ if ($action === 'login_verify') {
 
     $verified = @openssl_verify($signedData, $signatureBin, $pubKey, OPENSSL_ALGO_SHA256);
     if ($verified !== 1) {
+        recordFailedLoginAttempt($pdo, $clientIp, (string)$row['username']);
         echo json_encode(['ok' => false, 'error' => 'Kryptografische Passkey-Signatur konnte nicht verifiziert werden.']);
         exit;
     }
 
-    // Signatur gültig -> Nutzungszeitpunkt aktualisieren & Sitzung starten!
-    $stmtTouch = $pdo->prepare("UPDATE `user_passkeys` SET `last_used_at` = NOW() WHERE `id` = :id");
-    $stmtTouch->execute([':id' => (int)$row['pk_id']]);
+    // Signatur-Zähler (Clone-Detection nach WebAuthn-Standard) prüfen & aktualisieren
+    $newSignCount    = (int)(unpack('N', substr($authDataBin, 33, 4))[1] ?? 0);
+    $storedSignCount = (int)($row['sign_count'] ?? 0);
+    if ($storedSignCount > 0 && $newSignCount > 0 && $newSignCount <= $storedSignCount) {
+        logAuditEvent($pdo, 'login_failed', 'Passkey-Signaturzähler-Warnung (möglicher Klon): ' . $row['device_name'], (int)$row['user_id'], (string)$row['username']);
+        echo json_encode(['ok' => false, 'error' => 'Sicherheitswarnung: Ungültiger Signaturzähler des Passkeys.']);
+        exit;
+    }
+
+    // Signatur gültig -> Nutzungszeitpunkt & Zähler aktualisieren & Sitzung starten!
+    $stmtTouch = $pdo->prepare("UPDATE `user_passkeys` SET `last_used_at` = NOW(), `sign_count` = :sc WHERE `id` = :id");
+    $stmtTouch->execute([':sc' => max($storedSignCount, $newSignCount), ':id' => (int)$row['pk_id']]);
+    clearFailedLoginAttempts($pdo, $clientIp);
 
     session_regenerate_id(true);
     unset(

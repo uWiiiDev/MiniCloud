@@ -314,7 +314,7 @@ if (($appSettings['enable_calendar'] ?? '1') === '1') {
         $stmtEv = $pdo->prepare(
             "SELECT `id`, `title`, `start_at`, `location`
              FROM `calendar_events`
-             WHERE (`user_id` = :u1 OR `shared_user_id` = :u2)
+             WHERE (`user_id` = :u1 OR (`shared_user_id` = :u2 AND `is_private` = 0))
                AND (`title` LIKE :q1 OR `location` LIKE :q2 OR `description` LIKE :q3)
              ORDER BY `start_at` DESC
              LIMIT 5"
