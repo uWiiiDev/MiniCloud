@@ -5,23 +5,24 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 16 Spiele:
+ * Enthaltene 17 Spiele:
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
- * 2.  🐹 Cloud-Lemmings (1991 Klassiker: Zerstörbares Pixel-Gelände, 8 Fähigkeiten & 4 Kult-Level)
- * 3.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
- * 4.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
- * 5.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
- * 6.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 7.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 8.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 9.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 10. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 11. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 12. 🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 13. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 14. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 15. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 16. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 2.  🚘 Cloud-Traffic-Racer (Highway-Raser mit Gegenverkehr, Close-Overtake-Kombo, Lichthupe & 5 Tuning-Autos)
+ * 3.  🐹 Cloud-Lemmings (1991 Klassiker: Zerstörbares Pixel-Gelände, 8 Fähigkeiten & 4 Kult-Level)
+ * 4.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
+ * 5.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
+ * 6.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
+ * 7.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 8.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 9.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 10. ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 11. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 12. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 13. 🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 14. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 15. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 16. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 17. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -112,7 +113,7 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 16 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 17 Spiele inklusive Metadaten.
  *
  * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
@@ -127,6 +128,15 @@ function getGamesCatalog(): array
             'group'    => 'action',
             'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'trafficracer' => [
+            'key'      => 'trafficracer',
+            'title'    => 'Cloud-Traffic-Racer',
+            'icon'     => '🚘',
+            'category' => 'Highway-Action',
+            'group'    => 'action',
+            'desc'     => 'Vollgas auf der 4-spurigen Autobahn: Knappe Überholmanöver (Close Overtake), Gegenverkehr, Lichthupe & 5 Tuning-Autos!',
+            'color'    => 'from-orange-500 to-red-700',
         ],
         'lemmings' => [
             'key'      => 'lemmings',
@@ -1154,7 +1164,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🏎️ Rennspiel &amp; RPG (2)
+                        🏎️ Rennspiel &amp; RPG (3)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2424,6 +2434,120 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 17. SPIEL: CLOUD-TRAFFIC-RACER (HIGHWAY-OVERTAKE, GEGENVERKEHR & GARAGE) -->
+            <div id="gamePanel-trafficracer" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🚘 Cloud-Traffic-Racer</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300 border border-orange-300/70 dark:border-orange-800">
+                                ⚡ Close-Overtake-Kombo &middot; 🔄 Gegenverkehr &middot; 🔧 5 Tuning-Autos
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: <strong>← → / A D</strong> Spur wechseln &middot; <strong>↑ / W</strong> Vollgas &middot; <strong>↓ / S / Space</strong> Bremsen &middot; <strong>H</strong> Lichthupe &amp; Hupe (macht die Spur frei!). Ab <strong>100 km/h</strong> bringen knappe Überholmanöver fette Kombo-Punkte!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <select id="trModeSelect" onchange="trChangeConfig()"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="twoway">🔄 Gegenverkehr (2+2 Spuren · 2× Bonus)</option>
+                            <option value="oneway">🛣️ Einbahnstraße (4 Spuren)</option>
+                            <option value="timeattack">⏱️ Zeitfahren (90 Sek. Vollgas)</option>
+                            <option value="police">🚓 Polizei-Jagd (Raser stoppen!)</option>
+                        </select>
+                        <select id="trEnvSelect" onchange="trChangeConfig()"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="night">🌃 Neon-Nachtfahrt (Lichtkegel)</option>
+                            <option value="desert">☀️ Sonnen-Highway</option>
+                            <option value="rain">🌧️ Regen-Autobahn</option>
+                        </select>
+                        <button type="button" onclick="trStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Auf die Autobahn!
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Garage- & Fahrzeug-Auswahlleiste (Cloud-gesichert!) -->
+                <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5 text-xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="font-extrabold text-slate-800 dark:text-slate-100">🔧 Meine Highway-Garage:</span>
+                            <span class="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-extrabold border border-amber-300/70 dark:border-amber-800">
+                                💰 <span id="trCashLabel">0</span> Credits
+                            </span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" onclick="trUpgradeCurrentCar()" id="trUpgradeBtn"
+                                    class="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer">
+                                ⚙️ Motor &amp; Bremsen tunen (500 💰)
+                            </button>
+                        </div>
+                    </div>
+                    <div id="trCarSelectorRow" class="grid grid-cols-2 sm:grid-cols-5 gap-2"></div>
+                </div>
+
+                <!-- Tacho-, Kombo- & Punkte-Zeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="trScore" class="text-orange-600 dark:text-orange-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Tacho:</span>
+                        <strong id="trSpeedKmh" class="text-emerald-600 dark:text-emerald-400 font-extrabold text-sm">0 km/h</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Close Overtakes:</span>
+                        <strong id="trOvertakes" class="text-cyan-600 dark:text-cyan-400 font-extrabold">0 (×1)</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Distanz / Zeit:</span>
+                        <strong id="trDistInfo" class="text-slate-900 dark:text-white font-extrabold truncate">0,0 km</strong>
+                    </div>
+                </div>
+
+                <!-- 4-Spur-Highway-Spielfeld (Canvas) + Touch-Cockpit -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="trCanvas" width="460" height="540"
+                            class="rounded-2xl bg-slate-950 border-2 border-orange-900/80 shadow-xl max-w-full h-auto select-none"></canvas>
+
+                    <!-- Touch- & Mobil-Lenkrad -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="trKeys['ArrowLeft']=true" onmouseup="trKeys['ArrowLeft']=false" onmouseleave="trKeys['ArrowLeft']=false"
+                                ontouchstart="event.preventDefault(); trKeys['ArrowLeft']=true" ontouchend="trKeys['ArrowLeft']=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-orange-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬅️ Spur links
+                        </button>
+                        <button type="button"
+                                onmousedown="trKeys['ArrowRight']=true" onmouseup="trKeys['ArrowRight']=false" onmouseleave="trKeys['ArrowRight']=false"
+                                ontouchstart="event.preventDefault(); trKeys['ArrowRight']=true" ontouchend="trKeys['ArrowRight']=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-orange-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ➡️ Spur rechts
+                        </button>
+                        <button type="button"
+                                onmousedown="trKeys['ArrowDown']=true" onmouseup="trKeys['ArrowDown']=false" onmouseleave="trKeys['ArrowDown']=false"
+                                ontouchstart="event.preventDefault(); trKeys['ArrowDown']=true" ontouchend="trKeys['ArrowDown']=false"
+                                class="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm shadow-sm cursor-pointer">
+                            🛑 BREMSE
+                        </button>
+                        <button type="button"
+                                onmousedown="trKeys['ArrowUp']=true" onmouseup="trKeys['ArrowUp']=false" onmouseleave="trKeys['ArrowUp']=false"
+                                ontouchstart="event.preventDefault(); trKeys['ArrowUp']=true" ontouchend="trKeys['ArrowUp']=false"
+                                class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-sm cursor-pointer">
+                            🔥 VOLLGAS
+                        </button>
+                        <button type="button"
+                                onclick="trTriggerHorn()"
+                                class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-sm cursor-pointer">
+                            📣 LICHTHUPE (H)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2673,6 +2797,11 @@ function selectCloudGame(gameKey) {
             gummiInit();
         }
         gummiPollState();
+    } else if (gameKey === 'trafficracer') {
+        if (!trInitialized) {
+            trInit();
+        }
+        trDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -11406,10 +11535,761 @@ function lemLoop() {
     }
 }
 
+// =============================================================================
+// 17. CLOUD-TRAFFIC-RACER (HIGHWAY-ACTION, CLOSE OVERTAKES & TUNING-GARAGE)
+// =============================================================================
+const TR_CARS = [
+    { id: 'compact',     name: '🚗 City-Hatchback',   price: 0,     topKmh: 170, accel: 0.34, brake: 0.95, handling: 4.2, color: '#38bdf8', stripe: '#0284c7' },
+    { id: 'coupe',       name: '🏎️ GT Sport-Coupé',   price: 1200,  topKmh: 215, accel: 0.46, brake: 1.15, handling: 4.8, color: '#f43f5e', stripe: '#ffffff' },
+    { id: 'muscle',      name: '💪 V8 Muscle-Beast',  price: 3000,  topKmh: 250, accel: 0.56, brake: 1.25, handling: 5.1, color: '#f59e0b', stripe: '#1e293b' },
+    { id: 'hyper',       name: '⚡ Cyber-Hypercar',   price: 6500,  topKmh: 295, accel: 0.72, brake: 1.45, handling: 5.8, color: '#a855f7', stripe: '#22d3ee' },
+    { id: 'interceptor', name: '🚓 Polizei-Turbine',  price: 11000, topKmh: 330, accel: 0.85, brake: 1.65, handling: 6.2, color: '#0f172a', stripe: '#3b82f6', isPolice: true }
+];
+
+// 4 Fahrspuren auf dem 460px breiten Highway (Road von x=70 bis x=390, Spurbreite = 80px)
+const TR_LANES = [110, 190, 270, 350];
+
+let trInitialized = false;
+let trRunning     = false;
+let trRafId       = null;
+let trMode        = 'twoway'; // 'twoway' | 'oneway' | 'timeattack' | 'police'
+let trEnv         = 'night';  // 'night' | 'desert' | 'rain'
+let trTick        = 0;
+let trStartAt     = 0;
+let trScore       = 0;
+let trDistMeters  = 0;
+let trOvertakes   = 0;
+let trCombo       = 1;
+let trComboTimer  = 0;
+let trWrongWaySec = 0;
+let trTimeLeft    = 90;
+let trHornFlash   = 0;
+let trBannerText  = '';
+const trKeys      = {};
+
+let trGarage = {
+    cash: 500,
+    selectedCar: 'compact',
+    ownedCars: ['compact'],
+    upgrades: { compact: 0, coupe: 0, muscle: 0, hyper: 0, interceptor: 0 }
+};
+
+let trPlayer = {
+    x: 270,
+    y: 440,
+    w: 36,
+    h: 68,
+    kmh: 60,
+    tilt: 0
+};
+
+let trTraffic   = []; // { lane, x, targetX, y, w, h, kmh, dir, type, color,roofColor, passed, blinker, blinkerTicks, isSuspect, hp }
+let trPopups    = []; // { x, y, text, color, life }
+let trScenery   = []; // Bäume, Kakteen, Laternen am Straßenrand { side, y, type }
+let trRoadOffset = 0;
+
+function trLoadGarageFromSaved() {
+    const saved = SAVED_GAME_STATES && SAVED_GAME_STATES['trafficracer'];
+    if (saved && typeof saved === 'object') {
+        if (typeof saved.cash === 'number') trGarage.cash = Math.max(0, Math.round(saved.cash));
+        if (typeof saved.selectedCar === 'string') trGarage.selectedCar = saved.selectedCar;
+        if (Array.isArray(saved.ownedCars) && saved.ownedCars.length > 0) trGarage.ownedCars = saved.ownedCars;
+        if (saved.upgrades && typeof saved.upgrades === 'object') {
+            trGarage.upgrades = Object.assign(trGarage.upgrades, saved.upgrades);
+        }
+    }
+}
+
+function trSaveGarageToCloud() {
+    saveCloudGameState('trafficracer', trGarage);
+}
+
+function trGetCurrentCarStats() {
+    const base = TR_CARS.find((c) => c.id === trGarage.selectedCar) || TR_CARS[0];
+    const lvl  = Math.min(5, trGarage.upgrades[base.id] || 0);
+    return {
+        ...base,
+        level: lvl,
+        topKmh: base.topKmh + lvl * 12,
+        accel: base.accel + lvl * 0.06,
+        brake: base.brake + lvl * 0.10,
+        handling: base.handling + lvl * 0.25
+    };
+}
+
+function trRenderGarageUi() {
+    const cashEl = document.getElementById('trCashLabel');
+    if (cashEl) cashEl.textContent = trGarage.cash.toLocaleString('de-DE');
+
+    const upBtn = document.getElementById('trUpgradeBtn');
+    const curStats = trGetCurrentCarStats();
+    const upCost = 500 + curStats.level * 450;
+    if (upBtn) {
+        if (curStats.level >= 5) {
+            upBtn.textContent = '🏆 Max. Tuning erreicht (Stufe 5/5)';
+            upBtn.disabled = true;
+            upBtn.className = 'px-3 py-1 rounded-xl bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-extrabold cursor-not-allowed';
+        } else {
+            upBtn.textContent = '⚙️ Tuning Stufe ' + (curStats.level + 1) + '/5 (+12 km/h · ' + upCost.toLocaleString('de-DE') + ' 💰)';
+            upBtn.disabled = false;
+            upBtn.className = 'px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer';
+        }
+    }
+
+    const row = document.getElementById('trCarSelectorRow');
+    if (!row) return;
+    row.innerHTML = TR_CARS.map((c) => {
+        const owned = trGarage.ownedCars.includes(c.id);
+        const sel   = trGarage.selectedCar === c.id;
+        const lvl   = trGarage.upgrades[c.id] || 0;
+        const top   = c.topKmh + lvl * 12;
+        const cls   = sel
+            ? 'p-2 rounded-xl border-2 border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-left cursor-pointer transition-all'
+            : 'p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-orange-400 text-left cursor-pointer transition-all';
+        return `<button type="button" onclick="trSelectOrBuyCar('${c.id}')" class="${cls}">
+            <div class="flex items-center justify-between gap-1 font-extrabold text-slate-900 dark:text-white truncate">
+                <span class="truncate">${c.name}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800">${top} km/h</span>
+            </div>
+            <div class="text-[10px] mt-1 font-bold ${owned ? (sel ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400') : 'text-amber-600 dark:text-amber-400'}">
+                ${owned ? (sel ? '✓ Ausgewählt (Stufe ' + lvl + ')' : 'In Garage (Wählen)') : '🔒 Kaufen: ' + c.price.toLocaleString('de-DE') + ' 💰'}
+            </div>
+        </button>`;
+    }).join('');
+}
+
+function trSelectOrBuyCar(carId) {
+    const car = TR_CARS.find((c) => c.id === carId);
+    if (!car) return;
+    if (trGarage.ownedCars.includes(carId)) {
+        trGarage.selectedCar = carId;
+        trSaveGarageToCloud();
+        trRenderGarageUi();
+        trDraw();
+        return;
+    }
+    if (trGarage.cash < car.price) {
+        alert('Noch nicht genug Credits! Dir fehlen ' + (car.price - trGarage.cash).toLocaleString('de-DE') + ' 💰.');
+        return;
+    }
+    trGarage.cash -= car.price;
+    trGarage.ownedCars.push(carId);
+    trGarage.selectedCar = carId;
+    trSaveGarageToCloud();
+    trRenderGarageUi();
+    trDraw();
+}
+
+function trUpgradeCurrentCar() {
+    const cur = trGetCurrentCarStats();
+    if (cur.level >= 5) return;
+    const cost = 500 + cur.level * 450;
+    if (trGarage.cash < cost) {
+        alert('Noch nicht genug Credits für dieses Tuning (' + cost.toLocaleString('de-DE') + ' 💰 benötigt)!');
+        return;
+    }
+    trGarage.cash -= cost;
+    trGarage.upgrades[cur.id] = cur.level + 1;
+    trSaveGarageToCloud();
+    trRenderGarageUi();
+}
+
+function trChangeConfig() {
+    const mEl = document.getElementById('trModeSelect');
+    const eEl = document.getElementById('trEnvSelect');
+    if (mEl) trMode = mEl.value;
+    if (eEl) trEnv  = eEl.value;
+    trDraw();
+}
+
+function trInit() {
+    if (trInitialized) return;
+    trInitialized = true;
+
+    trLoadGarageFromSaved();
+    trRenderGarageUi();
+
+    for (let y = 0; y < 560; y += 70) {
+        trScenery.push({ side: -1, y: y, type: y % 140 === 0 ? 'lamp' : 'tree' });
+        trScenery.push({ side: 1,  y: y + 35, type: y % 140 === 0 ? 'lamp' : 'tree' });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'trafficracer') return;
+        const k = e.key;
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'w', 'W', 'a', 'A', 's', 'S', 'd', 'D', 'h', 'H'].includes(k)) {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) {
+                e.preventDefault();
+            }
+            if (k === 'a' || k === 'A') trKeys['ArrowLeft'] = true;
+            else if (k === 'd' || k === 'D') trKeys['ArrowRight'] = true;
+            else if (k === 'w' || k === 'W') trKeys['ArrowUp'] = true;
+            else if (k === 's' || k === 'S' || k === ' ') trKeys['ArrowDown'] = true;
+            else if (k === 'h' || k === 'H') trTriggerHorn();
+            else trKeys[k] = true;
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        const k = e.key;
+        if (k === 'a' || k === 'A') trKeys['ArrowLeft'] = false;
+        else if (k === 'd' || k === 'D') trKeys['ArrowRight'] = false;
+        else if (k === 'w' || k === 'W') trKeys['ArrowUp'] = false;
+        else if (k === 's' || k === 'S' || k === ' ') trKeys['ArrowDown'] = false;
+        else trKeys[k] = false;
+    });
+
+    trBannerText = '🚘 CLOUD-TRAFFIC-RACER BEREIT!';
+    trDraw();
+}
+
+function trStartGame() {
+    if (trRafId) cancelAnimationFrame(trRafId);
+    trChangeConfig();
+    trTick        = 0;
+    trStartAt     = Date.now();
+    trScore       = 0;
+    trDistMeters  = 0;
+    trOvertakes   = 0;
+    trCombo       = 1;
+    trComboTimer  = 0;
+    trWrongWaySec = 0;
+    trTimeLeft    = 90;
+    trHornFlash   = 0;
+    trBannerText  = '';
+    trTraffic     = [];
+    trPopups      = [];
+    trPlayer      = { x: 270, y: 440, w: 36, h: 68, kmh: 75, tilt: 0 };
+    trRunning     = true;
+    trUpdateHud();
+    trRafId       = requestAnimationFrame(trLoop);
+}
+
+function trTriggerHorn() {
+    if (!trRunning) {
+        trStartGame();
+        return;
+    }
+    trHornFlash = 26;
+    // Vorausfahrende Autos in unserer Spur weichen nach Möglichkeit zur Seite aus!
+    for (const v of trTraffic) {
+        if (v.dir === 1 && v.y < trPlayer.y && v.y > trPlayer.y - 260 && Math.abs(v.x - trPlayer.x) < 32) {
+            const altLane = v.lane === 3 ? 2 : (v.lane === 2 ? 3 : (v.lane === 0 ? 1 : 0));
+            const laneBlocked = trTraffic.some((o) => o !== v && o.lane === altLane && Math.abs(o.y - v.y) < 110);
+            if (!laneBlocked) {
+                v.blinker = altLane > v.lane ? 1 : -1;
+                v.blinkerTicks = 25;
+                v.lane = altLane;
+                v.targetX = TR_LANES[altLane];
+            }
+        }
+    }
+}
+
+function trSpawnVehicle() {
+    const lane = Math.floor(Math.random() * 4);
+    const x    = TR_LANES[lane];
+    // Mindestabstand zu bestehenden Fahrzeugen auf dieser Spur prüfen
+    for (const v of trTraffic) {
+        if (v.lane === lane && v.y < 140) return;
+    }
+
+    const isOncoming = (trMode === 'twoway' && lane < 2);
+    const dir        = isOncoming ? -1 : 1;
+
+    // Fahrzeugtyp bestimmen (PKW, Sportwagen, Transporter, Sattelzug-LKW, oder Raser im Polizeimodus)
+    const roll = Math.random();
+    let type = 'car';
+    let w = 36;
+    let h = 66;
+    let kmh = isOncoming ? (85 + Math.random() * 35) : (70 + Math.random() * 45);
+    let color = ['#3b82f6', '#10b981', '#eab308', '#ec4899', '#cbd5e1', '#6366f1'][Math.floor(Math.random() * 6)];
+    let isSuspect = false;
+
+    if (trMode === 'police' && !isOncoming && Math.random() < 0.25 && !trTraffic.some((t) => t.isSuspect)) {
+        type = 'suspect';
+        kmh  = 145 + Math.random() * 30;
+        color = '#ef4444';
+        isSuspect = true;
+    } else if (roll < 0.20) {
+        type = 'truck'; // Langer LKW / Sattelzug
+        w = 42;
+        h = 118;
+        kmh = isOncoming ? 75 : 65;
+        color = '#f8fafc';
+    } else if (roll < 0.36) {
+        type = 'van';
+        w = 38;
+        h = 78;
+        kmh = isOncoming ? 82 : 74;
+        color = '#fb923c';
+    }
+
+    trTraffic.push({
+        lane: lane,
+        x: x,
+        targetX: x,
+        y: -h - 20,
+        w: w,
+        h: h,
+        kmh: kmh,
+        dir: dir,
+        type: type,
+        color: color,
+        passed: false,
+        blinker: 0,
+        blinkerTicks: 0,
+        isSuspect: isSuspect,
+        hp: isSuspect ? 100 : 1
+    });
+}
+
+function trUpdateHud() {
+    const scEl = document.getElementById('trScore');
+    const spEl = document.getElementById('trSpeedKmh');
+    const ovEl = document.getElementById('trOvertakes');
+    const dsEl = document.getElementById('trDistInfo');
+
+    if (scEl) scEl.textContent = Math.round(trScore).toLocaleString('de-DE');
+    if (spEl) {
+        const k = Math.round(trPlayer.kmh);
+        spEl.textContent = k + ' km/h';
+        spEl.className = k >= 100
+            ? 'text-orange-600 dark:text-orange-400 font-extrabold text-sm'
+            : 'text-emerald-600 dark:text-emerald-400 font-extrabold text-sm';
+    }
+    if (ovEl) ovEl.textContent = trOvertakes + ' (×' + trCombo + ')';
+    if (dsEl) {
+        const km = (trDistMeters / 1000).toFixed(2).replace('.', ',') + ' km';
+        dsEl.textContent = trMode === 'timeattack' ? (km + ' · ⏱️ ' + trTimeLeft + 's') : km;
+    }
+}
+
+function trEndRun(reason) {
+    trRunning = false;
+    const earnedCash = Math.max(25, Math.round(trScore / 18) + trOvertakes * 15);
+    trGarage.cash += earnedCash;
+    trSaveGarageToCloud();
+    trRenderGarageUi();
+
+    trBannerText = reason + ' (+' + earnedCash.toLocaleString('de-DE') + ' 💰)';
+    const durSec = Math.max(1, Math.round((Date.now() - trStartAt) / 1000));
+    const kmStr  = (trDistMeters / 1000).toFixed(1).replace('.', ',') + ' km';
+    submitCloudScore('trafficracer', Math.round(trScore), durSec, kmStr + ' · ' + trOvertakes + ' Overtakes');
+}
+
+function trStep() {
+    trTick++;
+    if (trHornFlash > 0) trHornFlash--;
+    if (trComboTimer > 0) {
+        trComboTimer--;
+        if (trComboTimer === 0) trCombo = 1;
+    }
+
+    const car = trGetCurrentCarStats();
+    const rainBrakeFactor = trEnv === 'rain' ? 0.72 : 1.0;
+
+    // 1. Zeitfahren-Countdown
+    if (trMode === 'timeattack' && trTick % 60 === 0) {
+        trTimeLeft--;
+        if (trTimeLeft <= 0) {
+            trEndRun('⏱️ ZEIT ABGELAUFEN!');
+            return;
+        }
+    }
+
+    // 2. Gas, Bremse & Lenkung
+    if (trKeys['ArrowUp']) {
+        trPlayer.kmh = Math.min(car.topKmh, trPlayer.kmh + car.accel);
+    } else if (trKeys['ArrowDown']) {
+        trPlayer.kmh = Math.max(35, trPlayer.kmh - car.brake * rainBrakeFactor);
+    } else {
+        // Sanftes Ausrollen auf Reisegeschwindigkeit (70 km/h)
+        if (trPlayer.kmh > 70) trPlayer.kmh -= 0.14;
+        else if (trPlayer.kmh < 70) trPlayer.kmh += 0.18;
+    }
+
+    trPlayer.tilt *= 0.82;
+    if (trKeys['ArrowLeft']) {
+        trPlayer.x = Math.max(92, trPlayer.x - car.handling);
+        trPlayer.tilt = -0.09;
+    }
+    if (trKeys['ArrowRight']) {
+        trPlayer.x = Math.min(368, trPlayer.x + car.handling);
+        trPlayer.tilt = 0.09;
+    }
+
+    // 3. Gefahrene Distanz & laufende Punkte (ab 100 km/h schneller, im Gegenverkehr doppelt!)
+    const meterStep = (trPlayer.kmh / 3.6) / 60;
+    trDistMeters += meterStep;
+
+    const inOncomingLane = (trMode === 'twoway' && trPlayer.x < 230);
+    const speedMultiplier = trPlayer.kmh >= 100 ? (inOncomingLane ? 2.8 : 1.4) : 0.4;
+    trScore += meterStep * speedMultiplier;
+
+    // Straßenmarkierungen & Rand-Objekte scrollen
+    const roadPxSpeed = trPlayer.kmh * 0.085;
+    trRoadOffset = (trRoadOffset + roadPxSpeed) % 60;
+    for (const sc of trScenery) {
+        sc.y += roadPxSpeed;
+        if (sc.y > 560) sc.y -= 560;
+    }
+
+    // 4. Neuen Verkehr spawnen
+    if (trTick % Math.max(18, Math.floor(46 - trPlayer.kmh * 0.08)) === 0 && trTraffic.length < 9) {
+        trSpawnVehicle();
+    }
+
+    // 5. KI-Verkehr bewegen, Spurwechsel & Close-Overtake-Prüfung
+    for (let i = trTraffic.length - 1; i >= 0; i--) {
+        const v = trTraffic[i];
+        // Relativgeschwindigkeit zum Spieler:
+        // Mitfahrender Verkehr (dir=1) kommt näher, wenn trPlayer.kmh > v.kmh
+        // Gegenverkehr (dir=-1) rast mit (trPlayer.kmh + v.kmh) auf uns zu!
+        const relKmh = v.dir === 1 ? (trPlayer.kmh - v.kmh) : (trPlayer.kmh + v.kmh);
+        v.y += relKmh * 0.075;
+
+        // Sanfter Spurwechsel, falls aktiv
+        if (Math.abs(v.x - v.targetX) > 0.5) {
+            v.x += Math.sign(v.targetX - v.x) * 2.2;
+        }
+        if (v.blinkerTicks > 0) v.blinkerTicks--;
+
+        // Zufälliger KI-Spurwechsel mit Blinker
+        if (v.dir === 1 && v.type !== 'truck' && v.blinkerTicks === 0 && v.y > 40 && v.y < 300 && Math.random() < 0.004) {
+            const minLane = trMode === 'twoway' ? 2 : 0;
+            const nextL = v.lane + (Math.random() < 0.5 ? -1 : 1);
+            if (nextL >= minLane && nextL <= 3) {
+                const blocked = trTraffic.some((o) => o !== v && o.lane === nextL && Math.abs(o.y - v.y) < 110);
+                if (!blocked) {
+                    v.blinker = nextL > v.lane ? 1 : -1;
+                    v.blinkerTicks = 35;
+                    v.lane = nextL;
+                    v.targetX = TR_LANES[nextL];
+                }
+            }
+        }
+
+        // Im Polizei-Modus: Fluchtfahrzeug ("Suspect") durch dichtes Auffahren/Rammen stoppen!
+        if (v.isSuspect && Math.abs(v.x - trPlayer.x) < 42 && Math.abs(v.y - trPlayer.y) < 88) {
+            v.hp -= 2.2;
+            if (v.hp <= 0) {
+                trScore += 1200;
+                trGarage.cash += 150;
+                trPopups.push({ x: v.x, y: v.y, text: '🚓 RASER GESTOPPT! +1200', color: '#38bdf8', life: 50 });
+                trTraffic.splice(i, 1);
+                trUpdateHud();
+                continue;
+            }
+        }
+
+        // Close Overtake (Beinahe-Unfall-Überholmanöver ab 100 km/h!)
+        if (!v.passed && v.y > trPlayer.y + 18) {
+            v.passed = true;
+            const lateralDist = Math.abs(v.x - trPlayer.x);
+            if (trPlayer.kmh >= 100 && lateralDist < 68) {
+                trOvertakes++;
+                trCombo = Math.min(5, trCombo + (trComboTimer > 0 ? 1 : 0));
+                trComboTimer = 155; // ~2.5 Sekunden für nächsten Overtake
+                const bonus = (v.dir === -1 ? 200 : 100) * trCombo;
+                trScore += bonus;
+                trPopups.push({
+                    x: trPlayer.x,
+                    y: trPlayer.y - 38,
+                    text: (v.dir === -1 ? '🔥 GEGENVERKEHR ×' : '⚡ CLOSE OVERTAKE ×') + trCombo + ' (+' + bonus + ')',
+                    color: v.dir === -1 ? '#f43f5e' : '#fde047',
+                    life: 44
+                });
+            }
+        }
+
+        // Kollisionsprüfung mit Spieler-Auto
+        const hitX = Math.abs(v.x - trPlayer.x) < (v.w / 2 + trPlayer.w / 2 - 5);
+        const hitY = Math.abs(v.y - trPlayer.y) < (v.h / 2 + trPlayer.h / 2 - 6);
+        if (hitX && hitY && !v.isSuspect) {
+            if (trMode === 'timeattack') {
+                // Im Zeitfahren: starker Tempoverlust statt sofortigem Game Over
+                trPlayer.kmh = 45;
+                trCombo = 1;
+                trPopups.push({ x: trPlayer.x, y: trPlayer.y - 30, text: '💥 CRASH! TEMPOVERLUST!', color: '#fb7185', life: 35 });
+                trTraffic.splice(i, 1);
+                continue;
+            } else {
+                trEndRun('💥 CRASH BEI ' + Math.round(trPlayer.kmh) + ' KM/H!');
+                return;
+            }
+        }
+
+        // Außerhalb des Bildschirms entfernen
+        if (v.y > 640 || v.y < -220) {
+            trTraffic.splice(i, 1);
+        }
+    }
+
+    trUpdateHud();
+}
+
+function trDrawVehicle(ctx, x, y, w, h, color, stripeColor, dir, isTruck, blinker, blinkerTicks, isPolice, isPlayer, tilt = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (tilt !== 0) ctx.rotate(tilt);
+    if (dir === -1) ctx.scale(1, -1); // Gegenverkehr schaut nach unten
+
+    // Schatten
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(-w / 2 + 3, -h / 2 + 4, w, h);
+
+    // Reifen
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(-w / 2 - 2, -h / 2 + 8, 4, 12);
+    ctx.fillRect(w / 2 - 2, -h / 2 + 8, 4, 12);
+    ctx.fillRect(-w / 2 - 2, h / 2 - 20, 4, 12);
+    ctx.fillRect(w / 2 - 2, h / 2 - 20, 4, 12);
+
+    // Karosserie
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, isTruck ? 4 : 8);
+    ctx.fill();
+
+    if (isTruck) {
+        // Sattelzug-Führerhaus + heller Auflieger
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 24);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(-w / 2 + 2, -h / 2 + 28, w - 4, h - 32);
+    } else {
+        // Rennstreifen
+        if (stripeColor) {
+            ctx.fillStyle = stripeColor;
+            ctx.fillRect(-3, -h / 2 + 2, 6, h - 4);
+        }
+        // Windschutzscheibe & Heckscheibe
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(-w / 2 + 5, -h / 2 + 14, w - 10, 14);
+        ctx.fillRect(-w / 2 + 6, h / 2 - 18, w - 12, 10);
+    }
+
+    // Scheinwerfer vorn & Rücklichter hinten
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(-w / 2 + 4, -h / 2, 7, 3);
+    ctx.fillRect(w / 2 - 11, -h / 2, 7, 3);
+
+    ctx.fillStyle = (isPlayer && trKeys['ArrowDown']) ? '#ff0000' : '#dc2626';
+    ctx.fillRect(-w / 2 + 4, h / 2 - 3, 8, 3);
+    ctx.fillRect(w / 2 - 12, h / 2 - 3, 8, 3);
+
+    // Gelber Blinker beim Spurwechsel
+    if (blinkerTicks > 0 && Math.floor(blinkerTicks / 4) % 2 === 0) {
+        ctx.fillStyle = '#facc15';
+        const bx = blinker < 0 ? -w / 2 - 1 : w / 2 - 4;
+        ctx.fillRect(bx, -h / 2 + 2, 5, 5);
+        ctx.fillRect(bx, h / 2 - 7, 5, 5);
+    }
+
+    // Polizei-Blaulichtbalken auf dem Dach
+    if (isPolice) {
+        const flashBlue = (trTick % 12) < 6;
+        ctx.fillStyle = flashBlue ? '#3b82f6' : '#ef4444';
+        ctx.fillRect(-10, -4, 10, 5);
+        ctx.fillStyle = flashBlue ? '#ef4444' : '#3b82f6';
+        ctx.fillRect(0, -4, 10, 5);
+    }
+
+    ctx.restore();
+}
+
+function trDraw() {
+    const cvs = document.getElementById('trCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    // 1. Umgebungs-Rand (Wüste, Nacht oder Regen)
+    if (trEnv === 'desert') {
+        ctx.fillStyle = '#d97706';
+    } else if (trEnv === 'rain') {
+        ctx.fillStyle = '#1e293b';
+    } else {
+        ctx.fillStyle = '#090d16';
+    }
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // 2. 4-spurige Asphalt-Fahrbahn (x = 70 .. 390)
+    ctx.fillStyle = trEnv === 'rain' ? '#1e293b' : '#18181b';
+    ctx.fillRect(70, 0, 320, cvs.height);
+
+    // Rot-weiße Randcurbs / Leitplanken
+    for (let y = -60 + trRoadOffset; y < cvs.height; y += 30) {
+        ctx.fillStyle = Math.floor((y - trRoadOffset) / 30) % 2 === 0 ? '#ef4444' : '#f8fafc';
+        ctx.fillRect(62, y, 8, 30);
+        ctx.fillRect(390, y, 8, 30);
+    }
+
+    // Spur-Markierungen (bei Gegenverkehr ist die Mittellinie bei x=230 doppelt durchgezogen gelb!)
+    for (let laneIdx = 1; laneIdx <= 3; laneIdx++) {
+        const lx = 70 + laneIdx * 80;
+        if (laneIdx === 2 && trMode === 'twoway') {
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(lx - 4, 0, 2.5, cvs.height);
+            ctx.fillRect(lx + 1.5, 0, 2.5, cvs.height);
+        } else {
+            ctx.fillStyle = 'rgba(248, 250, 252, 0.65)';
+            for (let y = -60 + trRoadOffset; y < cvs.height; y += 60) {
+                ctx.fillRect(lx - 1.5, y, 3, 32);
+            }
+        }
+    }
+
+    // Straßenrand-Dekoration (Palmen/Kakteen/Laternen)
+    for (const sc of trScenery) {
+        const sx = sc.side < 0 ? 32 : 428;
+        if (sc.type === 'lamp') {
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(sx - 3, sc.y - 3, 6, 6);
+            if (trEnv === 'night') {
+                ctx.fillStyle = 'rgba(254, 240, 138, 0.16)';
+                ctx.beginPath();
+                ctx.arc(sc.side < 0 ? 68 : 392, sc.y, 28, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else {
+            ctx.fillStyle = trEnv === 'desert' ? '#15803d' : '#065f46';
+            ctx.beginPath();
+            ctx.arc(sx, sc.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // 3. Scheinwerfer-Lichtkegel bei Nacht oder Lichthupe
+    if (trEnv === 'night' || trHornFlash > 0) {
+        const beamGrad = ctx.createLinearGradient(trPlayer.x, trPlayer.y - 30, trPlayer.x, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
+        beamGrad.addColorStop(0, trHornFlash > 0 ? 'rgba(254, 249, 195, 0.55)' : 'rgba(254, 240, 138, 0.30)');
+        beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        ctx.moveTo(trPlayer.x - 14, trPlayer.y - 32);
+        ctx.lineTo(trPlayer.x - 52, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
+        ctx.lineTo(trPlayer.x + 52, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
+        ctx.lineTo(trPlayer.x + 14, trPlayer.y - 32);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // 4. KI-Verkehr zeichnen
+    for (const v of trTraffic) {
+        trDrawVehicle(
+            ctx,
+            v.x,
+            v.y,
+            v.w,
+            v.h,
+            v.color,
+            v.isSuspect ? '#fde047' : null,
+            v.dir,
+            v.type === 'truck',
+            v.blinker,
+            v.blinkerTicks,
+            false,
+            false,
+            0
+        );
+        if (v.isSuspect) {
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('🎯 RASER (' + Math.ceil(v.hp) + '%)', v.x, v.y - v.h / 2 - 8);
+        }
+    }
+
+    // 5. Eigenes Fahrzeug zeichnen
+    const myCar = trGetCurrentCarStats();
+    trDrawVehicle(
+        ctx,
+        trPlayer.x,
+        trPlayer.y,
+        trPlayer.w,
+        trPlayer.h,
+        myCar.color,
+        myCar.stripe,
+        1,
+        false,
+        0,
+        0,
+        !!myCar.isPolice || trMode === 'police',
+        true,
+        trPlayer.tilt
+    );
+
+    // 6. Regentropfen bei Regen-Autobahn
+    if (trEnv === 'rain') {
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.40)';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 32; i++) {
+            const rx = (i * 73 + trTick * 9) % cvs.width;
+            const ry = (i * 97 + trTick * 17) % cvs.height;
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx - 3, ry + 14);
+            ctx.stroke();
+        }
+    }
+
+    // 7. Schwebende Close-Overtake-Popups
+    for (let i = trPopups.length - 1; i >= 0; i--) {
+        const p = trPopups[i];
+        ctx.fillStyle = p.color;
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+        p.y -= 0.8;
+        p.life--;
+        if (p.life <= 0) trPopups.splice(i, 1);
+    }
+
+    // 8. Digital-Tacho oben links im Canvas (ab 100 km/h leuchtet "100+ BONUS AKTIV")
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.fillRect(12, 12, 148, 42);
+    ctx.fillStyle = trPlayer.kmh >= 100 ? '#fb923c' : '#34d399';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(Math.round(trPlayer.kmh) + ' KM/H', 20, 34);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(trPlayer.kmh >= 100 ? '⚡ OVERTAKE-BONUS AKTIV' : 'AB 100 KM/H: BONUS!', 20, 48);
+
+    // 9. Start- / Crash-Banner
+    if (!trRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.82)';
+        ctx.fillRect(0, cvs.height / 2 - 52, cvs.width, 104);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fb923c';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText(trBannerText || '🚘 CLOUD-TRAFFIC-RACER', cvs.width / 2, cvs.height / 2 - 14);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Knappe Überholmanöver ab 100 km/h bringen Kombo-Punkte & 💰 Credits!', cvs.width / 2, cvs.height / 2 + 10);
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('Klicke auf „▶️ Auf die Autobahn!“ oder drücke Taste H / Pfeiltasten', cvs.width / 2, cvs.height / 2 + 32);
+    }
+}
+
+function trLoop() {
+    if (!trRunning) {
+        trDraw();
+        return;
+    }
+    trStep();
+    trDraw();
+    if (trRunning) {
+        trRafId = requestAnimationFrame(trLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
+    trInit();
     lemInit();
     ninjaInit();
     canabaltInit();
