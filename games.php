@@ -180,6 +180,14 @@ function getGamesCatalog(): array
             'desc'     => 'Spiele gegen die Computer-KI oder fordere andere Cloud-Benutzer zum Live-Duell heraus!',
             'color'    => 'from-red-500 to-amber-500',
         ],
+        'wow' => [
+            'key'      => 'wow',
+            'title'    => 'World of MiniCloud',
+            'icon'     => '⚔️',
+            'category' => 'MMO-RPG',
+            'desc'     => 'Fantasy-Rollenspiel im WoW-Stil: 3 Klassen, Quests, 4 Zonen, Raid-Bosse, Epischer Loot & Live-Mitspieler!',
+            'color'    => 'from-amber-600 to-red-700',
+        ],
     ];
 }
 
@@ -564,6 +572,45 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         exit;
     }
 
+    // 7. Live-Helden anderer Cloud-Benutzer in "World of MiniCloud" abrufen
+    if ($action === 'wow_sync') {
+        session_write_close();
+        $peers = [];
+        try {
+            $stmtPeers = $pdo->prepare(
+                "SELECT s.user_id, u.username, s.state_json, s.updated_at
+                 FROM `game_saves` s
+                 INNER JOIN `users` u ON u.id = s.user_id
+                 WHERE s.game_key = 'wow'
+                   AND s.user_id != :uid
+                   AND s.updated_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+                 ORDER BY s.updated_at DESC
+                 LIMIT 12"
+            );
+            $stmtPeers->execute([':uid' => $userId]);
+            foreach ($stmtPeers->fetchAll() as $pRow) {
+                $st = json_decode((string)$pRow['state_json'], true);
+                if (!is_array($st)) {
+                    continue;
+                }
+                $peers[] = [
+                    'username'   => (string)$pRow['username'],
+                    'hero_class' => (string)($st['heroClass'] ?? 'paladin'),
+                    'level'      => max(1, (int)($st['level'] ?? 1)),
+                    'zone'       => (string)($st['zone'] ?? 'elwynn'),
+                    'x'          => (float)($st['x'] ?? 320),
+                    'y'          => (float)($st['y'] ?? 220),
+                    'hp'         => max(1, (int)($st['hp'] ?? 100)),
+                    'max_hp'     => max(1, (int)($st['maxHp'] ?? 100)),
+                    'gear_score' => max(0, (int)($st['gearScore'] ?? 10)),
+                ];
+            }
+        } catch (Throwable) {
+        }
+        echo json_encode(['ok' => true, 'peers' => $peers], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     echo json_encode(['ok' => false, 'error' => 'Unbekannte Aktion.']);
     exit;
 }
@@ -660,7 +707,7 @@ $csrfToken = getCsrfToken();
                         MiniCloud Spiele-Zentrale &amp; Pausenraum
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                        9 Spiele &middot; Cloud-Highscores &middot; Live-Duelle
+                        10 Spiele &middot; Cloud-Highscores &middot; Live-Duelle &amp; RPG
                     </span>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -680,8 +727,8 @@ $csrfToken = getCsrfToken();
         </div>
     </div>
 
-    <!-- SPIELAUSWAHL-LEISTE (9 SPIEL-KARTEN) -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
+    <!-- SPIELAUSWAHL-LEISTE (10 SPIEL-KARTEN) -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
         <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
             <?php
             $gKeyStr = (string)$gKey;
@@ -1080,6 +1127,172 @@ $csrfToken = getCsrfToken();
                                 Wähle links eine Partie aus oder starte ein neues Duell.
                             </p>
                             <div id="cloudActiveMatchBoard"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. SPIEL: WORLD OF MINICLOUD (FANTASY ACTION-RPG / MMORPG-LITE) -->
+            <div id="gamePanel-wow" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>⚔️ World of MiniCloud</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                                💾 Charakter-Sync &amp; Live-Mitspieler
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Bewegung: `W A S D` / Pfeiltasten · Zauberleiste: `1`–`5` · Heiltrank: `Q` · Ziel wechseln: `Tab` oder Klick auf Gegner.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Klassen-Auswahl -->
+                        <select id="wowClassSelect" onchange="wowChangeClass(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="paladin">🛡️ Paladin / Krieger</option>
+                            <option value="mage">🔥 Erzmagier</option>
+                            <option value="ranger">🏹 Waldläufer / Jäger</option>
+                        </select>
+
+                        <!-- Zonen- / Dungeon-Flugmeister -->
+                        <select id="wowZoneSelect" onchange="wowChangeZone(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-xs font-bold text-amber-900 dark:text-amber-200 cursor-pointer">
+                            <option value="elwynn">🌲 Goldhain &amp; Elwynn (Stufe 1–5)</option>
+                            <option value="duskwood">🌙 Dämmerwald (Stufe 5–10)</option>
+                            <option value="moltencore">🔥 Geschmolzener Kern [Raid] (Stufe 10+)</option>
+                            <option value="icecrown">❄️ Eiskronenzitadelle [Raid] (Stufe 16+)</option>
+                        </select>
+
+                        <button type="button" onclick="wowTeleportTown()"
+                                title="Ruhestein: Zurück zum Heilbrunnen im Lager"
+                                class="px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold cursor-pointer">
+                            💎 Ruhestein
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Helden-Statuszeile (Stufe, Kampfwert, Gold, Tränke) -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Stufe:</span>
+                        <strong id="wowHeroLevelBadge" class="text-amber-600 dark:text-amber-400 font-extrabold">Lv. 1</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">GearScore:</span>
+                        <strong id="wowGearScoreBadge" class="text-purple-600 dark:text-purple-400 font-extrabold">25</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Schaden / Krit:</span>
+                        <strong id="wowDamageBadge" class="text-rose-600 dark:text-rose-400 font-extrabold">18 (12%)</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-between">
+                        <span class="text-amber-800 dark:text-amber-300">🪙 Gold:</span>
+                        <strong id="wowGoldBadge" class="text-amber-700 dark:text-amber-300 font-extrabold">50</strong>
+                    </div>
+                    <div class="col-span-2 sm:col-span-1 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between">
+                        <span class="text-emerald-800 dark:text-emerald-300">🧪 Tränke:</span>
+                        <strong id="wowPotionsBadge" class="text-emerald-700 dark:text-emerald-300 font-extrabold">3</strong>
+                    </div>
+                </div>
+
+                <!-- SPIELWELT-CANVAS (MIT WOW-UNIT-FRAMES, QUEST-KOMPASS & BOSS-MECHANIKEN) -->
+                <div class="relative rounded-2xl overflow-hidden border-2 border-amber-500/50 dark:border-amber-600/50 bg-slate-950 shadow-lg select-none">
+                    <canvas id="wowCanvas" width="760" height="440" class="w-full h-auto block cursor-crosshair touch-none"></canvas>
+                </div>
+
+                <!-- KLASSISCHE WOW-AKTIONSLEISTE (TASTEN 1-5 + HEILTRANK Q + ZIELWECHSEL TAB) -->
+                <div class="p-2.5 rounded-2xl bg-slate-900 border border-amber-500/40 shadow-inner flex flex-wrap items-center justify-between gap-2">
+                    <div id="wowActionBarSlots" class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <!-- Wird dynamisch je nach Klasse gerendert -->
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="wowUsePotion()"
+                                id="wowPotionBtn"
+                                class="relative px-3 py-2 rounded-xl bg-rose-950/90 hover:bg-rose-900 border border-rose-500/70 text-rose-100 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                                title="Heiltrank trinken (Taste Q) – Stellt 45 % LP &amp; Mana wieder her">
+                            <span class="text-base">🧪</span>
+                            <div class="text-left leading-tight">
+                                <div class="text-[10px] text-rose-300">[Q] Trank</div>
+                                <div id="wowPotionBtnCount" class="text-xs font-extrabold">3×</div>
+                            </div>
+                        </button>
+                        <button type="button" onclick="wowCycleTarget()"
+                                class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold cursor-pointer"
+                                title="Nächstes Monster ins Visier nehmen (Taste Tab)">
+                            🎯 [Tab] Ziel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mobile Touch-Steuerung (nur auf kleinen Bildschirmen sichtbar) -->
+                <div class="flex sm:hidden items-center justify-center gap-2 pt-1">
+                    <button type="button" onpointerdown="wowTouchMove(-1,0)" onpointerup="wowTouchMove(0,0)" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 font-bold text-sm">◀</button>
+                    <button type="button" onpointerdown="wowTouchMove(0,-1)" onpointerup="wowTouchMove(0,0)" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 font-bold text-sm">▲</button>
+                    <button type="button" onpointerdown="wowTouchMove(0,1)" onpointerup="wowTouchMove(0,0)" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 font-bold text-sm">▼</button>
+                    <button type="button" onpointerdown="wowTouchMove(1,0)" onpointerup="wowTouchMove(0,0)" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 font-bold text-sm">▶</button>
+                </div>
+
+                <!-- UNTERER BEREICH: QUEST-LOGBUCH (LINKS) & AUSRÜSTUNG / BEUTE-RUCKSACK / SCHMIED (RECHTS) -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 pt-1">
+                    <!-- Quest-Log & Schmied-Händler -->
+                    <div class="md:col-span-5 space-y-3">
+                        <div class="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/80 dark:border-amber-800/60 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-xs font-extrabold uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                                    <span>📜</span>
+                                    <span>Aktive Quests &amp; Kopfgelder</span>
+                                </h3>
+                                <span id="wowCompletedQuestsBadge" class="text-[11px] font-bold text-amber-700 dark:text-amber-400">0 erledigt</span>
+                            </div>
+                            <div id="wowQuestListBox" class="space-y-2 text-xs"></div>
+                        </div>
+
+                        <!-- Dorf-Schmied & Alchemist -->
+                        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                            <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                ⚒️ Dorf-Schmied &amp; Alchemist
+                            </h3>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <button type="button" onclick="wowBuyPotion()"
+                                        class="p-2 rounded-xl bg-white dark:bg-slate-900 hover:border-emerald-500 border border-slate-200 dark:border-slate-700 text-left cursor-pointer transition-colors">
+                                    <div class="font-bold text-slate-900 dark:text-white">🧪 Heiltrank kaufen</div>
+                                    <div class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Kosten: 25 🪙 Gold</div>
+                                </button>
+                                <button type="button" onclick="wowGambleMysteryItem()"
+                                        class="p-2 rounded-xl bg-white dark:bg-slate-900 hover:border-purple-500 border border-slate-200 dark:border-slate-700 text-left cursor-pointer transition-colors">
+                                    <div class="font-bold text-slate-900 dark:text-white">🎁 Mysteriöse Truhe</div>
+                                    <div class="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">Kosten: 80 🪙 (Zufalls-Item!)</div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Angelegte Ausrüstung & Beute-Rucksack -->
+                    <div class="md:col-span-7 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                🛡️ Angelegte Helden-Ausrüstung (4 Slots)
+                            </h3>
+                            <button type="button" onclick="wowSellAllBackpack()"
+                                    class="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/70 hover:bg-amber-200 text-amber-900 dark:text-amber-200 text-[11px] font-bold cursor-pointer">
+                                🪙 Rucksack-Beute verkaufen
+                            </button>
+                        </div>
+
+                        <!-- 4 Ausrüstungs-Slots -->
+                        <div id="wowEquippedGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs"></div>
+
+                        <!-- Beute-Rucksack -->
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                    🎒 Beute-Rucksack (Klick zum Anlegen)
+                                </span>
+                                <span id="wowBagCountLabel" class="text-[11px] text-slate-400">0 / 12 Plätze</span>
+                            </div>
+                            <div id="wowBackpackGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-44 overflow-y-auto text-xs"></div>
                         </div>
                     </div>
                 </div>
@@ -2587,10 +2800,1421 @@ async function playCloudMatchMove(r, c) {
 }
 
 // =============================================================================
+// SPIEL 10: WORLD OF MINICLOUD (FANTASY ACTION-RPG / MMORPG-LITE)
+// =============================================================================
+const WOW_CLASSES = {
+    paladin: {
+        name: 'Paladin',
+        icon: '🛡️',
+        color: '#f59e0b',
+        baseHp: 180,
+        baseMp: 100,
+        baseDmg: 16,
+        range: 64,
+        spells: [
+            { key: '1', name: 'Kreuzfahrerstoß', icon: '⚔️', cd: 0.7, mp: 0, desc: 'Kräftiger Nahkampfhieb (+10 Mana)' },
+            { key: '2', name: 'Göttlicher Sturm', icon: '🌪️', cd: 4.0, mp: 20, desc: 'Trifft alle Feinde im Umkreis (Flächenschaden)' },
+            { key: '3', name: 'Richturteil', icon: '⚡', cd: 5.5, mp: 22, desc: 'Schleudert einen heiligen Hammer auf das Ziel & betäubt es kurz' },
+            { key: '4', name: 'Heiliges Licht', icon: '✨', cd: 7.5, mp: 28, desc: 'Heilt sofort 40 % deiner maximalen Lebenspunkte' },
+            { key: '5', name: 'Zornige Vergeltung', icon: '🪽', cd: 14.0, mp: 30, desc: '6 Sek. +55 % Schaden, +25 % Krit & Schadensschild' },
+        ]
+    },
+    mage: {
+        name: 'Erzmagier',
+        icon: '🔥',
+        color: '#38bdf8',
+        baseHp: 130,
+        baseMp: 160,
+        baseDmg: 21,
+        range: 220,
+        spells: [
+            { key: '1', name: 'Feuerball', icon: '🔥', cd: 0.75, mp: 0, desc: 'Schleudert einen Feuerball auf das Ziel (+12 Mana)' },
+            { key: '2', name: 'Frostnova', icon: '❄️', cd: 5.5, mp: 24, desc: 'Friert alle Feinde um dich herum ein & verlangsamt sie stark' },
+            { key: '3', name: 'Flammenstoß', icon: '☄️', cd: 5.0, mp: 28, desc: 'Mächtige Feuersäule am Ort deines Ziels (Flächenschaden)' },
+            { key: '4', name: 'Blinzeln & Eisbarriere', icon: '🌀', cd: 7.0, mp: 25, desc: 'Teleportiert dich ein Stück & heilt 32 % LP' },
+            { key: '5', name: 'Pyroschlag', icon: '🌋', cd: 12.0, mp: 35, desc: 'Gigantischer garantierter Krit-Feuerball + Arkane Macht' },
+        ]
+    },
+    ranger: {
+        name: 'Waldläufer',
+        icon: '🏹',
+        color: '#22c55e',
+        baseHp: 150,
+        baseMp: 120,
+        baseDmg: 19,
+        range: 210,
+        spells: [
+            { key: '1', name: 'Gezielter Schuss', icon: '🏹', cd: 0.65, mp: 0, desc: 'Präziser Pfeilschuss aus der Distanz (+10 Fokus)' },
+            { key: '2', name: 'Mehrfachschuss', icon: '🌧️', cd: 4.0, mp: 22, desc: 'Feuert eine Salve auf bis zu 5 Gegner gleichzeitig' },
+            { key: '3', name: 'Schlangenbiss', icon: '🐍', cd: 5.0, mp: 20, desc: 'Vergiftet & verlangsamt das Ziel mit hohem Bonusschaden' },
+            { key: '4', name: 'Naturheilung', icon: '🌿', cd: 7.5, mp: 25, desc: 'Stellt sofort 38 % LP wieder her & erhöht dein Lauftempo' },
+            { key: '5', name: 'Schnellfeuer', icon: '🦅', cd: 13.5, mp: 30, desc: '6 Sek. +60 % Angriffskraft & doppelte Krit-Chance' },
+        ]
+    }
+};
+
+const WOW_ZONES = {
+    elwynn: {
+        id: 'elwynn',
+        name: 'Goldhain & Wald von Elwynn',
+        minLv: 1,
+        bgTop: '#14331d',
+        bgBot: '#1d4527',
+        campColor: '#2e5938',
+        npcName: 'Marschall Dughan',
+        npcIcon: '💂',
+        questTitle: 'Kopfgeld: Die Gnoll-Plage von Elwynn',
+        questTargetKills: 6,
+        questRewardXp: 140,
+        questRewardGold: 65,
+        mobs: [
+            { name: 'Waldwolf', icon: '🐺', hp: 55, dmg: 7, xp: 24, gold: 8, lv: 1, speed: 1.05 },
+            { name: 'Kobold-Gräber', icon: '🕯️', hp: 70, dmg: 9, xp: 30, gold: 11, lv: 2, speed: 0.95 },
+            { name: 'Defias-Bandit', icon: '🗡️', hp: 90, dmg: 11, xp: 38, gold: 14, lv: 3, speed: 1.1 },
+        ],
+        boss: {
+            name: 'Hogger der Gnoll-Häuptling',
+            quote: 'Grrr! Keine Kerze für euch!',
+            icon: '🐗',
+            hp: 360,
+            dmg: 22,
+            xp: 165,
+            gold: 60,
+            lv: 5
+        }
+    },
+    duskwood: {
+        id: 'duskwood',
+        name: 'Dämmerwald & Rabenflucht',
+        minLv: 5,
+        bgTop: '#17162b',
+        bgBot: '#231f3d',
+        campColor: '#2d284d',
+        npcName: 'Kommandant Althea',
+        npcIcon: '🧙‍♀️',
+        questTitle: 'Säubert die Katakomben von Rabenflucht',
+        questTargetKills: 7,
+        questRewardXp: 320,
+        questRewardGold: 130,
+        mobs: [
+            { name: 'Skelettkrieger', icon: '💀', hp: 160, dmg: 18, xp: 65, gold: 20, lv: 6, speed: 1.05 },
+            { name: 'Nachtweber-Spinne', icon: '🕷️', hp: 195, dmg: 22, xp: 78, gold: 24, lv: 7, speed: 1.2 },
+            { name: 'Seuchen-Ghul', icon: '🧟', hp: 230, dmg: 25, xp: 92, gold: 28, lv: 8, speed: 1.0 },
+        ],
+        boss: {
+            name: 'Stitches die Monstrosität',
+            quote: 'Stitches will spielen!!',
+            icon: '👹',
+            hp: 920,
+            dmg: 45,
+            xp: 390,
+            gold: 135,
+            lv: 10
+        }
+    },
+    moltencore: {
+        id: 'moltencore',
+        name: 'Geschmolzener Kern [Raid]',
+        minLv: 10,
+        bgTop: '#2e0d08',
+        bgBot: '#47150b',
+        campColor: '#5c2012',
+        npcName: 'Herzog Hydraxis',
+        npcIcon: '🌊',
+        questTitle: 'Bezwingt die Diener des Feuerfürsten',
+        questTargetKills: 8,
+        questRewardXp: 700,
+        questRewardGold: 260,
+        mobs: [
+            { name: 'Feuerelementar', icon: '🔥', hp: 380, dmg: 38, xp: 160, gold: 45, lv: 11, speed: 1.1 },
+            { name: 'Uralter Kernhund', icon: '🐕‍🦺', hp: 460, dmg: 44, xp: 195, gold: 55, lv: 13, speed: 1.2 },
+            { name: 'Flammenwaker-Wache', icon: '🐍', hp: 540, dmg: 50, xp: 230, gold: 65, lv: 14, speed: 1.05 },
+        ],
+        boss: {
+            name: 'Ragnaros der Feuerfürst',
+            quote: 'ZU FRÜH! Ihr habt mich zu früh geweckt! SPÜRT DIE FLAMMEN VON SULFURON!',
+            icon: '🌋',
+            hp: 2400,
+            dmg: 85,
+            xp: 950,
+            gold: 320,
+            lv: 16
+        }
+    },
+    icecrown: {
+        id: 'icecrown',
+        name: 'Eiskronenzitadelle [Raid]',
+        minLv: 16,
+        bgTop: '#0b1e33',
+        bgBot: '#122f4d',
+        campColor: '#1b4269',
+        npcName: 'Hochlord Tirion',
+        npcIcon: '⚜️',
+        questTitle: 'Sturm auf den Frostthron',
+        questTargetKills: 8,
+        questRewardXp: 1400,
+        questRewardGold: 480,
+        mobs: [
+            { name: 'Todesritter der Geißel', icon: '🗡️', hp: 820, dmg: 70, xp: 360, gold: 95, lv: 17, speed: 1.12 },
+            { name: 'Frostwyrm-Brut', icon: '🐉', hp: 980, dmg: 82, xp: 430, gold: 115, lv: 19, speed: 1.15 },
+            { name: 'Val\'kyr-Schattenwächter', icon: '🪽', hp: 1150, dmg: 92, xp: 510, gold: 135, lv: 20, speed: 1.2 },
+        ],
+        boss: {
+            name: 'Der Lichkönig (Arthas)',
+            quote: 'Frostgram hungert… Eure Seelen gehören der Geißel!',
+            icon: '👑',
+            hp: 5200,
+            dmg: 145,
+            xp: 2200,
+            gold: 680,
+            lv: 25
+        }
+    }
+};
+
+const WOW_RARITIES = [
+    { key: 'common',    name: 'Gewöhnlich',   color: '#cbd5e1', badgeCls: 'text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700', mult: 1.0 },
+    { key: 'uncommon',  name: 'Ungewöhnlich', color: '#22c55e', badgeCls: 'text-emerald-600 dark:text-emerald-400 border-emerald-400/60', mult: 1.3 },
+    { key: 'rare',      name: 'Selten',       color: '#3b82f6', badgeCls: 'text-blue-600 dark:text-blue-400 border-blue-400/70', mult: 1.65 },
+    { key: 'epic',      name: 'Episch',       color: '#a855f7', badgeCls: 'text-purple-600 dark:text-purple-400 border-purple-400/80', mult: 2.15 },
+    { key: 'legendary', name: 'Legendär',     color: '#f97316', badgeCls: 'text-orange-500 dark:text-orange-400 border-orange-500', mult: 2.85 },
+];
+
+const WOW_SLOTS = {
+    weapon:  { label: 'Waffe',      icon: '⚔️', names: ['Klinge des Kreuzfahrers', 'Zauberstab von Dalaran', 'Langbogen der Waldläufer', 'Aschenbringer', 'Sulfuras, Hand von Ragnaros', 'Frostgram-Runenklinge'] },
+    armor:   { label: 'Brustpanzer', icon: '🛡️', names: ['Plattenrüstung der Allianz', 'Roben des Erzmagiers', 'Drachenschuppen-Harnisch', 'T2-Rüstung des Richturteils', 'Eiskronen-Prunkharnisch'] },
+    ring:    { label: 'Ring',       icon: '💍', names: ['Siegelring von Sturmwind', 'Band des Kirin Tor', 'Feuerring des Kerns', 'Aschering des unendlichen Mutes'] },
+    trinket: { label: 'Amulett',    icon: '📿', names: ['Talisman des Lichts', 'Auge von Sulfuras', 'Drachenzahn-Talisman', 'Willensstärke des Todesbringers'] },
+};
+
+let wowHero = {
+    heroClass: 'paladin',
+    level: 1,
+    xp: 0,
+    nextXp: 100,
+    x: 110,
+    y: 220,
+    hp: 180,
+    maxHp: 180,
+    mp: 100,
+    maxMp: 100,
+    gold: 60,
+    potions: 3,
+    zone: 'elwynn',
+    questKills: 0,
+    questsCompleted: 0,
+    bossKills: 0,
+    buffUntil: 0,
+    speedUntil: 0,
+    equipped: {
+        weapon:  { id: 'w0', slot: 'weapon',  name: 'Knappenschwert von Sturmwind', rarity: 'common', dmg: 5, hp: 10, crit: 2, gs: 12, price: 10 },
+        armor:   { id: 'a0', slot: 'armor',   name: 'Wams der Bürgerwehr',          rarity: 'common', dmg: 2, hp: 25, crit: 1, gs: 12, price: 10 },
+        ring:    null,
+        trinket: null,
+    },
+    backpack: []
+};
+
+let wowKeysDown     = {};
+let wowTouchDir     = { dx: 0, dy: 0 };
+let wowCooldowns    = [0, 0, 0, 0, 0];
+let wowMobs         = [];
+let wowTargetId     = null;
+let wowProjectiles  = [];
+let wowFloatTexts   = [];
+let wowVisualRings  = [];
+let wowGroundHazards= [];
+let wowScenery      = [];
+let wowPeerHeroes   = [];
+let wowLastFrameTs  = 0;
+let wowLastAutoAtk  = 0;
+let wowInitialized  = false;
+
+function wowCalcStats() {
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    let bonusDmg  = 0;
+    let bonusHp   = 0;
+    let bonusCrit = 8;
+    let gearScore = 0;
+
+    for (const slotKey of ['weapon', 'armor', 'ring', 'trinket']) {
+        const it = wowHero.equipped[slotKey];
+        if (it) {
+            bonusDmg  += Number(it.dmg) || 0;
+            bonusHp   += Number(it.hp) || 0;
+            bonusCrit += Number(it.crit) || 0;
+            gearScore += Number(it.gs) || 0;
+        }
+    }
+
+    const lv = wowHero.level;
+    const maxHp = Math.round(cls.baseHp + (lv - 1) * 34 + bonusHp);
+    const maxMp = Math.round(cls.baseMp + (lv - 1) * 14);
+    let dmg     = Math.round(cls.baseDmg + (lv - 1) * 5.5 + bonusDmg);
+    let critPct = Math.min(65, Math.round(bonusCrit + lv * 0.6));
+
+    if (performance.now() < wowHero.buffUntil) {
+        dmg     = Math.round(dmg * 1.55);
+        critPct = Math.min(85, critPct + 25);
+    }
+
+    wowHero.maxHp     = maxHp;
+    wowHero.maxMp     = maxMp;
+    wowHero.hp        = Math.min(wowHero.hp, maxHp);
+    wowHero.mp        = Math.min(wowHero.mp, maxMp);
+    wowHero.gearScore = gearScore;
+    wowHero.totalDmg  = dmg;
+    wowHero.critPct   = critPct;
+    wowHero.nextXp    = Math.round(100 * Math.pow(1.28, lv - 1));
+}
+
+function wowGetPowerScore() {
+    wowCalcStats();
+    return Math.round(wowHero.level * 150 + (wowHero.gearScore || 0) * 4 + (wowHero.questsCompleted || 0) * 80 + (wowHero.bossKills || 0) * 120);
+}
+
+function wowInit() {
+    if (SAVED_GAME_STATES['wow']) {
+        try {
+            const saved = JSON.parse(SAVED_GAME_STATES['wow']);
+            if (saved && typeof saved === 'object' && saved.level) {
+                wowHero = Object.assign(wowHero, saved);
+                if (!WOW_CLASSES[wowHero.heroClass]) wowHero.heroClass = 'paladin';
+                if (!WOW_ZONES[wowHero.zone]) wowHero.zone = 'elwynn';
+                if (!Array.isArray(wowHero.backpack)) wowHero.backpack = [];
+            }
+        } catch (e) {}
+    }
+
+    const clsSel = document.getElementById('wowClassSelect');
+    if (clsSel) clsSel.value = wowHero.heroClass;
+    const znSel = document.getElementById('wowZoneSelect');
+    if (znSel) znSel.value = wowHero.zone;
+
+    wowCalcStats();
+    wowHero.hp = wowHero.maxHp;
+    wowHero.mp = wowHero.maxMp;
+    wowBuildZone(wowHero.zone, false);
+    wowRenderActionBar();
+    wowRenderUI();
+
+    const cv = document.getElementById('wowCanvas');
+    if (cv && !wowInitialized) {
+        wowInitialized = true;
+        cv.addEventListener('pointerdown', (ev) => {
+            const rect = cv.getBoundingClientRect();
+            const scaleX = cv.width / rect.width;
+            const scaleY = cv.height / rect.height;
+            const cx = (ev.clientX - rect.left) * scaleX;
+            const cy = (ev.clientY - rect.top) * scaleY;
+
+            // Klick auf Questgeber im Lager?
+            if (Math.hypot(cx - 88, cy - 125) < 34) {
+                wowAddFloatText(88, 95, '📜 „Besiegt die Feinde im Osten!“', '#fbbf24', true);
+                return;
+            }
+
+            // Klick auf ein Monster -> ins Visier nehmen & angreifen
+            let bestMob = null;
+            let bestDist = 48;
+            for (const m of wowMobs) {
+                if (m.dead) continue;
+                const d = Math.hypot(cx - m.x, cy - m.y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestMob = m;
+                }
+            }
+            if (bestMob) {
+                wowTargetId = bestMob.id;
+            }
+        });
+        requestAnimationFrame(wowGameLoop);
+    }
+}
+
+function wowSaveHeroProgress(submitHighscore = false) {
+    wowCalcStats();
+    const stateToSave = {
+        heroClass: wowHero.heroClass,
+        level: wowHero.level,
+        xp: wowHero.xp,
+        x: Math.round(wowHero.x),
+        y: Math.round(wowHero.y),
+        hp: Math.round(wowHero.hp),
+        maxHp: wowHero.maxHp,
+        gold: wowHero.gold,
+        potions: wowHero.potions,
+        zone: wowHero.zone,
+        questKills: wowHero.questKills,
+        questsCompleted: wowHero.questsCompleted,
+        bossKills: wowHero.bossKills,
+        gearScore: wowHero.gearScore,
+        equipped: wowHero.equipped,
+        backpack: wowHero.backpack.slice(0, 12),
+    };
+    saveCloudGameState('wow', stateToSave);
+
+    if (submitHighscore) {
+        const clsName = (WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin).name;
+        const pScore  = wowGetPowerScore();
+        submitCloudScore('wow', pScore, 0, `Lv.${wowHero.level} ${clsName} (GS ${wowHero.gearScore})`);
+    }
+}
+
+async function wowSyncPeers() {
+    if (activeGameKey !== 'wow') return;
+    wowSaveHeroProgress(false);
+    const fd = new FormData();
+    fd.append('ajax', '1');
+    fd.append('csrf_token', GAMES_CSRF);
+    fd.append('action', 'wow_sync');
+    try {
+        const r = await fetch('games.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d && d.ok && Array.isArray(d.peers)) {
+            wowPeerHeroes = d.peers;
+        }
+    } catch (e) {}
+}
+
+function wowChangeClass(newClass) {
+    if (!WOW_CLASSES[newClass]) return;
+    wowHero.heroClass = newClass;
+    wowCalcStats();
+    wowHero.hp = wowHero.maxHp;
+    wowHero.mp = wowHero.maxMp;
+    wowRenderActionBar();
+    wowRenderUI();
+    wowAddFloatText(wowHero.x, wowHero.y - 24, `${WOW_CLASSES[newClass].icon} Klasse: ${WOW_CLASSES[newClass].name}`, '#fbbf24', true);
+    wowSaveHeroProgress(false);
+}
+
+function wowChangeZone(newZone) {
+    if (!WOW_ZONES[newZone]) return;
+    wowHero.zone = newZone;
+    wowHero.x = 105;
+    wowHero.y = 220;
+    wowBuildZone(newZone, true);
+    wowRenderUI();
+    wowSaveHeroProgress(false);
+}
+
+function wowTeleportTown() {
+    wowHero.x = 92;
+    wowHero.y = 220;
+    wowHero.hp = wowHero.maxHp;
+    wowHero.mp = wowHero.maxMp;
+    wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 8, maxR: 58, color: '#38bdf8', alpha: 1 });
+    wowAddFloatText(wowHero.x, wowHero.y - 25, '💎 Ruhestein: Vollständig geheilt!', '#38bdf8', true);
+    wowRenderUI();
+}
+
+function wowBuildZone(zoneKey, announce = true) {
+    const z = WOW_ZONES[zoneKey] || WOW_ZONES.elwynn;
+    wowMobs = [];
+    wowProjectiles = [];
+    wowGroundHazards = [];
+    wowScenery = [];
+
+    // Dekorative Bäume / Felsen / Lava-Krater erzeugen
+    const propIcon = zoneKey === 'elwynn' ? '🌲' : (zoneKey === 'duskwood' ? '🪦' : (zoneKey === 'moltencore' ? '🌋' : '🧊'));
+    for (let i = 0; i < 14; i++) {
+        wowScenery.push({
+            x: 190 + (i * 43) % 540,
+            y: 35 + ((i * 89) % 370),
+            icon: propIcon
+        });
+    }
+
+    // 7 normale Zonen-Gegner + 1 Zonen-/Raid-Boss
+    for (let i = 0; i < 7; i++) {
+        wowSpawnMob(i, false);
+    }
+    wowSpawnMob(99, true);
+
+    wowTargetId = wowMobs[0]?.id || null;
+    if (announce) {
+        wowAddFloatText(380, 70, `🗺️ ${z.name}`, '#fbbf24', true);
+    }
+}
+
+function wowSpawnMob(slotIdx, isBoss = false) {
+    const z = WOW_ZONES[wowHero.zone] || WOW_ZONES.elwynn;
+    if (isBoss) {
+        const b = z.boss;
+        wowMobs.push({
+            id: 'boss_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            slotIdx: 99,
+            isBoss: true,
+            name: b.name,
+            quote: b.quote,
+            icon: b.icon,
+            lv: b.lv,
+            hp: b.hp,
+            maxHp: b.hp,
+            dmg: b.dmg,
+            xp: b.xp,
+            gold: b.gold,
+            speed: 0.92,
+            x: 665,
+            y: 220,
+            homeX: 665,
+            homeY: 220,
+            lastAtk: 0,
+            lastHazard: performance.now() + 3000,
+            slowUntil: 0,
+            stunUntil: 0,
+            enraged: false,
+            dead: false,
+            respawnAt: 0
+        });
+        return;
+    }
+
+    const tpl = z.mobs[slotIdx % z.mobs.length];
+    const col = slotIdx % 3;
+    const row = Math.floor(slotIdx / 3);
+    const sx  = 255 + col * 125 + (Math.random() * 40 - 20);
+    const sy  = 75 + row * 135 + (Math.random() * 40 - 20);
+
+    wowMobs.push({
+        id: 'mob_' + slotIdx + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+        slotIdx,
+        isBoss: false,
+        name: tpl.name,
+        icon: tpl.icon,
+        lv: tpl.lv,
+        hp: tpl.hp,
+        maxHp: tpl.hp,
+        dmg: tpl.dmg,
+        xp: tpl.xp,
+        gold: tpl.gold,
+        speed: tpl.speed,
+        x: Math.min(585, Math.max(220, sx)),
+        y: Math.min(390, Math.max(55, sy)),
+        homeX: sx,
+        homeY: sy,
+        lastAtk: 0,
+        slowUntil: 0,
+        stunUntil: 0,
+        dead: false,
+        respawnAt: 0
+    });
+}
+
+function wowRenderActionBar() {
+    const box = document.getElementById('wowActionBarSlots');
+    if (!box) return;
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    box.innerHTML = cls.spells.map((sp, idx) => `
+        <button type="button"
+                onclick="wowCastSpell(${idx})"
+                id="wowSpellBtn-${idx}"
+                title="${sp.name} (${sp.mp > 0 ? sp.mp + ' Mana · ' : ''}${sp.cd}s Abklingzeit): ${sp.desc}"
+                class="relative px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-white text-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95">
+            <span class="text-base sm:text-lg">${sp.icon}</span>
+            <div class="text-left leading-tight">
+                <div class="text-[10px] text-amber-300 font-bold">[${sp.key}] ${sp.name}</div>
+                <div id="wowSpellCd-${idx}" class="text-[10px] text-slate-300">${sp.mp > 0 ? sp.mp + ' MP' : 'Sofort'}</div>
+            </div>
+        </button>
+    `).join('');
+}
+
+function wowCycleTarget() {
+    const alive = wowMobs.filter((m) => !m.dead);
+    if (!alive.length) {
+        wowTargetId = null;
+        return;
+    }
+    alive.sort((a, b) => Math.hypot(a.x - wowHero.x, a.y - wowHero.y) - Math.hypot(b.x - wowHero.x, b.y - wowHero.y));
+    const curIdx = alive.findIndex((m) => m.id === wowTargetId);
+    const next   = alive[(curIdx + 1) % alive.length];
+    wowTargetId  = next.id;
+}
+
+function wowGetActiveTarget() {
+    let t = wowMobs.find((m) => !m.dead && m.id === wowTargetId);
+    if (t) return t;
+    const alive = wowMobs.filter((m) => !m.dead);
+    if (!alive.length) return null;
+    alive.sort((a, b) => Math.hypot(a.x - wowHero.x, a.y - wowHero.y) - Math.hypot(b.x - wowHero.x, b.y - wowHero.y));
+    wowTargetId = alive[0].id;
+    return alive[0];
+}
+
+function wowCastSpell(spellIdx) {
+    const now = performance.now();
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    const sp  = cls.spells[spellIdx];
+    if (!sp) return;
+
+    if (now < wowCooldowns[spellIdx]) {
+        return;
+    }
+    if (wowHero.mp < sp.mp) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, '💧 Nicht genug Mana!', '#60a5fa', false);
+        return;
+    }
+
+    wowCalcStats();
+    const target = wowGetActiveTarget();
+
+    // Zauber 4: Heilung / Blinzeln (braucht kein Gegner-Ziel)
+    if (spellIdx === 3) {
+        wowHero.mp -= sp.mp;
+        wowCooldowns[spellIdx] = now + sp.cd * 1000;
+        const healAmt = Math.round(wowHero.maxHp * 0.38);
+        wowHero.hp = Math.min(wowHero.maxHp, wowHero.hp + healAmt);
+        if (wowHero.heroClass === 'mage') {
+            wowHero.x = Math.min(720, Math.max(40, wowHero.x + 75));
+        } else if (wowHero.heroClass === 'ranger') {
+            wowHero.speedUntil = now + 4500;
+        }
+        wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 10, maxR: 52, color: '#22c55e', alpha: 1 });
+        wowAddFloatText(wowHero.x, wowHero.y - 25, `+${healAmt} LP (${sp.name})`, '#4ade80', true);
+        wowRenderUI();
+        return;
+    }
+
+    // Zauber 5: Ultimativer Klassen-Buff / Pyroschlag
+    if (spellIdx === 4) {
+        wowHero.mp -= sp.mp;
+        wowCooldowns[spellIdx] = now + sp.cd * 1000;
+        wowHero.buffUntil = now + 6500;
+        wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 12, maxR: 72, color: '#f59e0b', alpha: 1 });
+        wowAddFloatText(wowHero.x, wowHero.y - 28, `${sp.icon} ${sp.name} AKTIV!`, '#f59e0b', true);
+        if (wowHero.heroClass === 'mage' && target) {
+            wowSpawnProjectile(wowHero.x, wowHero.y, target, wowHero.totalDmg * 2.5, '#f97316', '🌋', true);
+        }
+        wowRenderUI();
+        return;
+    }
+
+    // Zauber 2: AoE (Göttlicher Sturm / Frostnova / Mehrfachschuss)
+    if (spellIdx === 1) {
+        wowHero.mp -= sp.mp;
+        wowCooldowns[spellIdx] = now + sp.cd * 1000;
+        const aoeRadius = wowHero.heroClass === 'ranger' ? 230 : 115;
+        const ringColor = wowHero.heroClass === 'mage' ? '#38bdf8' : (wowHero.heroClass === 'paladin' ? '#fbbf24' : '#22c55e');
+        wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 14, maxR: aoeRadius, color: ringColor, alpha: 1 });
+
+        let hits = 0;
+        for (const m of wowMobs) {
+            if (m.dead) continue;
+            if (Math.hypot(m.x - wowHero.x, m.y - wowHero.y) <= aoeRadius) {
+                if (wowHero.heroClass === 'mage') {
+                    m.slowUntil = now + 4500;
+                }
+                wowDealDamageToMob(m, wowHero.totalDmg * 1.35, sp.name);
+                hits++;
+                if (wowHero.heroClass === 'ranger' && hits >= 5) break;
+            }
+        }
+        if (hits === 0) {
+            wowAddFloatText(wowHero.x, wowHero.y - 20, `${sp.icon} ${sp.name}`, ringColor, false);
+        }
+        return;
+    }
+
+    if (!target) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, 'Kein Ziel in Sicht!', '#94a3b8', false);
+        return;
+    }
+
+    const dist = Math.hypot(target.x - wowHero.x, target.y - wowHero.y);
+    const maxRange = spellIdx === 2 ? 250 : cls.range;
+    if (dist > maxRange + 25) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, '🎯 Außer Reichweite! Näher herangehen.', '#f87171', false);
+        return;
+    }
+
+    wowHero.mp = Math.min(wowHero.maxMp, wowHero.mp - sp.mp + (spellIdx === 0 ? 10 : 0));
+    wowCooldowns[spellIdx] = now + sp.cd * 1000;
+
+    if (spellIdx === 0) {
+        // Basisangriff (Kreuzfahrerstoß / Feuerball / Gezielter Schuss)
+        if (wowHero.heroClass === 'paladin') {
+            wowVisualRings.push({ x: target.x, y: target.y, r: 6, maxR: 32, color: '#fbbf24', alpha: 1 });
+            wowDealDamageToMob(target, wowHero.totalDmg, sp.name);
+        } else {
+            const pIcon = wowHero.heroClass === 'mage' ? '🔥' : '🏹';
+            const pCol  = wowHero.heroClass === 'mage' ? '#fb923c' : '#4ade80';
+            wowSpawnProjectile(wowHero.x, wowHero.y, target, wowHero.totalDmg, pCol, pIcon, false);
+        }
+    } else if (spellIdx === 2) {
+        // Zauber 3: Richturteil / Flammenstoß / Schlangenbiss
+        if (wowHero.heroClass === 'paladin') {
+            target.stunUntil = now + 2200;
+            wowVisualRings.push({ x: target.x, y: target.y, r: 8, maxR: 48, color: '#facc15', alpha: 1 });
+            wowDealDamageToMob(target, wowHero.totalDmg * 1.65, '⚡ Richturteil');
+        } else if (wowHero.heroClass === 'mage') {
+            wowVisualRings.push({ x: target.x, y: target.y, r: 10, maxR: 85, color: '#ef4444', alpha: 1 });
+            for (const m of wowMobs) {
+                if (!m.dead && Math.hypot(m.x - target.x, m.y - target.y) <= 85) {
+                    wowDealDamageToMob(m, wowHero.totalDmg * 1.6, '☄️ Flammenstoß');
+                }
+            }
+        } else {
+            target.slowUntil = now + 5000;
+            wowSpawnProjectile(wowHero.x, wowHero.y, target, wowHero.totalDmg * 1.7, '#22c55e', '🐍', false);
+        }
+    }
+}
+
+function wowSpawnProjectile(sx, sy, targetMob, dmg, color, icon, forceCrit) {
+    wowProjectiles.push({
+        x: sx,
+        y: sy,
+        targetId: targetMob.id,
+        tx: targetMob.x,
+        ty: targetMob.y,
+        dmg,
+        color,
+        icon,
+        forceCrit: !!forceCrit
+    });
+}
+
+function wowDealDamageToMob(mob, rawDmg, abilityLabel = '', forceCrit = false) {
+    if (!mob || mob.dead) return;
+    const isCrit = forceCrit || (Math.random() * 100 < (wowHero.critPct || 12));
+    const finalDmg = Math.max(1, Math.round(rawDmg * (isCrit ? 1.95 : (0.9 + Math.random() * 0.2))));
+    mob.hp -= finalDmg;
+
+    if (mob.isBoss && !mob.enraged && mob.hp > 0 && mob.hp < mob.maxHp * 0.45) {
+        mob.enraged = true;
+        wowAddFloatText(mob.x, mob.y - 38, `💢 ${mob.quote}`, '#ef4444', true);
+    }
+
+    const txt = isCrit ? `💥 ${finalDmg}!` : `-${finalDmg}`;
+    const col = isCrit ? '#f97316' : '#f8fafc';
+    wowAddFloatText(mob.x + (Math.random() * 24 - 12), mob.y - 18, txt, col, isCrit);
+
+    if (mob.hp <= 0) {
+        mob.hp   = 0;
+        mob.dead = true;
+        mob.respawnAt = performance.now() + (mob.isBoss ? 14000 : 5500);
+        wowOnMobKilled(mob);
+    }
+}
+
+function wowOnMobKilled(mob) {
+    wowHero.xp   += mob.xp;
+    wowHero.gold += mob.gold;
+    wowHero.questKills++;
+
+    if (mob.isBoss) {
+        wowHero.bossKills = (wowHero.bossKills || 0) + 1;
+        wowHero.questKills += 2;
+        wowAddFloatText(mob.x, mob.y - 34, `🏆 BOSS BESIEGT! +${mob.xp} EP · +${mob.gold} Gold`, '#fbbf24', true);
+    } else {
+        wowAddFloatText(mob.x, mob.y - 26, `+${mob.xp} EP  +${mob.gold}🪙`, '#c084fc', false);
+    }
+
+    // Loot-Drop-Chance (Bosse droppen immer, normale Mobs zu 45 %)
+    if (mob.isBoss || Math.random() < 0.45) {
+        const drop = wowGenerateLootItem(mob.lv, mob.isBoss);
+        wowAddLootToBag(drop, mob.x, mob.y);
+    }
+
+    // Quest-Abschluss prüfen
+    const z = WOW_ZONES[wowHero.zone] || WOW_ZONES.elwynn;
+    if (wowHero.questKills >= z.questTargetKills) {
+        wowHero.questKills = 0;
+        wowHero.questsCompleted = (wowHero.questsCompleted || 0) + 1;
+        wowHero.xp   += z.questRewardXp;
+        wowHero.gold += z.questRewardGold;
+        wowHero.potions = Math.min(15, wowHero.potions + 1);
+        wowAddFloatText(wowHero.x, wowHero.y - 40, `📜 QUEST ERLEDIGT! +${z.questRewardXp} EP & +${z.questRewardGold}🪙`, '#fde047', true);
+    }
+
+    // Level-Up prüfen
+    let leveledUp = false;
+    while (wowHero.xp >= wowHero.nextXp) {
+        wowHero.xp -= wowHero.nextXp;
+        wowHero.level++;
+        leveledUp = true;
+        wowCalcStats();
+        wowHero.hp = wowHero.maxHp;
+        wowHero.mp = wowHero.maxMp;
+        wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 10, maxR: 85, color: '#fde047', alpha: 1 });
+        wowAddFloatText(wowHero.x, wowHero.y - 45, `🌟 LEVEL UP! Stufe ${wowHero.level} erreicht!`, '#fde047', true);
+    }
+
+    wowRenderUI();
+    wowSaveHeroProgress(leveledUp || mob.isBoss);
+}
+
+function wowGenerateLootItem(itemLv, isBossDrop = false) {
+    const slotKeys = ['weapon', 'armor', 'ring', 'trinket'];
+    const slotKey  = slotKeys[Math.floor(Math.random() * slotKeys.length)];
+    const slotMeta = WOW_SLOTS[slotKey];
+
+    let rIdx = 0;
+    const roll = Math.random() + (isBossDrop ? 0.38 : 0);
+    if (roll > 1.22)      rIdx = 4; // Legendär
+    else if (roll > 0.96) rIdx = 3; // Episch
+    else if (roll > 0.68) rIdx = 2; // Selten
+    else if (roll > 0.35) rIdx = 1; // Ungewöhnlich
+
+    const rar  = WOW_RARITIES[rIdx];
+    const base = Math.max(1, itemLv) * rar.mult;
+    const dmg  = Math.max(2, Math.round(base * (slotKey === 'weapon' ? 3.4 : 1.6)));
+    const hp   = Math.max(8, Math.round(base * (slotKey === 'armor' ? 14 : 7)));
+    const crit = Math.max(1, Math.round(rar.mult * 2.2));
+    const gs   = Math.round(dmg * 2.2 + hp * 0.4 + crit * 3);
+    const name = slotMeta.names[Math.floor(Math.random() * slotMeta.names.length)];
+
+    return {
+        id: 'it_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        slot: slotKey,
+        name,
+        rarity: rar.key,
+        dmg,
+        hp,
+        crit,
+        gs,
+        price: Math.max(12, Math.round(gs * 0.9))
+    };
+}
+
+function wowAddLootToBag(item, fxX, fxY) {
+    const rar = WOW_RARITIES.find((r) => r.key === item.rarity) || WOW_RARITIES[0];
+    // Wenn der Slot noch leer ist -> sofort automatisch anlegen!
+    if (!wowHero.equipped[item.slot]) {
+        wowHero.equipped[item.slot] = item;
+        wowCalcStats();
+        wowAddFloatText(fxX, fxY - 12, `🎁 Angelegt: [${item.name}]`, rar.color, true);
+        return;
+    }
+    if (wowHero.backpack.length < 12) {
+        wowHero.backpack.unshift(item);
+        wowAddFloatText(fxX, fxY - 12, `🎒 Beute: [${item.name}]`, rar.color, item.rarity !== 'common');
+    } else {
+        wowHero.gold += item.price;
+        wowAddFloatText(fxX, fxY - 12, `🪙 Rucksack voll (+${item.price} Gold)`, '#fbbf24', false);
+    }
+}
+
+function wowEquipBagItem(idx) {
+    const item = wowHero.backpack[idx];
+    if (!item) return;
+    const prev = wowHero.equipped[item.slot] || null;
+    wowHero.equipped[item.slot] = item;
+    wowHero.backpack.splice(idx, 1);
+    if (prev) {
+        wowHero.backpack.push(prev);
+    }
+    wowCalcStats();
+    wowRenderUI();
+    wowSaveHeroProgress(true);
+}
+
+function wowSellAllBackpack() {
+    if (!wowHero.backpack.length) return;
+    let sum = 0;
+    for (const it of wowHero.backpack) {
+        sum += Number(it.price) || 10;
+    }
+    wowHero.backpack = [];
+    wowHero.gold += sum;
+    wowAddFloatText(wowHero.x, wowHero.y - 24, `🪙 Beute für +${sum} Gold verkauft!`, '#fbbf24', true);
+    wowRenderUI();
+    wowSaveHeroProgress(false);
+}
+
+function wowBuyPotion() {
+    if (wowHero.gold < 25) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, 'Nicht genug Gold (25 🪙 benötigt)!', '#f87171', false);
+        return;
+    }
+    wowHero.gold -= 25;
+    wowHero.potions++;
+    wowAddFloatText(wowHero.x, wowHero.y - 20, '🧪 +1 Heiltrank gekauft!', '#4ade80', false);
+    wowRenderUI();
+    wowSaveHeroProgress(false);
+}
+
+function wowGambleMysteryItem() {
+    if (wowHero.gold < 80) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, 'Nicht genug Gold (80 🪙 benötigt)!', '#f87171', false);
+        return;
+    }
+    wowHero.gold -= 80;
+    const item = wowGenerateLootItem(wowHero.level + 1, true);
+    wowAddLootToBag(item, wowHero.x, wowHero.y - 10);
+    wowRenderUI();
+    wowSaveHeroProgress(true);
+}
+
+function wowUsePotion() {
+    if (wowHero.potions <= 0) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, '🧪 Keine Heiltränke mehr!', '#f87171', false);
+        return;
+    }
+    if (wowHero.hp >= wowHero.maxHp && wowHero.mp >= wowHero.maxMp) {
+        wowAddFloatText(wowHero.x, wowHero.y - 20, 'LP & Mana sind bereits voll!', '#4ade80', false);
+        return;
+    }
+    wowHero.potions--;
+    const healHp = Math.round(wowHero.maxHp * 0.48);
+    const healMp = Math.round(wowHero.maxMp * 0.45);
+    wowHero.hp = Math.min(wowHero.maxHp, wowHero.hp + healHp);
+    wowHero.mp = Math.min(wowHero.maxMp, wowHero.mp + healMp);
+    wowVisualRings.push({ x: wowHero.x, y: wowHero.y, r: 8, maxR: 46, color: '#4ade80', alpha: 1 });
+    wowAddFloatText(wowHero.x, wowHero.y - 24, `🧪 +${healHp} LP / +${healMp} MP`, '#4ade80', true);
+    wowRenderUI();
+}
+
+function wowTouchMove(dx, dy) {
+    wowTouchDir = { dx, dy };
+}
+
+function wowAddFloatText(x, y, text, color = '#ffffff', big = false) {
+    wowFloatTexts.push({ x, y, text, color, big, alpha: 1.0, vy: big ? -0.95 : -0.7 });
+}
+
+function wowRenderUI() {
+    wowCalcStats();
+    const lvEl  = document.getElementById('wowHeroLevelBadge');
+    const gsEl  = document.getElementById('wowGearScoreBadge');
+    const dmgEl = document.getElementById('wowDamageBadge');
+    const gldEl = document.getElementById('wowGoldBadge');
+    const potEl = document.getElementById('wowPotionsBadge');
+    const potBtn= document.getElementById('wowPotionBtnCount');
+
+    if (lvEl)  lvEl.textContent  = `Lv. ${wowHero.level}`;
+    if (gsEl)  gsEl.textContent  = String(wowHero.gearScore || 0);
+    if (dmgEl) dmgEl.textContent = `${wowHero.totalDmg} (${wowHero.critPct}%)`;
+    if (gldEl) gldEl.textContent = String(wowHero.gold);
+    if (potEl) potEl.textContent = String(wowHero.potions);
+    if (potBtn) potBtn.textContent = `${wowHero.potions}×`;
+
+    // Quest-Box
+    const z = WOW_ZONES[wowHero.zone] || WOW_ZONES.elwynn;
+    const qBox = document.getElementById('wowQuestListBox');
+    const qDone= document.getElementById('wowCompletedQuestsBadge');
+    if (qDone) qDone.textContent = `${wowHero.questsCompleted || 0} erledigt`;
+    if (qBox) {
+        const pct = Math.min(100, Math.round((wowHero.questKills / z.questTargetKills) * 100));
+        qBox.innerHTML = `
+            <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/70 space-y-1.5">
+                <div class="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                    <span>${z.npcIcon} ${z.questTitle}</span>
+                    <span class="text-amber-600 dark:text-amber-400">${wowHero.questKills} / ${z.questTargetKills}</span>
+                </div>
+                <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div class="h-full bg-amber-500 transition-all" style="width:${pct}%"></div>
+                </div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                    Belohnung: <strong>+${z.questRewardXp} EP</strong>, <strong>+${z.questRewardGold} 🪙 Gold</strong> &amp; <strong>+1 🧪 Heiltrank</strong>
+                </div>
+            </div>
+        `;
+    }
+
+    // 4 Ausrüstungs-Slots
+    const eqGrid = document.getElementById('wowEquippedGrid');
+    if (eqGrid) {
+        eqGrid.innerHTML = Object.entries(WOW_SLOTS).map(([slotKey, meta]) => {
+            const it = wowHero.equipped[slotKey];
+            if (!it) {
+                return `
+                    <div class="p-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 flex flex-col justify-between min-h-[68px]">
+                        <div class="text-[10px] font-bold">${meta.icon} ${meta.label}</div>
+                        <div class="text-[11px] italic">Leer</div>
+                    </div>
+                `;
+            }
+            const rar = WOW_RARITIES.find((r) => r.key === it.rarity) || WOW_RARITIES[0];
+            return `
+                <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border ${rar.badgeCls} flex flex-col justify-between min-h-[68px]">
+                    <div class="flex items-center justify-between text-[10px] font-bold">
+                        <span>${meta.icon} ${meta.label}</span>
+                        <span>GS ${it.gs}</span>
+                    </div>
+                    <div class="font-bold text-[11px] leading-tight truncate my-0.5" title="${it.name}">${it.name}</div>
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400">+${it.dmg} DMG · +${it.hp} LP</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Rucksack
+    const bagGrid = document.getElementById('wowBackpackGrid');
+    const bagLbl  = document.getElementById('wowBagCountLabel');
+    if (bagLbl) bagLbl.textContent = `${wowHero.backpack.length} / 12 Plätze`;
+    if (bagGrid) {
+        if (wowHero.backpack.length === 0) {
+            bagGrid.innerHTML = '<div class="col-span-2 text-slate-400 italic py-2 text-center">Noch keine Beute im Rucksack – besiege Gegner oder öffne eine Truhe!</div>';
+        } else {
+            bagGrid.innerHTML = wowHero.backpack.map((it, idx) => {
+                const rar  = WOW_RARITIES.find((r) => r.key === it.rarity) || WOW_RARITIES[0];
+                const meta = WOW_SLOTS[it.slot] || WOW_SLOTS.weapon;
+                const curEq = wowHero.equipped[it.slot];
+                const diffGs = it.gs - (curEq ? curEq.gs : 0);
+                const diffBadge = diffGs > 0
+                    ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold">(+${diffGs} GS ▲)</span>`
+                    : `<span class="text-slate-400">(${diffGs} GS)</span>`;
+                return `
+                    <button type="button" onclick="wowEquipBagItem(${idx})"
+                            class="p-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border ${rar.badgeCls} text-left flex items-center justify-between gap-2 cursor-pointer transition-colors">
+                        <div class="min-w-0">
+                            <div class="font-bold text-[11px] truncate">${meta.icon} ${it.name}</div>
+                            <div class="text-[10px] text-slate-500 dark:text-slate-400">+${it.dmg} DMG · +${it.hp} LP ${diffBadge}</div>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-brand-600 text-white text-[10px] font-bold shrink-0">Anlegen</span>
+                    </button>
+                `;
+            }).join('');
+        }
+    }
+}
+
+function wowGameLoop(now) {
+    requestAnimationFrame(wowGameLoop);
+    if (activeGameKey !== 'wow') {
+        wowLastFrameTs = now;
+        return;
+    }
+
+    const dt = Math.min(0.05, (now - (wowLastFrameTs || now)) / 1000);
+    wowLastFrameTs = now;
+
+    // 1. Helden-Bewegung (W A S D / Pfeiltasten / Touch)
+    let mx = wowTouchDir.dx;
+    let my = wowTouchDir.dy;
+    if (wowKeysDown['ArrowLeft']  || wowKeysDown['a'] || wowKeysDown['A']) mx -= 1;
+    if (wowKeysDown['ArrowRight'] || wowKeysDown['d'] || wowKeysDown['D']) mx += 1;
+    if (wowKeysDown['ArrowUp']    || wowKeysDown['w'] || wowKeysDown['W']) my -= 1;
+    if (wowKeysDown['ArrowDown']  || wowKeysDown['s'] || wowKeysDown['S']) my += 1;
+
+    if (mx !== 0 || my !== 0) {
+        const len = Math.hypot(mx, my) || 1;
+        const spd = (now < wowHero.speedUntil ? 195 : 145) * dt;
+        wowHero.x = Math.min(735, Math.max(25, wowHero.x + (mx / len) * spd));
+        wowHero.y = Math.min(415, Math.max(30, wowHero.y + (my / len) * spd));
+    }
+
+    // 2. Heilbrunnen im Lager (links x < 165) regeneriert LP & Mana rasch
+    const inSafeCamp = wowHero.x < 165;
+    if (inSafeCamp) {
+        wowHero.hp = Math.min(wowHero.maxHp, wowHero.hp + wowHero.maxHp * 0.14 * dt);
+        wowHero.mp = Math.min(wowHero.maxMp, wowHero.mp + wowHero.maxMp * 0.22 * dt);
+    } else {
+        wowHero.mp = Math.min(wowHero.maxMp, wowHero.mp + wowHero.maxMp * 0.04 * dt);
+    }
+
+    // 3. Auto-Attacke auf das anvisierte Ziel, wenn in Reichweite
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    const target = wowMobs.find((m) => !m.dead && m.id === wowTargetId);
+    if (target && !inSafeCamp && (now - wowLastAutoAtk) > 1350) {
+        const dist = Math.hypot(target.x - wowHero.x, target.y - wowHero.y);
+        if (dist <= cls.range) {
+            wowLastAutoAtk = now;
+            if (wowHero.heroClass === 'paladin') {
+                wowDealDamageToMob(target, wowHero.totalDmg * 0.75, 'Auto');
+            } else {
+                const pIcon = wowHero.heroClass === 'mage' ? '✨' : '🏹';
+                wowSpawnProjectile(wowHero.x, wowHero.y, target, wowHero.totalDmg * 0.75, cls.color, pIcon, false);
+            }
+        }
+    }
+
+    // 4. Monster-KI, Boss-Bodenzonen (AoE) & Respawns
+    for (let i = 0; i < wowMobs.length; i++) {
+        const m = wowMobs[i];
+        if (m.dead) {
+            if (now >= m.respawnAt) {
+                const slot = m.slotIdx;
+                const wasBoss = m.isBoss;
+                wowMobs.splice(i, 1);
+                wowSpawnMob(slot, wasBoss);
+            }
+            continue;
+        }
+
+        if (now < m.stunUntil) continue;
+
+        const distToHero = Math.hypot(wowHero.x - m.x, wowHero.y - m.y);
+        const aggroRange = m.isBoss ? 225 : 145;
+
+        if (!inSafeCamp && distToHero < aggroRange) {
+            const slowMult = now < m.slowUntil ? 0.42 : 1.0;
+            const moveSpd  = m.speed * 68 * slowMult * dt;
+            if (distToHero > 28) {
+                m.x += ((wowHero.x - m.x) / distToHero) * moveSpd;
+                m.y += ((wowHero.y - m.y) / distToHero) * moveSpd;
+            } else if (now - m.lastAtk > 1400) {
+                m.lastAtk = now;
+                let incoming = Math.round(m.dmg * (0.88 + Math.random() * 0.24));
+                if (now < wowHero.buffUntil && wowHero.heroClass === 'paladin') {
+                    incoming = Math.round(incoming * 0.5);
+                }
+                wowHero.hp -= incoming;
+                wowAddFloatText(wowHero.x, wowHero.y - 18, `-${incoming} LP`, '#ef4444', false);
+                if (wowHero.hp <= 0) {
+                    // Wiederbelebung beim Geistheiler im Lager
+                    wowHero.hp = wowHero.maxHp;
+                    wowHero.mp = wowHero.maxMp;
+                    wowHero.x  = 88;
+                    wowHero.y  = 220;
+                    wowAddFloatText(88, 185, '👼 Vom Geistheiler im Lager wiederbelebt!', '#38bdf8', true);
+                }
+            }
+
+            // Boss-Spezialfähigkeit: Telegraphierte Feuer-/Frost-Bodenzone!
+            if (m.isBoss && now > m.lastHazard) {
+                m.lastHazard = now + 4800;
+                wowGroundHazards.push({
+                    x: wowHero.x,
+                    y: wowHero.y,
+                    r: 52,
+                    detonateAt: now + 1750,
+                    dmg: Math.round(m.dmg * 1.45),
+                    color: wowHero.zone === 'icecrown' ? '#38bdf8' : '#ef4444'
+                });
+                wowAddFloatText(wowHero.x, wowHero.y - 32, '⚠️ BOSS-FLÄCHE! Weiche aus!', '#fde047', true);
+            }
+        } else {
+            // Zurück zum Heimatpunkt patrouillieren
+            const dh = Math.hypot(m.homeX - m.x, m.homeY - m.y);
+            if (dh > 6) {
+                m.x += ((m.homeX - m.x) / dh) * 40 * dt;
+                m.y += ((m.homeY - m.y) / dh) * 40 * dt;
+            }
+        }
+    }
+
+    // 5. Boss-Bodenzonen (AoE) auswerten
+    for (let i = wowGroundHazards.length - 1; i >= 0; i--) {
+        const hz = wowGroundHazards[i];
+        if (now >= hz.detonateAt) {
+            wowVisualRings.push({ x: hz.x, y: hz.y, r: 8, maxR: hz.r, color: hz.color, alpha: 1 });
+            if (Math.hypot(wowHero.x - hz.x, wowHero.y - hz.y) <= hz.r) {
+                wowHero.hp = Math.max(1, wowHero.hp - hz.dmg);
+                wowAddFloatText(wowHero.x, wowHero.y - 24, `💥 -${hz.dmg} LP (Boss-Fläche!)`, '#ef4444', true);
+            }
+            wowGroundHazards.splice(i, 1);
+        }
+    }
+
+    // 6. Projektile bewegen
+    for (let i = wowProjectiles.length - 1; i >= 0; i--) {
+        const p = wowProjectiles[i];
+        const t = wowMobs.find((m) => !m.dead && m.id === p.targetId);
+        if (t) {
+            p.tx = t.x;
+            p.ty = t.y;
+        }
+        const dist = Math.hypot(p.tx - p.x, p.ty - p.y);
+        if (dist < 18) {
+            if (t && !t.dead) {
+                wowDealDamageToMob(t, p.dmg, '', p.forceCrit);
+            }
+            wowProjectiles.splice(i, 1);
+        } else {
+            p.x += ((p.tx - p.x) / dist) * 380 * dt;
+            p.y += ((p.ty - p.y) / dist) * 380 * dt;
+        }
+    }
+
+    // 7. Cooldown-Anzeige auf den Aktionsleisten-Buttons aktualisieren
+    cls.spells.forEach((sp, idx) => {
+        const cdEl  = document.getElementById('wowSpellCd-' + idx);
+        const btnEl = document.getElementById('wowSpellBtn-' + idx);
+        if (!cdEl || !btnEl) return;
+        const rem = (wowCooldowns[idx] - now) / 1000;
+        if (rem > 0.05) {
+            cdEl.textContent = rem.toFixed(1) + 's';
+            btnEl.style.opacity = '0.55';
+        } else {
+            cdEl.textContent = sp.mp > 0 ? sp.mp + ' MP' : 'Bereit';
+            btnEl.style.opacity = '1';
+        }
+    });
+
+    wowDrawWorld(now);
+}
+
+function wowDrawWorld(now) {
+    const cv = document.getElementById('wowCanvas');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = cv.width;
+    const H = cv.height;
+    const z = WOW_ZONES[wowHero.zone] || WOW_ZONES.elwynn;
+
+    // 1. Zonen-Hintergrund
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, z.bgTop);
+    grad.addColorStop(1, z.bgBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Sicheres Helden-Lager (links) mit Heilbrunnen & Questgeber
+    ctx.fillStyle = z.campColor;
+    ctx.beginPath();
+    ctx.roundRect(12, 22, 152, H - 44, 18);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏕️ Sicheres Lager', 88, 44);
+
+    // Questgeber mit gelbem "!"
+    ctx.font = '24px sans-serif';
+    ctx.fillText(z.npcIcon, 88, 130);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('!', 88, 102);
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText(z.npcName, 88, 146);
+
+    // Heilbrunnen
+    ctx.beginPath();
+    ctx.arc(88, 315, 24, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.28)';
+    ctx.fill();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.stroke();
+    ctx.font = '20px sans-serif';
+    ctx.fillText('⛲', 88, 322);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('Heilbrunnen (+LP/MP)', 88, 352);
+
+    // 3. Umgebungs-Dekoration
+    ctx.font = '20px sans-serif';
+    for (const sc of wowScenery) {
+        ctx.fillText(sc.icon, sc.x, sc.y);
+    }
+
+    // 4. Boss-Bodenzonen (Telegraphierte AoE-Kreise)
+    for (const hz of wowGroundHazards) {
+        const pulse = 0.35 + 0.25 * Math.sin(now / 90);
+        ctx.beginPath();
+        ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
+        ctx.fillStyle = hz.color === '#38bdf8' ? `rgba(56, 189, 248, ${pulse})` : `rgba(239, 68, 68, ${pulse})`;
+        ctx.fill();
+        ctx.strokeStyle = hz.color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+
+    // 5. Zauber-Ringe (AoE-Animationen)
+    for (let i = wowVisualRings.length - 1; i >= 0; i--) {
+        const vr = wowVisualRings[i];
+        vr.r += (vr.maxR - vr.r) * 0.18;
+        vr.alpha -= 0.045;
+        if (vr.alpha <= 0) {
+            wowVisualRings.splice(i, 1);
+            continue;
+        }
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, vr.alpha);
+        ctx.beginPath();
+        ctx.arc(vr.x, vr.y, vr.r, 0, Math.PI * 2);
+        ctx.strokeStyle = vr.color;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 6. Andere aktive Cloud-Mitspieler in derselben Zone zeichnen
+    for (const peer of wowPeerHeroes) {
+        if (peer.zone !== wowHero.zone) continue;
+        const pCls = WOW_CLASSES[peer.hero_class] || WOW_CLASSES.paladin;
+        ctx.beginPath();
+        ctx.arc(peer.x, peer.y, 16, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.35)';
+        ctx.fill();
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.font = '19px sans-serif';
+        ctx.fillText(pCls.icon, peer.x, peer.y + 6);
+        ctx.fillStyle = '#93c5fd';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText(`👤 ${peer.username} (Lv.${peer.level})`, peer.x, peer.y - 22);
+    }
+
+    // 7. Monster & Zonen-Boss zeichnen
+    for (const m of wowMobs) {
+        if (m.dead) continue;
+        const isTarget = m.id === wowTargetId;
+
+        // Roter WoW-Zielring unter dem ausgewählten Gegner
+        if (isTarget) {
+            ctx.beginPath();
+            ctx.ellipse(m.x, m.y + 12, m.isBoss ? 28 : 20, m.isBoss ? 14 : 10, 0, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
+            ctx.fill();
+        }
+
+        // Gegner-Symbol
+        ctx.font = m.isBoss ? '32px sans-serif' : '22px sans-serif';
+        ctx.fillText(m.icon, m.x, m.y + 8);
+
+        // Lebensbalken über dem Monster
+        const bw = m.isBoss ? 74 : 46;
+        const bh = m.isBoss ? 7 : 5;
+        const bx = m.x - bw / 2;
+        const by = m.y - (m.isBoss ? 32 : 22);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        ctx.fillStyle = m.isBoss ? '#f97316' : '#ef4444';
+        ctx.fillRect(bx, by, bw * Math.max(0, m.hp / m.maxHp), bh);
+
+        ctx.fillStyle = m.isBoss ? '#fde047' : '#e2e8f0';
+        ctx.font = m.isBoss ? 'bold 11px sans-serif' : '10px sans-serif';
+        ctx.fillText(`${m.isBoss ? '💀 ' : ''}${m.name} [${m.lv}]`, m.x, by - 4);
+    }
+
+    // 8. Eigenen Helden zeichnen
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    ctx.beginPath();
+    ctx.arc(wowHero.x, wowHero.y, now < wowHero.buffUntil ? 22 : 18, 0, Math.PI * 2);
+    ctx.fillStyle = now < wowHero.buffUntil ? 'rgba(251, 191, 36, 0.38)' : 'rgba(34, 197, 94, 0.28)';
+    ctx.fill();
+    ctx.strokeStyle = now < wowHero.buffUntil ? '#fde047' : '#4ade80';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.font = '23px sans-serif';
+    ctx.fillText(cls.icon, wowHero.x, wowHero.y + 8);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(`${CURRENT_USERNAME} (Lv.${wowHero.level})`, wowHero.x, wowHero.y - 24);
+
+    // 9. Projektile zeichnen
+    ctx.font = '16px sans-serif';
+    for (const p of wowProjectiles) {
+        ctx.fillText(p.icon, p.x, p.y);
+    }
+
+    // 10. Floating Combat Text (Schadenszahlen, Krit-Treffer, Heilung, Loot)
+    for (let i = wowFloatTexts.length - 1; i >= 0; i--) {
+        const ft = wowFloatTexts[i];
+        ft.y += ft.vy;
+        ft.alpha -= 0.018;
+        if (ft.alpha <= 0) {
+            wowFloatTexts.splice(i, 1);
+            continue;
+        }
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.font = ft.big ? 'bold 14px sans-serif' : 'bold 11px sans-serif';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+    }
+
+    // 11. Klassisches WoW-HUD oben links (Spieler-Unit-Frame & Target-Unit-Frame)
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    ctx.beginPath();
+    ctx.roundRect(14, 10, 210, 54, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(`${cls.icon} ${CURRENT_USERNAME} · Lv.${wowHero.level} ${cls.name}`, 22, 25);
+
+    // LP-Balken
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(22, 31, 194, 10);
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(22, 31, 194 * Math.max(0, wowHero.hp / wowHero.maxHp), 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(`LP: ${Math.round(wowHero.hp)} / ${wowHero.maxHp}`, 28, 39);
+
+    // Mana-Balken
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(22, 44, 194, 8);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(22, 44, 194 * Math.max(0, wowHero.mp / wowHero.maxMp), 8);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '8px sans-serif';
+    ctx.fillText(`MP: ${Math.round(wowHero.mp)} / ${wowHero.maxMp}`, 28, 51);
+
+    // Ziel-Unit-Frame (rechts neben dem Spieler-Frame)
+    const activeTarget = wowMobs.find((m) => !m.dead && m.id === wowTargetId);
+    if (activeTarget) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+        ctx.beginPath();
+        ctx.roundRect(236, 10, 215, 46, 10);
+        ctx.fill();
+        ctx.strokeStyle = activeTarget.isBoss ? '#f97316' : '#ef4444';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = activeTarget.isBoss ? '#fde047' : '#fca5a5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(`🎯 ${activeTarget.icon} ${activeTarget.name} (Lv.${activeTarget.lv})`, 244, 26);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(244, 33, 198, 12);
+        ctx.fillStyle = activeTarget.isBoss ? '#f97316' : '#ef4444';
+        ctx.fillRect(244, 33, 198 * Math.max(0, activeTarget.hp / activeTarget.maxHp), 12);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText(`${activeTarget.hp} / ${activeTarget.maxHp} LP`, 250, 42);
+    }
+
+    // 12. WoW-Erfahrungsbalken (EP / XP-Bar) ganz unten am Bildschirmrand
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.fillRect(0, H - 12, W, 12);
+    ctx.fillStyle = '#9333ea';
+    ctx.fillRect(0, H - 12, W * Math.min(1, wowHero.xp / Math.max(1, wowHero.nextXp)), 12);
+    ctx.fillStyle = '#f3e8ff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`EP: ${wowHero.xp} / ${wowHero.nextXp} (${Math.round((wowHero.xp / Math.max(1, wowHero.nextXp)) * 100)} %) — ${z.name}`, W / 2, H - 3);
+}
+
+// =============================================================================
 // GLOBALE TASTATUR-STEUERUNG & SEKUNDEN-TIMER
 // =============================================================================
+window.addEventListener('keyup', (e) => {
+    delete wowKeysDown[e.key];
+});
+
 window.addEventListener('keydown', (e) => {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) return;
+
+    if (activeGameKey === 'wow') {
+        wowKeysDown[e.key] = true;
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+            e.preventDefault();
+        }
+        if (e.key >= '1' && e.key <= '5') {
+            e.preventDefault();
+            wowCastSpell(Number(e.key) - 1);
+        } else if (e.key === 'q' || e.key === 'Q') {
+            e.preventDefault();
+            wowUsePotion();
+        } else if (e.key === 'Tab') {
+            wowCycleTarget();
+        }
+        return;
+    }
 
     if (activeGameKey === '2048') {
         const map = { ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down' };
@@ -2640,6 +4264,8 @@ setInterval(() => {
 setInterval(() => {
     if (activeGameKey === 'connect4' && c4Mode === 'cloud') {
         pollCloudMatches();
+    } else if (activeGameKey === 'wow') {
+        wowSyncPeers();
     }
 }, 4000);
 
@@ -2653,6 +4279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tetrisDraw();
     snakeDraw();
     c4AiNewGame();
+    wowInit();
 });
 </script>
 
