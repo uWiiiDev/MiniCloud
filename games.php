@@ -5,16 +5,19 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 9 Spiele:
- * 1. 🔢 2048 (Zahlen-Schiebepuzzle mit Auto-Save)
- * 2. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 3. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 4. 🔤 Wort des Tages (Cloud-Wordle: tägliches Wort für alle + Trainingsmodus)
- * 5. 🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 6. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 7. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 8. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 9. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * Enthaltene 12 Spiele:
+ * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
+ * 2.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 3.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 4.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 5.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 6.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 7.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 8.  🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 9.  🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 10. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 11. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 12. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -105,9 +108,9 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 9 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 12 Spiele inklusive Metadaten.
  *
- * @return array<string, array{key: string, title: string, icon: string, category: string, desc: string, color: string}>
+ * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
 function getGamesCatalog(): array
 {
