@@ -301,6 +301,18 @@ $allModules = [
         'badgeCls' => 'bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300',
     ],
     [
+        'key'      => 'toolbox',
+        'enabled'  => ($appSettings['enable_toolbox'] ?? '1') === '1',
+        'title'    => 'Alltags-Werkzeuge & Toolbox',
+        'icon'     => '🧰',
+        'url'      => 'toolbox.php',
+        'category' => 'extra',
+        'catLabel' => 'Sicherheit, KI & Freizeit',
+        'desc'     => '6-in-1 Schweizer Taschenmesser: Gäste-WLAN-Karten & GiroCode-Überweisungs-QR-Codes, Glücksrad & Team-Auslosung, Stoppuhr & Weltzeituhr, Text-Diff-Checker, Farb-/WCAG-Studio & Passphrasen-Generator.',
+        'badge'    => '6-in-1 Neu',
+        'badgeCls' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300',
+    ],
+    [
         'key'      => 'games',
         'enabled'  => ($appSettings['enable_games'] ?? '1') === '1',
         'title'    => 'Spiele-Zentrale',

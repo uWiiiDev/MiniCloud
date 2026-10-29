@@ -1826,6 +1826,27 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 'Wie funktioniert der Haushaltsplaner?',
             ],
         ],
+        [
+            'id'       => 'toolbox_studio',
+            'title'    => 'Alltags-Werkzeuge & Toolbox (WLAN-QR, GiroCode, Glücksrad, Stoppuhr, Text-Diff & Farben)',
+            'icon'     => '🧰',
+            'keywords' => ['toolbox', 'werkzeuge', 'alltagswerkzeuge', 'qr code', 'wlan qr', 'gäste wlan', 'girocode', 'epc qr', 'überweisung qr', 'glücksrad', 'auslosung', 'zufall', 'würfel', 'münzwurf', 'lotto', 'stoppuhr', 'timer', 'countdown', 'weltzeituhr', 'zeitzone', 'diff', 'textvergleich', 'wortzähler', 'farbwähler', 'hex', 'rgb', 'wcag', 'kontrast', 'passphrase', 'uuid', 'base64', 'sha256'],
+            'answer'   => "Das Modul **🧰 Alltags-Werkzeuge & Toolbox** (`toolbox.php`) ist das 6-in-1 Schweizer Taschenmesser deiner Cloud:\n\n"
+                . "1. **📶 QR-Code, Gäste-WLAN-Karten & GiroCode-Studio:** Druckfertige Gäste-WLAN-Aufsteller, SEPA-Überweisungs-QR-Codes (GiroCode für Banking-Apps), Visitenkarten und Weblinks – 100 % lokal berechnet und direkt im Cloud-Ordner `Werkzeuge/` speicherbar.\n"
+                . "2. **🎡 Glücksrad, Team-Generator & Würfel:** Animiertes Glücksrad mit Sound, Zufalls-Team-/Turnier-Auslosung, Münzwurf, Rollenspiel-Würfel (`W6`/`W20`) und Lottozahlen.\n"
+                . "3. **⏱️ Stoppuhr, Countdown & Weltzeituhr:** Hundertstelsekunden-Stoppuhr mit Rundenzeiten, Küchentimer/Pomodoro-Wecker und internationale Weltzeituhr mit Zeitzonen-Schieberegler.\n"
+                . "4. **🔍 Text-Werkstatt & Dokumenten-Vergleich:** Zeilenweiser Diff-Checker (Original vs. Geändert), Wort-/Zeichen-/Lesezeit-Zähler und 1-Klick-Zeilenreiniger.\n"
+                . "5. **🎨 Farb- & WCAG-Kontrast-Studio:** Umrechner (`HEX` $\leftrightarrow$ `RGB` $\leftrightarrow$ `HSL` $\leftrightarrow$ `CMYK`), Farbharmonien und Barrierefreiheits-Prüfer.\n"
+                . "6. **🔐 Passphrasen, UUID & Kodierung:** Deutsche 4-Wort-Passphrasen, starke Zufallspasswörter, `UUID v4`, `Base64`, `JSON`-Formatter & `SHA-256`.",
+            'actions'  => [
+                ['label' => '🧰 Toolbox öffnen', 'url' => 'toolbox.php'],
+                ['label' => '🧮 Taschenrechner', 'url' => 'calculator.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert der Taschenrechner?',
+                'Welche Spiele gibt es in der Cloud?',
+            ],
+        ],
     ];
 
     if ($isAdmin) {

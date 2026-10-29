@@ -694,6 +694,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_forms'                  => '1',
         'enable_music'                  => '1',
         'enable_calculator'             => '1',
+        'enable_toolbox'                => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
@@ -3051,6 +3052,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_calculator',
             'color'       => 'bg-cyan-600',
         ],
+        'toolbox' => [
+            'icon'        => '🧰',
+            'label'       => 'Alltags-Werkzeuge & Toolbox',
+            'url'         => 'toolbox.php',
+            'setting_key' => 'enable_toolbox',
+            'color'       => 'bg-amber-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3098,6 +3106,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'forms.php'      => 'forms',
         'music.php'      => 'music',
         'calculator.php' => 'calculator',
+        'toolbox.php'    => 'toolbox',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
