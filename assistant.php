@@ -2085,7 +2085,7 @@ function queryLocalOllamaAssistant(
         'keep_alive' => '30m',
         'options'    => [
             'temperature' => $isGeneralQuestion ? 0.35 : 0.2,
-            'num_predict' => 145,
+            'num_predict' => 180,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -2117,6 +2117,15 @@ function queryLocalOllamaAssistant(
     $content = trim((string)($decoded['message']['content'] ?? ''));
     if ($content === '') {
         return null;
+    }
+
+    // Falls das Token-Limit mitten im letzten Satz erreicht wurde, sauber am letzten Satzende abschneiden
+    if (($decoded['done_reason'] ?? '') === 'length' && !preg_match('/[.!?:)`*»"”]\s*$/u', $content)) {
+        if (preg_match('/^(.*[.!?])\s+[^.!?]+$/su', $content, $mSent) && mb_strlen($mSent[1]) >= 60) {
+            $content = trim($mSent[1]);
+        } else {
+            $content .= '.';
+        }
     }
 
     return $content;
