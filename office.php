@@ -689,6 +689,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'colla
     }
 
     $username = (string)($_SESSION['username'] ?? ('User#' . $userId));
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     $palette  = ['#2563eb', '#059669', '#d97706', '#e11d48', '#7c3aed', '#0891b2', '#ea580c', '#4f46e5'];
     $userColor = $palette[$userId % count($palette)];
 
@@ -2443,20 +2446,27 @@ const wordSurface = document.getElementById('wordEditorSurface');
 let wordBlockCounter = 0;
 let wordInputDebounce = null;
 let lastKnownBlockCount = 0;
+let wordInitialIdsAssigned = false;
+let wordLastTypedAt = 0;
 
 function ensureWordBlockIds() {
     if (!wordSurface) return;
     // Falls das Dokument noch gar keine Block-Kinder hat, in <p> einbetten
     if (wordSurface.children.length === 0) {
         const txt = wordSurface.innerHTML.trim();
-        wordSurface.innerHTML = `<p data-block-id="b0">${txt || '<br>'}</p>`;
+        wordSurface.innerHTML = `<p data-block-id="b_init_0">${txt || '<br>'}</p>`;
     }
     Array.from(wordSurface.children).forEach((el, idx) => {
         if (!el.getAttribute('data-block-id')) {
-            wordBlockCounter++;
-            el.setAttribute('data-block-id', 'b_' + OFFICE_USER_ID + '_' + Date.now() + '_' + wordBlockCounter + '_' + idx);
+            if (!wordInitialIdsAssigned) {
+                el.setAttribute('data-block-id', 'b_init_' + idx);
+            } else {
+                wordBlockCounter++;
+                el.setAttribute('data-block-id', 'b_' + OFFICE_USER_ID + '_' + Date.now() + '_' + wordBlockCounter + '_' + idx);
+            }
         }
     });
+    wordInitialIdsAssigned = true;
 }
 
 function getCleanWordHtml() {
@@ -2536,27 +2546,15 @@ function applyWordPeerLocks() {
 function broadcastWordChange(forceFull = false) {
     if (!wordSurface || !OFFICE_CAN_EDIT) return;
     ensureWordBlockIds();
-    const currentCount = wordSurface.children.length;
-    const blk = getActiveWordBlockElement();
-
-    if (forceFull || currentCount !== lastKnownBlockCount || !blk) {
-        lastKnownBlockCount = currentCount;
-        const blocksPayload = Array.from(wordSurface.children).map(el => ({
-            id: el.getAttribute('data-block-id'),
-            tag: el.tagName,
-            html: el.innerHTML
-        }));
-        queueCollabDelta('word_full', 'doc', blocksPayload);
-    } else {
-        const bid = blk.getAttribute('data-block-id');
-        if (bid && !blk.hasAttribute('data-locked-by')) {
-            queueCollabDelta('word_block', 'block:' + bid, {
-                id: bid,
-                tag: blk.tagName,
-                html: blk.innerHTML
-            });
-        }
-    }
+    lastKnownBlockCount = wordSurface.children.length;
+    const blocksPayload = Array.from(wordSurface.children).map((el, idx) => ({
+        id: el.getAttribute('data-block-id'),
+        idx: idx,
+        tag: el.tagName,
+        html: el.innerHTML
+    }));
+    queueCollabDelta('word_full', 'doc', blocksPayload);
+    runCollabSyncTick();
 }
 
 if (wordSurface) {
@@ -2573,11 +2571,12 @@ if (wordSurface) {
         }
     };
     wordSurface.addEventListener('input', () => {
+        wordLastTypedAt = Date.now();
         markDirty();
         updateWordStats();
         updateWordFocusTarget();
         if (wordInputDebounce) clearTimeout(wordInputDebounce);
-        wordInputDebounce = setTimeout(() => broadcastWordChange(false), 250);
+        wordInputDebounce = setTimeout(() => broadcastWordChange(true), 220);
     });
     wordSurface.addEventListener('keyup', updateWordFocusTarget);
     wordSurface.addEventListener('mouseup', updateWordFocusTarget);
@@ -5293,41 +5292,64 @@ function applyIncomingDeltas(deltas) {
             }
         } else if (OFFICE_EDITOR_TYPE === 'word' && wordSurface) {
             ensureWordBlockIds();
+            const isActivelyTypingRightNow = (Date.now() - wordLastTypedAt) < 1600;
+            const myActiveBlk = isActivelyTypingRightNow ? getActiveWordBlockElement() : null;
+            const myActiveId  = myActiveBlk ? myActiveBlk.getAttribute('data-block-id') : null;
+
             if (d.type === 'word_block' && d.payload && d.payload.id) {
-                const targetEl = wordSurface.querySelector(`[data-block-id="${CSS.escape(d.payload.id)}"]`);
-                const myActiveBlk = getActiveWordBlockElement();
-                // Nur aktualisieren, wenn der eigene Cursor nicht gerade mitten in diesem Absatz tippt
+                let targetEl = wordSurface.querySelector(`[data-block-id="${CSS.escape(d.payload.id)}"]`);
+                if (!targetEl && typeof d.payload.idx === 'number' && wordSurface.children[d.payload.idx]) {
+                    targetEl = wordSurface.children[d.payload.idx];
+                }
                 if (targetEl && targetEl !== myActiveBlk) {
                     targetEl.innerHTML = sanitizeWordPeerHtml(d.payload.html || '');
                 }
             } else if (d.type === 'word_full' && Array.isArray(d.payload)) {
-                const myActiveBlk = getActiveWordBlockElement();
-                const myActiveId  = myActiveBlk ? myActiveBlk.getAttribute('data-block-id') : null;
                 const existingMap = {};
                 Array.from(wordSurface.children).forEach(el => {
                     const bid = el.getAttribute('data-block-id');
                     if (bid) existingMap[bid] = el;
                 });
 
+                const incomingIds = new Set();
                 d.payload.forEach((bInfo, idx) => {
                     if (!bInfo || !bInfo.id) return;
-                    let el = existingMap[bInfo.id];
+                    const cleanId = String(bInfo.id).replace(/[^a-zA-Z0-9_-]/g, '');
+                    incomingIds.add(cleanId);
+                    let el = existingMap[cleanId];
+                    if (!el && wordSurface.children[idx] && !d.payload.some(x => x && x.id === wordSurface.children[idx].getAttribute('data-block-id'))) {
+                        el = wordSurface.children[idx];
+                        el.setAttribute('data-block-id', cleanId);
+                    }
                     if (!el) {
                         const safeTag = ['P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'TABLE'].includes(String(bInfo.tag).toUpperCase())
                             ? String(bInfo.tag).toUpperCase()
                             : 'P';
                         el = document.createElement(safeTag);
-                        el.setAttribute('data-block-id', String(bInfo.id).replace(/[^a-zA-Z0-9_-]/g, ''));
+                        el.setAttribute('data-block-id', cleanId);
                         el.innerHTML = sanitizeWordPeerHtml(bInfo.html || '');
                         if (idx < wordSurface.children.length) {
                             wordSurface.insertBefore(el, wordSurface.children[idx]);
                         } else {
                             wordSurface.appendChild(el);
                         }
-                    } else if (bInfo.id !== myActiveId) {
-                        el.innerHTML = sanitizeWordPeerHtml(bInfo.html || '');
+                    } else if (cleanId !== myActiveId) {
+                        const safeHtml = sanitizeWordPeerHtml(bInfo.html || '');
+                        if (el.innerHTML !== safeHtml) {
+                            el.innerHTML = safeHtml;
+                        }
                     }
                 });
+
+                // Gelöschte Absätze entfernen (sofern man nicht selbst gerade darin tippt)
+                if (!isActivelyTypingRightNow && wordSurface.children.length > d.payload.length) {
+                    Array.from(wordSurface.children).forEach(el => {
+                        const bid = el.getAttribute('data-block-id');
+                        if (bid && !incomingIds.has(bid) && wordSurface.children.length > 1) {
+                            el.remove();
+                        }
+                    });
+                }
                 lastKnownBlockCount = wordSurface.children.length;
             }
         } else if (OFFICE_EDITOR_TYPE === 'slides') {
@@ -5405,9 +5427,25 @@ async function runCollabSyncTick() {
             if (typeof data.maxDeltaId === 'number' && data.maxDeltaId > collabLastDeltaId) {
                 collabLastDeltaId = data.maxDeltaId;
             }
+            const prevPeerCount = collabPeers.length;
             const prevPeersJson = JSON.stringify(collabPeers);
             collabPeers = Array.isArray(data.collaborators) ? data.collaborators : [];
             renderCollabPresenceBar();
+
+            // Wenn ein weiterer Mitarbeiter neu ins Dokument kommt, aktuellen Live-Stand senden
+            if (prevPeerCount >= 1 && collabPeers.length > prevPeerCount && OFFICE_CAN_EDIT && hasUnsavedChanges) {
+                if (OFFICE_EDITOR_TYPE === 'word') {
+                    broadcastWordChange(true);
+                } else if (OFFICE_EDITOR_TYPE === 'sheet') {
+                    queueCollabDelta('sheet_full', 'doc', sheetsState);
+                } else if (OFFICE_EDITOR_TYPE === 'slides') {
+                    queueCollabDelta('slides_full', 'doc', slidesDeckState);
+                } else if (OFFICE_EDITOR_TYPE === 'visio') {
+                    queueCollabDelta('visio_full', 'doc', visioState);
+                } else if (plainTextEl) {
+                    queueCollabDelta('text_full', 'doc', plainTextEl.value);
+                }
+            }
 
             if (Array.isArray(data.deltas) && data.deltas.length > 0) {
                 applyIncomingDeltas(data.deltas);
@@ -5430,6 +5468,9 @@ async function runCollabSyncTick() {
         }
     } finally {
         collabSyncInFlight = false;
+        if (collabOutQueue.length > 0) {
+            setTimeout(runCollabSyncTick, 120);
+        }
     }
 }
 
