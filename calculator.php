@@ -231,9 +231,9 @@ require_once __DIR__ . '/includes/header.php';
     }
 </style>
 
-<!-- Kopfbereich -->
-<div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <div>
+<!-- Kopfbereich (Überschrift auf Mobilgeräten ausgeblendet für maximalen Platz) -->
+<div class="mb-3 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div class="hidden sm:block">
         <div class="flex items-center gap-2.5">
             <span class="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-brand-600 text-white text-xl shadow-xs">
                 🧮
