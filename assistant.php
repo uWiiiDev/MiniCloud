@@ -138,19 +138,19 @@ function getAssistantLangPack(string $lang, string $username, string $appTitle):
             'page_title'       => '🤖 Cloud-Assistent',
             'header_title'     => 'MiniCloud KI- & Wissens-Assistent',
             'header_badge'     => '🟢 100 % Lokal & 11 Sprachen',
-            'header_desc'      => 'Beantwortet Fragen zur Cloud in 11 Sprachen, durchsucht live deine Dateien, Termine & Aufgaben und legt per Befehl direkt Notizen oder To-Dos an.',
+            'header_desc'      => '2-Stufen-Architektur: Durchsucht live deine Dateien, Termine, Aufgaben, Finanzen & Lesestände, merkt sich den Gesprächskontext und nutzt optional ein lokales Sprachmodell (Ollama).',
             'btn_clear'        => '🔄 Verlauf leeren',
             'btn_help'         => '📖 Handbuch öffnen',
             'lang_auto'        => '🌐 Automatisch (Sprache erkennen)',
             'sec_live'         => 'Live-Abfragen zu deinem Konto',
             'sec_modules'      => 'Häufige Fragen zu Modulen',
             'tip_title'        => '⚡ Profi-Tipp: Schnellbefehle im Chat',
-            'tip_body'         => '• <code>Suche Rechnung</code> durchsucht Dateien, Kontakte & Notizen.<br>• <code>Notiz: Einkaufsliste…</code> legt direkt eine Haftnotiz an.<br>• <code>Aufgabe: Steuererklärung</code> legt direkt ein To-Do an.',
-            'input_placeholder'=> 'Frage stellen (in 11 Sprachen) oder „Suche …“ / „Aufgabe: …“ eingeben…',
+            'tip_body'         => '• <code>Suche Rechnung</code> durchsucht Dateien, Kontakte & Notizen.<br>• <code>Notiz: Einkaufsliste…</code> legt direkt eine Haftnotiz an.<br>• <code>Aufgabe: Steuererklärung</code> legt direkt ein To-Do an.<br>• <code>Termin: Morgen 15:00 Zahnarzt</code> trägt direkt einen Kalendertermin ein.',
+            'input_placeholder'=> 'Frage stellen (mit Folgefragen-Gedächtnis) oder „Termin: Morgen 15:00 …“ eingeben…',
             'btn_send'         => 'Senden →',
-            'welcome'          => "Hallo **{$username}**! 👋 Ich bin dein lokaler **{$appTitle}-Assistent**.\n\nIch spreche alle **11 Sprachen** deiner Cloud! Frag mich gerne alles zur Bedienung, zu deinem freien **Speicherplatz**, deinen **Terminen & Aufgaben** oder suche direkt nach **Dateien, Kontakten und Notizen**.",
+            'welcome'          => "Hallo **{$username}**! 👋 Ich bin dein lokaler **{$appTitle}-Assistent**.\n\nIch spreche alle **11 Sprachen** deiner Cloud, merke mir unseren **Gesprächskontext für Rückfragen** und kenne live deinen **Speicherplatz**, deine **Termine & Aufgaben**, dein **Haushaltsbuch**, deine **Hörbuch-/E-Book-Lesestände** sowie **Kontakte & Geburtstage**.",
             'quick_welcome'    => "Hallo **{$username}**! 👋 Wie kann ich dir auf dieser Seite helfen?",
-            'hello_reply'      => "Hallo **{$username}**! 🤖 Ich bin dein **lokaler Cloud-Assistent** (100 % offline-, Intranet- & DSGVO-konform direkt auf diesem Server).\n\nIch kann dir in **11 Sprachen** helfen:\n1. **📊 Live-Fragen zu deinem Konto:** Frag mich nach freiem *Speicherplatz*, *Terminen*, offenen *Aufgaben*, ungelesenen *Nachrichten* oder suche nach *Dateien, Kontakten & Notizen*.\n2. **💡 Erklärungen zu allen Modulen:** Frag mich zu *Office Light*, *E-Book-Reader (.epub)*, *PDF schwärzen & ausfüllen*, *OCR-Texterkennung*, *WebDAV/CalDAV* oder *Datei-Tresor*.\n3. **⚡ Schnellbefehle:** Schreib `Notiz: ...` oder `Aufgabe: ...`, um sofort einen Eintrag anzulegen!",
+            'hello_reply'      => "Hallo **{$username}**! 🤖 Ich bin dein **lokaler 2-Stufen-Cloud-Assistent** (100 % offline-, Intranet- & DSGVO-konform direkt auf diesem Server).\n\nIch kann dir in **11 Sprachen** helfen:\n1. **📊 Live-Fragen zu deinem Konto:** Frag mich nach freiem *Speicherplatz*, *Terminen*, offenen *Aufgaben*, *Haushaltsbuch-Ausgaben*, deinem letzten *Hörbuch / E-Book*, *Vereinsdaten* oder *Geburtstagen*.\n2. **🧠 Gesprächsgedächtnis:** Du kannst jederzeit kurze Anschlussfragen stellen (*„Und wie teile ich das?“*, *„Geht das auch mit Passwort?“*).\n3. **⚡ Schnellbefehle:** Schreib `Notiz: ...`, `Aufgabe: ...` oder `Termin: Morgen 15:00 ...`, um sofort einen Eintrag anzulegen!",
             'thanks_reply'     => "Sehr gerne, **{$username}**! 😊 Wenn du noch eine Frage zur Cloud hast oder eine Datei, einen Termin oder eine Funktion suchst, frag einfach jederzeit.",
             'q_storage'        => 'Wie viel Speicherplatz habe ich noch frei?',
             'q_events'         => 'Welche Termine stehen bei mir an?',
@@ -1785,6 +1785,176 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
 }
 
 /**
+ * Speichert den aktuellen Gesprächsschritt im Session-Kontext-Gedächtnis (Stufe 1 & 2),
+ * damit Folgefragen ("Und wie teile ich das?", "Geht das auch mit Passwort?") verstanden werden.
+ *
+ * @param array<int, array{label: string, url: string}> $actions
+ */
+function rememberAssistantTurn(string $question, string $reply, string $topicId = '', array $actions = []): void
+{
+    if (!isset($_SESSION['assistant_context']) || !is_array($_SESSION['assistant_context'])) {
+        $_SESSION['assistant_context'] = [
+            'last_topic_id' => '',
+            'last_actions'  => [],
+            'history'       => [],
+        ];
+    }
+
+    if ($topicId !== '') {
+        $_SESSION['assistant_context']['last_topic_id'] = $topicId;
+    }
+    if (!empty($actions)) {
+        $_SESSION['assistant_context']['last_actions'] = $actions;
+    }
+
+    $cleanReply = trim(preg_replace('/\s+/u', ' ', strip_tags($reply)) ?? '');
+    $_SESSION['assistant_context']['history'][] = [
+        'q' => mb_substr(trim($question), 0, 260),
+        'a' => mb_substr($cleanReply, 0, 420),
+    ];
+
+    if (count($_SESSION['assistant_context']['history']) > 4) {
+        $_SESSION['assistant_context']['history'] = array_slice($_SESSION['assistant_context']['history'], -4);
+    }
+}
+
+/**
+ * Stufe 2 (Optional): Fragt das lokale KI-Sprachmodell über Ollama (127.0.0.1:11434) an,
+ * sofern in den Einstellungen aktiviert und auf dem Server verfügbar (z. B. auf runready.cloud).
+ * Auf Shared-Webhosting (wie STRATO) kehrt diese Funktion sofort (< 1 ms) mit null zurück.
+ *
+ * @param array<int, array{id: string, title: string, icon: string, answer: string}> $topKbEntries
+ */
+function queryLocalOllamaAssistant(
+    PDO $pdo,
+    int $userId,
+    string $username,
+    bool $isAdmin,
+    array $appSettings,
+    string $question,
+    string $lang,
+    array $topKbEntries
+): ?string {
+    if (($appSettings['assistant_use_ollama'] ?? '1') !== '1') {
+        return null;
+    }
+
+    $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?: 'qwen2.5:3b';
+    $status = probeLocalOllamaStatus($preferredModel);
+    if (!$status['available'] || $status['active_model'] === '') {
+        return null;
+    }
+
+    // Session-Lock vor dem lokalen Modell-Aufruf nicht blockieren, aber History vorher auslesen
+    $history = $_SESSION['assistant_context']['history'] ?? [];
+
+    // Kompakte Live-Konto-Fakten für den System-Prompt zusammenstellen
+    $appTitle = (string)($appSettings['app_title'] ?? 'MiniCloud');
+    $stats    = getUserStorageStats($pdo, $userId);
+    $freeStr  = formatBytes($stats['free']);
+    $usedStr  = formatBytes($stats['used']);
+    $quotaStr = formatBytes($stats['quota']);
+    $unread   = getUnreadMessagesCount($pdo, $userId);
+
+    $openTasksCount = 0;
+    $nextEventStr   = 'keine anstehenden Termine';
+    try {
+        $stmtT = $pdo->prepare("SELECT COUNT(*) FROM `tasks` WHERE (`user_id` = :u1 OR `assigned_to` = :u2) AND `status` IN ('todo', 'in_progress')");
+        $stmtT->execute([':u1' => $userId, ':u2' => $userId]);
+        $openTasksCount = (int)$stmtT->fetchColumn();
+
+        $stmtE = $pdo->prepare("SELECT `title`, `start_at` FROM `calendar_events` WHERE (`user_id` = :u1 OR `shared_user_id` = :u2) AND `end_at` >= CURDATE() ORDER BY `start_at` ASC LIMIT 2");
+        $stmtE->execute([':u1' => $userId, ':u2' => $userId]);
+        $evRows = $stmtE->fetchAll();
+        if (!empty($evRows)) {
+            $evParts = [];
+            foreach ($evRows as $er) {
+                $evParts[] = date('d.m.Y H:i', strtotime((string)$er['start_at']) ?: time()) . ' (' . $er['title'] . ')';
+            }
+            $nextEventStr = implode(', ', $evParts);
+        }
+    } catch (Throwable) {
+    }
+
+    $kbContextLines = [];
+    foreach (array_slice($topKbEntries, 0, 3) as $kbe) {
+        $kbContextLines[] = "### {$kbe['icon']} {$kbe['title']}\n{$kbe['answer']}";
+    }
+    $kbContextStr = !empty($kbContextLines)
+        ? implode("\n\n", $kbContextLines)
+        : "MiniCloud umfasst 22 Module: Dateien & Tresor (index.php), Office Light 6-in-1 (office.php), Kalender (calendar.php), Aufgaben (tasks.php), Projekte (projects.php), Notizwand mit Sprachnotizen & Diktat (notes.php), Kontakte (contacts.php), Nachrichten & Sprachanrufe (messages.php), Musik- & Hörbuch-Studio mit 1->99 Kapitel-Sortierung (music.php), E-Books (ebooks.php), PDF & Scanner/OCR (pdf_tools.php), Foto-Galerie (gallery.php), Online-Formulare (forms.php), Vereinsverwaltung (club.php), Haushaltsplaner (budget.php), Mind-Map (mindmap.php), Umfragen (polls.php), Live-Mentimeter (menti.php), Passwort-Manager (passwords.php) und Spiele (games.php).";
+
+    $langNames = [
+        'de' => 'Deutsch', 'en' => 'English', 'fr' => 'Français', 'es' => 'Español',
+        'it' => 'Italiano', 'nl' => 'Nederlands', 'pl' => 'Polski', 'pt' => 'Português',
+        'cs' => 'Čeština', 'tr' => 'Türkçe', 'uk' => 'Українська',
+    ];
+    $targetLangName = $langNames[$lang] ?? 'Deutsch';
+
+    $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent von {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
+        . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
+        . "Erfinde KEINE Funktionen, die nicht in {$appTitle} existieren. Halte die Antwort kompakt (ca. 3 bis 6 Sätze oder Stichpunkte).\n\n"
+        . "Live-Kontodaten von {$username}:\n"
+        . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
+        . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread}\n"
+        . "- Nächste Termine: {$nextEventStr}\n\n"
+        . "Relevantes Handbuch-Wissen zu dieser Frage:\n"
+        . $kbContextStr;
+
+    $messages = [
+        ['role' => 'system', 'content' => $sysPrompt],
+    ];
+    if (is_array($history)) {
+        foreach (array_slice($history, -2) as $turn) {
+            if (!empty($turn['q']) && !empty($turn['a'])) {
+                $messages[] = ['role' => 'user', 'content' => (string)$turn['q']];
+                $messages[] = ['role' => 'assistant', 'content' => (string)$turn['a']];
+            }
+        }
+    }
+    $messages[] = ['role' => 'user', 'content' => $question];
+
+    $payload = json_encode([
+        'model'      => $status['active_model'],
+        'messages'   => $messages,
+        'stream'     => false,
+        'keep_alive' => '30m',
+        'options'    => [
+            'temperature' => 0.25,
+            'num_predict' => 260,
+            'num_ctx'     => 2048,
+        ],
+    ], JSON_UNESCAPED_UNICODE);
+
+    if (!is_string($payload)) {
+        return null;
+    }
+
+    $ctx = stream_context_create([
+        'http' => [
+            'method'        => 'POST',
+            'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
+            'content'       => $payload,
+            'timeout'       => 15.0,
+            'ignore_errors' => true,
+        ],
+    ]);
+
+    $rawResp = @file_get_contents('http://127.0.0.1:11434/api/chat', false, $ctx);
+    if (!is_string($rawResp) || $rawResp === '') {
+        return null;
+    }
+
+    $decoded = json_decode($rawResp, true);
+    $content = trim((string)($decoded['message']['content'] ?? ''));
+    if ($content === '') {
+        return null;
+    }
+
+    return $content;
+}
+
+/**
  * Beantwortet eine Frage des Benutzers mehrsprachig in allen 11 angebotenen Sprachen.
  *
  * @return array{
@@ -1879,6 +2049,92 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
                     'followups' => [
                         $pack['q_tasks'],
                         $pack['q_events'],
+                    ],
+                    'lang'      => $lang,
+                ];
+            } catch (Throwable) {
+            }
+        }
+    }
+
+    // Natürlicher Schnellbefehl: Kalender-Termin direkt anlegen ("Termin: Morgen 15:00 Zahnarzt" oder "Termin am 20.11.2026 18:30 Vorstand")
+    if (preg_match('/^(?:neuer\s+termin|termin\s+eintragen|termin\s+anlegen|trage\s+termin\s+ein|termin|new\s+event|event|appointment)\s*:?\s+(.+)$/isu', $question, $mEvCmd)
+        && !preg_match('/^(welche|meine|wann|was|hast|habe|gibt|zeig)/isu', trim($mEvCmd[1]))
+    ) {
+        $rawEvText = trim($mEvCmd[1]);
+        if ($rawEvText !== '') {
+            try {
+                $baseTs = time();
+                $allDay = 1;
+                $hour   = 9;
+                $min    = 0;
+
+                if (preg_match('/\b(uebermorgen|übermorgen)\b/iu', $rawEvText)) {
+                    $baseTs = strtotime('+2 days');
+                    $rawEvText = trim((string)preg_replace('/\b(uebermorgen|übermorgen)\b/iu', '', $rawEvText));
+                } elseif (preg_match('/\b(morgen|tomorrow)\b/iu', $rawEvText)) {
+                    $baseTs = strtotime('+1 day');
+                    $rawEvText = trim((string)preg_replace('/\b(morgen|tomorrow)\b/iu', '', $rawEvText));
+                } elseif (preg_match('/\b(heute|today)\b/iu', $rawEvText)) {
+                    $baseTs = time();
+                    $rawEvText = trim((string)preg_replace('/\b(heute|today)\b/iu', '', $rawEvText));
+                } elseif (preg_match('/\b(?:am\s+)?(\d{1,2})\.(\d{1,2})\.(\d{2,4})?\b/u', $rawEvText, $mDate)) {
+                    $d = (int)$mDate[1];
+                    $m = (int)$mDate[2];
+                    $y = !empty($mDate[3]) ? (int)$mDate[3] : (int)date('Y');
+                    if ($y < 100) {
+                        $y += 2000;
+                    }
+                    $candTs = mktime(9, 0, 0, $m, $d, $y);
+                    if ($candTs !== false) {
+                        $baseTs = $candTs;
+                    }
+                    $rawEvText = trim(str_replace($mDate[0], '', $rawEvText));
+                }
+
+                if (preg_match('/\b(?:um\s+)?(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?\b/iu', $rawEvText, $mTime)) {
+                    $candH = (int)$mTime[1];
+                    $candM = isset($mTime[2]) && $mTime[2] !== '' ? (int)$mTime[2] : 0;
+                    if ($candH >= 0 && $candH <= 23 && $candM >= 0 && $candM <= 59 && (isset($mTime[2]) || stripos($mTime[0], 'uhr') !== false || stripos($mTime[0], 'um') !== false)) {
+                        $hour   = $candH;
+                        $min    = $candM;
+                        $allDay = 0;
+                        $rawEvText = trim(str_replace($mTime[0], '', $rawEvText));
+                    }
+                }
+
+                $evTitle = mb_substr(trim((string)preg_replace('/\s+/u', ' ', $rawEvText), " -,:."), 0, 160);
+                if ($evTitle === '') {
+                    $evTitle = 'Termin';
+                }
+
+                $startDt = date('Y-m-d', $baseTs) . ($allDay ? ' 00:00:00' : sprintf(' %02d:%02d:00', $hour, $min));
+                $endDt   = date('Y-m-d', $baseTs) . ($allDay ? ' 23:59:59' : sprintf(' %02d:%02d:00', min(23, $hour + 1), $min));
+
+                $stmtInsEv = $pdo->prepare(
+                    "INSERT INTO `calendar_events` (`user_id`, `title`, `start_at`, `end_at`, `all_day`, `color`)
+                     VALUES (:uid, :title, :sa, :ea, :ad, '#2563eb')"
+                );
+                $stmtInsEv->execute([
+                    ':uid'   => $userId,
+                    ':title' => $evTitle,
+                    ':sa'    => $startDt,
+                    ':ea'    => $endDt,
+                    ':ad'    => $allDay,
+                ]);
+
+                $dispDate = date('d.m.Y', $baseTs) . ($allDay ? ' (' . $pack['events_allday'] . ')' : sprintf(' um %02d:%02d Uhr', $hour, $min));
+                $replyMsg = "📅 ✅ Termin **„" . htmlspecialchars($evTitle, ENT_QUOTES, 'UTF-8') . "“** wurde für den **{$dispDate}** in deinem Kalender eingetragen!";
+                rememberAssistantTurn($question, $replyMsg, 'calendar_sync', [['label' => $pack['act_calendar'], 'url' => 'calendar.php']]);
+
+                return [
+                    'reply'     => $replyMsg,
+                    'actions'   => [
+                        ['label' => $pack['act_calendar'], 'url' => 'calendar.php'],
+                    ],
+                    'followups' => [
+                        $pack['q_events'],
+                        $pack['q_tasks'],
                     ],
                     'lang'      => $lang,
                 ];
@@ -2231,6 +2487,223 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     }
 
     // =========================================================================
+    // 8b. LIVE-ABFRAGE (STUFE 1): HAUSHALTSBUCH & FINANZEN (budget.php)
+    // =========================================================================
+    $budgetLiveTriggers = [
+        'mein haushaltsbuch', 'meine finanzen', 'meine ausgaben', 'meine einnahmen', 'wie viel ausgegeben', 'ausgaben diesen monat', 'einnahmen diesen monat', 'kontostand', 'monatsbilanz', 'kassensturz', 'meine abos', 'meine fixkosten', 'meine sparziele',
+        'my budget', 'my expenses', 'my income', 'monthly balance',
+    ];
+    $isBudgetLive = false;
+    foreach ($budgetLiveTriggers as $bt) {
+        if (str_contains($norm, $bt)) {
+            $isBudgetLive = true;
+            break;
+        }
+    }
+    if ($isBudgetLive) {
+        try {
+            $curMonth = date('Y-m');
+            $stmtBk = $pdo->prepare(
+                "SELECT `id`, `name`, `currency`
+                 FROM `budget_books`
+                 WHERE `user_id` = :u1 OR `shared_user_id` = :u2
+                 ORDER BY `id` ASC LIMIT 5"
+            );
+            $stmtBk->execute([':u1' => $userId, ':u2' => $userId]);
+            $books = $stmtBk->fetchAll();
+
+            if (!empty($books)) {
+                $lines = ["💰 **Live-Finanzübersicht (" . date('m/Y') . "):**\n"];
+                foreach ($books as $bk) {
+                    $bid  = (int)$bk['id'];
+                    $curr = htmlspecialchars((string)($bk['currency'] ?: '€'), ENT_QUOTES, 'UTF-8');
+                    $stmtSum = $pdo->prepare(
+                        "SELECT
+                            COALESCE(SUM(CASE WHEN `type` = 'income' THEN `amount` ELSE 0 END), 0) AS inc,
+                            COALESCE(SUM(CASE WHEN `type` = 'expense' THEN `amount` ELSE 0 END), 0) AS exp
+                         FROM `budget_entries`
+                         WHERE `book_id` = :bid AND `entry_date` LIKE :ym"
+                    );
+                    $stmtSum->execute([':bid' => $bid, ':ym' => $curMonth . '%']);
+                    $sums = $stmtSum->fetch() ?: ['inc' => 0, 'exp' => 0];
+                    $inc  = (float)$sums['inc'];
+                    $exp  = (float)$sums['exp'];
+                    $bal  = $inc - $exp;
+                    $sign = $bal >= 0 ? '+' : '';
+                    $lines[] = "- 📘 **" . htmlspecialchars((string)$bk['name'], ENT_QUOTES, 'UTF-8') . ":** Einnahmen **" . number_format($inc, 2, ',', '.') . " {$curr}** · Ausgaben **" . number_format($exp, 2, ',', '.') . " {$curr}** · Saldo: **{$sign}" . number_format($bal, 2, ',', '.') . " {$curr}**";
+                }
+                $reply = implode("\n", $lines);
+                rememberAssistantTurn($question, $reply, 'budget_planner', [['label' => '💰 Haushaltsplaner', 'url' => 'budget.php']]);
+                return [
+                    'reply'     => $reply,
+                    'actions'   => [['label' => '💰 Haushaltsplaner öffnen', 'url' => 'budget.php']],
+                    'followups' => [$pack['q_storage'], $pack['q_tasks']],
+                    'lang'      => $lang,
+                ];
+            }
+        } catch (Throwable) {
+        }
+    }
+
+    // =========================================================================
+    // 8c. LIVE-ABFRAGE (STUFE 1): HÖRBUCH- / MUSIK-GEDÄCHTNIS & E-BOOK-LESESTAND
+    // =========================================================================
+    $mediaResumeTriggers = [
+        'welches hoerbuch', 'wo war ich beim hoerbuch', 'hoerbuch weiterhoeren', 'weiterhoeren', 'zuletzt gehoert', 'welches buch lese ich', 'wo war ich beim buch', 'weiterlesen', 'lesefortschritt', 'lesestand',
+        'continue audiobook', 'continue reading', 'last audiobook', 'reading progress',
+    ];
+    $isMediaResume = false;
+    foreach ($mediaResumeTriggers as $mrt) {
+        if (str_contains($norm, $mrt)) {
+            $isMediaResume = true;
+            break;
+        }
+    }
+    if ($isMediaResume) {
+        $lines   = [];
+        $actions = [];
+        try {
+            $stmtAud = $pdo->prepare(
+                "SELECT m.file_id, m.last_position_sec, m.cached_title, f.original_name, f.folder_path
+                 FROM `music_track_meta` m
+                 INNER JOIN `files` f ON f.id = m.file_id
+                 WHERE m.user_id = :uid AND m.last_position_sec >= 5 AND f.deleted_at IS NULL
+                 ORDER BY m.updated_at DESC LIMIT 2"
+            );
+            $stmtAud->execute([':uid' => $userId]);
+            foreach ($stmtAud->fetchAll() as $ar) {
+                $posSec = (int)$ar['last_position_sec'];
+                $posFmt = sprintf('%02d:%02d Min.', intdiv($posSec, 60), $posSec % 60);
+                $label  = trim((string)($ar['cached_title'] ?: $ar['original_name']));
+                $lines[] = "- 📖 **Hörbuch / Audio:** **" . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . "** (gespeicherte Position: **{$posFmt}**)";
+                $actions[] = ['label' => '▶️ ' . mb_substr($label, 0, 22) . ' weiterhören', 'url' => 'music.php?play=' . (int)$ar['file_id'] . '&audiobook=1&sort=chapter'];
+            }
+        } catch (Throwable) {
+        }
+
+        try {
+            $stmtEb = $pdo->prepare(
+                "SELECT p.file_id, p.progress_percent, f.original_name
+                 FROM `ebook_progress` p
+                 INNER JOIN `files` f ON f.id = p.file_id
+                 WHERE p.user_id = :uid AND f.deleted_at IS NULL
+                 ORDER BY p.updated_at DESC LIMIT 2"
+            );
+            $stmtEb->execute([':uid' => $userId]);
+            foreach ($stmtEb->fetchAll() as $eb) {
+                $pct   = number_format((float)$eb['progress_percent'], 0, ',', '.');
+                $bName = (string)$eb['original_name'];
+                $lines[] = "- 📚 **E-Book:** **" . htmlspecialchars($bName, ENT_QUOTES, 'UTF-8') . "** (**{$pct} %** gelesen)";
+                $actions[] = ['label' => '📚 ' . mb_substr($bName, 0, 22) . ' weiterlesen', 'url' => 'ebooks.php?id=' . (int)$eb['file_id']];
+            }
+        } catch (Throwable) {
+        }
+
+        if (!empty($lines)) {
+            $reply = "🔖 **Deine zuletzt gespeicherten Hörbuch- & Lese-Positionen:**\n\n" . implode("\n", $lines);
+            rememberAssistantTurn($question, $reply, 'music_player', $actions);
+            return [
+                'reply'     => $reply,
+                'actions'   => array_slice($actions, 0, 4),
+                'followups' => [$pack['q_ebooks'], $pack['q_storage']],
+                'lang'      => $lang,
+            ];
+        }
+    }
+
+    // =========================================================================
+    // 8d. LIVE-ABFRAGE (STUFE 1): VEREINSVERWALTUNG & MITGLIEDER-STATISTIK (club.php)
+    // =========================================================================
+    if (str_contains($norm, 'wie viele mitglieder') || str_contains($norm, 'mitgliederzahl') || str_contains($norm, 'vereinsstatistik') || str_contains($norm, 'offene beitraege') || str_contains($norm, 'mitgliedsbeitraege')) {
+        try {
+            $totalM  = (int)$pdo->query("SELECT COUNT(*) FROM `club_members` WHERE `status` = 'active'")->fetchColumn();
+            $passive = (int)$pdo->query("SELECT COUNT(*) FROM `club_members` WHERE `status` = 'passive'")->fetchColumn();
+            $honor   = (int)$pdo->query("SELECT COUNT(*) FROM `club_members` WHERE `status` = 'honorary'")->fetchColumn();
+            $openFee = (float)$pdo->query("SELECT COALESCE(SUM(`amount`), 0) FROM `club_fees` WHERE `status` = 'open'")->fetchColumn();
+            $paidFee = (float)$pdo->query("SELECT COALESCE(SUM(`amount`), 0) FROM `club_fees` WHERE `status` = 'paid'")->fetchColumn();
+
+            $reply = "🏛️ **Live-Status aus der Vereinsverwaltung (`club.php`):**\n\n"
+                . "- 👥 **Aktive Mitglieder:** **{$totalM}** *(Passiv: {$passive} · Ehrenmitglieder: {$honor})*\n"
+                . "- 💶 **Beiträge bezahlt:** **" . number_format($paidFee, 2, ',', '.') . " €**\n"
+                . "- ⏳ **Offene Beiträge:** **" . number_format($openFee, 2, ',', '.') . " €**";
+            rememberAssistantTurn($question, $reply, 'club_management', [['label' => '🏛️ Vereinsverwaltung', 'url' => 'club.php']]);
+            return [
+                'reply'     => $reply,
+                'actions'   => [['label' => '🏛️ Vereinsverwaltung öffnen', 'url' => 'club.php']],
+                'followups' => [$pack['q_events'], $pack['q_storage']],
+                'lang'      => $lang,
+            ];
+        } catch (Throwable) {
+        }
+    }
+
+    // =========================================================================
+    // 8e. LIVE-ABFRAGE (STUFE 1): GEBURTSTAGE & KONTAKTE (contacts.php)
+    // =========================================================================
+    if (str_contains($norm, 'geburtstag') || str_contains($norm, 'birthday')) {
+        try {
+            $stmtB = $pdo->prepare(
+                "SELECT `first_name`, `last_name`, `birthday`
+                 FROM `contacts`
+                 WHERE (`user_id` = :u1 OR `shared_user_id` = :u2)
+                   AND `birthday` IS NOT NULL
+                 ORDER BY MONTH(`birthday`) ASC, DAY(`birthday`) ASC
+                 LIMIT 10"
+            );
+            $stmtB->execute([':u1' => $userId, ':u2' => $userId]);
+            $bRows = $stmtB->fetchAll();
+            if (!empty($bRows)) {
+                $lines = ["🎂 **Eingetragene Geburtstage in deinen Kontakten:**\n"];
+                foreach ($bRows as $br) {
+                    $bTs  = strtotime((string)$br['birthday']) ?: time();
+                    $name = trim($br['first_name'] . ' ' . $br['last_name']);
+                    $lines[] = "- 🎉 **" . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ":** " . date('d.m.Y', $bTs);
+                }
+                $reply = implode("\n", $lines);
+                rememberAssistantTurn($question, $reply, 'calendar_sync', [['label' => '📇 Kontakte', 'url' => 'contacts.php']]);
+                return [
+                    'reply'     => $reply,
+                    'actions'   => [['label' => '📇 Kontakte öffnen', 'url' => 'contacts.php'], ['label' => $pack['act_calendar'], 'url' => 'calendar.php']],
+                    'followups' => [$pack['q_events'], $pack['q_tasks']],
+                    'lang'      => $lang,
+                ];
+            }
+        } catch (Throwable) {
+        }
+    }
+
+    // =========================================================================
+    // 8f. LIVE-ABFRAGE (STUFE 1): PROJEKTE (projects.php) & UMFRAGEN (polls.php)
+    // =========================================================================
+    if (str_contains($norm, 'meine projekte') || str_contains($norm, 'aktive projekte') || str_contains($norm, 'projektstatus')) {
+        try {
+            $stmtPr = $pdo->prepare(
+                "SELECT `name`, `status`, `progress`
+                 FROM `projects`
+                 WHERE `owner_id` = :u1 OR `shared_user_id` = :u2
+                 ORDER BY `id` DESC LIMIT 6"
+            );
+            $stmtPr->execute([':u1' => $userId, ':u2' => $userId]);
+            $pRows = $stmtPr->fetchAll();
+            if (!empty($pRows)) {
+                $lines = ["🚀 **Deine aktuellen Projekte:**\n"];
+                foreach ($pRows as $pr) {
+                    $lines[] = "- **" . htmlspecialchars((string)$pr['name'], ENT_QUOTES, 'UTF-8') . "** – Fortschritt: **" . (int)$pr['progress'] . " %**";
+                }
+                $reply = implode("\n", $lines);
+                rememberAssistantTurn($question, $reply, 'projects_module', [['label' => '🚀 Projekte', 'url' => 'projects.php']]);
+                return [
+                    'reply'     => $reply,
+                    'actions'   => [['label' => '🚀 Projekte öffnen', 'url' => 'projects.php']],
+                    'followups' => [$pack['q_tasks'], $pack['q_events']],
+                    'lang'      => $lang,
+                ];
+            }
+        } catch (Throwable) {
+        }
+    }
+
+    // =========================================================================
     // 9. EXPLIZITE LIVE-SUCHE IN DATEIEN, KONTAKTEN & NOTIZEN (11 SPRACHEN)
     // =========================================================================
     if (preg_match('/^(?:suche\s+nach|suche\s+datei|suche|finde\s+datei|finde|wo\s+ist\s+die\s+datei|wo\s+liegt|wo\s+finde\s+ich|telefonnummer\s+von|kontakt\s+von|adresse\s+von|search\s+for|search|find\s+file|find|where\s+is|chercher|cherche|rechercher|trouver|buscar|busca|encontrar|cerca|trova|zoek|zoeken|szukaj|znajdz|znajdź|procurar|procura|hledat|najit|najít|ara|bul|пошук|знайди|знайти)\s+(.+)$/isu', $question, $mSearch)) {
@@ -2323,17 +2796,30 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     }
 
     // =========================================================================
-    // 10. WISSENSDATENBANK-ABGLEICH (MIT GEWICHTUNG & FUZZY-MATCHING)
+    // 10. WISSENSDATENBANK-ABGLEICH (MIT KONTEXT-GEDÄCHTNIS, VOLLTEXT & FUZZY)
     // =========================================================================
     $kb = getAssistantKnowledgeBase($appSettings, $isAdmin, $lang);
     $queryWords = array_values(array_filter(explode(' ', $norm), static fn(string $w): bool => mb_strlen($w) >= 2));
 
-    $bestScore = 0.0;
-    $bestEntry = null;
+    $lastTopicId = (string)($_SESSION['assistant_context']['last_topic_id'] ?? '');
+    $isFollowUpPhrase = hasAnyKeyword($norm, [
+        'und wie', 'geht das', 'kann man das', 'kann ich das', 'dort', 'damit', 'dazu', 'davon', 'darin', 'dafuer',
+        'auch mit', 'passwort', 'teilen', 'freigeben', 'exportieren', 'drucken', 'smartphone', 'handy', 'android', 'iphone',
+        'and how', 'can i also', 'with that', 'there', 'how do i share that',
+    ]);
+
+    $scoredEntries = [];
 
     foreach ($kb as $entry) {
         $score = 0.0;
-        $titleNorm = normalizeAssistantText($entry['title']);
+        $titleNorm  = normalizeAssistantText($entry['title']);
+        $answerNorm = normalizeAssistantText(strip_tags((string)$entry['answer']));
+
+        // Folgefragen-Bonus: Wenn der Nutzer ein Pronomen/Anschlusswort nutzt ("Und wie teile ich das?"),
+        // erhält das zuletzt besprochene Thema bzw. eng verwandte Themen einen Kontext-Bonus
+        if ($lastTopicId !== '' && $isFollowUpPhrase && $entry['id'] === $lastTopicId) {
+            $score += 6.5;
+        }
 
         if ($titleNorm !== '' && str_contains($norm, $titleNorm)) {
             $score += 18.0;
@@ -2362,15 +2848,91 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             }
         }
 
-        if ($score > $bestScore) {
-            $bestScore = $score;
-            $bestEntry = $entry;
+        // Volltext-Bonus auf den Antworttext (Stufe 1 Tiefensuche)
+        foreach ($queryWords as $qw) {
+            if (mb_strlen($qw) >= 5 && str_contains($answerNorm, $qw)) {
+                $score += 2.0;
+            }
+        }
+
+        if ($score > 0.0) {
+            $scoredEntries[] = ['score' => $score, 'entry' => $entry];
+        }
+    }
+
+    usort($scoredEntries, static fn(array $a, array $b): int => $b['score'] <=> $a['score']);
+
+    $bestScore = $scoredEntries[0]['score'] ?? 0.0;
+    $bestEntry = $scoredEntries[0]['entry'] ?? null;
+
+    // Top-3 Wissensartikel für Stufe 2 (Ollama RAG) zusammenstellen
+    $topKbForRag = [];
+    foreach (array_slice($scoredEntries, 0, 3) as $item) {
+        $topKbForRag[] = $item['entry'];
+    }
+    // Falls eine Folgefrage gestellt wurde, das vorherige Thema ebenfalls als Kontext mitgeben
+    if ($lastTopicId !== '') {
+        foreach ($kb as $entry) {
+            if ($entry['id'] === $lastTopicId) {
+                $alreadyIn = false;
+                foreach ($topKbForRag as $existing) {
+                    if ($existing['id'] === $lastTopicId) {
+                        $alreadyIn = true;
+                        break;
+                    }
+                }
+                if (!$alreadyIn) {
+                    $topKbForRag[] = $entry;
+                }
+                break;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 10b. STUFE 2 (OPTIONAL): LOKALES KI-SPRACHMODELL (OLLAMA AUF 127.0.0.1)
+    // =========================================================================
+    // Wenn Ollama aktiv ist und entweder eine freie/kombinierte Frage, eine
+    // Anschlussfrage im Gesprächskontext oder ein moderater KB-Score vorliegt,
+    // formuliert das lokale Sprachmodell eine maßgeschneiderte Antwort auf Basis
+    // der Top-KB-Artikel + Live-Kontodaten.
+    $shouldInvokeOllama = ($bestScore < 16.0 || $isFollowUpPhrase || count($queryWords) >= 6);
+    if ($shouldInvokeOllama && ($appSettings['assistant_use_ollama'] ?? '1') === '1') {
+        $ollamaReply = queryLocalOllamaAssistant(
+            $pdo,
+            $userId,
+            $username,
+            $appSettings,
+            $qTrim,
+            $lang,
+            $topKbForRag
+        );
+        if ($ollamaReply !== null && $ollamaReply !== '') {
+            $topicId = $bestEntry['id'] ?? ($lastTopicId !== '' ? $lastTopicId : 'ollama_rag');
+            $actions = $bestEntry['actions'] ?? [
+                ['label' => $pack['act_dashboard'], 'url' => 'dashboard.php'],
+                ['label' => $pack['act_help'], 'url' => 'help.php'],
+            ];
+            $followups = $bestEntry['followups'] ?? [
+                $pack['q_storage'],
+                $pack['q_events'],
+                $pack['q_tasks'],
+            ];
+            rememberAssistantTurn($qTrim, $ollamaReply, (string)$topicId);
+            return [
+                'reply'     => "🧠 **Lokale KI-Antwort**\n\n" . $ollamaReply,
+                'actions'   => $actions,
+                'followups' => $followups,
+                'lang'      => $lang,
+            ];
         }
     }
 
     if ($bestEntry !== null && $bestScore >= 4.0) {
+        $replyText = "{$bestEntry['icon']} **{$bestEntry['title']}**\n\n" . $bestEntry['answer'];
+        rememberAssistantTurn($qTrim, $replyText, (string)$bestEntry['id']);
         return [
-            'reply'     => "{$bestEntry['icon']} **{$bestEntry['title']}**\n\n" . $bestEntry['answer'],
+            'reply'     => $replyText,
             'actions'   => $bestEntry['actions'],
             'followups' => $bestEntry['followups'],
             'lang'      => $lang,
@@ -2378,7 +2940,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     }
 
     // =========================================================================
-    // 11. AUTOMATISCHER FALLBACK: SUCHE IN EIGENEN DATEIEN
+    // 11. AUTOMATISCHER FALLBACK: SUCHE IN EIGENEN DATEIEN & TEXTDOKUMENTEN
     // =========================================================================
     $stopWords = [
         'wie', 'was', 'wo', 'wann', 'warum', 'kann', 'ich', 'man', 'in', 'der', 'die', 'das', 'den', 'dem', 'ein', 'eine', 'mit', 'fuer', 'von', 'auf', 'ist', 'sind', 'cloud', 'minicloud', 'bitte', 'mir', 'mein', 'meine',
@@ -2394,7 +2956,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         $like = '%' . $searchCandidate . '%';
         try {
             $stmtFiles = $pdo->prepare(
-                "SELECT `id`, `original_name`, `folder_path`, `file_size`
+                "SELECT `id`, `original_name`, `stored_name`, `folder_path`, `file_size`
                  FROM `files`
                  WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `original_name` LIKE :q
                  ORDER BY `upload_date` DESC, `id` DESC
@@ -2403,13 +2965,48 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             $stmtFiles->execute([':uid' => $userId, ':q' => $like]);
             $matchedFiles = $stmtFiles->fetchAll();
 
-            if (!empty($matchedFiles)) {
+            // Zusätzlich Volltextsuche in kleinen .txt / .md Cloud-Dokumenten des Nutzers
+            $contentHits = [];
+            $stmtTxt = $pdo->prepare(
+                "SELECT `id`, `original_name`, `stored_name`, `file_size`
+                 FROM `files`
+                 WHERE `user_id` = :uid AND `deleted_at` IS NULL
+                   AND (`original_name` LIKE '%.txt' OR `original_name` LIKE '%.md')
+                   AND `file_size` <= 204800
+                 ORDER BY `upload_date` DESC
+                 LIMIT 15"
+            );
+            $stmtTxt->execute([':uid' => $userId]);
+            foreach ($stmtTxt->fetchAll() as $txtFile) {
+                $fullPath = UPLOAD_DIR . '/' . basename((string)$txtFile['stored_name']);
+                if (is_file($fullPath) && is_readable($fullPath)) {
+                    $rawContent = (string)@file_get_contents($fullPath, false, null, 0, 65536);
+                    if ($rawContent !== '' && mb_stripos($rawContent, $searchCandidate, 0, 'UTF-8') !== false) {
+                        $pos = (int)mb_stripos($rawContent, $searchCandidate, 0, 'UTF-8');
+                        $snippet = trim(preg_replace('/\s+/u', ' ', mb_substr($rawContent, max(0, $pos - 35), 90, 'UTF-8')) ?? '');
+                        $contentHits[] = "- 📝 **" . htmlspecialchars((string)$txtFile['original_name'], ENT_QUOTES, 'UTF-8') . "**: *„…" . htmlspecialchars($snippet, ENT_QUOTES, 'UTF-8') . "…“*";
+                        if (count($contentHits) >= 3) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!empty($matchedFiles) || !empty($contentHits)) {
                 $lines = [sprintf($pack['fallback_files'], htmlspecialchars($searchCandidate, ENT_QUOTES, 'UTF-8')) . "\n"];
                 foreach ($matchedFiles as $f) {
                     $lines[] = "- 📄 **" . htmlspecialchars((string)$f['original_name'], ENT_QUOTES, 'UTF-8') . "** (" . formatBytes((int)$f['file_size']) . ")";
                 }
+                if (!empty($contentHits)) {
+                    $lines[] = "\n🔎 **Textstellen in deinen Dokumenten:**";
+                    foreach ($contentHits as $ch) {
+                        $lines[] = $ch;
+                    }
+                }
+                $replyText = implode("\n", $lines);
+                rememberAssistantTurn($qTrim, $replyText, 'file_search');
                 return [
-                    'reply'   => implode("\n", $lines),
+                    'reply'   => $replyText,
                     'actions' => [
                         ['label' => $pack['search_all_btn'], 'url' => 'index.php?search=' . rawurlencode($searchCandidate)],
                     ],
@@ -2424,6 +3021,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         }
     }
 
+    rememberAssistantTurn($qTrim, $pack['fallback_reply'], 'fallback');
     return [
         'reply'   => $pack['fallback_reply'],
         'actions' => [
@@ -2473,6 +3071,9 @@ $appTitle         = (string)($appSettings['app_title'] ?? 'MiniCloud');
 $uiPack           = getAssistantLangPack($uiLang, $username, $appTitle);
 $allowedLanguages = getAllowedLanguages();
 $pageTitle        = $uiPack['page_title'];
+$ollamaUiEnabled  = ($appSettings['assistant_use_ollama'] ?? '1') === '1';
+$ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?: 'qwen2.5:3b';
+$ollamaUiProbe    = $ollamaUiEnabled ? probeLocalOllamaStatus($ollamaUiModel) : ['available' => false, 'active_model' => ''];
 require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
 ?>
@@ -2492,6 +3093,15 @@ $csrfToken = getCsrfToken();
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                         <?= e($uiPack['header_badge']) ?>
                     </span>
+                    <?php if (!empty($ollamaUiProbe['available'])): ?>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800" title="Lokales KI-Sprachmodell auf 127.0.0.1:11434 aktiv">
+                            🧠 Stufe 1 + 2 (Ollama: <?= e((string)$ollamaUiProbe['active_model']) ?>)
+                        </span>
+                    <?php else: ?>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700" title="100 % lokale PHP-&-MySQL-Engine (ideal auch für Shared-Webhosting/STRATO)">
+                            ⚡ Stufe 1 (Lokale Engine + Kontext-Gedächtnis)
+                        </span>
+                    <?php endif; ?>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                     <?= e($uiPack['header_desc']) ?>
@@ -2544,9 +3154,17 @@ $csrfToken = getCsrfToken();
                             class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
                         📋 <?= e($uiPack['q_tasks']) ?>
                     </button>
-                    <button type="button" onclick="askAssistantQuick(<?= e(json_encode($uiPack['q_notes'])) ?>)"
+                    <button type="button" onclick="askAssistantQuick('Wie steht mein Haushaltsbuch diesen Monat?')"
                             class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
-                        📌 <?= e($uiPack['q_notes']) ?>
+                        💰 Wie steht mein Haushaltsbuch diesen Monat?
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Wo war ich beim Hörbuch oder E-Book stehengeblieben?')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        🎧 Wo war ich beim Hörbuch / E-Book stehengeblieben?
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Welche Geburtstage stehen als Nächstes an?')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        🎂 Welche Geburtstage stehen als Nächstes an?
                     </button>
                     <button type="button" onclick="askAssistantQuick(<?= e(json_encode($uiPack['q_messages'])) ?>)"
                             class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">

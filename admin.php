@@ -1410,6 +1410,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableGallery   = isset($_POST['enable_gallery']) && $_POST['enable_gallery'] === '1' ? '1' : '0';
         $enableForms     = isset($_POST['enable_forms']) && $_POST['enable_forms'] === '1' ? '1' : '0';
         $enableMusic     = isset($_POST['enable_music']) && $_POST['enable_music'] === '1' ? '1' : '0';
+        $useOllama       = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
+        $ollamaModelRaw  = trim((string)($_POST['assistant_ollama_model'] ?? 'qwen2.5:3b'));
+        $ollamaModel     = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'qwen2.5:3b';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1425,6 +1428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_projects', $enableProjects);
         saveAppSetting($pdo, 'enable_office', $enableOffice);
         saveAppSetting($pdo, 'enable_assistant', $enableAssistant);
+        saveAppSetting($pdo, 'assistant_use_ollama', $useOllama);
+        saveAppSetting($pdo, 'assistant_ollama_model', mb_substr($ollamaModel, 0, 64));
         saveAppSetting($pdo, 'enable_ebooks', $enableEbooks);
         saveAppSetting($pdo, 'enable_games', $enableGames);
         saveAppSetting($pdo, 'enable_mindmap', $enableMindmap);
@@ -3122,7 +3127,8 @@ foreach ($modList as $mItem) {
                     <?php endif; ?>
                 </div>
 
-                <!-- Modul 14: Lokaler KI- & Wissens-Assistent -->
+                <!-- Modul 14: Lokaler KI- & Wissens-Assistent (Stufe 1 + optionales lokales Sprachmodell Stufe 2) -->
+                <?php $ollamaStatus = probeLocalOllamaStatus((string)($currentSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')); ?>
                 <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
                     <div class="space-y-2.5">
                         <div class="flex items-center justify-between gap-2">
@@ -3144,10 +3150,45 @@ foreach ($modList as $mItem) {
                             <span>
                                 <strong>Cloud-Assistent &amp; Schnell-Chat (<code>assistant.php</code>) aktivieren</strong><br>
                                 <span class="text-[11px] text-slate-500 dark:text-slate-400">
-                                    100 % lokaler, Strato- &amp; Intranet-fähiger Assistent (inkl. schwebendem Schnell-Chat rechts unten): beantwortet Fragen zur Cloud, prüft live Speicherplatz, Termine &amp; Aufgaben, durchsucht Dateien/Kontakte und legt per Befehl Notizen oder To-Dos an.
+                                    <strong>Stufe 1 (immer aktiv, auch auf STRATO):</strong> Kontext-Gedächtnis, Volltext-Handbuchsuche, natürliche Termin-/Aufgaben-/Notiz-Befehle &amp; Live-Datenbank-Abfragen für alle Module (Speicher, Termine, Aufgaben, Notizen, Kontakte/Geburtstage, Haushaltsbuch, Verein, Hörbücher &amp; E-Books).
                                 </span>
                             </span>
                         </label>
+
+                        <!-- Stufe 2: Optionales lokales KI-Sprachmodell (Ollama) -->
+                        <div class="mt-2 p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="flex items-center gap-2 text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="assistant_use_ollama"
+                                        value="1"
+                                        <?= ($currentSettings['assistant_use_ollama'] ?? '1') === '1' ? 'checked' : '' ?>
+                                        class="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                    >
+                                    <span>🧠 Stufe 2: Lokales Sprachmodell (Ollama) nutzen, falls verfügbar</span>
+                                </label>
+                                <?php if ($ollamaStatus['available']): ?>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                        🟢 Ollama aktiv (<?= e($ollamaStatus['active_model']) ?>)
+                                    </span>
+                                <?php else: ?>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400" title="Auf Shared-Webhosting (z. B. STRATO) wird automatisch und verzögerungsfrei Stufe 1 verwendet.">
+                                        ⚪ Nur Stufe 1 (kein lokales Ollama)
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">Modell (`127.0.0.1:11434`):</span>
+                                <input
+                                    type="text"
+                                    name="assistant_ollama_model"
+                                    value="<?= e((string)($currentSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?>"
+                                    placeholder="qwen2.5:3b"
+                                    class="w-full px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
+                                >
+                            </div>
+                        </div>
                     </div>
                     <?php if (($currentSettings['enable_assistant'] ?? '1') === '1'): ?>
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">

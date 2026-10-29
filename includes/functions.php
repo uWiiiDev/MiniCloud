@@ -694,6 +694,8 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_forms'                  => '1',
         'enable_music'                  => '1',
         'enable_dashboard'              => '1',
+        'assistant_use_ollama'          => '1',
+        'assistant_ollama_model'        => 'qwen2.5:3b',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
@@ -3390,6 +3392,69 @@ function resetModuleUsageStatistics(PDO $pdo): void
         // Ignorieren
     }
 }
+
+/**
+ * Prüft verzögerungsfrei (< 150 ms), ob auf dem lokalen Server (127.0.0.1:11434) ein
+ * lokaler Ollama-KI-Dienst (Stufe 2) läuft und welche Sprachmodelle installiert sind.
+ * Auf Shared-Webhosting (z. B. STRATO) kehrt diese Prüfung in < 1 ms mit available = false zurück.
+ *
+ * @return array{available: bool, models: array<int, string>, active_model: string}
+ */
+function probeLocalOllamaStatus(string $preferredModel = 'qwen2.5:3b'): array
+{
+    static $cached = null;
+    if (is_array($cached)) {
+        return $cached;
+    }
+
+    $result = [
+        'available'    => false,
+        'models'       => [],
+        'active_model' => '',
+    ];
+
+    $errno  = 0;
+    $errstr = '';
+    $sock   = @fsockopen('127.0.0.1', 11434, $errno, $errstr, 0.15);
+    if (!is_resource($sock)) {
+        $cached = $result;
+        return $result;
+    }
+    fclose($sock);
+
+    $ctx = stream_context_create([
+        'http' => [
+            'method'        => 'GET',
+            'timeout'       => 0.6,
+            'ignore_errors' => true,
+        ],
+    ]);
+    $raw = @file_get_contents('http://127.0.0.1:11434/api/tags', false, $ctx);
+    if (is_string($raw) && $raw !== '') {
+        $json = json_decode($raw, true);
+        if (is_array($json) && isset($json['models']) && is_array($json['models'])) {
+            foreach ($json['models'] as $m) {
+                $name = trim((string)($m['name'] ?? ''));
+                if ($name !== '') {
+                    $result['models'][] = $name;
+                }
+            }
+        }
+        $result['available'] = true;
+        $pref = trim($preferredModel) !== '' ? trim($preferredModel) : 'qwen2.5:3b';
+        if (in_array($pref, $result['models'], true)) {
+            $result['active_model'] = $pref;
+        } elseif (!empty($result['models'])) {
+            $result['active_model'] = $result['models'][0];
+        } else {
+            $result['active_model'] = $pref;
+        }
+    }
+
+    $cached = $result;
+    return $result;
+}
+
 
 
 
