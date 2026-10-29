@@ -5,21 +5,22 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 14 Spiele:
+ * Enthaltene 15 Spiele:
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
- * 2.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
- * 3.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
- * 4.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 5.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 6.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 7.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 8.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 9.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 10. 🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 11. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 12. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 13. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 14. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 2.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
+ * 3.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
+ * 4.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
+ * 5.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 6.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 7.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 8.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 9.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 10. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 11. 🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 12. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 13. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 14. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 15. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -110,7 +111,7 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 14 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 15 Spiele inklusive Metadaten.
  *
  * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
@@ -125,6 +126,15 @@ function getGamesCatalog(): array
             'group'    => 'action',
             'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'lastninja' => [
+            'key'      => 'lastninja',
+            'title'    => 'The Last Ninja (1987)',
+            'icon'     => '🥷',
+            'category' => 'C64 Adventure',
+            'group'    => 'arcade',
+            'desc'     => 'Das legendäre C64-Action-Adventure: 6 isometrische Räume, Katana, Shuriken, Fluss-Sprünge & Shogun Kunitoki!',
+            'color'    => 'from-amber-700 to-stone-900',
         ],
         'canabalt' => [
             'key'      => 'canabalt',
@@ -1084,7 +1094,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (8)
+                        🕹️ Retro &amp; Arcade (9)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2119,6 +2129,99 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 15. SPIEL: THE LAST NINJA (1987 C64 ISOMETRISCHES ACTION-ADVENTURE) -->
+            <div id="gamePanel-lastninja" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🥷 The Last Ninja (1987 C64-Edition)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                                ⛩️ 6 Iso-Räume &middot; ⚔️ Katana &amp; Shuriken &middot; 🌊 Fluss-Sprünge &middot; 👹 Shogun Kunitoki
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: <strong>WASD / Pfeiltasten</strong> Laufen &middot; <strong>Leertaste</strong> Angriff &middot; <strong>E / Shift</strong> Vorwärtssalto (über Fluss-Felsen!) &middot; <strong>F / Enter</strong> Objekt am Schrein aufnehmen &middot; <strong>Q / 1–5</strong> Waffe wechseln.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="ninjaStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Mission auf Lin Fen starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Punktezeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="ninjaScore" class="text-amber-600 dark:text-amber-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Ort (Raum):</span>
+                        <strong id="ninjaRoomName" class="text-slate-900 dark:text-white font-extrabold truncate">1/6 Einöde</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Waffe:</span>
+                        <strong id="ninjaWeaponName" class="text-cyan-600 dark:text-cyan-400 font-extrabold truncate">👊 Fäuste &amp; Kick</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Leben:</span>
+                        <strong id="ninjaLives" class="tracking-widest">🥷🥷🥷</strong>
+                    </div>
+                </div>
+
+                <!-- C64-Breitbild-Spielfeld (Isometrische 3D-Ansicht + Original C64-Rahmen-HUD) -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="ninjaCanvas" width="760" height="440"
+                            class="w-full max-w-[760px] h-auto rounded-2xl bg-stone-950 border-2 border-amber-900/80 shadow-xl select-none"></canvas>
+
+                    <!-- Touch- & Aktionsleiste -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="ninjaKeys['ArrowLeft']=true" onmouseup="ninjaKeys['ArrowLeft']=false" onmouseleave="ninjaKeys['ArrowLeft']=false"
+                                ontouchstart="event.preventDefault(); ninjaKeys['ArrowLeft']=true" ontouchend="ninjaKeys['ArrowLeft']=false"
+                                class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-700 active:text-white font-extrabold text-xs shadow-2xs cursor-pointer">
+                            ↙️ Zurück
+                        </button>
+                        <button type="button"
+                                onmousedown="ninjaKeys['ArrowUp']=true" onmouseup="ninjaKeys['ArrowUp']=false" onmouseleave="ninjaKeys['ArrowUp']=false"
+                                ontouchstart="event.preventDefault(); ninjaKeys['ArrowUp']=true" ontouchend="ninjaKeys['ArrowUp']=false"
+                                class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-700 active:text-white font-extrabold text-xs shadow-2xs cursor-pointer">
+                            ↖️ Links
+                        </button>
+                        <button type="button"
+                                onmousedown="ninjaKeys['ArrowDown']=true" onmouseup="ninjaKeys['ArrowDown']=false" onmouseleave="ninjaKeys['ArrowDown']=false"
+                                ontouchstart="event.preventDefault(); ninjaKeys['ArrowDown']=true" ontouchend="ninjaKeys['ArrowDown']=false"
+                                class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-700 active:text-white font-extrabold text-xs shadow-2xs cursor-pointer">
+                            ↘️ Rechts
+                        </button>
+                        <button type="button"
+                                onmousedown="ninjaKeys['ArrowRight']=true" onmouseup="ninjaKeys['ArrowRight']=false" onmouseleave="ninjaKeys['ArrowRight']=false"
+                                ontouchstart="event.preventDefault(); ninjaKeys['ArrowRight']=true" ontouchend="ninjaKeys['ArrowRight']=false"
+                                class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-700 active:text-white font-extrabold text-xs shadow-2xs cursor-pointer">
+                            ↗️ Vorwärts
+                        </button>
+                        <button type="button" onclick="ninjaTriggerAttack()"
+                                class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-sm cursor-pointer">
+                            ⚔️ ANGRIFF (Space)
+                        </button>
+                        <button type="button" onclick="ninjaTriggerLeap()"
+                                class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow-sm cursor-pointer">
+                            🤸 SALTO-SPRUNG (E)
+                        </button>
+                        <button type="button" onclick="ninjaTriggerPickup()"
+                                class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm cursor-pointer">
+                            ✋ AUFHEBEN (F)
+                        </button>
+                        <button type="button" onclick="ninjaCycleWeapon()"
+                                class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-sm cursor-pointer">
+                            🔄 WAFFE (Q)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2321,6 +2424,11 @@ function selectCloudGame(gameKey) {
             canabaltInit();
         }
         canabaltDraw();
+    } else if (gameKey === 'lastninja') {
+        if (!ninjaInitialized) {
+            ninjaInit();
+        }
+        ninjaDraw();
     } else if (gameKey === 'kong') {
         if (!kongInitialized) {
             kongInit();
@@ -9192,10 +9300,988 @@ function canabaltLoop() {
     }
 }
 
+// =============================================================================
+// 15. THE LAST NINJA (1987 C64 ISOMETRISCHES ACTION-ADVENTURE)
+// =============================================================================
+let ninjaInitialized = false;
+let ninjaRunning     = false;
+let ninjaRafId       = null;
+let ninjaStartAt     = 0;
+let ninjaTick        = 0;
+let ninjaScore       = 0;
+let ninjaLives       = 3;
+let ninjaStage       = 1;
+let ninjaRoomIdx     = 0;
+let ninjaBannerText  = '';
+let ninjaStatusMsg   = 'ARMAKUNI BETRITT DIE INSEL LIN FEN...';
+const ninjaKeys      = {};
+
+const NINJA_WEAPONS = [
+    { key: 'fists',    name: '👊 Fäuste & Kick', icon: '👊', range: 44, dmg: 14, ranged: false },
+    { key: 'katana',   name: '⚔️ Ninjatō-Schwert', icon: '⚔️', range: 58, dmg: 28, ranged: false },
+    { key: 'shuriken', name: '✴️ Shuriken-Sterne', icon: '✴️', range: 220, dmg: 20, ranged: true },
+    { key: 'nunchaku', name: '⛓️ Nunchaku', icon: '⛓️', range: 50, dmg: 22, ranged: false },
+    { key: 'bostaff',  name: '🦯 Bo-Kampfstab', icon: '🦯', range: 70, dmg: 25, ranged: false }
+];
+
+let ninjaPlayer = {
+    s: 45,          // Fortschritt entlang des isometrischen Pfads (20 .. 460)
+    l: 0,           // Quer-Versatz auf dem Pfad (-32 .. +32)
+    z: 0,           // Sprunghöhe beim Vorwärtssalto
+    vz: 0,
+    leapVx: 0,
+    facing: 1,      // +1 = vorwärts nach Nordosten, -1 = rückwärts nach Südwesten
+    hp: 100,
+    maxHp: 100,
+    weaponIdx: 0,
+    unlockedWeapons: ['fists'],
+    items: [],      // ['amulet', 'key', 'scroll']
+    attackTicks: 0,
+    invulnTicks: 0,
+    animWalk: 0
+};
+
+let ninjaRoomsState  = [];
+let ninjaProjectiles = []; // Fliegende Shuriken { s, l, vs, dmg }
+let ninjaPopups      = []; // { x, y, text, color, life }
+
+function ninjaBuildRooms(stageNum) {
+    const hpScale = 1 + (stageNum - 1) * 0.35;
+    ninjaRoomsState = [
+        {
+            id: 1,
+            title: '1/6 Tor der Einöde',
+            subtitle: 'THE WASTELANDS GATE',
+            skyColor: '#1e1b4b',
+            groundColor: '#3f6212',
+            pathColor: '#a8a29e',
+            hasRiver: false,
+            hasDragon: false,
+            lockedGate: false,
+            shrine: { s: 155, l: -22, itemKey: 'katana', icon: '⚔️', label: 'Ninjatō-Schwert', collected: false },
+            enemies: [
+                { name: 'Samurai-Torwächter', s: 330, l: 0, hp: Math.round(65 * hpScale), maxHp: Math.round(65 * hpScale), dmg: 10, color: '#dc2626', hatColor: '#facc15', attackCd: 0, alive: true, points: 300 }
+            ]
+        },
+        {
+            id: 2,
+            title: '2/6 Der Gebirgsfluss',
+            subtitle: 'THE STEPPING STONES',
+            skyColor: '#0f172a',
+            groundColor: '#365314',
+            pathColor: '#78716c',
+            hasRiver: true, // Fluss zwischen s=185 und s=305 mit 3 Trittsteinen bei s=210, 245, 280!
+            hasDragon: false,
+            lockedGate: false,
+            shrine: { s: 115, l: 20, itemKey: 'shuriken', icon: '✴️', label: 'Shuriken-Wurfsterne', collected: false },
+            enemies: [
+                { name: 'Fluss-Bogenschütze', s: 390, l: 4, hp: Math.round(75 * hpScale), maxHp: Math.round(75 * hpScale), dmg: 12, color: '#2563eb', hatColor: '#93c5fd', attackCd: 0, alive: true, points: 400 }
+            ]
+        },
+        {
+            id: 3,
+            title: '3/6 Der Bambushain',
+            subtitle: 'THE BAMBOO GROVE',
+            skyColor: '#022c22',
+            groundColor: '#14532d',
+            pathColor: '#a16207',
+            hasRiver: false,
+            hasDragon: false,
+            lockedGate: false,
+            shrine: { s: 230, l: -24, itemKey: 'amulet', icon: '💎', label: 'Feuer-Amulett & Nunchaku', collected: false },
+            enemies: [
+                { name: 'Roter Schatten-Ninja', s: 200, l: 8, hp: Math.round(70 * hpScale), maxHp: Math.round(70 * hpScale), dmg: 12, color: '#991b1b', hatColor: '#ef4444', attackCd: 0, alive: true, points: 450 },
+                { name: 'Koga-Attentäter', s: 370, l: -6, hp: Math.round(85 * hpScale), maxHp: Math.round(85 * hpScale), dmg: 14, color: '#7f1d1d', hatColor: '#f87171', attackCd: 0, alive: true, points: 500 }
+            ]
+        },
+        {
+            id: 4,
+            title: '4/6 Der Drachenschrein',
+            subtitle: 'SHRINE OF THE FIRE DRAGON',
+            skyColor: '#3b0764',
+            groundColor: '#451a03',
+            pathColor: '#d6d3d1',
+            hasRiver: false,
+            hasDragon: true, // Speit bei s=240 rhythmisch Feuer!
+            lockedGate: false,
+            shrine: { s: 345, l: -22, itemKey: 'key', icon: '🗝️', label: 'Goldener Palastschlüssel', collected: false },
+            enemies: [
+                { name: 'Tempel-Wächter', s: 395, l: 0, hp: Math.round(95 * hpScale), maxHp: Math.round(95 * hpScale), dmg: 15, color: '#d97706', hatColor: '#fef08a', attackCd: 0, alive: true, points: 550 }
+            ]
+        },
+        {
+            id: 5,
+            title: '5/6 Der Palasthof',
+            subtitle: 'THE INNER COURTYARD',
+            skyColor: '#1e293b',
+            groundColor: '#334155',
+            pathColor: '#cbd5e1',
+            hasRiver: false,
+            hasDragon: false,
+            lockedGate: true, // Tor bei s=425 erfordert den Palastschlüssel!
+            shrine: { s: 145, l: 22, itemKey: 'bostaff', icon: '🦯', label: 'Bo-Kampfstab & Heiltrank', collected: false },
+            enemies: [
+                { name: 'Palast-Schwertmeister', s: 310, l: 0, hp: Math.round(115 * hpScale), maxHp: Math.round(115 * hpScale), dmg: 16, color: '#7c2d12', hatColor: '#fdba74', attackCd: 0, alive: true, points: 650 }
+            ]
+        },
+        {
+            id: 6,
+            title: '6/6 Thronsaal Kunitoki',
+            subtitle: 'SANCTUM OF SHOGUN KUNITOKI',
+            skyColor: '#450a0a',
+            groundColor: '#1c1917',
+            pathColor: '#b91c1c',
+            hasRiver: false,
+            hasDragon: false,
+            lockedGate: false,
+            shrine: { s: 430, l: 0, itemKey: 'scroll', icon: '📜', label: 'Schriftrollen der Koga', collected: false },
+            enemies: [
+                { name: '👹 SHOGUN KUNITOKI', s: 335, l: 0, hp: Math.round(170 * hpScale), maxHp: Math.round(170 * hpScale), dmg: 20, color: '#fbbf24', hatColor: '#dc2626', attackCd: 0, alive: true, points: 1500, isBoss: true }
+            ]
+        }
+    ];
+}
+
+// Rechnet Pfad-Koordinaten (s: 0..480 entlang des isometrischen Wegs, l: -35..+35 quer, z: Höhe) in Canvas-Pixel um
+function ninjaIsoToScreen(s, l, z = 0) {
+    // Isometrische Diagonale von unten-links (82, 286) nach oben-rechts (466, 86)
+    const t = s / 480;
+    const baseX = 76 + t * 392 + l * 0.72;
+    const baseY = 282 - t * 192 + l * 0.48 - z;
+    return { x: baseX, y: baseY };
+}
+
+function ninjaInit() {
+    if (ninjaInitialized) return;
+    ninjaInitialized = true;
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'lastninja') return;
+        const k = e.key;
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'w', 'W', 'a', 'A', 's', 'S', 'd', 'D', 'e', 'E', 'Shift', 'f', 'F', 'Enter', 'q', 'Q', '1', '2', '3', '4', '5'].includes(k)) {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) {
+                e.preventDefault();
+            }
+            if (k === 'd' || k === 'D') ninjaKeys['ArrowRight'] = true;
+            else if (k === 'a' || k === 'A') ninjaKeys['ArrowLeft'] = true;
+            else if (k === 'w' || k === 'W') ninjaKeys['ArrowUp'] = true;
+            else if (k === 's' || k === 'S') ninjaKeys['ArrowDown'] = true;
+            else if (k === ' ') ninjaTriggerAttack();
+            else if (k === 'e' || k === 'E' || k === 'Shift') ninjaTriggerLeap();
+            else if (k === 'f' || k === 'F' || k === 'Enter') ninjaTriggerPickup();
+            else if (k === 'q' || k === 'Q') ninjaCycleWeapon();
+            else if (['1', '2', '3', '4', '5'].includes(k)) {
+                const idx = parseInt(k, 10) - 1;
+                if (NINJA_WEAPONS[idx] && ninjaPlayer.unlockedWeapons.includes(NINJA_WEAPONS[idx].key)) {
+                    ninjaPlayer.weaponIdx = idx;
+                    ninjaStatusMsg = 'WAFFE GEWÄHLT: ' + NINJA_WEAPONS[idx].name.toUpperCase();
+                    ninjaUpdateHud();
+                }
+            } else {
+                ninjaKeys[k] = true;
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        const k = e.key;
+        if (k === 'd' || k === 'D') ninjaKeys['ArrowRight'] = false;
+        else if (k === 'a' || k === 'A') ninjaKeys['ArrowLeft'] = false;
+        else if (k === 'w' || k === 'W') ninjaKeys['ArrowUp'] = false;
+        else if (k === 's' || k === 'S') ninjaKeys['ArrowDown'] = false;
+        else ninjaKeys[k] = false;
+    });
+
+    ninjaResetState();
+    ninjaBannerText = '🥷 THE LAST NINJA (1987)';
+    ninjaDraw();
+}
+
+function ninjaResetState() {
+    ninjaTick        = 0;
+    ninjaScore       = 0;
+    ninjaLives       = 3;
+    ninjaStage       = 1;
+    ninjaRoomIdx     = 0;
+    ninjaProjectiles = [];
+    ninjaPopups      = [];
+    ninjaPlayer = {
+        s: 45,
+        l: 0,
+        z: 0,
+        vz: 0,
+        leapVx: 0,
+        facing: 1,
+        hp: 100,
+        maxHp: 100,
+        weaponIdx: 0,
+        unlockedWeapons: ['fists'],
+        items: [],
+        attackTicks: 0,
+        invulnTicks: 0,
+        animWalk: 0
+    };
+    ninjaBuildRooms(1);
+    ninjaStatusMsg = 'FINDE DAS NINJATO-SCHWERT AM SCHREIN (TASTE F)!';
+    ninjaUpdateHud();
+}
+
+function ninjaStartGame() {
+    if (ninjaRafId) cancelAnimationFrame(ninjaRafId);
+    ninjaResetState();
+    ninjaStartAt    = Date.now();
+    ninjaBannerText = '';
+    ninjaRunning    = true;
+    ninjaRafId      = requestAnimationFrame(ninjaLoop);
+}
+
+function ninjaUpdateHud() {
+    const scEl = document.getElementById('ninjaScore');
+    const rmEl = document.getElementById('ninjaRoomName');
+    const wpEl = document.getElementById('ninjaWeaponName');
+    const lfEl = document.getElementById('ninjaLives');
+    if (scEl) scEl.textContent = ninjaScore.toLocaleString('de-DE');
+    if (rmEl && ninjaRoomsState[ninjaRoomIdx]) {
+        rmEl.textContent = ninjaRoomsState[ninjaRoomIdx].title;
+    }
+    if (wpEl && NINJA_WEAPONS[ninjaPlayer.weaponIdx]) {
+        wpEl.textContent = NINJA_WEAPONS[ninjaPlayer.weaponIdx].name;
+    }
+    if (lfEl) {
+        lfEl.textContent = '🥷'.repeat(Math.max(0, ninjaLives)) || '💀';
+    }
+}
+
+function ninjaCycleWeapon() {
+    if (!ninjaRunning) return;
+    for (let i = 1; i <= NINJA_WEAPONS.length; i++) {
+        const nextIdx = (ninjaPlayer.weaponIdx + i) % NINJA_WEAPONS.length;
+        if (ninjaPlayer.unlockedWeapons.includes(NINJA_WEAPONS[nextIdx].key)) {
+            ninjaPlayer.weaponIdx = nextIdx;
+            ninjaStatusMsg = 'WAFFE GEWECHSELT: ' + NINJA_WEAPONS[nextIdx].name.toUpperCase();
+            ninjaUpdateHud();
+            break;
+        }
+    }
+}
+
+function ninjaTriggerLeap() {
+    if (!ninjaRunning) {
+        ninjaStartGame();
+        return;
+    }
+    if (ninjaPlayer.z > 0) return;
+    ninjaPlayer.vz = 6.2;
+    ninjaPlayer.leapVx = 3.2 * ninjaPlayer.facing;
+    ninjaStatusMsg = 'ARMAKUNI SPRINGT IM SALTO!';
+}
+
+function ninjaTriggerPickup() {
+    if (!ninjaRunning) {
+        ninjaStartGame();
+        return;
+    }
+    const room = ninjaRoomsState[ninjaRoomIdx];
+    if (!room || !room.shrine || room.shrine.collected) {
+        ninjaStatusMsg = 'HIER GIBT ES NICHTS ZUM AUFHEBEN.';
+        return;
+    }
+    const sh = room.shrine;
+    if (Math.abs(ninjaPlayer.s - sh.s) > 48) {
+        ninjaStatusMsg = 'GEHE NÄHER AN DEN SCHREIN HERAN!';
+        return;
+    }
+
+    // Im Thronsaal muss zuerst Shogun Kunitoki besiegt werden
+    const aliveBoss = room.enemies.some((e) => e.alive && e.isBoss);
+    if (sh.itemKey === 'scroll' && aliveBoss) {
+        ninjaStatusMsg = 'BESIEGE ZUERST SHOGUN KUNITOKI!';
+        return;
+    }
+
+    sh.collected = true;
+    ninjaScore += 250;
+    const pos = ninjaIsoToScreen(sh.s, sh.l, 24);
+    ninjaPopups.push({ x: pos.x, y: pos.y, text: '+' + sh.label, color: '#fde047', life: 55 });
+
+    if (sh.itemKey === 'katana') {
+        ninjaPlayer.unlockedWeapons.push('katana');
+        ninjaPlayer.weaponIdx = 1;
+        ninjaStatusMsg = '⚔️ NINJATO-SCHWERT ERHALTEN! (+250 PKT.)';
+    } else if (sh.itemKey === 'shuriken') {
+        ninjaPlayer.unlockedWeapons.push('shuriken');
+        ninjaPlayer.weaponIdx = 2;
+        ninjaPlayer.hp = Math.min(ninjaPlayer.maxHp, ninjaPlayer.hp + 35);
+        ninjaStatusMsg = '✴️ SHURIKEN-WURFSTERNE & HEILKRAUT ERHALTEN!';
+    } else if (sh.itemKey === 'amulet') {
+        ninjaPlayer.items.push('amulet');
+        ninjaPlayer.unlockedWeapons.push('nunchaku');
+        ninjaPlayer.weaponIdx = 3;
+        ninjaStatusMsg = '💎 FEUER-AMULETT & ⛓️ NUNCHAKU ERHALTEN!';
+    } else if (sh.itemKey === 'key') {
+        ninjaPlayer.items.push('key');
+        ninjaStatusMsg = '🗝️ GOLDENER PALASTSCHLÜSSEL ERHALTEN!';
+    } else if (sh.itemKey === 'bostaff') {
+        ninjaPlayer.unlockedWeapons.push('bostaff');
+        ninjaPlayer.weaponIdx = 4;
+        ninjaPlayer.hp = ninjaPlayer.maxHp;
+        ninjaStatusMsg = '🦯 BO-KAMPFSTAB & VOLLE ENERGIE ERHALTEN!';
+    } else if (sh.itemKey === 'scroll') {
+        ninjaScore += 3000 * ninjaStage;
+        ninjaStage++;
+        const durSec = Math.max(1, Math.round((Date.now() - ninjaStartAt) / 1000));
+        submitCloudScore('lastninja', ninjaScore, durSec, 'Stage ' + (ninjaStage - 1) + ' gemeistert');
+        // Nächster Durchgang mit höherer Schwierigkeit für Highscore-Jäger
+        ninjaRoomIdx = 0;
+        ninjaPlayer.s = 45;
+        ninjaPlayer.hp = ninjaPlayer.maxHp;
+        ninjaPlayer.items = [];
+        ninjaBuildRooms(ninjaStage);
+        ninjaStatusMsg = '📜 KOGA-SCHRIFTROLLEN GERETTET! STAGE ' + ninjaStage + ' STARTET!';
+    }
+    ninjaUpdateHud();
+}
+
+function ninjaTriggerAttack() {
+    if (!ninjaRunning) {
+        ninjaStartGame();
+        return;
+    }
+    if (ninjaPlayer.attackTicks > 0) return;
+    ninjaPlayer.attackTicks = 16;
+
+    const wp = NINJA_WEAPONS[ninjaPlayer.weaponIdx] || NINJA_WEAPONS[0];
+    const room = ninjaRoomsState[ninjaRoomIdx];
+    if (!room) return;
+
+    if (wp.ranged) {
+        // Shuriken abfeuern
+        if (ninjaProjectiles.length < 3) {
+            ninjaProjectiles.push({
+                s: ninjaPlayer.s + ninjaPlayer.facing * 14,
+                l: ninjaPlayer.l,
+                vs: ninjaPlayer.facing * 6.5,
+                dmg: wp.dmg
+            });
+        }
+        return;
+    }
+
+    // Nahkampf-Treffer prüfen
+    for (const en of room.enemies) {
+        if (!en.alive) continue;
+        const distS = (en.s - ninjaPlayer.s) * ninjaPlayer.facing;
+        const distL = Math.abs(en.l - ninjaPlayer.l);
+        if (distS >= -10 && distS <= wp.range && distL <= 28) {
+            en.hp -= wp.dmg;
+            en.s = Math.min(445, Math.max(40, en.s + ninjaPlayer.facing * 12));
+            const p = ninjaIsoToScreen(en.s, en.l, 26);
+            ninjaPopups.push({ x: p.x, y: p.y, text: '-' + wp.dmg, color: '#f87171', life: 28 });
+            if (en.hp <= 0) {
+                en.alive = false;
+                en.hp = 0;
+                ninjaScore += en.points;
+                ninjaPopups.push({ x: p.x, y: p.y - 12, text: '⚔️ +' + en.points + ' PKT!', color: '#fde047', life: 45 });
+                ninjaStatusMsg = en.name.toUpperCase() + ' BESIEGT!';
+                ninjaUpdateHud();
+            }
+        }
+    }
+}
+
+function ninjaLoseLife(reason) {
+    ninjaLives--;
+    ninjaStatusMsg = reason.toUpperCase();
+    ninjaUpdateHud();
+    if (ninjaLives <= 0) {
+        ninjaRunning = false;
+        ninjaBannerText = '💀 ARMAKUNI IST GEFALLEN!';
+        const durSec = Math.max(1, Math.round((Date.now() - ninjaStartAt) / 1000));
+        submitCloudScore('lastninja', ninjaScore, durSec, 'Raum ' + (ninjaRoomIdx + 1) + '/6');
+    } else {
+        ninjaPlayer.s = 45;
+        ninjaPlayer.l = 0;
+        ninjaPlayer.z = 0;
+        ninjaPlayer.vz = 0;
+        ninjaPlayer.hp = ninjaPlayer.maxHp;
+        ninjaPlayer.invulnTicks = 65;
+    }
+}
+
+function ninjaStep() {
+    ninjaTick++;
+    if (ninjaPlayer.attackTicks > 0) ninjaPlayer.attackTicks--;
+    if (ninjaPlayer.invulnTicks > 0) ninjaPlayer.invulnTicks--;
+
+    const room = ninjaRoomsState[ninjaRoomIdx];
+    if (!room) return;
+
+    // 1. Bewegung entlang des isometrischen Pfads (s) & quer (l)
+    if (ninjaPlayer.z > 0 || ninjaPlayer.vz !== 0) {
+        // Während des Salto-Sprungs
+        ninjaPlayer.s += ninjaPlayer.leapVx;
+        ninjaPlayer.z += ninjaPlayer.vz;
+        ninjaPlayer.vz -= 0.42;
+        if (ninjaPlayer.z <= 0) {
+            ninjaPlayer.z = 0;
+            ninjaPlayer.vz = 0;
+            ninjaPlayer.leapVx = 0;
+        }
+    } else {
+        let moved = false;
+        if (ninjaKeys['ArrowRight']) {
+            ninjaPlayer.s += 2.3;
+            ninjaPlayer.facing = 1;
+            moved = true;
+        }
+        if (ninjaKeys['ArrowLeft']) {
+            ninjaPlayer.s -= 2.3;
+            ninjaPlayer.facing = -1;
+            moved = true;
+        }
+        if (ninjaKeys['ArrowUp']) {
+            ninjaPlayer.l = Math.max(-30, ninjaPlayer.l - 1.6);
+            moved = true;
+        }
+        if (ninjaKeys['ArrowDown']) {
+            ninjaPlayer.l = Math.min(30, ninjaPlayer.l + 1.6);
+            moved = true;
+        }
+        if (moved) {
+            ninjaPlayer.animWalk += 0.25;
+        }
+    }
+
+    // 2. Raum-Übergänge („Flip-Screen“ wie beim C64-Original!)
+    if (ninjaPlayer.s < 22) {
+        if (ninjaRoomIdx > 0) {
+            ninjaRoomIdx--;
+            ninjaPlayer.s = 435;
+            ninjaProjectiles = [];
+            ninjaStatusMsg = 'ZURÜCK IN: ' + ninjaRoomsState[ninjaRoomIdx].title.toUpperCase();
+            ninjaUpdateHud();
+            return;
+        } else {
+            ninjaPlayer.s = 22;
+        }
+    }
+
+    // Verschlossenes Palasttor in Raum 5 prüfen
+    if (room.lockedGate && ninjaPlayer.s > 410) {
+        if (ninjaPlayer.items.includes('key')) {
+            room.lockedGate = false;
+            ninjaScore += 400;
+            ninjaStatusMsg = '🗝️ PALASTTOR MIT DEM GOLDENEN SCHLÜSSEL GEÖFFNET! (+400 PKT.)';
+            ninjaUpdateHud();
+        } else {
+            ninjaPlayer.s = 410;
+            ninjaStatusMsg = '🔒 DAS PALASTTOR IST VERSCHLOSSEN! HOLE DEN SCHLÜSSEL IN RAUM 4!';
+        }
+    }
+
+    if (ninjaPlayer.s > 455) {
+        if (ninjaRoomIdx < ninjaRoomsState.length - 1) {
+            ninjaRoomIdx++;
+            ninjaPlayer.s = 35;
+            ninjaProjectiles = [];
+            ninjaScore += 150;
+            ninjaStatusMsg = 'BETRETE: ' + ninjaRoomsState[ninjaRoomIdx].title.toUpperCase();
+            ninjaUpdateHud();
+            return;
+        } else {
+            ninjaPlayer.s = 455;
+        }
+    }
+
+    // 3. Gebirgsfluss & Trittsteine in Raum 2 prüfen (s = 190 .. 300)
+    if (room.hasRiver && ninjaPlayer.z <= 1 && ninjaPlayer.s >= 192 && ninjaPlayer.s <= 298) {
+        // 3 sichere Trittsteine bei s=212, s=245, s=278 (jeweils +-14 Toleranz)
+        const onStone1 = Math.abs(ninjaPlayer.s - 212) <= 15 && Math.abs(ninjaPlayer.l) <= 18;
+        const onStone2 = Math.abs(ninjaPlayer.s - 245) <= 15 && Math.abs(ninjaPlayer.l) <= 18;
+        const onStone3 = Math.abs(ninjaPlayer.s - 278) <= 15 && Math.abs(ninjaPlayer.l) <= 18;
+        if (!onStone1 && !onStone2 && !onStone3) {
+            ninjaLoseLife('🌊 In den reißenden Fluss gestürzt! Nutze Taste E für Salto-Sprünge!');
+            return;
+        }
+    }
+
+    // 4. Feuerspeiende Drachenstatue in Raum 4 (s = 225 .. 265)
+    if (room.hasDragon) {
+        const fireActive = (ninjaTick % 110) < 48;
+        if (fireActive && ninjaPlayer.z < 12 && Math.abs(ninjaPlayer.s - 245) < 22) {
+            if (!ninjaPlayer.items.includes('amulet')) {
+                if (ninjaPlayer.invulnTicks <= 0) {
+                    ninjaPlayer.hp -= 35;
+                    ninjaPlayer.invulnTicks = 30;
+                    ninjaStatusMsg = '🔥 DRACHENFEUER! DAS AMULETT AUS RAUM 3 SCHÜTZT DICH!';
+                    if (ninjaPlayer.hp <= 0) {
+                        ninjaLoseLife('🔥 Vom Drachenfeuer verbrannt!');
+                        return;
+                    }
+                }
+            } else if (ninjaTick % 30 === 0) {
+                ninjaStatusMsg = '💎 DEIN FEUER-AMULETT WEHRT DIE DRACHENFLAMMEN AB!';
+            }
+        }
+    }
+
+    // 5. Fliegende Shuriken bewegen
+    for (let i = ninjaProjectiles.length - 1; i >= 0; i--) {
+        const pr = ninjaProjectiles[i];
+        pr.s += pr.vs;
+        if (pr.s < 15 || pr.s > 465) {
+            ninjaProjectiles.splice(i, 1);
+            continue;
+        }
+        for (const en of room.enemies) {
+            if (!en.alive) continue;
+            if (Math.abs(pr.s - en.s) < 18 && Math.abs(pr.l - en.l) < 24) {
+                en.hp -= pr.dmg;
+                const p = ninjaIsoToScreen(en.s, en.l, 26);
+                ninjaPopups.push({ x: p.x, y: p.y, text: '✴️ -' + pr.dmg, color: '#38bdf8', life: 28 });
+                ninjaProjectiles.splice(i, 1);
+                if (en.hp <= 0) {
+                    en.alive = false;
+                    en.hp = 0;
+                    ninjaScore += en.points;
+                    ninjaPopups.push({ x: p.x, y: p.y - 12, text: '⚔️ +' + en.points + ' PKT!', color: '#fde047', life: 45 });
+                    ninjaStatusMsg = en.name.toUpperCase() + ' BESIEGT!';
+                    ninjaUpdateHud();
+                }
+                break;
+            }
+        }
+    }
+
+    // 6. Gegner-KI (Wachen & Shogun Kunitoki)
+    for (const en of room.enemies) {
+        if (!en.alive) continue;
+        if (en.attackCd > 0) en.attackCd--;
+
+        const diffS = ninjaPlayer.s - en.s;
+        const diffL = ninjaPlayer.l - en.l;
+
+        // Wache bewegt sich auf Armakuni zu, sobald er in Reichweite ist
+        if (Math.abs(diffS) > 30 && Math.abs(diffS) < 210) {
+            const nextS = en.s + Math.sign(diffS) * (en.isBoss ? 1.35 : 1.05);
+            // Wachen laufen nicht in den Fluss
+            if (!room.hasRiver || nextS > 308 || nextS < 180) {
+                en.s = nextS;
+            }
+        }
+        if (Math.abs(diffL) > 4) {
+            en.l += Math.sign(diffL) * 0.6;
+        }
+
+        // Gegner schlägt zu
+        if (Math.abs(diffS) <= 36 && Math.abs(diffL) <= 22 && ninjaPlayer.z < 14 && en.attackCd <= 0) {
+            en.attackCd = en.isBoss ? 36 : 48;
+            if (ninjaPlayer.invulnTicks <= 0) {
+                ninjaPlayer.hp = Math.max(0, ninjaPlayer.hp - en.dmg);
+                ninjaPlayer.invulnTicks = 22;
+                const p = ninjaIsoToScreen(ninjaPlayer.s, ninjaPlayer.l, 28);
+                ninjaPopups.push({ x: p.x, y: p.y, text: '-' + en.dmg + ' HP', color: '#fb7185', life: 26 });
+                if (ninjaPlayer.hp <= 0) {
+                    ninjaLoseLife('⚔️ Im Duell gegen ' + en.name + ' besiegt!');
+                    return;
+                }
+            }
+        }
+    }
+}
+
+function ninjaDrawCharacter(ctx, x, y, bodyColor, beltColor, facing, walkPhase, attackTicks, weaponKey, isBoss = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (isBoss) {
+        ctx.scale(1.22, 1.22);
+    }
+
+    // Schatten auf dem Boden
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 11, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Beine in Bewegung
+    const legSwing = Math.sin(walkPhase) * 5;
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-3, -10);
+    ctx.lineTo(-4 - legSwing, 0);
+    ctx.moveTo(3, -10);
+    ctx.lineTo(4 + legSwing, 0);
+    ctx.stroke();
+
+    // Torso (Gi / Rüstung)
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-7, -24, 14, 15);
+
+    // Gürtel / Schärpe
+    ctx.fillStyle = beltColor;
+    ctx.fillRect(-7, -13, 14, 3);
+
+    // Kopf mit Ninja-Maske & Stirnband
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.arc(0, -29, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Augen-Schlitz
+    ctx.fillStyle = '#fde68a';
+    ctx.fillRect(facing > 0 ? 0 : -5, -31, 5, 2.5);
+
+    // Arm & Waffe
+    const dirX = facing > 0 ? 1 : -1;
+    const swing = attackTicks > 0 ? 10 : 0;
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -21);
+    ctx.lineTo(dirX * (10 + swing * 0.4), -19 - swing * 0.3);
+    ctx.stroke();
+
+    if (weaponKey === 'katana' || isBoss) {
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(dirX * 10, -19);
+        ctx.lineTo(dirX * (26 + swing), -29 + swing);
+        ctx.stroke();
+    } else if (weaponKey === 'bostaff') {
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(dirX * -8, -10);
+        ctx.lineTo(dirX * (26 + swing), -32 + swing);
+        ctx.stroke();
+    } else if (weaponKey === 'nunchaku') {
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(dirX * 10, -19);
+        ctx.lineTo(dirX * (20 + swing), -15);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+function ninjaDraw() {
+    const cvs = document.getElementById('ninjaCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    const room = ninjaRoomsState[ninjaRoomIdx] || ninjaRoomsState[0];
+
+    // =========================================================================
+    // 1. ISOMETRISCHES 3D-SPIELFENSTER LINKS OBEN (550 x 330)
+    // =========================================================================
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(12, 12, 548, 326);
+    ctx.clip();
+
+    // Himmel + Grasboden des aktuellen Raums
+    ctx.fillStyle = room.skyColor;
+    ctx.fillRect(12, 12, 548, 125);
+    ctx.fillStyle = room.groundColor;
+    ctx.fillRect(12, 110, 548, 228);
+
+    // Ferne japanische Berge & Mond im Hintergrund
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(105, 52, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.beginPath();
+    ctx.moveTo(12, 120);
+    ctx.lineTo(140, 55);
+    ctx.lineTo(260, 120);
+    ctx.lineTo(390, 48);
+    ctx.lineTo(560, 120);
+    ctx.closePath();
+    ctx.fill();
+
+    // Isometrische Straße / Steinpfad von Südwesten (s=0) nach Nordosten (s=480)
+    const pSW1 = ninjaIsoToScreen(0, -38, 0);
+    const pSW2 = ninjaIsoToScreen(0, 38, 0);
+    const pNE2 = ninjaIsoToScreen(480, 38, 0);
+    const pNE1 = ninjaIsoToScreen(480, -38, 0);
+
+    ctx.fillStyle = room.pathColor;
+    ctx.beginPath();
+    ctx.moveTo(pSW1.x, pSW1.y);
+    ctx.lineTo(pSW2.x, pSW2.y);
+    ctx.lineTo(pNE2.x, pNE2.y);
+    ctx.lineTo(pNE1.x, pNE1.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Steinplatten-Fugen auf dem Pfad
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.lineWidth = 1.5;
+    for (let s = 30; s < 460; s += 32) {
+        const a = ninjaIsoToScreen(s, -36, 0);
+        const b = ninjaIsoToScreen(s, 36, 0);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+    }
+
+    // Falls Raum 2: Reißender Fluss quer über den Pfad + 3 Trittsteine!
+    if (room.hasRiver) {
+        const r1 = ninjaIsoToScreen(190, -140, 0);
+        const r2 = ninjaIsoToScreen(190, 140, 0);
+        const r3 = ninjaIsoToScreen(300, 140, 0);
+        const r4 = ninjaIsoToScreen(300, -140, 0);
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.moveTo(r1.x, r1.y);
+        ctx.lineTo(r2.x, r2.y);
+        ctx.lineTo(r3.x, r3.y);
+        ctx.lineTo(r4.x, r4.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3 Trittsteine im Wasser
+        for (const stoneS of [212, 245, 278]) {
+            const st = ninjaIsoToScreen(stoneS, 0, 0);
+            ctx.fillStyle = '#d6d3d1';
+            ctx.beginPath();
+            ctx.ellipse(st.x, st.y, 14, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#57534e';
+            ctx.stroke();
+        }
+    }
+
+    // Falls Raum 4: Goldene Drachenstatue + Feuerstrahl!
+    if (room.hasDragon) {
+        const dr = ninjaIsoToScreen(245, -48, 0);
+        ctx.font = '28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🐉', dr.x, dr.y);
+        if ((ninjaTick % 110) < 48) {
+            const fEnd = ninjaIsoToScreen(245, 34, 0);
+            const grad = ctx.createLinearGradient(dr.x, dr.y - 8, fEnd.x, fEnd.y);
+            grad.addColorStop(0, '#fde047');
+            grad.addColorStop(0.5, '#f97316');
+            grad.addColorStop(1, 'rgba(239, 68, 68, 0.2)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 16;
+            ctx.beginPath();
+            ctx.moveTo(dr.x, dr.y - 8);
+            ctx.lineTo(fEnd.x, fEnd.y);
+            ctx.stroke();
+        }
+    }
+
+    // Falls Raum 5: Verschlossenes Tor am oberen Ende des Pfads
+    if (room.lockedGate) {
+        const g1 = ninjaIsoToScreen(420, -38, 0);
+        const g2 = ninjaIsoToScreen(420, 38, 0);
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(g1.x, g1.y - 38);
+        ctx.lineTo(g1.x, g1.y);
+        ctx.lineTo(g2.x, g2.y);
+        ctx.lineTo(g2.x, g2.y - 38);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(120, 53, 15, 0.78)';
+        ctx.fill();
+        ctx.font = '18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔒', (g1.x + g2.x) / 2, (g1.y + g2.y) / 2 - 14);
+    }
+
+    // Schrein & blinkendes Item (wie beim C64-Original blinken aufhebbare Gegenstände!)
+    if (room.shrine) {
+        const shPos = ninjaIsoToScreen(room.shrine.s, room.shrine.l, 0);
+        // Stein-Podest
+        ctx.fillStyle = '#57534e';
+        ctx.fillRect(shPos.x - 14, shPos.y - 12, 28, 12);
+        ctx.fillStyle = '#a8a29e';
+        ctx.fillRect(shPos.x - 16, shPos.y - 15, 32, 4);
+
+        if (!room.shrine.collected) {
+            if (ninjaTick % 24 < 18) {
+                ctx.font = '20px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(room.shrine.icon, shPos.x, shPos.y - 18);
+            }
+            if (Math.abs(ninjaPlayer.s - room.shrine.s) <= 48) {
+                ctx.fillStyle = '#fde047';
+                ctx.font = 'bold 10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('[F] ' + room.shrine.label, shPos.x, shPos.y - 36);
+            }
+        }
+    }
+
+    // Gegner zeichnen
+    for (const en of room.enemies) {
+        if (!en.alive) continue;
+        const ep = ninjaIsoToScreen(en.s, en.l, 0);
+        ninjaDrawCharacter(ctx, ep.x, ep.y, en.color, en.hatColor, en.s > ninjaPlayer.s ? -1 : 1, ninjaTick * 0.15, en.attackCd > 30 ? 8 : 0, 'katana', !!en.isBoss);
+    }
+
+    // Spieler Armakuni (schwarzer Ninja mit rotem Gürtel) zeichnen
+    const np = ninjaIsoToScreen(ninjaPlayer.s, ninjaPlayer.l, ninjaPlayer.z);
+    const curWeaponKey = (NINJA_WEAPONS[ninjaPlayer.weaponIdx] || NINJA_WEAPONS[0]).key;
+    if (ninjaPlayer.invulnTicks % 4 < 2) {
+        ninjaDrawCharacter(ctx, np.x, np.y, '#090d16', '#dc2626', ninjaPlayer.facing, ninjaPlayer.animWalk, ninjaPlayer.attackTicks, curWeaponKey, false);
+    }
+
+    // Fliegende Shuriken zeichnen
+    for (const pr of ninjaProjectiles) {
+        const pp = ninjaIsoToScreen(pr.s, pr.l, 16);
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('✴️', pp.x, pp.y);
+    }
+
+    // Schwebende Treffer-Popups
+    for (let i = ninjaPopups.length - 1; i >= 0; i--) {
+        const p = ninjaPopups[i];
+        ctx.fillStyle = p.color;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+        p.y -= 0.6;
+        p.life--;
+        if (p.life <= 0) ninjaPopups.splice(i, 1);
+    }
+
+    ctx.restore();
+
+    // =========================================================================
+    // 2. ORIGINALGETREUER C64-RAHMEN & STATUS-HUD (RECHTS & UNTEN)
+    // =========================================================================
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(12, 12, 548, 326);
+
+    // Rechtes C64-Status-Panel (x=572 .. 748, y=12 .. 338)
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(572, 12, 176, 326);
+    ctx.strokeRect(572, 12, 176, 326);
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('NINJA ENERGY', 660, 32);
+
+    // Ninja-Energiebalken (10 Segmente)
+    const nSegs = Math.ceil((ninjaPlayer.hp / ninjaPlayer.maxHp) * 10);
+    for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = i < nSegs ? '#22c55e' : '#292524';
+        ctx.fillRect(588 + i * 14, 40, 11, 14);
+    }
+
+    // Gegner-Energiebalken
+    const activeEnemy = room.enemies.find((e) => e.alive);
+    ctx.fillStyle = '#f87171';
+    ctx.fillText(activeEnemy ? 'ENEMY ENERGY' : 'AREA CLEAR', 660, 76);
+    const eSegs = activeEnemy ? Math.ceil((activeEnemy.hp / activeEnemy.maxHp) * 10) : 0;
+    for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = i < eSegs ? '#ef4444' : '#292524';
+        ctx.fillRect(588 + i * 14, 84, 11, 14);
+    }
+
+    // Aktive Waffe im Kasten
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillText('WEAPON (Q)', 660, 124);
+    ctx.fillStyle = '#0c0a09';
+    ctx.fillRect(590, 132, 140, 62);
+    ctx.strokeStyle = '#78350f';
+    ctx.strokeRect(590, 132, 140, 62);
+    const curWp = NINJA_WEAPONS[ninjaPlayer.weaponIdx] || NINJA_WEAPONS[0];
+    ctx.font = '26px sans-serif';
+    ctx.fillText(curWp.icon, 660, 165);
+    ctx.fillStyle = '#fde68a';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(curWp.name, 660, 186);
+
+    // Gesammelte Artefakte / Items im Kasten
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('INVENTORY', 660, 218);
+    ctx.fillStyle = '#0c0a09';
+    ctx.fillRect(590, 226, 140, 54);
+    ctx.strokeRect(590, 226, 140, 54);
+
+    const invIcons = [];
+    if (ninjaPlayer.unlockedWeapons.includes('katana')) invIcons.push('⚔️');
+    if (ninjaPlayer.unlockedWeapons.includes('shuriken')) invIcons.push('✴️');
+    if (ninjaPlayer.items.includes('amulet')) invIcons.push('💎');
+    if (ninjaPlayer.items.includes('key')) invIcons.push('🗝️');
+    if (ninjaPlayer.unlockedWeapons.includes('bostaff')) invIcons.push('🦯');
+    ctx.font = '18px sans-serif';
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(invIcons.length > 0 ? invIcons.join(' ') : '—', 660, 259);
+
+    // Raum-Kompass & Stage
+    ctx.fillStyle = '#a8a29e';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('STAGE ' + ninjaStage + '  |  ROOM ' + (ninjaRoomIdx + 1) + '/6', 660, 312);
+
+    // =========================================================================
+    // 3. UNTERES C64-NACHRICHTEN- & HINWEIS-BANNER (y=350 .. 428)
+    // =========================================================================
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(12, 350, 736, 78);
+    ctx.strokeStyle = '#b45309';
+    ctx.strokeRect(12, 350, 736, 78);
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('⛩️ ' + room.subtitle + ' — ' + ninjaStatusMsg, 26, 376);
+
+    ctx.fillStyle = '#d6d3d1';
+    ctx.font = '11px monospace';
+    ctx.fillText('PFEILTASTEN/WASD: Pfad entlanglaufen  |  SPACE: Angriff  |  E: Salto-Sprung  |  F: Schrein aufnehmen  |  Q: Waffe', 26, 402);
+    ctx.fillStyle = '#a8a29e';
+    ctx.fillText('💡 Tipp: In Raum 2 mit Taste E über die 3 Fluss-Felsen springen! In Raum 4 schützt das 💎 Amulett vor dem Drachenfeuer.', 26, 419);
+
+    // Start- / Game-Over-Overlay
+    if (!ninjaRunning) {
+        ctx.fillStyle = 'rgba(12, 10, 9, 0.82)';
+        ctx.fillRect(12, 12, 548, 326);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText(ninjaBannerText || '🥷 THE LAST NINJA (1987)', 286, 152);
+        ctx.fillStyle = '#e7e5e4';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Finde Waffen & Artefakte in 6 isometrischen Räumen und besiege Shogun Kunitoki!', 286, 180);
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('Klicke auf „Mission auf Lin Fen starten“ oder drücke LEERTASTE!', 286, 206);
+    }
+}
+
+function ninjaLoop() {
+    if (!ninjaRunning) {
+        ninjaDraw();
+        return;
+    }
+    ninjaStep();
+    ninjaDraw();
+    if (ninjaRunning) {
+        ninjaRafId = requestAnimationFrame(ninjaLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
+    ninjaInit();
     canabaltInit();
     invadersInit();
     pacmanInit();
