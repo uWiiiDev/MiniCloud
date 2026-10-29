@@ -1386,6 +1386,14 @@ function selectCloudGame(gameKey) {
         titleEl.textContent = 'Bestenliste: ' + GAMES_CATALOG[gameKey].title;
     }
 
+    if (gameKey === 'wow') {
+        if (!wowInitialized) {
+            wowInit();
+        }
+        wowDrawWorld(performance.now());
+        wowSyncPeers();
+    }
+
     loadCloudLeaderboard(activeLbPeriod);
 }
 
@@ -2303,7 +2311,7 @@ function tetrisDraw() {
         for (let c = 0; c < 10; c++) {
             ctx.strokeStyle = 'rgba(148,163,184,0.08)';
             ctx.strokeRect(c * 24, r * 22, 24, 22);
-            if (tetrisBoard[r][c]) {
+            if (tetrisBoard[r] && tetrisBoard[r][c]) {
                 ctx.fillStyle = tetrisBoard[r][c];
                 ctx.fillRect(c * 24 + 1, r * 22 + 1, 22, 20);
             }
@@ -3140,6 +3148,7 @@ function wowInit() {
                 wowVisualRings.push({ x: wowMoveTarget.x, y: wowMoveTarget.y, r: 4, maxR: 20, color: '#4ade80', alpha: 0.85 });
             }
         });
+        wowDrawWorld(performance.now());
         requestAnimationFrame(wowGameLoop);
     }
 }
