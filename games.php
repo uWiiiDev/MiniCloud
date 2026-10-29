@@ -3026,6 +3026,9 @@ let wowVisualRings  = [];
 let wowGroundHazards= [];
 let wowScenery      = [];
 let wowPeerHeroes   = [];
+let wowMoveTarget   = null;
+let wowAutoChaseMob = false;
+let wowPendingSpell = null;
 let wowLastFrameTs  = 0;
 let wowLastAutoAtk  = 0;
 let wowInitialized  = false;
@@ -3114,7 +3117,7 @@ function wowInit() {
                 return;
             }
 
-            // Klick auf ein Monster -> ins Visier nehmen & angreifen
+            // Klick auf ein Monster -> ins Visier nehmen & automatisch hinlaufen/angreifen!
             let bestMob = null;
             let bestDist = 48;
             for (const m of wowMobs) {
@@ -3127,6 +3130,14 @@ function wowInit() {
             }
             if (bestMob) {
                 wowTargetId = bestMob.id;
+                wowAutoChaseMob = true;
+                wowMoveTarget = null;
+                wowVisualRings.push({ x: bestMob.x, y: bestMob.y, r: 8, maxR: 28, color: '#ef4444', alpha: 0.9 });
+            } else {
+                // Klick auf freien Boden -> Held läuft automatisch dorthin (Click-to-Move)!
+                wowMoveTarget = { x: Math.min(735, Math.max(25, cx)), y: Math.min(415, Math.max(30, cy)) };
+                wowAutoChaseMob = false;
+                wowVisualRings.push({ x: wowMoveTarget.x, y: wowMoveTarget.y, r: 4, maxR: 20, color: '#4ade80', alpha: 0.85 });
             }
         });
         requestAnimationFrame(wowGameLoop);
@@ -3426,7 +3437,10 @@ function wowCastSpell(spellIdx) {
     const dist = Math.hypot(target.x - wowHero.x, target.y - wowHero.y);
     const maxRange = spellIdx === 2 ? 250 : cls.range;
     if (dist > maxRange + 25) {
-        wowAddFloatText(wowHero.x, wowHero.y - 20, '🎯 Außer Reichweite! Näher herangehen.', '#f87171', false);
+        wowAutoChaseMob = true;
+        wowPendingSpell = spellIdx;
+        wowMoveTarget   = null;
+        wowAddFloatText(wowHero.x, wowHero.y - 20, '🏃 Laufe zum Ziel…', '#fbbf24', false);
         return;
     }
 
@@ -3783,7 +3797,10 @@ function wowGameLoop(now) {
     const dt = Math.min(0.05, (now - (wowLastFrameTs || now)) / 1000);
     wowLastFrameTs = now;
 
-    // 1. Helden-Bewegung (W A S D / Pfeiltasten / Touch)
+    // 1. Helden-Bewegung (W A S D / Pfeiltasten / Touch / Click-to-Move / Auto-Ansturm)
+    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
+    const target = wowMobs.find((m) => !m.dead && m.id === wowTargetId);
+
     let mx = wowTouchDir.dx;
     let my = wowTouchDir.dy;
     if (wowKeysDown['ArrowLeft']  || wowKeysDown['a'] || wowKeysDown['A']) mx -= 1;
@@ -3792,10 +3809,37 @@ function wowGameLoop(now) {
     if (wowKeysDown['ArrowDown']  || wowKeysDown['s'] || wowKeysDown['S']) my += 1;
 
     if (mx !== 0 || my !== 0) {
+        wowMoveTarget   = null;
+        wowAutoChaseMob = false;
+        wowPendingSpell = null;
         const len = Math.hypot(mx, my) || 1;
         const spd = (now < wowHero.speedUntil ? 195 : 145) * dt;
         wowHero.x = Math.min(735, Math.max(25, wowHero.x + (mx / len) * spd));
         wowHero.y = Math.min(415, Math.max(30, wowHero.y + (my / len) * spd));
+    } else if (wowAutoChaseMob && target) {
+        const distToT = Math.hypot(target.x - wowHero.x, target.y - wowHero.y);
+        const stopDist = Math.max(42, cls.range - 12);
+        if (distToT > stopDist) {
+            const spd = (now < wowHero.speedUntil ? 195 : 145) * dt;
+            wowHero.x = Math.min(735, Math.max(25, wowHero.x + ((target.x - wowHero.x) / distToT) * spd));
+            wowHero.y = Math.min(415, Math.max(30, wowHero.y + ((target.y - wowHero.y) / distToT) * spd));
+        } else {
+            wowAutoChaseMob = false;
+            if (wowPendingSpell !== null) {
+                const spToCast = wowPendingSpell;
+                wowPendingSpell = null;
+                wowCastSpell(spToCast);
+            }
+        }
+    } else if (wowMoveTarget) {
+        const distToM = Math.hypot(wowMoveTarget.x - wowHero.x, wowMoveTarget.y - wowHero.y);
+        if (distToM > 6) {
+            const spd = (now < wowHero.speedUntil ? 195 : 145) * dt;
+            wowHero.x = Math.min(735, Math.max(25, wowHero.x + ((wowMoveTarget.x - wowHero.x) / distToM) * spd));
+            wowHero.y = Math.min(415, Math.max(30, wowHero.y + ((wowMoveTarget.y - wowHero.y) / distToM) * spd));
+        } else {
+            wowMoveTarget = null;
+        }
     }
 
     // 2. Heilbrunnen im Lager (links x < 165) regeneriert LP & Mana rasch
@@ -3808,8 +3852,6 @@ function wowGameLoop(now) {
     }
 
     // 3. Auto-Attacke auf das anvisierte Ziel, wenn in Reichweite
-    const cls = WOW_CLASSES[wowHero.heroClass] || WOW_CLASSES.paladin;
-    const target = wowMobs.find((m) => !m.dead && m.id === wowTargetId);
     if (target && !inSafeCamp && (now - wowLastAutoAtk) > 1350) {
         const dist = Math.hypot(target.x - wowHero.x, target.y - wowHero.y);
         if (dist <= cls.range) {
@@ -4280,6 +4322,11 @@ document.addEventListener('DOMContentLoaded', () => {
     snakeDraw();
     c4AiNewGame();
     wowInit();
+
+    const urlGame = new URLSearchParams(window.location.search).get('game');
+    if (urlGame && GAMES_CATALOG[urlGame]) {
+        selectCloudGame(urlGame);
+    }
 });
 </script>
 
