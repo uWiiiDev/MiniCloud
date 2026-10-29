@@ -803,7 +803,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
         <!-- Ausklappbare Schnellleiste: Dropbox- / Cloud-Link Server-zu-Server Import -->
         <div id="cloudImportInlineBar" class="hidden px-4 sm:px-6 py-3.5 bg-sky-50/80 dark:bg-sky-950/35 border-b border-sky-200/80 dark:border-sky-800/70">
-            <form action="folder_action.php" method="post" onsubmit="const b=this.querySelector('button[type=submit]'); if(b){b.disabled=true; b.innerHTML='⏳ Übertrage direkt auf Server...';}" class="space-y-2.5">
+            <form id="cloudImportForm" action="folder_action.php" method="post" onsubmit="return submitCloudUrlImport(event)" class="space-y-2.5">
                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                 <input type="hidden" name="action" value="import_cloud_url">
                 <?php if ($activeGroupFolder !== null): ?>
@@ -813,35 +813,46 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <span class="text-xs font-bold text-sky-950 dark:text-sky-200">
-                        ☁️↓ Dropbox- &amp; Cloud-Umzug (Server-zu-Server Direktimport<?= $currentFolder !== '' ? ' in „' . e($currentFolder) . '“' : '' ?>)
+                        ☁️↓ Dropbox-, Nextcloud- &amp; Cloud-Umzug (Server-zu-Server Direktimport<?= $currentFolder !== '' ? ' in „' . e($currentFolder) . '“' : '' ?>)
                     </span>
                     <span class="text-[11px] text-sky-700 dark:text-sky-300">
-                        Tipp: In Dropbox auf „Link kopieren“ klicken (Ordner oder Datei) &amp; hier einfügen
+                        Tipp: In Dropbox / Nextcloud auf „Link kopieren“ klicken (Ordner oder Datei) &amp; hier einfügen
                     </span>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-2">
-                    <div class="md:col-span-6">
+                    <div class="md:col-span-5">
                         <input
                             type="url"
                             id="cloudImportUrlInput"
                             name="import_url"
                             required
-                            placeholder="https://www.dropbox.com/scl/fo/... (oder direkter HTTPS-Link)"
+                            placeholder="https://www.dropbox.com/scl/fo/... oder Nextcloud-Link"
                             class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                         >
                     </div>
-                    <div class="md:col-span-3">
+                    <div class="md:col-span-2">
+                        <input
+                            type="password"
+                            name="import_password"
+                            autocomplete="new-password"
+                            placeholder="🔒 Passwort (optional)"
+                            title="Optionales Passwort für passwortgeschützte Nextcloud-Freigaben oder geschützte ZIP-Archive"
+                            class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                    </div>
+                    <div class="md:col-span-2">
                         <input
                             type="text"
                             name="target_subfolder"
-                            placeholder="Ziel-Unterordner (optional, z. B. Dropbox)"
+                            placeholder="Ziel-Unterordner (opt.)"
                             class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                         >
                     </div>
                     <div class="md:col-span-3 flex items-center gap-1.5">
                         <button
                             type="submit"
+                            id="cloudImportSubmitBtn"
                             class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer"
                         >
                             <span>🚀 Importieren</span>
@@ -858,8 +869,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
                 <label class="inline-flex items-center gap-2 text-xs text-sky-900 dark:text-sky-200 cursor-pointer select-none">
                     <input type="checkbox" name="auto_unpack" value="1" checked class="rounded border-sky-300 text-sky-600 focus:ring-sky-500">
-                    <span>📦 <strong>Dropbox-Ordner / ZIP-Archive automatisch entpacken</strong> und alle Unterordner 1:1 in der MiniCloud wiederherstellen</span>
+                    <span>📦 <strong>Dropbox-/Nextcloud-Ordner &amp; ZIP-Archive automatisch entpacken</strong> und alle Unterordner 1:1 wiederherstellen</span>
                 </label>
+
+                <div id="cloudImportProgressBox" class="hidden pt-1 space-y-1.5">
+                    <div class="flex items-center justify-between text-xs font-semibold text-sky-900 dark:text-sky-200">
+                        <span id="cloudImportProgressLabel">⏳ Verbinde mit Quell-Cloud...</span>
+                        <span id="cloudImportProgressStats" class="font-mono text-[11px] text-sky-700 dark:text-sky-300">0 MB</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-sky-200/80 dark:bg-sky-900/70 overflow-hidden">
+                        <div id="cloudImportProgressBar" class="h-full bg-sky-600 dark:bg-sky-400 transition-all duration-300" style="width: 8%;"></div>
+                    </div>
+                </div>
             </form>
         </div>
         <script>
@@ -874,6 +895,126 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 if (nfBar) nfBar.classList.add('hidden');
                 if (inp) setTimeout(() => inp.focus(), 30);
             }
+        }
+
+        function formatImportBytesJs(bytes) {
+            const b = Number(bytes) || 0;
+            if (b >= 1073741824) return (b / 1073741824).toFixed(2).replace('.', ',') + ' GB';
+            if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+            if (b >= 1024) return Math.round(b / 1024) + ' KB';
+            return b + ' B';
+        }
+
+        function submitCloudUrlImport(ev) {
+            if (ev) ev.preventDefault();
+            const form = document.getElementById('cloudImportForm');
+            if (!form) return true;
+
+            const btn   = document.getElementById('cloudImportSubmitBtn');
+            const box   = document.getElementById('cloudImportProgressBox');
+            const lbl   = document.getElementById('cloudImportProgressLabel');
+            const stats = document.getElementById('cloudImportProgressStats');
+            const bar   = document.getElementById('cloudImportProgressBar');
+
+            const jobId = 'imp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            const fd    = new FormData(form);
+            fd.set('ajax', '1');
+            fd.set('job_id', jobId);
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Läuft...';
+            }
+            if (box) box.classList.remove('hidden');
+            if (lbl) lbl.textContent = '⏳ Verbinde direkt von Server zu Server...';
+            if (stats) stats.textContent = '0 MB';
+            if (bar) bar.style.width = '6%';
+
+            let finished = false;
+            const csrfToken = fd.get('csrf_token') || '';
+
+            const pollTimer = setInterval(async () => {
+                if (finished) return;
+                try {
+                    const pfd = new FormData();
+                    pfd.set('csrf_token', csrfToken);
+                    pfd.set('action', 'import_cloud_status');
+                    pfd.set('job_id', jobId);
+                    const res = await fetch('folder_action.php', { method: 'POST', body: pfd, credentials: 'same-origin' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!data || finished) return;
+
+                    if (data.phase === 'downloading') {
+                        const dl = Number(data.downloaded_bytes) || 0;
+                        const tot = Number(data.total_bytes) || 0;
+                        const fn = data.filename ? (' („' + data.filename + '“)') : '';
+                        if (lbl) lbl.textContent = '📥 Lade direkt auf den MiniCloud-Server' + fn + '...';
+                        if (tot > 0 && tot >= dl) {
+                            const pct = Math.min(92, Math.max(8, Math.round((dl / tot) * 88)));
+                            if (bar) bar.style.width = pct + '%';
+                            if (stats) stats.textContent = formatImportBytesJs(dl) + ' / ' + formatImportBytesJs(tot) + ' (' + Math.round((dl / tot) * 100) + ' %)';
+                        } else {
+                            if (bar) bar.style.width = '55%';
+                            if (stats) stats.textContent = formatImportBytesJs(dl) + ' empfangen';
+                        }
+                    } else if (data.phase === 'unpacking') {
+                        const ext = Number(data.extracted_files) || 0;
+                        const totF = Number(data.total_files) || 1;
+                        const pct = Math.min(99, Math.max(88, 88 + Math.round((ext / totF) * 11)));
+                        if (lbl) lbl.textContent = '📦 Entpacke Ordner & Dateien 1:1 in die MiniCloud...';
+                        if (bar) bar.style.width = pct + '%';
+                        if (stats) stats.textContent = ext + ' / ' + totF + ' Dateien';
+                    } else if (data.phase === 'done') {
+                        finished = true;
+                        clearInterval(pollTimer);
+                        if (bar) bar.style.width = '100%';
+                        if (lbl) lbl.textContent = data.message || '✅ Import abgeschlossen! Lade Ordner...';
+                        window.location.href = data.redirect_url || window.location.href;
+                    } else if (data.phase === 'error') {
+                        finished = true;
+                        clearInterval(pollTimer);
+                        if (lbl) lbl.textContent = '❌ ' + (data.message || 'Fehler beim Import.');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '🚀 Importieren';
+                        }
+                    }
+                } catch (e) {
+                    // Netzwerkfehler beim Polling ignorieren, nächster Tick folgt
+                }
+            }, 950);
+
+            fetch('folder_action.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(async (resp) => {
+                    if (finished) return;
+                    // Falls ein Proxy nach 60s mit 504 antwortet, läuft PHP dank ignore_user_abort im Hintergrund weiter -> Poller übernimmt!
+                    if (resp.status === 504 || resp.status === 502) {
+                        if (lbl) lbl.textContent = '📥 Großer Datenimport läuft im Hintergrund auf dem Server weiter...';
+                        return;
+                    }
+                    const json = await resp.json().catch(() => null);
+                    if (json && (json.phase === 'done' || json.ok === true)) {
+                        finished = true;
+                        clearInterval(pollTimer);
+                        if (bar) bar.style.width = '100%';
+                        if (lbl) lbl.textContent = json.message || '✅ Import abgeschlossen!';
+                        window.location.href = json.redirect_url || window.location.href;
+                    } else if (json && json.phase === 'error') {
+                        finished = true;
+                        clearInterval(pollTimer);
+                        if (lbl) lbl.textContent = '❌ ' + (json.message || 'Import fehlgeschlagen.');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '🚀 Importieren';
+                        }
+                    }
+                })
+                .catch(() => {
+                    // Bei Verbindungsabbruch pollt pollTimer automatisch den Server-Status weiter
+                });
+
+            return false;
         }
         </script>
     <?php endif; ?>
