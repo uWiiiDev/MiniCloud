@@ -1852,6 +1852,10 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
  */
 function rememberAssistantTurn(string $question, string $reply, string $topicId = '', array $actions = []): void
 {
+    if (session_status() !== PHP_SESSION_ACTIVE && !headers_sent()) {
+        @session_start();
+    }
+
     if (!isset($_SESSION['assistant_context']) || !is_array($_SESSION['assistant_context'])) {
         $_SESSION['assistant_context'] = [
             'last_topic_id' => '',
@@ -1868,13 +1872,15 @@ function rememberAssistantTurn(string $question, string $reply, string $topicId 
     }
 
     $cleanReply = trim(preg_replace('/\s+/u', ' ', strip_tags($reply)) ?? '');
-    $_SESSION['assistant_context']['history'][] = [
-        'q' => mb_substr(trim($question), 0, 260),
-        'a' => mb_substr($cleanReply, 0, 420),
-    ];
+    if ($cleanReply !== '') {
+        $_SESSION['assistant_context']['history'][] = [
+            'q' => mb_substr(trim($question), 0, 260),
+            'a' => mb_substr($cleanReply, 0, 420),
+        ];
 
-    if (count($_SESSION['assistant_context']['history']) > 4) {
-        $_SESSION['assistant_context']['history'] = array_slice($_SESSION['assistant_context']['history'], -4);
+        if (count($_SESSION['assistant_context']['history']) > 4) {
+            $_SESSION['assistant_context']['history'] = array_slice($_SESSION['assistant_context']['history'], -4);
+        }
     }
 }
 
@@ -2056,10 +2062,11 @@ function queryLocalOllamaAssistant(
 
     if ($isGeneralQuestion) {
         $sysPrompt = "Du bist der freundliche lokale KI-Assistent von {$username} in {$appTitle} (Datum: " . date('d.m.Y') . "). "
-            . "Antworte IMMER auf {$targetLangName}, präzise, hilfreich und kompakt (ca. 3 bis 6 Sätze oder Stichpunkte mit **Fettdruck**).";
+            . "Antworte IMMER auf {$targetLangName}, präzise, hilfreich und kompakt (ca. 2 bis 5 Sätze oder Stichpunkte mit **Fettdruck**). "
+            . "WICHTIG: Wenn der Benutzer eine kurze Anschlussfrage stellt (z. B. 'Und wie lautet sie für ...?', 'Und bei ...?', 'Und dort?'), beziehe sie direkt auf die unmittelbar vorherige Frage im Gesprächsverlauf!";
     } else {
         $sysPrompt = "Du bist der lokale KI-Assistent von {$appTitle} (Benutzer: {$username}, Datum: " . date('d.m.Y') . "). "
-            . "Antworte auf {$targetLangName} kompakt (3-5 Sätze/Stichpunkte). "
+            . "Antworte auf {$targetLangName} kompakt (3-5 Sätze/Stichpunkte). Beachte bei Anschlussfragen immer den vorherigen Gesprächsverlauf. "
             . "Nutze für Cloud-Fragen diese Fakten (nenne niemals Google Drive/Dropbox): "
             . "Speicher frei: {$freeStr} von {$quotaStr}, Offene Aufgaben: {$openTasksCount}, Ungelesene Nachrichten: {$unread}, Termine: {$nextEventStr}. "
             . "Handbuch: {$kbContextStr}";
@@ -2068,11 +2075,11 @@ function queryLocalOllamaAssistant(
     $messages = [
         ['role' => 'system', 'content' => $sysPrompt],
     ];
-    if (!$isGeneralQuestion && is_array($history)) {
-        foreach (array_slice($history, -1) as $turn) {
+    if (is_array($history)) {
+        foreach (array_slice($history, -2) as $turn) {
             if (!empty($turn['q']) && !empty($turn['a'])) {
-                $messages[] = ['role' => 'user', 'content' => mb_substr((string)$turn['q'], 0, 140)];
-                $messages[] = ['role' => 'assistant', 'content' => mb_substr((string)$turn['a'], 0, 200)];
+                $messages[] = ['role' => 'user', 'content' => mb_substr((string)$turn['q'], 0, 180)];
+                $messages[] = ['role' => 'assistant', 'content' => mb_substr((string)$turn['a'], 0, 240)];
             }
         }
     }
@@ -2084,8 +2091,9 @@ function queryLocalOllamaAssistant(
         'stream'     => false,
         'keep_alive' => '30m',
         'options'    => [
-            'temperature' => $isGeneralQuestion ? 0.35 : 0.2,
+            'temperature' => $isGeneralQuestion ? 0.3 : 0.2,
             'num_predict' => 180,
+            'num_thread'  => 3,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -3136,9 +3144,10 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
 
     $lastTopicId = (string)($_SESSION['assistant_context']['last_topic_id'] ?? '');
     $isFollowUpPhrase = hasAnyKeyword($norm, [
-        'und wie', 'geht das', 'kann man das', 'kann ich das', 'dort', 'damit', 'dazu', 'davon', 'darin', 'dafuer',
+        'und wie', 'und fuer', 'und bei', 'wie lautet sie', 'wie lautet er', 'wie lautet das', 'wie ist es bei',
+        'geht das', 'kann man das', 'kann ich das', 'dort', 'damit', 'dazu', 'davon', 'darin', 'dafuer',
         'auch mit', 'passwort', 'teilen', 'freigeben', 'exportieren', 'drucken', 'smartphone', 'handy', 'android', 'iphone',
-        'and how', 'can i also', 'with that', 'there', 'how do i share that',
+        'and how', 'and for', 'what about', 'can i also', 'with that', 'there', 'how do i share that',
     ]);
 
     $scoredEntries = [];
@@ -3150,7 +3159,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
 
         // Folgefragen-Bonus: Wenn der Nutzer ein Pronomen/Anschlusswort nutzt ("Und wie teile ich das?"),
         // erhält das zuletzt besprochene Thema bzw. eng verwandte Themen einen Kontext-Bonus
-        if ($lastTopicId !== '' && $isFollowUpPhrase && $entry['id'] === $lastTopicId) {
+        if ($lastTopicId !== '' && $lastTopicId !== 'ollama_general' && $isFollowUpPhrase && $entry['id'] === $lastTopicId) {
             $score += 6.5;
         }
 
@@ -3204,7 +3213,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         $topKbForRag[] = $item['entry'];
     }
     // Falls eine Folgefrage gestellt wurde, das vorherige Thema ebenfalls als Kontext mitgeben
-    if ($lastTopicId !== '') {
+    if ($lastTopicId !== '' && $lastTopicId !== 'ollama_general') {
         foreach ($kb as $entry) {
             if ($entry['id'] === $lastTopicId) {
                 $alreadyIn = false;
@@ -3230,14 +3239,13 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     //   liefert Stufe 1 sofort (< 5 ms) die exakte Handbuch-Antwort.
     // - Wenn es sich um eine allgemeine Wissens-/Text-/Alltagsfrage ($bestScore < 7.5),
     //   eine kombinierte Frage oder eine Anschlussfrage handelt, antwortet das
-    //   lokale Sprachmodell (qwen2.5:3b) im Dual-Modus.
-    $isGeneralQuestion  = ($bestScore < 7.5 && !$isFollowUpPhrase);
+    //   lokale Sprachmodell (qwen2.5:1.5b / 3b) im Dual-Modus.
+    $isGeneralQuestion  = ($bestScore < 7.5 && (!$isFollowUpPhrase || $lastTopicId === '' || $lastTopicId === 'ollama_general'));
     $shouldInvokeOllama = ($bestScore < 10.0 || $isFollowUpPhrase || count($queryWords) >= 7);
     if ($shouldInvokeOllama && ($appSettings['assistant_use_ollama'] ?? '1') === '1') {
         $topicId = ($bestEntry !== null && !$isGeneralQuestion)
             ? (string)$bestEntry['id']
-            : ($lastTopicId !== '' ? $lastTopicId : 'ollama_general');
-        rememberAssistantTurn($qTrim, '', $topicId);
+            : 'ollama_general';
 
         $ollamaReply = queryLocalOllamaAssistant(
             $pdo,
@@ -3251,6 +3259,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             $isGeneralQuestion
         );
         if ($ollamaReply !== null && $ollamaReply !== '') {
+            rememberAssistantTurn($qTrim, $ollamaReply, $topicId);
             $actions = ($bestEntry !== null && !$isGeneralQuestion)
                 ? $bestEntry['actions']
                 : [
@@ -3394,6 +3403,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
     if (!verifyCsrfToken($csrf)) {
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => 'Ungültiges Sicherheits-Token. Bitte laden Sie die Seite neu.']);
+        exit;
+    }
+
+    if (isset($_POST['clear_context']) && $_POST['clear_context'] === '1') {
+        unset($_SESSION['assistant_context']);
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -3671,6 +3686,11 @@ function saveAssistantHistory(items) {
 function clearAssistantHistory() {
     try {
         sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
+        const fd = new FormData();
+        fd.append('ajax', '1');
+        fd.append('csrf_token', ASSISTANT_CSRF);
+        fd.append('clear_context', '1');
+        fetch('assistant.php', { method: 'POST', body: fd }).catch(() => {});
     } catch (e) {}
     renderAssistantMessages();
 }
