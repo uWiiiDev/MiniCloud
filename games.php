@@ -5,20 +5,21 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 13 Spiele:
+ * Enthaltene 14 Spiele:
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
- * 2.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
- * 3.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 4.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 5.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 6.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 7.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 8.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 9.  🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 10. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 11. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 12. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 13. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 2.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
+ * 3.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
+ * 4.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 5.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 6.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 7.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 8.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 9.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 10. 🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 11. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 12. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 13. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 14. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -109,7 +110,7 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 13 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 14 Spiele inklusive Metadaten.
  *
  * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
@@ -124,6 +125,15 @@ function getGamesCatalog(): array
             'group'    => 'action',
             'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'canabalt' => [
+            'key'      => 'canabalt',
+            'title'    => 'Cloud-Canabalt',
+            'icon'     => '🏃‍♂️',
+            'category' => 'Parkour-Runner',
+            'group'    => 'arcade',
+            'desc'     => 'Rasante Ein-Tasten-Flucht über einstürzende Wolkenkratzer, durch Glasfenster & Taubenschwärme!',
+            'color'    => 'from-slate-600 to-zinc-900',
         ],
         'invaders' => [
             'key'      => 'invaders',
@@ -1074,7 +1084,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (7)
+                        🕹️ Retro &amp; Arcade (8)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2049,6 +2059,66 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 14. SPIEL: CLOUD-CANABALT (EIN-TASTEN ROOFTOP-RUNNER) -->
+            <div id="gamePanel-canabalt" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🏃‍♂️ Cloud-Canabalt (2009 Parkour-Runner)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/70 dark:border-slate-700">
+                                🏢 Einstürzende Dächer &middot; 🪟 Glasfenster &middot; 🕊️ Taubenschwärme
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: <strong>Leertaste / W / ↑ / Klick aufs Spielfeld</strong> &ndash; <em>kurz antippen</em> = flacher Sprung (für Bürofenster), <em>gedrückt halten</em> = weiter Satz! Kisten bremsen dich ab, fallende Bombenblöcke sind tödlich.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="canabaltStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-200 dark:hover:bg-white dark:text-slate-900 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Flucht starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Distanzzeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Distanz:</span>
+                        <strong id="canabaltDist" class="text-slate-900 dark:text-white font-extrabold text-sm">0 m</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Tempo:</span>
+                        <strong id="canabaltSpeed" class="text-cyan-600 dark:text-cyan-400 font-extrabold">0 km/h</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Spitzentempo:</span>
+                        <strong id="canabaltMaxSpeed" class="text-amber-600 dark:text-amber-400 font-extrabold">0 km/h</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Status:</span>
+                        <strong id="canabaltStatus" class="text-emerald-600 dark:text-emerald-400 font-extrabold truncate">Bereit</strong>
+                    </div>
+                </div>
+
+                <!-- Breitbild-Skyline-Spielfeld (Canvas) + Ein-Tasten-Button -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="canabaltCanvas" width="760" height="380"
+                            onmousedown="canabaltPressJump(true)" onmouseup="canabaltPressJump(false)" onmouseleave="canabaltPressJump(false)"
+                            ontouchstart="event.preventDefault(); canabaltPressJump(true)" ontouchend="canabaltPressJump(false)"
+                            class="w-full max-w-[760px] h-auto rounded-2xl bg-slate-900 border-2 border-slate-700 shadow-xl cursor-pointer select-none"></canvas>
+
+                    <div class="flex flex-wrap items-center justify-center gap-3 select-none">
+                        <button type="button"
+                                onmousedown="canabaltPressJump(true)" onmouseup="canabaltPressJump(false)" onmouseleave="canabaltPressJump(false)"
+                                ontouchstart="event.preventDefault(); canabaltPressJump(true)" ontouchend="canabaltPressJump(false)"
+                                class="px-8 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-950 font-extrabold text-sm shadow-md cursor-pointer">
+                            🦘 SPRINGEN (Kurz antippen = flach &middot; Gedrückt halten = hoch &amp; weit)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2246,6 +2316,11 @@ function selectCloudGame(gameKey) {
             invadersInit();
         }
         invadersDraw();
+    } else if (gameKey === 'canabalt') {
+        if (!canabaltInitialized) {
+            canabaltInit();
+        }
+        canabaltDraw();
     } else if (gameKey === 'kong') {
         if (!kongInitialized) {
             kongInit();
@@ -8399,10 +8474,729 @@ function invadersLoop() {
     }
 }
 
+// =============================================================================
+// 14. CLOUD-CANABALT (2009 EIN-TASTEN ROOFTOP-PARKOUR-RUNNER)
+// =============================================================================
+let canabaltInitialized = false;
+let canabaltRunning     = false;
+let canabaltRafId       = null;
+let canabaltStartAt     = 0;
+let canabaltTick        = 0;
+let canabaltDistPx      = 0;
+let canabaltMaxKmh      = 0;
+let canabaltShake       = 0;
+let canabaltJumpHeld    = false;
+let canabaltBannerText  = '';
+let canabaltDeathReason = '';
+
+let canabaltRunner = {
+    x: 135,
+    y: 200,
+    vx: 6.2,
+    vy: 0,
+    w: 16,
+    h: 28,
+    onGround: false,
+    jumpHoldFrames: 0,
+    stumbleFrames: 0,
+    animPhase: 0
+};
+
+let canabaltBuildings = []; // { x, y, w, type: 'normal'|'hallway'|'collapsing'|'crane', ceilingH, collapsing, sinkVy, crates:[], pigeons:[], bomb:null, enteredLeftGlass:false, exitedRightGlass:false }
+let canabaltPigeons   = []; // Fliegende Tauben { x, y, vx, vy, wing }
+let canabaltShards    = []; // Glassplitter, Kistentrümmer & Rauch { x, y, vx, vy, size, color, life }
+let canabaltBgTowers1 = []; // Ferne Skyline
+let canabaltBgTowers2 = []; // Mittlere Skyline
+
+function canabaltBuildParallax() {
+    canabaltBgTowers1 = [];
+    canabaltBgTowers2 = [];
+    for (let x = 0; x < 920; x += 65) {
+        canabaltBgTowers1.push({
+            x: x,
+            w: 48 + (x % 35),
+            h: 110 + ((x * 37) % 150)
+        });
+    }
+    for (let x = 0; x < 960; x += 85) {
+        canabaltBgTowers2.push({
+            x: x,
+            w: 62 + (x % 40),
+            h: 85 + ((x * 53) % 135)
+        });
+    }
+}
+
+function canabaltSpawnNextBuilding() {
+    const last = canabaltBuildings[canabaltBuildings.length - 1];
+    const speedFactor = Math.min(1.8, canabaltRunner.vx / 7.5);
+    const gap = Math.floor(68 + Math.random() * (62 + speedFactor * 42));
+    const nextX = last ? (last.x + last.w + gap) : 0;
+
+    // Dachhöhe im gut erreichbaren Bereich variieren
+    const prevY = last ? last.y : 255;
+    let nextY = prevY + Math.floor((Math.random() - 0.46) * 72);
+    nextY = Math.max(155, Math.min(315, nextY));
+
+    const nextW = Math.floor(230 + Math.random() * 270);
+
+    // Gebäudetyp bestimmen
+    let type = 'normal';
+    const roll = Math.random();
+    if (canabaltBuildings.length > 1) {
+        if (roll < 0.22) {
+            type = 'hallway'; // Büro-Etage mit Glasfenstern (Decke darüber!)
+            nextY = Math.max(195, Math.min(295, prevY + Math.floor((Math.random() - 0.35) * 40)));
+        } else if (roll < 0.42) {
+            type = 'collapsing'; // Einstürzender Wolkenkratzer
+        } else if (roll < 0.54) {
+            type = 'crane'; // Schmaler Kran-Stahlträger
+        }
+    }
+
+    const crates = [];
+    const pigeons = [];
+    let bomb = null;
+
+    if (type !== 'crane') {
+        const numCrates = Math.floor(1 + Math.random() * 3);
+        for (let i = 0; i < numCrates; i++) {
+            const cx = 55 + Math.floor((nextW - 110) * ((i + 0.5) / numCrates) + (Math.random() - 0.5) * 30);
+            crates.push({
+                relX: cx,
+                w: 16,
+                h: 16,
+                hit: false
+            });
+        }
+    }
+
+    // Taubenschwarm auf manchen Dächern
+    if (type !== 'hallway' && Math.random() < 0.65) {
+        const pCount = 4 + Math.floor(Math.random() * 6);
+        const startRel = 35 + Math.random() * 80;
+        for (let i = 0; i < pCount; i++) {
+            pigeons.push({
+                relX: startRel + i * 11 + Math.random() * 5,
+                scared: false
+            });
+        }
+    }
+
+    // Fallender Sperrblock aus dem Himmel (auf normalen Dächern ab 250m)
+    if (type === 'normal' && canabaltDistPx > 2500 && nextW > 280 && Math.random() < 0.35) {
+        bomb = {
+            relX: Math.floor(nextW * (0.45 + Math.random() * 0.3)),
+            y: -140,
+            vy: 0,
+            w: 26,
+            h: 26,
+            landed: false,
+            triggered: false
+        };
+    }
+
+    canabaltBuildings.push({
+        x: nextX,
+        y: nextY,
+        w: nextW,
+        type: type,
+        ceilingH: 64, // Freie Höhe im Büro-Korridor
+        collapsing: false,
+        sinkVy: 0,
+        crates: crates,
+        pigeons: pigeons,
+        bomb: bomb,
+        enteredLeftGlass: false,
+        exitedRightGlass: false
+    });
+}
+
+function canabaltSpawnGlassShards(x, y) {
+    for (let i = 0; i < 18; i++) {
+        canabaltShards.push({
+            x: x,
+            y: y + (Math.random() - 0.5) * 44,
+            vx: 2 + Math.random() * 6,
+            vy: (Math.random() - 0.6) * 5,
+            size: 2 + Math.random() * 3.5,
+            color: i % 2 === 0 ? '#e0f2fe' : '#bae6fd',
+            life: 24 + Math.floor(Math.random() * 16)
+        });
+    }
+}
+
+function canabaltInit() {
+    if (canabaltInitialized) return;
+    canabaltInitialized = true;
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'canabalt') return;
+        if ([' ', 'ArrowUp', 'w', 'W', 'x', 'X'].includes(e.key)) {
+            e.preventDefault();
+            if (!e.repeat) {
+                canabaltPressJump(true);
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (activeGameKey !== 'canabalt') return;
+        if ([' ', 'ArrowUp', 'w', 'W', 'x', 'X'].includes(e.key)) {
+            canabaltPressJump(false);
+        }
+    });
+
+    canabaltBuildParallax();
+    canabaltResetState();
+    canabaltBannerText = '🏃‍♂️ CLOUD-CANABALT BEREIT!';
+    canabaltDraw();
+}
+
+function canabaltResetState() {
+    canabaltTick        = 0;
+    canabaltDistPx      = 0;
+    canabaltMaxKmh      = 0;
+    canabaltShake       = 0;
+    canabaltJumpHeld    = false;
+    canabaltDeathReason = '';
+    canabaltPigeons     = [];
+    canabaltShards      = [];
+    canabaltBuildings   = [];
+
+    // Erstes Start-Dach lang & sicher
+    canabaltBuildings.push({
+        x: 0,
+        y: 255,
+        w: 440,
+        type: 'normal',
+        ceilingH: 64,
+        collapsing: false,
+        sinkVy: 0,
+        crates: [{ relX: 280, w: 16, h: 16, hit: false }],
+        pigeons: [
+            { relX: 190, scared: false },
+            { relX: 202, scared: false },
+            { relX: 215, scared: false },
+            { relX: 226, scared: false }
+        ],
+        bomb: null,
+        enteredLeftGlass: false,
+        exitedRightGlass: false
+    });
+
+    for (let i = 0; i < 4; i++) {
+        canabaltSpawnNextBuilding();
+    }
+
+    canabaltRunner = {
+        x: 135,
+        y: 255,
+        vx: 6.2,
+        vy: 0,
+        w: 16,
+        h: 28,
+        onGround: true,
+        jumpHoldFrames: 0,
+        stumbleFrames: 0,
+        animPhase: 0
+    };
+    canabaltUpdateHud();
+}
+
+function canabaltStartGame() {
+    if (canabaltRafId) cancelAnimationFrame(canabaltRafId);
+    canabaltResetState();
+    canabaltStartAt    = Date.now();
+    canabaltBannerText = '';
+    canabaltRunning    = true;
+    canabaltRafId      = requestAnimationFrame(canabaltLoop);
+}
+
+function canabaltPressJump(pressed) {
+    if (pressed && !canabaltRunning) {
+        canabaltStartGame();
+        return;
+    }
+    canabaltJumpHeld = pressed;
+    if (pressed && canabaltRunner.onGround) {
+        canabaltRunner.vy = -7.8;
+        canabaltRunner.onGround = false;
+        canabaltRunner.jumpHoldFrames = 15;
+    }
+    if (!pressed) {
+        canabaltRunner.jumpHoldFrames = 0;
+    }
+}
+
+function canabaltUpdateHud() {
+    const meters = Math.floor(canabaltDistPx / 10);
+    const kmh    = Math.round(canabaltRunner.vx * 5.2);
+    if (kmh > canabaltMaxKmh) canabaltMaxKmh = kmh;
+
+    const dEl = document.getElementById('canabaltDist');
+    const sEl = document.getElementById('canabaltSpeed');
+    const mEl = document.getElementById('canabaltMaxSpeed');
+    const stEl = document.getElementById('canabaltStatus');
+    if (dEl) dEl.textContent = meters.toLocaleString('de-DE') + ' m';
+    if (sEl) sEl.textContent = kmh + ' km/h';
+    if (mEl) mEl.textContent = canabaltMaxKmh + ' km/h';
+    if (stEl) {
+        if (!canabaltRunning && canabaltDeathReason) {
+            stEl.textContent = canabaltDeathReason;
+            stEl.className = 'text-rose-600 dark:text-rose-400 font-extrabold truncate';
+        } else if (canabaltRunner.stumbleFrames > 0) {
+            stEl.textContent = '⚠️ Gestolpert!';
+            stEl.className = 'text-amber-600 dark:text-amber-400 font-extrabold truncate';
+        } else {
+            stEl.textContent = '🏃‍♂️ Im Sprint';
+            stEl.className = 'text-emerald-600 dark:text-emerald-400 font-extrabold truncate';
+        }
+    }
+}
+
+function canabaltTriggerGameOver(reason) {
+    canabaltRunning     = false;
+    canabaltDeathReason = reason;
+    canabaltBannerText  = '💥 ' + reason.toUpperCase();
+    canabaltUpdateHud();
+    const meters = Math.floor(canabaltDistPx / 10);
+    const durSec = Math.max(1, Math.round((Date.now() - canabaltStartAt) / 1000));
+    submitCloudScore('canabalt', meters, durSec, meters + ' m (' + canabaltMaxKmh + ' km/h)');
+}
+
+function canabaltStep() {
+    canabaltTick++;
+    if (canabaltShake > 0) canabaltShake *= 0.88;
+
+    // 1. Horizontale Beschleunigung (je weiter man läuft, desto höher das Spitzentempo)
+    const maxVx = Math.min(14.2, 9.8 + (canabaltDistPx / 8500));
+    if (canabaltRunner.onGround) {
+        canabaltRunner.vx = Math.min(maxVx, canabaltRunner.vx + 0.032);
+    } else {
+        canabaltRunner.vx = Math.min(maxVx, canabaltRunner.vx + 0.012);
+    }
+
+    if (canabaltRunner.stumbleFrames > 0) {
+        canabaltRunner.stumbleFrames--;
+    }
+
+    const vx = canabaltRunner.vx;
+    canabaltDistPx += vx;
+    canabaltRunner.animPhase += vx * 0.085;
+
+    // Parallax-Hintergrund verschieben
+    for (const t of canabaltBgTowers1) {
+        t.x -= vx * 0.18;
+        if (t.x + t.w < 0) t.x += 920;
+    }
+    for (const t of canabaltBgTowers2) {
+        t.x -= vx * 0.42;
+        if (t.x + t.w < 0) t.x += 960;
+    }
+
+    // 2. Variable Sprunghöhe bei gedrückter Taste
+    if (canabaltJumpHeld && canabaltRunner.jumpHoldFrames > 0) {
+        canabaltRunner.vy -= 0.48;
+        canabaltRunner.jumpHoldFrames--;
+    }
+
+    const prevFootY = canabaltRunner.y;
+    canabaltRunner.vy = Math.min(13.5, canabaltRunner.vy + 0.56);
+    canabaltRunner.y += canabaltRunner.vy;
+    canabaltRunner.onGround = false;
+
+    // 3. Gebäude nach links bewegen & Kollisionen prüfen
+    for (const b of canabaltBuildings) {
+        const prevBx = b.x;
+        b.x -= vx;
+
+        // Einstürzende Wolkenkratzer beginnen zu beben, sobald der Spieler sich nähert
+        if (b.type === 'collapsing' && b.x < 440 && !b.collapsing) {
+            b.collapsing = true;
+        }
+        if (b.collapsing) {
+            b.sinkVy = Math.min(3.4, b.sinkVy + 0.045);
+            b.y += b.sinkVy;
+            canabaltShake = Math.max(canabaltShake, 2.8);
+            if (canabaltTick % 3 === 0) {
+                canabaltShards.push({
+                    x: b.x + Math.random() * b.w,
+                    y: 375,
+                    vx: -vx * 0.4,
+                    vy: -1 - Math.random() * 2,
+                    size: 6 + Math.random() * 6,
+                    color: 'rgba(148, 163, 184, 0.45)',
+                    life: 22
+                });
+            }
+        }
+
+        // Tauben aufscheuchen, sobald der Läufer nah ist
+        for (const p of b.pigeons) {
+            const px = b.x + p.relX;
+            if (!p.scared && px < canabaltRunner.x + 115) {
+                p.scared = true;
+                canabaltPigeons.push({
+                    x: px,
+                    y: b.y - 6,
+                    vx: 1.5 + Math.random() * 3.5,
+                    vy: -3.2 - Math.random() * 3.0,
+                    wing: Math.random() * 6
+                });
+            }
+        }
+
+        // Fallender Sperrblock (Bombe) auf dem Dach
+        if (b.bomb) {
+            const bx = b.x + b.bomb.relX;
+            if (!b.bomb.triggered && bx < 560) {
+                b.bomb.triggered = true;
+            }
+            if (b.bomb.triggered && !b.bomb.landed) {
+                b.bomb.vy += 0.65;
+                b.bomb.y += b.bomb.vy;
+                if (b.bomb.y + b.bomb.h >= b.y) {
+                    b.bomb.y = b.y - b.bomb.h;
+                    b.bomb.landed = true;
+                    canabaltShake = 7.5;
+                    canabaltSpawnGlassShards(bx, b.y - 8);
+                }
+            }
+            // Kollision mit Sperrblock -> tödlich!
+            if (Math.abs(canabaltRunner.x - (bx + b.bomb.w / 2)) < (canabaltRunner.w / 2 + b.bomb.w / 2 - 3) &&
+                canabaltRunner.y > b.bomb.y + 4 &&
+                canabaltRunner.y - canabaltRunner.h < b.bomb.y + b.bomb.h) {
+                canabaltTriggerGameOver('Gegen Einschlag-Sperrblock geprallt!');
+                return;
+            }
+        }
+
+        // Prüfen, ob Läufer horizontal im Bereich dieses Gebäudes ist
+        const rx = canabaltRunner.x;
+        if (rx + 7 >= b.x && rx - 7 <= b.x + b.w) {
+            // a) Stirnwand-Aufprall links an der Gebäudekante?
+            if (prevBx > rx + 5) {
+                // Bei Büro-Etagen ('hallway') ist über dem Korridor ebenfalls Betonwand!
+                if (b.type === 'hallway' && canabaltRunner.y - canabaltRunner.h < b.y - b.ceilingH) {
+                    canabaltShake = 8;
+                    canabaltTriggerGameOver('Über dem Bürofenster gegen die Fassade geprallt!');
+                    return;
+                }
+                if (prevFootY > b.y + 10) {
+                    canabaltShake = 8;
+                    canabaltTriggerGameOver('Gegen die Hochhauswand geprallt!');
+                    return;
+                }
+            }
+
+            // b) Glasfenster-Durchbruch bei Büro-Etagen ('hallway')
+            if (b.type === 'hallway') {
+                if (!b.enteredLeftGlass && rx >= b.x) {
+                    b.enteredLeftGlass = true;
+                    canabaltSpawnGlassShards(b.x, b.y - 24);
+                }
+                if (!b.exitedRightGlass && rx >= b.x + b.w - 10) {
+                    b.exitedRightGlass = true;
+                    canabaltSpawnGlassShards(b.x + b.w, b.y - 24);
+                }
+                // Decken-Kollision im Büro-Korridor
+                const ceilY = b.y - b.ceilingH;
+                if (canabaltRunner.y - canabaltRunner.h < ceilY && canabaltRunner.vy < 0) {
+                    canabaltRunner.y = ceilY + canabaltRunner.h;
+                    canabaltRunner.vy = 1.2;
+                }
+            }
+
+            // c) Landung auf dem Dach / Büro-Boden
+            if (canabaltRunner.vy >= 0 && prevFootY <= b.y + 12 && canabaltRunner.y >= b.y) {
+                canabaltRunner.y = b.y;
+                canabaltRunner.vy = b.collapsing ? b.sinkVy : 0;
+                canabaltRunner.onGround = true;
+            }
+
+            // d) Kisten auf dem Dach (bremsen das Tempo beim Umwerfen!)
+            for (const c of b.crates) {
+                if (c.hit) continue;
+                const cx = b.x + c.relX;
+                if (Math.abs(rx - (cx + c.w / 2)) < 13 && canabaltRunner.y > b.y - c.h + 2) {
+                    c.hit = true;
+                    canabaltRunner.vx = Math.max(4.4, canabaltRunner.vx * 0.72);
+                    canabaltRunner.stumbleFrames = 18;
+                    for (let k = 0; k < 7; k++) {
+                        canabaltShards.push({
+                            x: cx,
+                            y: b.y - 8,
+                            vx: 2 + Math.random() * 4,
+                            vy: -2 - Math.random() * 3,
+                            size: 4,
+                            color: '#d97706',
+                            life: 20
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Alte Gebäude entfernen & neue generieren
+    if (canabaltBuildings.length > 0 && canabaltBuildings[0].x + canabaltBuildings[0].w < -80) {
+        canabaltBuildings.shift();
+        canabaltSpawnNextBuilding();
+    }
+
+    // 5. In die Häuserschlucht gestürzt?
+    if (canabaltRunner.y > 395) {
+        canabaltTriggerGameOver('In die Häuserschlucht gestürzt!');
+        return;
+    }
+
+    canabaltUpdateHud();
+}
+
+function canabaltDraw() {
+    const cvs = document.getElementById('canabaltCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    ctx.save();
+    if (canabaltShake > 0.4) {
+        ctx.translate((Math.random() - 0.5) * canabaltShake, (Math.random() - 0.5) * canabaltShake);
+    }
+
+    // 1. Dramatischer Grau-Violetter Großstadt-Himmel (Canabalt-Stil)
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, cvs.height);
+    skyGrad.addColorStop(0, '#334155');
+    skyGrad.addColorStop(0.55, '#64748b');
+    skyGrad.addColorStop(1, '#cbd5e1');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // 2. Parallax-Skyline Ebene 1 (ferne Silhouette)
+    ctx.fillStyle = '#475569';
+    for (const t of canabaltBgTowers1) {
+        ctx.fillRect(t.x, cvs.height - t.h, t.w, t.h);
+    }
+
+    // 3. Parallax-Skyline Ebene 2 (mittlere Hochhäuser)
+    ctx.fillStyle = '#1e293b';
+    for (const t of canabaltBgTowers2) {
+        ctx.fillRect(t.x, cvs.height - t.h, t.w, t.h);
+    }
+
+    // 4. Vordergrund-Gebäude, Kran-Träger & Büro-Etagen zeichnen
+    for (const b of canabaltBuildings) {
+        if (b.type === 'crane') {
+            // Rot-dunkler Stahlträger-Kran
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(b.x, b.y, b.w, 18);
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            for (let gx = b.x; gx < b.x + b.w - 16; gx += 18) {
+                ctx.beginPath();
+                ctx.moveTo(gx, b.y);
+                ctx.lineTo(gx + 18, b.y + 18);
+                ctx.lineTo(gx + 18, b.y);
+                ctx.stroke();
+            }
+            // Kran-Stützpfeiler in der Mitte
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(b.x + b.w / 2 - 14, b.y + 18, 28, cvs.height - b.y);
+        } else {
+            // Hauptgebäude unter dem Dach / Boden
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(b.x, b.y, b.w, cvs.height - b.y + 20);
+
+            // Dachkante
+            ctx.fillStyle = b.type === 'collapsing' ? '#dc2626' : '#94a3b8';
+            ctx.fillRect(b.x, b.y, b.w, 4);
+
+            // Beleuchtete Fassadenfenster unterhalb der Lauffläche
+            ctx.fillStyle = '#334155';
+            for (let wy = b.y + 18; wy < cvs.height - 10; wy += 22) {
+                for (let wx = b.x + 14; wx < b.x + b.w - 18; wx += 20) {
+                    ctx.fillRect(wx, wy, 10, 12);
+                }
+            }
+
+            // Falls Büro-Etage ('hallway'): obere Decke + Glasfenster links & rechts!
+            if (b.type === 'hallway') {
+                const ceilY = b.y - b.ceilingH;
+                // Hellerer Büro-Hintergrund im Korridor
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(b.x, ceilY, b.w, b.ceilingH);
+                // Deckenlampen im Büro
+                ctx.fillStyle = '#fef08a';
+                for (let lx = b.x + 35; lx < b.x + b.w - 30; lx += 65) {
+                    ctx.fillRect(lx, ceilY + 2, 24, 3);
+                }
+                // Obere Beton-Etagen über dem Büro-Korridor
+                ctx.fillStyle = '#090d16';
+                ctx.fillRect(b.x, 0, b.w, ceilY);
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(b.x, ceilY - 3, b.w, 4);
+
+                // Glasfenster-Scheiben links & rechts (sofern noch nicht durchschlagen)
+                ctx.fillStyle = 'rgba(125, 211, 252, 0.55)';
+                if (!b.enteredLeftGlass) {
+                    ctx.fillRect(b.x, ceilY, 5, b.ceilingH);
+                }
+                if (!b.exitedRightGlass) {
+                    ctx.fillRect(b.x + b.w - 5, ceilY, 5, b.ceilingH);
+                }
+            }
+        }
+
+        // Kisten / Lüftungsblöcke auf dem Dach
+        for (const c of b.crates) {
+            if (c.hit) continue;
+            ctx.fillStyle = '#d97706';
+            ctx.fillRect(b.x + c.relX, b.y - c.h, c.w, c.h);
+            ctx.strokeStyle = '#fef3c7';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(b.x + c.relX + 1, b.y - c.h + 1, c.w - 2, c.h - 2);
+        }
+
+        // Sitzende Tauben auf dem Dach
+        ctx.fillStyle = '#f8fafc';
+        for (const p of b.pigeons) {
+            if (p.scared) continue;
+            ctx.fillRect(b.x + p.relX, b.y - 5, 5, 5);
+        }
+
+        // Fallender Sperrblock (Bombe) + rote Ziel-Warnlinie
+        if (b.bomb) {
+            const bx = b.x + b.bomb.relX;
+            if (!b.bomb.landed) {
+                ctx.strokeStyle = 'rgba(244, 63, 94, 0.55)';
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(bx + b.bomb.w / 2, 0);
+                ctx.lineTo(bx + b.bomb.w / 2, b.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            ctx.fillStyle = '#e11d48';
+            ctx.fillRect(bx, b.bomb.y, b.bomb.w, b.bomb.h);
+            ctx.fillStyle = '#fecdd3';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠️', bx + b.bomb.w / 2, b.bomb.y + 17);
+        }
+    }
+
+    // 5. Auffliegende Taubenschwärme zeichnen
+    ctx.fillStyle = '#ffffff';
+    for (let i = canabaltPigeons.length - 1; i >= 0; i--) {
+        const p = canabaltPigeons[i];
+        p.x += p.vx - canabaltRunner.vx * 0.35;
+        p.y += p.vy;
+        p.wing += 0.45;
+        const wingY = Math.sin(p.wing) * 4;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - 5, p.y - wingY);
+        ctx.lineTo(p.x + 5, p.y - wingY);
+        ctx.closePath();
+        ctx.fill();
+        if (p.y < -20 || p.x < -30 || p.x > cvs.width + 30) {
+            canabaltPigeons.splice(i, 1);
+        }
+    }
+
+    // 6. Glassplitter, Kistentrümmer & Staubwolken
+    for (let i = canabaltShards.length - 1; i >= 0; i--) {
+        const s = canabaltShards[i];
+        ctx.fillStyle = s.color;
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+        s.x += s.vx - canabaltRunner.vx * 0.5;
+        s.y += s.vy;
+        s.vy += 0.22;
+        s.life--;
+        if (s.life <= 0) canabaltShards.splice(i, 1);
+    }
+
+    // 7. Den sprintenden Agenten im Anzug mit flatternder roter Krawatte zeichnen!
+    const rx = canabaltRunner.x;
+    const ry = canabaltRunner.y;
+    ctx.save();
+    ctx.translate(rx, ry - 14);
+
+    // Rote flatternde Krawatte / Schal im Fahrtwind
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-2, -6);
+    ctx.lineTo(-14 - Math.sin(canabaltRunner.animPhase) * 4, -4 + Math.cos(canabaltRunner.animPhase) * 3);
+    ctx.stroke();
+
+    // Kopf + weißes Hemd + dunkler Anzug
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(2, -11, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(-4, -6, 9, 11);
+
+    // Animierte Sprint-Beine
+    const stride = canabaltRunner.onGround ? Math.sin(canabaltRunner.animPhase) * 8 : 6;
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    ctx.lineTo(stride, 14);
+    ctx.moveTo(0, 4);
+    ctx.lineTo(-stride, 14);
+    ctx.stroke();
+    ctx.restore();
+
+    // 8. Live-Distanz-Anzeige oben rechts im Canvas
+    const meters = Math.floor(canabaltDistPx / 10);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.fillRect(cvs.width - 148, 12, 136, 32);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(meters.toLocaleString('de-DE') + ' m', cvs.width - 22, 33);
+
+    // 9. Start- / Game-Over-Banner
+    if (!canabaltRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.80)';
+        ctx.fillRect(0, cvs.height / 2 - 48, cvs.width, 96);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText(canabaltBannerText || '🏃‍♂️ CLOUD-CANABALT', cvs.width / 2, cvs.height / 2 - 10);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Ein-Tasten-Flucht: LEERTASTE oder Klick aufs Spielfeld (kurz = flach, halten = weit)', cvs.width / 2, cvs.height / 2 + 14);
+        if (meters > 0) {
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('Erreichte Distanz: ' + meters.toLocaleString('de-DE') + ' m  |  Spitzentempo: ' + canabaltMaxKmh + ' km/h', cvs.width / 2, cvs.height / 2 + 34);
+        }
+    }
+
+    ctx.restore();
+}
+
+function canabaltLoop() {
+    if (!canabaltRunning) {
+        canabaltDraw();
+        return;
+    }
+    canabaltStep();
+    canabaltDraw();
+    if (canabaltRunning) {
+        canabaltRafId = requestAnimationFrame(canabaltLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
+    canabaltInit();
     invadersInit();
     pacmanInit();
     kongInit();
