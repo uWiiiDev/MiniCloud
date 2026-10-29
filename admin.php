@@ -1407,12 +1407,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableMindmap   = isset($_POST['enable_mindmap']) && $_POST['enable_mindmap'] === '1' ? '1' : '0';
         $enableBudget    = isset($_POST['enable_budget']) && $_POST['enable_budget'] === '1' ? '1' : '0';
         $enableClub      = isset($_POST['enable_club']) && $_POST['enable_club'] === '1' ? '1' : '0';
-        $enableGallery   = isset($_POST['enable_gallery']) && $_POST['enable_gallery'] === '1' ? '1' : '0';
-        $enableForms     = isset($_POST['enable_forms']) && $_POST['enable_forms'] === '1' ? '1' : '0';
-        $enableMusic     = isset($_POST['enable_music']) && $_POST['enable_music'] === '1' ? '1' : '0';
-        $useOllama       = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
-        $ollamaModelRaw  = trim((string)($_POST['assistant_ollama_model'] ?? 'qwen2.5:3b'));
-        $ollamaModel     = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'qwen2.5:3b';
+        $enableGallery    = isset($_POST['enable_gallery']) && $_POST['enable_gallery'] === '1' ? '1' : '0';
+        $enableForms      = isset($_POST['enable_forms']) && $_POST['enable_forms'] === '1' ? '1' : '0';
+        $enableMusic      = isset($_POST['enable_music']) && $_POST['enable_music'] === '1' ? '1' : '0';
+        $enableCalculator = isset($_POST['enable_calculator']) && $_POST['enable_calculator'] === '1' ? '1' : '0';
+        $useOllama        = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
+        $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'qwen2.5:1.5b'));
+        $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'qwen2.5:1.5b';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1438,6 +1439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_gallery', $enableGallery);
         saveAppSetting($pdo, 'enable_forms', $enableForms);
         saveAppSetting($pdo, 'enable_music', $enableMusic);
+        saveAppSetting($pdo, 'enable_calculator', $enableCalculator);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -3482,6 +3484,42 @@ foreach ($modList as $mItem) {
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="music.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🎵 Musik- &amp; Hörbuch-Studio öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 23: Taschenrechner & Rechen-Studio -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🧮 Taschenrechner &amp; Rechen-Studio
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_calculator'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_calculator'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_calculator"
+                                value="1"
+                                <?= ($currentSettings['enable_calculator'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Taschenrechner &amp; Rechen-Studio (<code>calculator.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Standard- &amp; Wissenschaftsrechner (inkl. Tastatur-/Numpad-Steuerung), interaktiver Rechenstreifen mit Bon-Summe (&Sigma;) &amp; Cloud-Export (<code>.txt</code>/<code>.csv</code> oder Haftnotiz), MwSt.-/Prozent-/Rabatt-Rechner, Einheiten-Umrechner und Zins-/Kredit-Rechner.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_calculator'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="calculator.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🧮 Taschenrechner öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

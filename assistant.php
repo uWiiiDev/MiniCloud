@@ -1806,6 +1806,25 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 $pack['q_storage'],
             ],
         ],
+        [
+            'id'       => 'calculator_studio',
+            'title'    => 'Taschenrechner, Rechenstreifen (Bon-Summe Σ), MwSt.-, Einheiten- & Zinsrechner',
+            'icon'     => '🧮',
+            'keywords' => ['taschenrechner', 'rechner', 'calculator', 'rechenstreifen', 'bon', 'mehrwertsteuer', 'mwst', 'netto', 'brutto', 'prozentrechner', 'rabatt', 'trinkgeld', 'einheiten', 'umrechner', 'umrechnen', 'zinsrechner', 'zinseszins', 'sparplan', 'kreditrechner', 'darlehen', 'wissenschaftlicher rechner', 'sinus', 'wurzel'],
+            'answer'   => "Das Modul **🧮 Taschenrechner & Rechen-Studio** (`calculator.php`) bietet 4 spezialisierte Rechen-Werkzeuge:\n\n"
+                . "1. **🔢 Standard- & Wissenschaftlicher Rechner:** Mit Live-Vorschau, Klammern, Potenzen, Wurzeln, `sin`/`cos`/`tan` (DEG/RAD), Logarithmen, Fakultät (`n!`), Speicher (`MC`, `MR`, `M+`, `M-`) und voller **Tastatur-/Numpad-Steuerung**.\n"
+                . "2. **🧾 Interaktiver Rechenstreifen (Bon-Rechner):** Jeder Rechenschritt landet auf dem chronologischen Streifen, lässt sich einzeln beschriften (z. B. *„Getränke“*, *„Material“*), in die **Gesamtsumme ($\Sigma$)** ein-/ausschließen und per **1-Klick** als **📌 Haftnotiz** (`notes.php`) oder als **`.txt` / `.csv` Datei** im Cloud-Ordner `Rechnungen/` speichern.\n"
+                . "3. **💶 MwSt.-, Rabatt- & Trinkgeld-Rechner:** Sofortige Netto $\leftrightarrow$ Brutto Berechnung (19 %, 7 % oder frei), Rabatt-Ersparnis und Aufteilen von Rechnungen auf mehrere Personen.\n"
+                . "4. **📐 Einheiten-Umrechner & 📈 Zins-/Kredit-Rechner:** Länge, Gewicht, Fläche, Volumen, Temperatur, Datenspeicher (`MB`/`GB`/`TB`), Geschwindigkeit sowie Zinseszins-/Sparplan- und Darlehens-Raten.",
+            'actions'  => [
+                ['label' => '🧮 Taschenrechner öffnen', 'url' => 'calculator.php'],
+                ['label' => '💰 Haushaltsplaner', 'url' => 'budget.php'],
+            ],
+            'followups' => [
+                'Was ist 19% von 249,50?',
+                'Wie funktioniert der Haushaltsplaner?',
+            ],
+        ],
     ];
 
     if ($isAdmin) {
@@ -2909,8 +2928,8 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         rememberAssistantTurn($qTrim, $reply, 'math_helper');
         return [
             'reply'     => $reply,
-            'actions'   => [['label' => '💰 Haushaltsplaner', 'url' => 'budget.php'], ['label' => '📝 Excel Light', 'url' => 'office.php']],
-            'followups' => ['Wie steht mein Haushaltsbuch diesen Monat?', $pack['q_office']],
+            'actions'   => [['label' => '🧮 Taschenrechner öffnen', 'url' => 'calculator.php'], ['label' => '💰 Haushaltsplaner', 'url' => 'budget.php']],
+            'followups' => ['Wie funktioniert der Taschenrechner?', 'Wie steht mein Haushaltsbuch diesen Monat?'],
             'lang'      => $lang,
         ];
     }
@@ -2928,8 +2947,8 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             rememberAssistantTurn($qTrim, $reply, 'math_helper');
             return [
                 'reply'     => $reply,
-                'actions'   => [['label' => '📝 Excel Light', 'url' => 'office.php'], ['label' => '💰 Haushaltsplaner', 'url' => 'budget.php']],
-                'followups' => ['Was ist 19% von 249,50?', $pack['q_office']],
+                'actions'   => [['label' => '🧮 Taschenrechner & Rechenstreifen', 'url' => 'calculator.php'], ['label' => '📝 Excel Light', 'url' => 'office.php']],
+                'followups' => ['Was ist 19% von 249,50?', 'Wie funktioniert der Taschenrechner?'],
                 'lang'      => $lang,
             ];
         }

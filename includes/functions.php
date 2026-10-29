@@ -693,6 +693,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_gallery'                => '1',
         'enable_forms'                  => '1',
         'enable_music'                  => '1',
+        'enable_calculator'             => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'qwen2.5:1.5b',
@@ -3043,6 +3044,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_music',
             'color'       => 'bg-rose-600',
         ],
+        'calculator' => [
+            'icon'        => '🧮',
+            'label'       => 'Taschenrechner & Rechen-Studio',
+            'url'         => 'calculator.php',
+            'setting_key' => 'enable_calculator',
+            'color'       => 'bg-cyan-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3087,8 +3095,9 @@ function detectCurrentModuleKeyForStats(): ?string
         'budget.php'    => 'budget',
         'club.php'      => 'club',
         'gallery.php'   => 'gallery',
-        'forms.php'     => 'forms',
-        'music.php'     => 'music',
+        'forms.php'      => 'forms',
+        'music.php'      => 'music',
+        'calculator.php' => 'calculator',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3224,6 +3233,8 @@ function getModuleInventorySummary(PDO $pdo): array
 
     $clubMemberCount = $safeCount("SELECT COUNT(*) FROM `club_members`");
     $summary['club'] = $clubMemberCount . ' ' . ($clubMemberCount === 1 ? 'Mitglied' : 'Mitglieder');
+
+    $summary['calculator'] = 'Rechenstreifen, MwSt., Einheiten & Zins';
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
