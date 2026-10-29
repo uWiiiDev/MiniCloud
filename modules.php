@@ -73,6 +73,18 @@ $allModules = [
         'badgeCls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300',
     ],
     [
+        'key'      => 'whiteboard',
+        'enabled'  => ($appSettings['enable_whiteboard'] ?? '1') === '1',
+        'title'    => 'Whiteboard & Skizzenbuch',
+        'icon'     => '🎨',
+        'url'      => 'whiteboard.php',
+        'category' => 'files_office',
+        'catLabel' => 'Dateien & Büro',
+        'desc'     => 'Kollaborative Zeichenfläche für Freihand-Skizzen, Flussdiagramme, Klebezettel (Sticky Notes) & Live-Teamwork inklusive PNG- & Cloud-Export.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300',
+    ],
+    [
         'key'      => 'ebooks',
         'enabled'  => ($appSettings['enable_ebooks'] ?? '1') === '1',
         'title'    => 'E-Book-Reader',

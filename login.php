@@ -474,6 +474,109 @@ require_once __DIR__ . '/includes/header.php';
                     Anmelden
                 </button>
             </form>
+
+            <!-- 🔑 PASSKEY / FINGERABDRUCK / FACE-ID LOGIN (WEBAUTHN) -->
+            <div id="passkeyLoginSection" class="mt-4 pt-4 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
+                <button
+                    type="button"
+                    id="passkeyLoginBtn"
+                    onclick="loginWithPasskey()"
+                    class="w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                    <span>🔑</span>
+                    <span>Mit Passkey / Fingerabdruck / FaceID anmelden</span>
+                </button>
+                <p id="passkeyLoginMsg" class="hidden text-xs text-center font-medium"></p>
+            </div>
+
+            <script>
+            function pkB64UrlToUint8(b64url) {
+                const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
+                const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+                const raw = atob(b64);
+                const arr = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                return arr;
+            }
+            function pkBufToB64Url(buf) {
+                const bytes = new Uint8Array(buf);
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            async function loginWithPasskey() {
+                const msgEl = document.getElementById('passkeyLoginMsg');
+                const showMsg = (txt, isErr = true) => {
+                    if (!msgEl) return;
+                    msgEl.textContent = txt;
+                    msgEl.className = 'text-xs text-center font-medium pt-1 ' + (isErr ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400');
+                };
+
+                if (!window.PublicKeyCredential || !navigator.credentials) {
+                    showMsg('Dein Browser unterstützt leider keine Passkeys (WebAuthn).');
+                    return;
+                }
+
+                showMsg('🔐 Bitte bestätige die Anmeldung mit deinem Fingerabdruck, FaceID oder Geräte-PIN…', false);
+
+                try {
+                    const fdOpt = new FormData();
+                    fdOpt.append('action', 'login_options');
+                    fdOpt.append('csrf_token', <?= json_encode(getCsrfToken()) ?>);
+                    fdOpt.append('username', document.getElementById('username')?.value || '');
+
+                    const rOpt = await fetch('passkey_api.php', { method: 'POST', body: fdOpt });
+                    const dOpt = await rOpt.json();
+                    if (!dOpt || !dOpt.ok) {
+                        showMsg(dOpt?.error || 'Passkey-Optionen konnten nicht geladen werden.');
+                        return;
+                    }
+
+                    const publicKey = {
+                        challenge: pkB64UrlToUint8(dOpt.challengeB64),
+                        rpId: dOpt.rpId,
+                        userVerification: 'preferred',
+                        timeout: 60000,
+                    };
+                    if (Array.isArray(dOpt.allowCredentials) && dOpt.allowCredentials.length > 0) {
+                        publicKey.allowCredentials = dOpt.allowCredentials.map((c) => ({
+                            type: 'public-key',
+                            id: pkB64UrlToUint8(c.id),
+                        }));
+                    }
+
+                    const cred = await navigator.credentials.get({ publicKey });
+                    if (!cred) {
+                        showMsg('Passkey-Anmeldung abgebrochen.');
+                        return;
+                    }
+
+                    const fdVer = new FormData();
+                    fdVer.append('action', 'login_verify');
+                    fdVer.append('csrf_token', <?= json_encode(getCsrfToken()) ?>);
+                    fdVer.append('credential_id', pkBufToB64Url(cred.rawId));
+                    fdVer.append('client_data_json', pkBufToB64Url(cred.response.clientDataJSON));
+                    fdVer.append('authenticator_data', pkBufToB64Url(cred.response.authenticatorData));
+                    fdVer.append('signature', pkBufToB64Url(cred.response.signature));
+
+                    const rVer = await fetch('passkey_api.php', { method: 'POST', body: fdVer });
+                    const dVer = await rVer.json();
+                    if (dVer && dVer.ok) {
+                        showMsg('✅ Erfolgreich verifiziert! Weiterleitung…', false);
+                        window.location.href = dVer.redirect || 'index.php';
+                    } else {
+                        showMsg(dVer?.error || 'Passkey-Prüfung fehlgeschlagen.');
+                    }
+                } catch (err) {
+                    if (err && err.name === 'NotAllowedError') {
+                        showMsg('Vorgang abgebrochen oder kein passender Passkey auf diesem Gerät gefunden.');
+                    } else {
+                        showMsg('Passkey-Fehler: ' + (err?.message || 'Unbekannter Fehler'));
+                    }
+                }
+            }
+            </script>
         <?php endif; ?>
 
         <div class="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">

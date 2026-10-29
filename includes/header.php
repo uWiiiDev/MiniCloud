@@ -678,6 +678,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_whiteboard'] ?? '1') === '1'): ?>
+                        <a
+                            href="whiteboard.php"
+                            data-nav-item="whiteboard"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Kollaboratives Whiteboard &amp; Skizzenbuch"
+                        >
+                            <span>🎨</span>
+                            <span class="hidden md:inline">Whiteboard</span>
+                        </a>
+                    <?php endif; ?>
+
                     <a
                         href="trash.php"
                         data-nav-item="trash"
@@ -694,6 +707,21 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         <?php endif; ?>
                     </a>
                 </div>
+
+                <!-- 🔍 Globale Spotlight-Schnellsuche (Strg+K / Cmd+K) -->
+                <button
+                    type="button"
+                    onclick="openGlobalSearchModal()"
+                    class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
+                    title="Globale Schnellsuche über Dateien, Module, Notizen, Termine &amp; Kontakte (Strg+K)"
+                    aria-label="Schnellsuche"
+                >
+                    <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <span class="hidden lg:inline text-xs font-medium text-slate-500 dark:text-slate-400">Suche…</span>
+                    <kbd class="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded border border-slate-300 dark:border-slate-700">Strg+K</kbd>
+                </button>
 
                 <!-- ⊞ Modul-Übersicht (eigene Seite modules.php + ⭐ Favoriten-Pin für die Kopfzeile) -->
                 <a
@@ -1093,7 +1121,144 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         initLauncherGridDragAndDrop();
                     });
                 })();
+
+                // =========================================================================
+                // 🔍 GLOBALE SPOTLIGHT-SCHNELLSUCHE (Strg+K / Cmd+K)
+                // =========================================================================
+                (function() {
+                    let gsResults = [];
+                    let gsSelectedIndex = 0;
+                    let gsDebounceTimer = null;
+
+                    window.openGlobalSearchModal = function() {
+                        const modal = document.getElementById('globalSearchModal');
+                        const inp   = document.getElementById('globalSearchInput');
+                        if (!modal) return;
+                        modal.classList.remove('hidden');
+                        if (inp) {
+                            inp.focus();
+                            inp.select();
+                            fetchGlobalSearch(inp.value);
+                        }
+                    };
+
+                    window.closeGlobalSearchModal = function() {
+                        const modal = document.getElementById('globalSearchModal');
+                        if (modal) modal.classList.add('hidden');
+                    };
+
+                    window.onGlobalSearchInput = function(val) {
+                        if (gsDebounceTimer) clearTimeout(gsDebounceTimer);
+                        gsDebounceTimer = setTimeout(() => fetchGlobalSearch(val), 140);
+                    };
+
+                    async function fetchGlobalSearch(q) {
+                        try {
+                            const r = await fetch('search_api.php?q=' + encodeURIComponent(q || ''));
+                            const d = await r.json();
+                            if (d && d.ok && Array.isArray(d.results)) {
+                                gsResults = d.results;
+                                gsSelectedIndex = 0;
+                                renderGlobalSearchResults();
+                            }
+                        } catch (e) {}
+                    }
+
+                    function renderGlobalSearchResults() {
+                        const box = document.getElementById('globalSearchResultsList');
+                        if (!box) return;
+                        if (!gsResults.length) {
+                            box.innerHTML = '<div class="py-8 text-center text-xs text-slate-400">Keine passenden Module, Dateien, Notizen oder Kontakte gefunden.</div>';
+                            return;
+                        }
+                        box.innerHTML = gsResults.map((item, idx) => {
+                            const active = idx === gsSelectedIndex;
+                            return `
+                                <a href="${item.url}"
+                                   onmouseenter="window.setGsIndex(${idx})"
+                                   class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl transition-colors ${active ? 'bg-brand-600 text-white shadow-xs' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'}">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <span class="text-xl shrink-0">${item.icon || '🔎'}</span>
+                                        <div class="min-w-0">
+                                            <div class="text-xs sm:text-sm font-bold truncate">${item.title}</div>
+                                            <div class="text-[11px] truncate ${active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400'}">${item.sub || ''}</div>
+                                        </div>
+                                    </div>
+                                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${active ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}">${item.cat || 'Treffer'}</span>
+                                </a>
+                            `;
+                        }).join('');
+                    }
+
+                    window.setGsIndex = function(idx) {
+                        gsSelectedIndex = idx;
+                        renderGlobalSearchResults();
+                    };
+
+                    window.addEventListener('keydown', function(e) {
+                        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                            e.preventDefault();
+                            const modal = document.getElementById('globalSearchModal');
+                            if (modal && !modal.classList.contains('hidden')) {
+                                closeGlobalSearchModal();
+                            } else {
+                                openGlobalSearchModal();
+                            }
+                            return;
+                        }
+
+                        const modal = document.getElementById('globalSearchModal');
+                        if (!modal || modal.classList.contains('hidden')) return;
+
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            closeGlobalSearchModal();
+                        } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            if (gsResults.length > 0) {
+                                gsSelectedIndex = (gsSelectedIndex + 1) % gsResults.length;
+                                renderGlobalSearchResults();
+                            }
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            if (gsResults.length > 0) {
+                                gsSelectedIndex = (gsSelectedIndex - 1 + gsResults.length) % gsResults.length;
+                                renderGlobalSearchResults();
+                            }
+                        } else if (e.key === 'Enter') {
+                            if (gsResults[gsSelectedIndex] && gsResults[gsSelectedIndex].url) {
+                                e.preventDefault();
+                                window.location.href = gsResults[gsSelectedIndex].url;
+                            }
+                        }
+                    });
+                })();
                 </script>
+
+                <!-- 🔍 SPOTLIGHT-SCHNELLSUCHE MODAL -->
+                <div id="globalSearchModal" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-14 sm:pt-20 px-3 bg-slate-950/60 backdrop-blur-xs" onclick="if(event.target===this)closeGlobalSearchModal()">
+                    <div class="modal-box w-full max-w-xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+                        <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+                            <span class="text-lg">🔍</span>
+                            <input
+                                type="text"
+                                id="globalSearchInput"
+                                oninput="onGlobalSearchInput(this.value)"
+                                placeholder="Dateien, Ordner, Module, Whiteboards, Notizen, Termine oder Kontakte suchen…"
+                                class="flex-1 bg-transparent border-0 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
+                                autocomplete="off"
+                            >
+                            <button type="button" onclick="closeGlobalSearchModal()" class="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer">
+                                ESC
+                            </button>
+                        </div>
+                        <div id="globalSearchResultsList" class="max-h-[62vh] overflow-y-auto p-2 space-y-1"></div>
+                        <div class="px-4 py-2 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                            <span>⬆️⬇️ Navigieren &middot; <strong>Enter</strong> Öffnen &middot; <strong>Esc</strong> Schließen</span>
+                            <span>⌨️ <strong>Strg + K</strong> überall in der Cloud</span>
+                        </div>
+                    </div>
+                </div>
             <?php else: ?>
                 <a
                     href="settings.php"

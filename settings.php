@@ -946,6 +946,213 @@ $themeGroups = [
             </form>
         </section>
 
+        <!-- 4b. PASSKEYS (FINGERABDRUCK, FACE-ID & WINDOWS HELLO – WEBAUTHN) -->
+        <?php
+        $userPasskeys = [];
+        try {
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS `user_passkeys` (
+                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    `user_id` INT UNSIGNED NOT NULL,
+                    `credential_id` VARCHAR(512) NOT NULL,
+                    `public_key_pem` TEXT NOT NULL,
+                    `cose_alg` INT NOT NULL DEFAULT -7,
+                    `device_name` VARCHAR(120) NOT NULL DEFAULT 'Passkey-Gerät',
+                    `sign_count` INT UNSIGNED NOT NULL DEFAULT 0,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `last_used_at` DATETIME NULL DEFAULT NULL,
+                    UNIQUE KEY `uq_cred_id` (`credential_id`(255)),
+                    INDEX `idx_user_passkeys` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $stmtPkList = $pdo->prepare("SELECT * FROM `user_passkeys` WHERE `user_id` = :uid ORDER BY `created_at` DESC");
+            $stmtPkList->execute([':uid' => (int)$userRow['id']]);
+            $userPasskeys = $stmtPkList->fetchAll();
+        } catch (Throwable) {
+            $userPasskeys = [];
+        }
+        ?>
+        <section id="sec-passkeys" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔑 Passkeys (Fingerabdruck, FaceID &amp; Windows Hello)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= !empty($userPasskeys) ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= count($userPasskeys) ?> Passkey<?= count($userPasskeys) === 1 ? '' : 's' ?> hinterlegt
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Richten Sie für Ihr Smartphone, Ihren Laptop oder einen Hardware-Sicherheitsschlüssel (YubiKey) einen <strong>Passkey (WebAuthn / FIDO2)</strong> ein. Danach können Sie sich auf der Anmeldeseite in 1 Sekunde per <strong>Fingerabdruck, Gesichtserkennung oder Geräte-PIN</strong> ohne Passworteingabe einloggen.
+            </p>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5 mb-4">
+                <div class="flex-1">
+                    <label for="newPasskeyDeviceName" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Bezeichnung für dieses Gerät</label>
+                    <input
+                        type="text"
+                        id="newPasskeyDeviceName"
+                        maxlength="100"
+                        placeholder="z. B. iPhone FaceID, MacBook TouchID, Windows Hello Laptop…"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+                <button
+                    type="button"
+                    onclick="registerNewPasskey()"
+                    class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                    ➕ Dieses Gerät als Passkey registrieren
+                </button>
+            </div>
+
+            <p id="passkeyRegStatusMsg" class="hidden text-xs font-medium mb-3"></p>
+
+            <?php if (!empty($userPasskeys)): ?>
+                <div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                    <?php foreach ($userPasskeys as $pk): ?>
+                        <div class="p-3 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                            <div>
+                                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>🔑 <?= e((string)$pk['device_name']) ?></span>
+                                    <span class="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">WebAuthn / FIDO2</span>
+                                </div>
+                                <div class="text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Eingerichtet am <?= e(formatDateTime((string)$pk['created_at'])) ?>
+                                    <?php if (!empty($pk['last_used_at'])): ?>
+                                        · Zuletzt für Login genutzt: <strong><?= e(formatDateTime((string)$pk['last_used_at'])) ?></strong>
+                                    <?php else: ?>
+                                        · <em>Noch nicht beim Login verwendet</em>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <form action="passkey_api.php" method="post" onsubmit="return confirm('Diesen Passkey wirklich entfernen?');">
+                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                <input type="hidden" name="action" value="delete_passkey">
+                                <input type="hidden" name="passkey_id" value="<?= (int)$pk['id'] ?>">
+                                <button
+                                    type="submit"
+                                    class="px-3 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                                >
+                                    🗑️ Entfernen
+                                </button>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <p class="text-xs text-slate-500 dark:text-slate-400 italic">
+                    Noch kein Passkey für Ihr Konto hinterlegt.
+                </p>
+            <?php endif; ?>
+
+            <script>
+            function pkRegB64UrlToUint8(b64url) {
+                const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
+                const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+                const raw = atob(b64);
+                const arr = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                return arr;
+            }
+            function pkRegBufToB64Url(buf) {
+                const bytes = new Uint8Array(buf);
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            async function registerNewPasskey() {
+                const msgEl = document.getElementById('passkeyRegStatusMsg');
+                const showMsg = (txt, isErr = true) => {
+                    if (!msgEl) return;
+                    msgEl.textContent = txt;
+                    msgEl.className = 'text-xs font-semibold mb-3 ' + (isErr ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400');
+                };
+
+                if (!window.PublicKeyCredential || !navigator.credentials) {
+                    showMsg('Dieser Browser unterstützt leider keine Passkeys (WebAuthn).');
+                    return;
+                }
+
+                showMsg('🔐 Bitte bestätige die Einrichtung jetzt per Fingerabdruck, FaceID oder Geräte-PIN…', false);
+
+                try {
+                    const fdOpt = new FormData();
+                    fdOpt.append('action', 'register_options');
+                    fdOpt.append('csrf_token', <?= json_encode(getCsrfToken()) ?>);
+
+                    const rOpt = await fetch('passkey_api.php', { method: 'POST', body: fdOpt });
+                    const dOpt = await rOpt.json();
+                    if (!dOpt || !dOpt.ok) {
+                        showMsg(dOpt?.error || 'Passkey-Optionen konnten nicht geladen werden.');
+                        return;
+                    }
+
+                    const publicKey = {
+                        rp: { id: dOpt.rpId, name: dOpt.rpName },
+                        user: {
+                            id: pkRegB64UrlToUint8(dOpt.userIdB64),
+                            name: dOpt.userName,
+                            displayName: dOpt.userName,
+                        },
+                        challenge: pkRegB64UrlToUint8(dOpt.challengeB64),
+                        pubKeyCredParams: [
+                            { type: 'public-key', alg: -7 },   // ES256 (Standard für TouchID / FaceID / Android / Windows Hello)
+                            { type: 'public-key', alg: -257 }, // RS256 (Fallback)
+                        ],
+                        authenticatorSelection: {
+                            residentKey: 'preferred',
+                            userVerification: 'preferred',
+                        },
+                        timeout: 60000,
+                        excludeCredentials: (dOpt.excludeCredentials || []).map((c) => ({
+                            type: 'public-key',
+                            id: pkRegB64UrlToUint8(c.id),
+                        })),
+                    };
+
+                    const cred = await navigator.credentials.create({ publicKey });
+                    if (!cred) {
+                        showMsg('Einrichtung abgebrochen.');
+                        return;
+                    }
+
+                    const fdVer = new FormData();
+                    fdVer.append('action', 'register_verify');
+                    fdVer.append('csrf_token', <?= json_encode(getCsrfToken()) ?>);
+                    fdVer.append('device_name', document.getElementById('newPasskeyDeviceName')?.value || '');
+                    fdVer.append('credential_id', pkRegBufToB64Url(cred.rawId));
+                    fdVer.append('client_data_json', pkRegBufToB64Url(cred.response.clientDataJSON));
+                    if (typeof cred.response.getAuthenticatorData === 'function') {
+                        fdVer.append('authenticator_data', pkRegBufToB64Url(cred.response.getAuthenticatorData()));
+                    }
+                    if (typeof cred.response.getPublicKey === 'function') {
+                        const spki = cred.response.getPublicKey();
+                        if (spki) fdVer.append('public_key_spki', pkRegBufToB64Url(spki));
+                    }
+                    if (typeof cred.response.getPublicKeyAlgorithm === 'function') {
+                        fdVer.append('public_key_alg', String(cred.response.getPublicKeyAlgorithm()));
+                    }
+
+                    const rVer = await fetch('passkey_api.php', { method: 'POST', body: fdVer });
+                    const dVer = await rVer.json();
+                    if (dVer && dVer.ok) {
+                        showMsg('✅ ' + dVer.message, false);
+                        setTimeout(() => window.location.reload(), 700);
+                    } else {
+                        showMsg(dVer?.error || 'Passkey konnte nicht gespeichert werden.');
+                    }
+                } catch (err) {
+                    if (err && err.name === 'InvalidStateError') {
+                        showMsg('Für dieses Gerät ist bereits ein Passkey registriert.');
+                    } else if (err && err.name === 'NotAllowedError') {
+                        showMsg('Einrichtung durch Benutzer abgebrochen.');
+                    } else {
+                        showMsg('Fehler bei der Passkey-Einrichtung: ' + (err?.message || 'Unbekannter Fehler'));
+                    }
+                }
+            }
+            </script>
+        </section>
+
         <?php if (($appSettings['enable_webdav'] ?? '1') === '1'):
             $webdavEndpointUrl = getBaseUrl() . '/webdav.php/';
             $davsEndpointUrl   = preg_replace('/^https:\/\//i', 'davs://', preg_replace('/^http:\/\//i', 'dav://', $webdavEndpointUrl));
