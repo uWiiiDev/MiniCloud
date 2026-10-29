@@ -128,6 +128,14 @@ function getGamesCatalog(): array
             'desc'     => 'Der Neon-Labyrinth-Klassiker mit 4 schlauen Geistern (Blinky, Pinky, Inky, Clyde), Power-Pillen & Bonusfrüchten!',
             'color'    => 'from-amber-400 to-yellow-600',
         ],
+        'blitz' => [
+            'key'      => 'blitz',
+            'title'    => 'VC-20 Blitz',
+            'icon'     => '✈️',
+            'category' => 'Retro 1981',
+            'desc'     => 'Der Commodore VC-20 Kult-Klassiker: Trage im Sinkflug alle Wolkenkratzer per Bombe ab, um sicher zu landen!',
+            'color'    => 'from-cyan-500 to-blue-700',
+        ],
         'sudoku' => [
             'key'      => 'sudoku',
             'title'    => 'Cloud-Sudoku',
@@ -983,7 +991,7 @@ $csrfToken = getCsrfToken();
                         MiniCloud Spiele-Zentrale &amp; Pausenraum
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                        10 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
+                        11 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
                     </span>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1003,8 +1011,8 @@ $csrfToken = getCsrfToken();
         </div>
     </div>
 
-    <!-- SPIELAUSWAHL-LEISTE (10 SPIEL-KARTEN) -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+    <!-- SPIELAUSWAHL-LEISTE (11 SPIEL-KARTEN) -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 gap-2">
         <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
             <?php
             $gKeyStr = (string)$gKey;
@@ -1728,6 +1736,66 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 11. SPIEL: COMMODORE VC-20 BLITZ (1981 RETRO-KLASSIKER) -->
+            <div id="gamePanel-blitz" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>✈️ Commodore VC-20 „Blitz“ (1981)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300/70 dark:border-cyan-800">
+                                🏙️ 8-Bit Ein-Tasten-Kultklassiker
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Dein Flugzeug sinkt mit jedem Überflug eine Zeile tiefer! Wirf mit <strong>Leertaste</strong> (oder Klick auf das Spielfeld) Bomben ab, um alle Hochhäuser rechtzeitig vor der Landung einzuebnen – es kann immer nur <strong>1 Bombe gleichzeitig</strong> fallen!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" id="blitzThemeBtn" onclick="blitzToggleTheme()"
+                                class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
+                            🖥️ Optik: VC-20 Klassik
+                        </button>
+                        <button type="button" onclick="blitzStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ✈️ Neuer Anflug (Start)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Telemetrie- & Stadt-Status -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="blitzScore" class="text-cyan-600 dark:text-cyan-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Stadt (City):</span>
+                        <strong id="blitzCity" class="text-slate-900 dark:text-white font-extrabold">1</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Übrige Etagen:</span>
+                        <strong id="blitzBlocksLeft" class="text-amber-600 dark:text-amber-400 font-extrabold">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Bomben-Schacht:</span>
+                        <strong id="blitzBombStatus" class="text-emerald-600 dark:text-emerald-400 font-extrabold truncate">🟢 Bereit</strong>
+                    </div>
+                </div>
+
+                <!-- VC-20 Bildschirm (Canvas) + Großer Abwurf-Button -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="blitzCanvas" width="528" height="432" onclick="blitzDropBomb()"
+                            class="rounded-2xl bg-cyan-400 p-2 sm:p-3 border-4 border-cyan-500 shadow-xl max-w-full h-auto cursor-pointer select-none"
+                            title="Klicken oder Leertaste drücken, um eine Bombe abzuwerfen!"></canvas>
+
+                    <button type="button" onclick="blitzDropBomb()"
+                            class="w-full max-w-md py-3 px-6 rounded-2xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 active:scale-[0.99] text-white font-extrabold text-sm shadow-md cursor-pointer select-none flex items-center justify-center gap-2">
+                        <span>💣 BOMBE ABWERFEN</span>
+                        <span class="text-xs px-2 py-0.5 rounded-md bg-black/25 font-mono">Leertaste / Klick</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -1824,6 +1892,11 @@ function selectCloudGame(gameKey) {
             pacmanInit();
         }
         pacmanDraw();
+    } else if (gameKey === 'blitz') {
+        if (!blitzInitialized) {
+            blitzInit();
+        }
+        blitzDraw();
     } else if (gameKey === 'wow') {
         if (!wowInitialized) {
             wowInit();
@@ -5692,6 +5765,11 @@ window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'A') { e.preventDefault(); pacmanQueueDir(-1, 0); }
         if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); pacmanQueueDir(1, 0); }
         if (e.key === 'p' || e.key === 'P') { e.preventDefault(); pacmanTogglePause(); }
+    } else if (activeGameKey === 'blitz') {
+        if (e.key === ' ' || e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.key === 'Enter') {
+            e.preventDefault();
+            blitzDropBomb();
+        }
     } else if (activeGameKey === 'breakout' && boRunning) {
         if (e.key === 'ArrowLeft')  boPaddleX = Math.max(0, boPaddleX - 24);
         if (e.key === 'ArrowRight') boPaddleX = Math.min(390, boPaddleX + 24);
@@ -6398,10 +6476,399 @@ function pacmanLoop() {
     }
 }
 
+// =============================================================================
+// SPIEL 11: COMMODORE VC-20 „BLITZ“ (1981 RETRO-KULTKLASSIKER)
+// =============================================================================
+const BLITZ_TILE = 24;
+const BLITZ_COLS = 22;
+const BLITZ_ROWS = 18;
+const BLITZ_GROUND_ROW = 16; // Zeile 17 ist das Rollfeld / Fundament
+const BLITZ_COLORS_VC20 = ['#ef4444', '#facc15', '#22c55e', '#a855f7', '#fb923c', '#38bdf8'];
+
+let blitzInitialized = false;
+let blitzRunning     = false;
+let blitzLanding     = false;
+let blitzCrashed     = false;
+let blitzClassicMode = true; // true = VC-20 Weiß/Cyan/Blau-Look, false = Moderne Nacht-Skyline
+let blitzRafId       = null;
+let blitzScoreVal    = 0;
+let blitzCityVal     = 1;
+let blitzStartTime   = 0;
+let blitzTowers      = []; // Array der Länge 22: { height, color, windowsSeed }
+let blitzPlane       = { x: 0, row: 1, speed: 2.3 };
+let blitzBomb        = null; // { col, y, power }
+let blitzParticles   = [];
+let blitzBannerText  = '';
+
+function blitzBuildCity(cityNum) {
+    blitzTowers = [];
+    const minH = Math.min(8, 2 + Math.floor((cityNum - 1) * 0.7));
+    const maxH = Math.min(13, 6 + Math.floor(cityNum * 1.1));
+
+    for (let c = 0; c < BLITZ_COLS; c++) {
+        // Spalten 0..2 links und 19..21 rechts bleiben als Einflug-/Ausflugschneise frei
+        if (c < 3 || c > 18) {
+            blitzTowers.push({ height: 0, color: '#64748b', seed: 0 });
+        } else {
+            const h = Math.floor(minH + Math.random() * (maxH - minH + 1));
+            const colHex = BLITZ_COLORS_VC20[(c + cityNum) % BLITZ_COLORS_VC20.length];
+            blitzTowers.push({ height: h, color: colHex, seed: (c * 37 + cityNum * 13) });
+        }
+    }
+}
+
+function blitzCountBlocksLeft() {
+    let sum = 0;
+    for (let c = 0; c < BLITZ_COLS; c++) {
+        sum += Math.max(0, blitzTowers[c]?.height || 0);
+    }
+    return sum;
+}
+
+function blitzUpdateHud(bombMsg = null) {
+    const scEl = document.getElementById('blitzScore');
+    const ctEl = document.getElementById('blitzCity');
+    const blEl = document.getElementById('blitzBlocksLeft');
+    const bmEl = document.getElementById('blitzBombStatus');
+
+    if (scEl) scEl.textContent = blitzScoreVal.toLocaleString('de-DE');
+    if (ctEl) ctEl.textContent = String(blitzCityVal);
+    if (blEl) blEl.textContent = String(blitzCountBlocksLeft());
+    if (bmEl) {
+        if (bombMsg !== null) {
+            bmEl.textContent = bombMsg;
+        } else if (blitzBomb) {
+            bmEl.textContent = '🔴 Bombe fällt…';
+        } else {
+            bmEl.textContent = '🟢 Bereit (Space)';
+        }
+    }
+}
+
+function blitzToggleTheme() {
+    blitzClassicMode = !blitzClassicMode;
+    const btn = document.getElementById('blitzThemeBtn');
+    if (btn) {
+        btn.textContent = blitzClassicMode ? '🖥️ Optik: VC-20 Klassik' : '🌙 Optik: Nacht-Skyline';
+    }
+    blitzDraw();
+}
+
+function blitzInit() {
+    blitzInitialized = true;
+    blitzCityVal  = 1;
+    blitzScoreVal = 0;
+    blitzBuildCity(1);
+    blitzPlane = { x: 1 * BLITZ_TILE, row: 1, speed: 2.3 };
+    blitzBomb  = null;
+    blitzBannerText = 'DRÜCKE LEERTASTE ODER START';
+    blitzUpdateHud('🟢 Bereit');
+    blitzDraw();
+}
+
+function blitzStartGame() {
+    if (blitzRafId) cancelAnimationFrame(blitzRafId);
+    blitzScoreVal   = 0;
+    blitzCityVal    = 1;
+    blitzRunning    = true;
+    blitzLanding    = false;
+    blitzCrashed    = false;
+    blitzBomb       = null;
+    blitzParticles  = [];
+    blitzBannerText = '';
+    blitzStartTime  = performance.now();
+
+    blitzBuildCity(1);
+    blitzPlane = { x: 0, row: 1, speed: 2.3 };
+    blitzUpdateHud('🟢 Bereit');
+    blitzLoop();
+}
+
+function blitzStartNextCity() {
+    blitzCityVal++;
+    blitzLanding    = false;
+    blitzCrashed    = false;
+    blitzBomb       = null;
+    blitzParticles  = [];
+    blitzBannerText = '';
+    blitzBuildCity(blitzCityVal);
+    blitzPlane = {
+        x: 0,
+        row: 1,
+        speed: Math.min(4.4, 2.3 + (blitzCityVal - 1) * 0.28)
+    };
+    blitzUpdateHud('🎉 City ' + blitzCityVal + '!');
+}
+
+function blitzDropBomb() {
+    if (!blitzRunning) {
+        blitzStartGame();
+        return;
+    }
+    if (blitzLanding || blitzCrashed || blitzBomb !== null) {
+        return;
+    }
+    // Aktuelle Spalte unter der Flugzeugmitte bestimmen
+    const centerCol = Math.floor((blitzPlane.x + BLITZ_TILE * 0.6) / BLITZ_TILE);
+    if (centerCol < 0 || centerCol >= BLITZ_COLS) return;
+
+    blitzBomb = {
+        col: centerCol,
+        y: (blitzPlane.row + 0.8) * BLITZ_TILE,
+        power: 3 + (Math.random() < 0.45 ? 1 : 0) // zerstört 3 bis 4 Stockwerke wie im VC-20 Original!
+    };
+    blitzUpdateHud();
+}
+
+function blitzSpawnExplosion(x, y, color, count = 14) {
+    for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 1 + Math.random() * 3.5;
+        blitzParticles.push({
+            x,
+            y,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 1.2,
+            color,
+            life: 24 + Math.floor(Math.random() * 18)
+        });
+    }
+}
+
+function blitzStep() {
+    // 1. Sind alle Hochhäuser abgetragen? -> Automatischer Sinkflug zur Landebahn!
+    if (!blitzLanding && blitzCountBlocksLeft() === 0) {
+        blitzLanding = true;
+        blitzUpdateHud('🛬 Landeanflug!');
+    }
+
+    // 2. Flugzeug bewegen
+    const currentSpeed = blitzLanding ? Math.max(blitzPlane.speed * 1.4, 3.6) : blitzPlane.speed;
+    blitzPlane.x += currentSpeed;
+
+    if (blitzLanding && blitzPlane.row < BLITZ_GROUND_ROW) {
+        // Im Landeanflug gleitet das Flugzeug sanft direkt zur Landebahn hinunter
+        if (blitzPlane.x > BLITZ_COLS * BLITZ_TILE) {
+            blitzPlane.x = -BLITZ_TILE;
+            blitzPlane.row = Math.min(BLITZ_GROUND_ROW, blitzPlane.row + 3);
+        }
+    } else if (blitzPlane.x > BLITZ_COLS * BLITZ_TILE) {
+        blitzPlane.x = -BLITZ_TILE;
+        blitzPlane.row++;
+    }
+
+    // Hat das Flugzeug auf der untersten Zeile (Rollbahn) sicher das rechte Ende erreicht?
+    if (blitzPlane.row >= BLITZ_GROUND_ROW) {
+        blitzPlane.row = BLITZ_GROUND_ROW;
+        if (blitzPlane.x >= (BLITZ_COLS - 3) * BLITZ_TILE && blitzCountBlocksLeft() === 0) {
+            const bonus = 500 * blitzCityVal;
+            blitzScoreVal += bonus;
+            blitzSpawnExplosion(blitzPlane.x, blitzPlane.row * BLITZ_TILE, '#facc15', 22);
+            blitzStartNextCity();
+            return;
+        }
+    }
+
+    // 3. Kollision des Flugzeugs mit einem Hochhaus prüfen
+    const noseCol = Math.floor((blitzPlane.x + BLITZ_TILE * 0.85) / BLITZ_TILE);
+    const tailCol = Math.floor((blitzPlane.x + BLITZ_TILE * 0.15) / BLITZ_TILE);
+    for (const checkCol of [noseCol, tailCol]) {
+        if (checkCol >= 0 && checkCol < BLITZ_COLS) {
+            const towerH = blitzTowers[checkCol].height;
+            const towerTopRow = BLITZ_GROUND_ROW - towerH + 1;
+            if (towerH > 0 && blitzPlane.row >= towerTopRow) {
+                // Kollision mit Wolkenkratzer!
+                blitzCrashed    = true;
+                blitzRunning    = false;
+                blitzBannerText = '💥 CRASH IN CITY ' + blitzCityVal + '! (' + blitzScoreVal.toLocaleString('de-DE') + ' PKT.)';
+                blitzSpawnExplosion(blitzPlane.x + 12, blitzPlane.row * BLITZ_TILE + 12, '#ef4444', 32);
+                blitzUpdateHud('💥 Abgestürzt!');
+                const durSec = Math.max(1, Math.round((performance.now() - blitzStartTime) / 1000));
+                submitCloudScore('blitz', blitzScoreVal, durSec, 'City ' + blitzCityVal);
+                return;
+            }
+        }
+    }
+
+    // 4. Fallende Bombe bewegen
+    if (blitzBomb) {
+        blitzBomb.y += 5.5;
+        const bCol = blitzBomb.col;
+        const tower = blitzTowers[bCol];
+        const towerTopY = (BLITZ_GROUND_ROW - tower.height + 1) * BLITZ_TILE;
+        const groundY   = (BLITZ_GROUND_ROW + 1) * BLITZ_TILE;
+
+        if (tower.height > 0 && blitzBomb.y >= towerTopY) {
+            // Treffer auf Wolkenkratzer!
+            const destroyed = Math.min(tower.height, blitzBomb.power);
+            tower.height   -= destroyed;
+            blitzScoreVal  += destroyed * 10;
+            blitzSpawnExplosion(bCol * BLITZ_TILE + 12, blitzBomb.y, tower.color, 14);
+
+            // Wenn die Bombe noch Rest-Sprengkraft hat, erst auf der neuen Dachkante explodieren lassen
+            blitzBomb = null;
+            blitzUpdateHud();
+        } else if (blitzBomb.y >= groundY) {
+            // Bombe schlägt auf freiem Boden auf
+            blitzSpawnExplosion(bCol * BLITZ_TILE + 12, groundY - 4, '#94a3b8', 8);
+            blitzBomb = null;
+            blitzUpdateHud();
+        }
+    }
+
+    // 5. Partikel aktualisieren
+    for (let i = blitzParticles.length - 1; i >= 0; i--) {
+        const p = blitzParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life--;
+        if (p.life <= 0) {
+            blitzParticles.splice(i, 1);
+        }
+    }
+}
+
+function blitzDraw() {
+    const cvs = document.getElementById('blitzCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    // Hintergrund (VC-20 Klassik vs. Nacht-Skyline)
+    if (blitzClassicMode) {
+        ctx.fillStyle = '#0f172a';
+    } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, cvs.height);
+        grad.addColorStop(0, '#020617');
+        grad.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = grad;
+    }
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // VC-20 Retro-Kopfzeile im Canvas
+    ctx.fillStyle = blitzClassicMode ? '#22d3ee' : '#94a3b8';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('COMMODORE VIC-20 BLITZ', 12, 18);
+    ctx.textAlign = 'right';
+    ctx.fillText('CITY ' + blitzCityVal + '  SCORE ' + String(blitzScoreVal).padStart(5, '0'), cvs.width - 12, 18);
+
+    // Landebahn / Boden (Zeile 17)
+    const groundY = (BLITZ_GROUND_ROW + 1) * BLITZ_TILE;
+    ctx.fillStyle = blitzClassicMode ? '#22c55e' : '#334155';
+    ctx.fillRect(0, groundY, cvs.width, BLITZ_TILE);
+    // Landebahn-Markierungen
+    ctx.fillStyle = '#facc15';
+    for (let rx = 8; rx < cvs.width; rx += 32) {
+        ctx.fillRect(rx, groundY + 10, 16, 4);
+    }
+
+    // Wolkenkratzer zeichnen
+    for (let c = 0; c < BLITZ_COLS; c++) {
+        const t = blitzTowers[c];
+        if (!t || t.height <= 0) continue;
+        const x = c * BLITZ_TILE;
+
+        for (let f = 0; f < t.height; f++) {
+            const row = BLITZ_GROUND_ROW - f;
+            const y   = row * BLITZ_TILE;
+
+            ctx.fillStyle = t.color;
+            ctx.fillRect(x + 1, y + 1, BLITZ_TILE - 2, BLITZ_TILE - 2);
+
+            // Beleuchtete PETSCII-Fenster im 8-Bit-Stil
+            ctx.fillStyle = ((t.seed + f * 7) % 3 === 0) ? '#0f172a' : '#fef08a';
+            ctx.fillRect(x + 5, y + 5, 5, 6);
+            ctx.fillStyle = ((t.seed + f * 11) % 4 === 0) ? '#0f172a' : '#fef08a';
+            ctx.fillRect(x + 14, y + 5, 5, 6);
+            ctx.fillRect(x + 5, y + 14, 5, 6);
+            ctx.fillRect(x + 14, y + 14, 5, 6);
+        }
+
+        // Kleine Dach-Antenne auf dem obersten Stockwerk
+        const topY = (BLITZ_GROUND_ROW - t.height + 1) * BLITZ_TILE;
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(x + 11, topY - 5, 2, 5);
+    }
+
+    // Fallende Bombe zeichnen
+    if (blitzBomb) {
+        const bx = blitzBomb.col * BLITZ_TILE + BLITZ_TILE / 2;
+        const by = blitzBomb.y;
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.arc(bx, by, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(bx - 4, by - 8, 8, 3);
+    }
+
+    // Flugzeug im VC-20 Pixel-Stil zeichnen
+    const px = blitzPlane.x;
+    const py = blitzPlane.row * BLITZ_TILE;
+    ctx.save();
+    ctx.translate(px, py);
+
+    // Rumpf
+    ctx.fillStyle = blitzCrashed ? '#ef4444' : '#f8fafc';
+    ctx.fillRect(2, 9, 22, 6);
+    // Heckflosse
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(2, 9);
+    ctx.lineTo(2, 2);
+    ctx.lineTo(9, 9);
+    ctx.closePath();
+    ctx.fill();
+    // Cockpit-Fenster
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(16, 6, 6, 4);
+    // Tragfläche
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(9, 13, 8, 4);
+    // Propeller vorne (animiert)
+    ctx.fillStyle = (Math.floor(performance.now() / 40) % 2 === 0) ? '#facc15' : '#94a3b8';
+    ctx.fillRect(24, 5, 2, 14);
+
+    ctx.restore();
+
+    // Explosions-Partikel zeichnen
+    for (const p of blitzParticles) {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+
+    // Start- oder Crash-Banner
+    if (!blitzRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.78)';
+        ctx.fillRect(0, cvs.height / 2 - 44, cvs.width, 88);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = blitzCrashed ? '#f87171' : '#22d3ee';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText(blitzBannerText || '✈️ VC-20 BLITZ BEREIT', cvs.width / 2, cvs.height / 2 - 6);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '13px sans-serif';
+        ctx.fillText('Drücke die LEERTASTE oder klicke ins Bild, um zu starten & Bomben abzuwerfen!', cvs.width / 2, cvs.height / 2 + 20);
+    }
+}
+
+function blitzLoop() {
+    if (!blitzRunning) {
+        blitzDraw();
+        return;
+    }
+    blitzStep();
+    blitzDraw();
+    if (blitzRunning) {
+        blitzRafId = requestAnimationFrame(blitzLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     gummiInit();
     pacmanInit();
+    blitzInit();
     sudokuInit();
     mineNewGame('medium');
     memoryNewGame(16);
