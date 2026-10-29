@@ -2039,12 +2039,13 @@ function queryLocalOllamaAssistant(
     }
 
     $kbContextLines = [];
-    foreach (array_slice($topKbEntries, 0, 3) as $kbe) {
-        $kbContextLines[] = "### {$kbe['icon']} {$kbe['title']}\n{$kbe['answer']}";
+    foreach (array_slice($topKbEntries, 0, 1) as $kbe) {
+        $shortAns = mb_substr(trim(preg_replace('/\s+/u', ' ', (string)$kbe['answer']) ?? ''), 0, 520);
+        $kbContextLines[] = "{$kbe['icon']} {$kbe['title']}: {$shortAns}";
     }
     $kbContextStr = !empty($kbContextLines)
-        ? implode("\n\n", $kbContextLines)
-        : "MiniCloud umfasst 22 Module: Dateien & Tresor (index.php), Office Light 6-in-1 (office.php), Kalender (calendar.php), Aufgaben (tasks.php), Projekte (projects.php), Notizwand mit Sprachnotizen & Diktat (notes.php), Kontakte (contacts.php), Nachrichten & Sprachanrufe (messages.php), Musik- & Hörbuch-Studio mit 1->99 Kapitel-Sortierung (music.php), E-Books (ebooks.php), PDF & Scanner/OCR (pdf_tools.php), Foto-Galerie (gallery.php), Online-Formulare (forms.php), Vereinsverwaltung (club.php), Haushaltsplaner (budget.php), Mind-Map (mindmap.php), Umfragen (polls.php), Live-Mentimeter (menti.php), Passwort-Manager (passwords.php) und Spiele (games.php).";
+        ? implode("\n", $kbContextLines)
+        : "MiniCloud Module: Dateien & Tresor (index.php), Office Light (office.php), Kalender (calendar.php), Aufgaben (tasks.php), Projekte (projects.php), Notizen & Sprachnotizen (notes.php), Kontakte (contacts.php), Messenger & Anrufe (messages.php), Musik- & Hörbuch-Studio (music.php), E-Books (ebooks.php), PDF & OCR (pdf_tools.php), Foto-Galerie (gallery.php), Formulare (forms.php), Verein (club.php), Haushalt (budget.php), Mind-Map (mindmap.php), Umfragen (polls.php), Mentimeter (menti.php), Passwörter (passwords.php), Spiele (games.php).";
 
     $langNames = [
         'de' => 'Deutsch', 'en' => 'English', 'fr' => 'Français', 'es' => 'Español',
@@ -2054,36 +2055,24 @@ function queryLocalOllamaAssistant(
     $targetLangName = $langNames[$lang] ?? 'Deutsch';
 
     if ($isGeneralQuestion) {
-        $sysPrompt = "Du bist der vielseitige, freundliche lokale KI-Assistent von **{$username}** in der privaten Cloud **{$appTitle}** (aktuelles Datum: " . date('d.m.Y H:i') . ").\n"
-            . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
-            . "AUFGABE (Dual-Modus):\n"
-            . "1. Bei **allgemeinen Fragen** (Allgemeinwissen, Alltag, Wissenschaft, Geschichte, Finanzen, Rezepte, Technik, Ideen sammeln, E-Mails/Einladungen/Texte entwerfen oder Übersetzungen) antworte frei, hilfreich und präzise mit deinem gesamten Wissen.\n"
-            . "2. Falls sich die Frage doch auf Funktionen der Cloud **{$appTitle}** bezieht, nutze die untenstehenden {$appTitle}-Fakten und Live-Kontodaten (nenne für Cloud-Funktionen niemals fremde Dienste wie Google Drive oder Dropbox).\n\n"
-            . "Hintergrund-Kontodaten von {$username} (nur nutzen, falls danach gefragt wird):\n"
-            . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
-            . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread} | Nächste Termine: {$nextEventStr}\n\n"
-            . "Kurz-Übersicht {$appTitle}:\n"
-            . $kbContextStr;
+        $sysPrompt = "Du bist der freundliche lokale KI-Assistent von {$username} in {$appTitle} (Datum: " . date('d.m.Y') . "). "
+            . "Antworte IMMER auf {$targetLangName}, präzise, hilfreich und kompakt (ca. 3 bis 6 Sätze oder Stichpunkte mit **Fettdruck**).";
     } else {
-        $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent der selbstgehosteten Cloud-Plattform {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
-            . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
-            . "WICHTIG: Wenn es um Cloud-Funktionen geht, beziehe dich AUSSCHLIESSLICH auf die untenstehenden offiziellen {$appTitle}-Handbuch-Fakten und Live-Kontodaten (nenne NIEMALS fremde Dienste wie Google Drive, Dropbox oder Amazon S3). Wenn der Benutzer hingegen eine allgemeine Wissensfrage stellt oder einen Text/Entwurf wünscht, beantworte diese gerne hilfreich und direkt.\n\n"
-            . "Live-Kontodaten von {$username}:\n"
-            . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
-            . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread}\n"
-            . "- Nächste Termine: {$nextEventStr}\n\n"
-            . "Offizielle {$appTitle}-Fakten zu dieser Frage:\n"
-            . $kbContextStr;
+        $sysPrompt = "Du bist der lokale KI-Assistent von {$appTitle} (Benutzer: {$username}, Datum: " . date('d.m.Y') . "). "
+            . "Antworte auf {$targetLangName} kompakt (3-5 Sätze/Stichpunkte). "
+            . "Nutze für Cloud-Fragen diese Fakten (nenne niemals Google Drive/Dropbox): "
+            . "Speicher frei: {$freeStr} von {$quotaStr}, Offene Aufgaben: {$openTasksCount}, Ungelesene Nachrichten: {$unread}, Termine: {$nextEventStr}. "
+            . "Handbuch: {$kbContextStr}";
     }
 
     $messages = [
         ['role' => 'system', 'content' => $sysPrompt],
     ];
-    if (is_array($history)) {
-        foreach (array_slice($history, -2) as $turn) {
+    if (!$isGeneralQuestion && is_array($history)) {
+        foreach (array_slice($history, -1) as $turn) {
             if (!empty($turn['q']) && !empty($turn['a'])) {
-                $messages[] = ['role' => 'user', 'content' => (string)$turn['q']];
-                $messages[] = ['role' => 'assistant', 'content' => (string)$turn['a']];
+                $messages[] = ['role' => 'user', 'content' => mb_substr((string)$turn['q'], 0, 140)];
+                $messages[] = ['role' => 'assistant', 'content' => mb_substr((string)$turn['a'], 0, 200)];
             }
         }
     }
@@ -2095,9 +2084,9 @@ function queryLocalOllamaAssistant(
         'stream'     => false,
         'keep_alive' => '30m',
         'options'    => [
-            'temperature' => $isGeneralQuestion ? 0.4 : 0.25,
-            'num_predict' => 240,
-            'num_ctx'     => 2048,
+            'temperature' => $isGeneralQuestion ? 0.35 : 0.2,
+            'num_predict' => 165,
+            'num_ctx'     => 1024,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -2115,7 +2104,7 @@ function queryLocalOllamaAssistant(
             'method'        => 'POST',
             'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
             'content'       => $payload,
-            'timeout'       => 30.0,
+            'timeout'       => 45.0,
             'ignore_errors' => true,
         ],
     ]);
@@ -3174,7 +3163,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             foreach ($queryWords as $qw) {
                 if ($qw === $kwNorm) {
                     $score += 7.5;
-                } elseif (mb_strlen($qw) >= 4 && mb_strlen($kwNorm) >= 4) {
+                } elseif (mb_strlen($qw) >= 5 && mb_strlen($kwNorm) >= 5) {
                     if (str_starts_with($qw, $kwNorm) || str_starts_with($kwNorm, $qw)) {
                         $score += 5.0;
                     } elseif (strlen($qw) <= 20 && strlen($kwNorm) <= 20 && levenshtein($qw, $kwNorm) <= 1) {
@@ -3186,7 +3175,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
 
         // Volltext-Bonus auf den Antworttext (Stufe 1 Tiefensuche)
         foreach ($queryWords as $qw) {
-            if (mb_strlen($qw) >= 5 && str_contains($answerNorm, $qw)) {
+            if (mb_strlen($qw) >= 6 && str_contains($answerNorm, $qw)) {
                 $score += 2.0;
             }
         }
@@ -3231,12 +3220,17 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     // Dual-Modus:
     // - Wenn die Frage klar einen einzelnen MiniCloud-KB-Artikel trifft ($bestScore >= 10),
     //   liefert Stufe 1 sofort (< 5 ms) die exakte Handbuch-Antwort.
-    // - Wenn es sich um eine allgemeine Wissens-/Text-/Alltagsfrage ($bestScore < 6),
+    // - Wenn es sich um eine allgemeine Wissens-/Text-/Alltagsfrage ($bestScore < 7.5),
     //   eine kombinierte Frage oder eine Anschlussfrage handelt, antwortet das
     //   lokale Sprachmodell (qwen2.5:3b) im Dual-Modus.
-    $isGeneralQuestion  = ($bestScore < 6.0 && !$isFollowUpPhrase);
+    $isGeneralQuestion  = ($bestScore < 7.5 && !$isFollowUpPhrase);
     $shouldInvokeOllama = ($bestScore < 10.0 || $isFollowUpPhrase || count($queryWords) >= 7);
     if ($shouldInvokeOllama && ($appSettings['assistant_use_ollama'] ?? '1') === '1') {
+        $topicId = ($bestEntry !== null && !$isGeneralQuestion)
+            ? (string)$bestEntry['id']
+            : ($lastTopicId !== '' ? $lastTopicId : 'ollama_general');
+        rememberAssistantTurn($qTrim, '', $topicId);
+
         $ollamaReply = queryLocalOllamaAssistant(
             $pdo,
             $userId,
@@ -3249,7 +3243,6 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             $isGeneralQuestion
         );
         if ($ollamaReply !== null && $ollamaReply !== '') {
-            $topicId = $bestEntry['id'] ?? ($lastTopicId !== '' ? $lastTopicId : 'ollama_general');
             $actions = ($bestEntry !== null && !$isGeneralQuestion)
                 ? $bestEntry['actions']
                 : [
@@ -3264,7 +3257,6 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
                     $pack['q_events'],
                     'Generiere ein sicheres Passwort',
                 ];
-            rememberAssistantTurn($qTrim, $ollamaReply, (string)$topicId);
             return [
                 'reply'     => "🧠 **Lokale KI-Antwort**\n\n" . $ollamaReply,
                 'actions'   => $actions,
@@ -3274,7 +3266,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         }
     }
 
-    if ($bestEntry !== null && $bestScore >= 4.0) {
+    if ($bestEntry !== null && $bestScore >= 7.5) {
         $replyText = "{$bestEntry['icon']} **{$bestEntry['title']}**\n\n" . $bestEntry['answer'];
         rememberAssistantTurn($qTrim, $replyText, (string)$bestEntry['id']);
         return [
