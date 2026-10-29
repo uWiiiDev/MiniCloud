@@ -1746,6 +1746,51 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 $pack['q_ebooks'],
             ],
         ],
+        [
+            'id'       => 'it_security_concept',
+            'title'    => 'IT-Sicherheitskonzept, Verschlüsselung & Datenschutz (TOM)',
+            'icon'     => '🛡️',
+            'keywords' => [
+                'sicherheitskonzept', 'it-sicherheit', 'it sicherheit', 'wie sicher', 'abgesichert', 'datenschutz', 'dsgvo', 'tom',
+                'bcrypt', 'aes-256', 'brute force', 'rate limit', 'prepared statements', 'sql injection', 'xss', 'csrf', 'security concept', 'gdpr',
+            ],
+            'answer'   => "Laut dem offiziellen **🛡️ IT-Sicherheitskonzept** (`help.php#it-sicherheit`) ist deine **{$appTitle}** mehrstufig gehärtet:\n\n"
+                . "1. **🔐 Login, 2FA & Brute-Force-Schutz:** Passwörter werden mit **BCRYPT (Cost 12)** gehasht. Optional ist **2FA per E-Mail oder Google Authenticator (TOTP RFC 6238 mit 100 % lokalem QR-Code)** aktivierbar. Nach **5 Fehlversuchen in 5 Minuten** greift eine automatische Sperre.\n"
+                . "2. **🔒 Dateispeicher-Isolierung & Zero-Knowledge-Tresor:** Dateien werden niemals unter ihrem Originalnamen im Dateisystem abgelegt, sondern als nicht ausführbare `.bin`-Dateien (`0640`) im per Webserver gesperrten Ordner `uploads/`. Im **Tresor-Modus** erfolgt eine **AES-256-GCM-Verschlüsselung** (`PBKDF2-HMAC-SHA256`), ohne dass das Passwort jemals gespeichert wird.\n"
+                . "3. **🛡️ Schutz vor SQLi, XSS, CSRF & IDOR:** 100 % echte **PDO Prepared Statements**, kontextsensitive HTML-/JSON-Maskierung, **256-Bit-CSRF-Tokens** für jede Änderung sowie strikte Eigentümer-/Freigabeprüfungen.\n"
+                . "4. **🧠 100 % Lokale KI (DSGVO-konform):** Der Cloud-Assistent und das optionale Sprachmodell (Ollama auf `127.0.0.1:11434`) laufen vollständig lokal auf diesem Server – es fließen keinerlei Daten an externe Cloud-Anbieter.",
+            'actions'  => [
+                ['label' => '🛡️ IT-Sicherheitskonzept', 'url' => 'help.php#it-sicherheit'],
+                ['label' => '⚙️ Sicherheit & 2FA', 'url' => 'settings.php'],
+            ],
+            'followups' => [
+                'Welche Daten speichert die Cloud laut Datenverzeichnis?',
+                $pack['q_vault'],
+            ],
+        ],
+        [
+            'id'       => 'data_dictionary_retention',
+            'title'    => 'Datenverzeichnis, Speicherorte & Löschfristen (Data Dictionary)',
+            'icon'     => '🗂️',
+            'keywords' => [
+                'datenverzeichnis', 'data dictionary', 'welche daten', 'was wird gespeichert', 'loeschfristen', 'löschfristen',
+                'aufbewahrung', 'tabellen', 'datenbanktabellen', 'speicherorte', 'localstorage', 'wie lange gespeichert', 'audit_logs',
+            ],
+            'answer'   => "Das **🗂️ Datenverzeichnis** (`help.php#datenverzeichnis`) dokumentiert transparent alle gespeicherten Daten und Löschfristen:\n\n"
+                . "- **🗑️ Papierkorb (`files.deleted_at`):** Gelöschte Dateien werden nach **30 Tagen** automatisch physisch vom Server entfernt (`unlink`) oder sofort beim Leeren des Papierkorbs.\n"
+                . "- **🕓 Dateiversionen (`file_versions`):** Automatische Rotation der maximal **5 neuesten Stände** pro Datei; Endlöschung zusammen mit der Hauptdatei.\n"
+                . "- **📜 Sicherheits-Audit-Log (`audit_logs`):** Speichert sicherheitsrelevante Ereignisse mit **anonymisierter IP-Adresse** (letztes Oktett maskiert) und bereinigt Einträge automatisch nach **90 Tagen**.\n"
+                . "- **💾 System-Snapshots (`uploads/.system_backups/`):** Reiner Programmcode für den 1-Klick-Rollback (maximal die **8 neuesten Stände**).\n"
+                . "- **🧠 Assistenten-Kontext (`\$_SESSION['assistant_context']`):** Dein Gesprächsgedächtnis für Anschlussfragen liegt nur flüchtig in der aktuellen PHP-Sitzung und verfällt beim Abmelden.",
+            'actions'  => [
+                ['label' => '🗂️ Datenverzeichnis öffnen', 'url' => 'help.php#datenverzeichnis'],
+                ['label' => $pack['act_trash'], 'url' => 'trash.php'],
+            ],
+            'followups' => [
+                'Wie ist die Cloud laut IT-Sicherheitskonzept geschützt?',
+                $pack['q_storage'],
+            ],
+        ],
     ];
 
     if ($isAdmin) {
@@ -1819,8 +1864,109 @@ function rememberAssistantTurn(string $question, string $reply, string $topicId 
 }
 
 /**
+ * Sicherer mathematischer Ausdrucks-Auswerter (Shunting-Yard ohne eval()),
+ * unterstützt +, -, *, /, ^, Klammern sowie deutsche Kommazahlen (z. B. "1250,50 * 1,19").
+ */
+function evaluateSafeMathExpression(string $expr): ?float
+{
+    $clean = str_replace([',', '×', '÷', ':'], ['.', '*', '/', '/'], trim($expr));
+    $clean = preg_replace('/\s+/u', '', $clean) ?? '';
+    if ($clean === '' || !preg_match('/^[0-9+\-*\/().^]+$/', $clean) || !preg_match('/[+\-*\/^]/', $clean)) {
+        return null;
+    }
+
+    $tokens = [];
+    $len    = strlen($clean);
+    $i      = 0;
+    while ($i < $len) {
+        $ch = $clean[$i];
+        if (ctype_digit($ch) || $ch === '.' || (($ch === '-' || $ch === '+') && ($i === 0 || in_array($clean[$i - 1], ['(', '+', '-', '*', '/', '^'], true)))) {
+            $numStr = $ch;
+            $i++;
+            while ($i < $len && (ctype_digit($clean[$i]) || $clean[$i] === '.')) {
+                $numStr .= $clean[$i];
+                $i++;
+            }
+            if (!is_numeric($numStr)) {
+                return null;
+            }
+            $tokens[] = (float)$numStr;
+            continue;
+        }
+        if (in_array($ch, ['+', '-', '*', '/', '^', '(', ')'], true)) {
+            $tokens[] = $ch;
+            $i++;
+            continue;
+        }
+        return null;
+    }
+
+    $prec = ['+' => 1, '-' => 1, '*' => 2, '/' => 2, '^' => 3];
+    $output = [];
+    $ops    = [];
+    foreach ($tokens as $tok) {
+        if (is_float($tok)) {
+            $output[] = $tok;
+        } elseif ($tok === '(') {
+            $ops[] = $tok;
+        } elseif ($tok === ')') {
+            while (!empty($ops) && end($ops) !== '(') {
+                $output[] = array_pop($ops);
+            }
+            if (empty($ops)) {
+                return null;
+            }
+            array_pop($ops);
+        } else {
+            while (!empty($ops) && end($ops) !== '(' && ($prec[end($ops)] ?? 0) >= ($prec[$tok] ?? 0)) {
+                $output[] = array_pop($ops);
+            }
+            $ops[] = $tok;
+        }
+    }
+    while (!empty($ops)) {
+        $op = array_pop($ops);
+        if ($op === '(' || $op === ')') {
+            return null;
+        }
+        $output[] = $op;
+    }
+
+    $stack = [];
+    foreach ($output as $rpn) {
+        if (is_float($rpn)) {
+            $stack[] = $rpn;
+        } else {
+            if (count($stack) < 2) {
+                return null;
+            }
+            $b = (float)array_pop($stack);
+            $a = (float)array_pop($stack);
+            switch ($rpn) {
+                case '+': $stack[] = $a + $b; break;
+                case '-': $stack[] = $a - $b; break;
+                case '*': $stack[] = $a * $b; break;
+                case '/':
+                    if (abs($b) < 1e-12) {
+                        return null;
+                    }
+                    $stack[] = $a / $b;
+                    break;
+                case '^': $stack[] = $a ** $b; break;
+                default: return null;
+            }
+        }
+    }
+
+    return count($stack) === 1 && is_finite($stack[0]) ? (float)$stack[0] : null;
+}
+
+/**
  * Stufe 2 (Optional): Fragt das lokale KI-Sprachmodell über Ollama (127.0.0.1:11434) an,
  * sofern in den Einstellungen aktiviert und auf dem Server verfügbar (z. B. auf runready.cloud).
+ * Unterstützt den Dual-Modus:
+ *  - Bei Fragen zur MiniCloud nutzt das Modell strikt das Handbuch & die Live-Kontodaten.
+ *  - Bei allgemeinen Wissens-, Alltags-, Text- oder Übersetzungsfragen antwortet es frei aus seinem Allgemeinwissen.
  * Auf Shared-Webhosting (wie STRATO) kehrt diese Funktion sofort (< 1 ms) mit null zurück.
  *
  * @param array<int, array{id: string, title: string, icon: string, answer: string}> $topKbEntries
@@ -1833,7 +1979,8 @@ function queryLocalOllamaAssistant(
     array $appSettings,
     string $question,
     string $lang,
-    array $topKbEntries
+    array $topKbEntries,
+    bool $isGeneralQuestion = false
 ): ?string {
     if (($appSettings['assistant_use_ollama'] ?? '1') !== '1') {
         return null;
@@ -1891,15 +2038,28 @@ function queryLocalOllamaAssistant(
     ];
     $targetLangName = $langNames[$lang] ?? 'Deutsch';
 
-    $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent der selbstgehosteten Cloud-Plattform {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
-        . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
-        . "WICHTIG: Beziehe dich AUSSCHLIESSLICH auf die untenstehenden offiziellen {$appTitle}-Handbuch-Fakten und Live-Kontodaten. Nenne NIEMALS fremde Dienste wie Google Drive, Dropbox oder Amazon S3. Halte die Antwort kompakt (ca. 3 bis 6 Sätze oder Stichpunkte).\n\n"
-        . "Live-Kontodaten von {$username}:\n"
-        . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
-        . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread}\n"
-        . "- Nächste Termine: {$nextEventStr}\n\n"
-        . "Offizielle {$appTitle}-Fakten zu dieser Frage:\n"
-        . $kbContextStr;
+    if ($isGeneralQuestion) {
+        $sysPrompt = "Du bist der vielseitige, freundliche lokale KI-Assistent von **{$username}** in der privaten Cloud **{$appTitle}** (aktuelles Datum: " . date('d.m.Y H:i') . ").\n"
+            . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
+            . "AUFGABE (Dual-Modus):\n"
+            . "1. Bei **allgemeinen Fragen** (Allgemeinwissen, Alltag, Wissenschaft, Geschichte, Finanzen, Rezepte, Technik, Ideen sammeln, E-Mails/Einladungen/Texte entwerfen oder Übersetzungen) antworte frei, hilfreich und präzise mit deinem gesamten Wissen.\n"
+            . "2. Falls sich die Frage doch auf Funktionen der Cloud **{$appTitle}** bezieht, nutze die untenstehenden {$appTitle}-Fakten und Live-Kontodaten (nenne für Cloud-Funktionen niemals fremde Dienste wie Google Drive oder Dropbox).\n\n"
+            . "Hintergrund-Kontodaten von {$username} (nur nutzen, falls danach gefragt wird):\n"
+            . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
+            . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread} | Nächste Termine: {$nextEventStr}\n\n"
+            . "Kurz-Übersicht {$appTitle}:\n"
+            . $kbContextStr;
+    } else {
+        $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent der selbstgehosteten Cloud-Plattform {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
+            . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
+            . "WICHTIG: Wenn es um Cloud-Funktionen geht, beziehe dich AUSSCHLIESSLICH auf die untenstehenden offiziellen {$appTitle}-Handbuch-Fakten und Live-Kontodaten (nenne NIEMALS fremde Dienste wie Google Drive, Dropbox oder Amazon S3). Wenn der Benutzer hingegen eine allgemeine Wissensfrage stellt oder einen Text/Entwurf wünscht, beantworte diese gerne hilfreich und direkt.\n\n"
+            . "Live-Kontodaten von {$username}:\n"
+            . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
+            . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread}\n"
+            . "- Nächste Termine: {$nextEventStr}\n\n"
+            . "Offizielle {$appTitle}-Fakten zu dieser Frage:\n"
+            . $kbContextStr;
+    }
 
     $messages = [
         ['role' => 'system', 'content' => $sysPrompt],
@@ -1920,8 +2080,8 @@ function queryLocalOllamaAssistant(
         'stream'     => false,
         'keep_alive' => '30m',
         'options'    => [
-            'temperature' => 0.25,
-            'num_predict' => 260,
+            'temperature' => $isGeneralQuestion ? 0.4 : 0.25,
+            'num_predict' => 380,
             'num_ctx'     => 2048,
         ],
     ], JSON_UNESCAPED_UNICODE);
@@ -2704,6 +2864,161 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     }
 
     // =========================================================================
+    // 8g. ALLTAGS-HELFER (STUFE 1 – LÄUFT AUCH AUF STRATO OHNE KI-MODELL):
+    //     1) Taschen- & Prozentrechner  2) Datums- & Countdown-Rechner
+    //     3) Kryptografischer Passwort- & PIN-Generator
+    // =========================================================================
+    // 1) Prozentrechner ("Was ist 19% von 249,50?", "15 Prozent von 800")
+    if (preg_match('/([0-9]+(?:[.,][0-9]+)?)\s*(?:%|prozent|percent)\s*(?:von|of|de)\s*([0-9]+(?:[.,][0-9]+)?)/iu', $qTrim, $mPct)) {
+        $pct  = (float)str_replace(',', '.', $mPct[1]);
+        $base = (float)str_replace(',', '.', $mPct[2]);
+        $val  = ($pct / 100.0) * $base;
+        $plus = $base + $val;
+        $minus = $base - $val;
+        $fmt  = static fn(float $n): string => rtrim(rtrim(number_format($n, 2, ',', '.'), '0'), ',');
+        $reply = "🧮 **Prozentrechner-Ergebnis:**\n\n"
+            . "- **{$fmt($pct)} %** von **{$fmt($base)}** = **`{$fmt($val)}`**\n"
+            . "- ➕ Inklusive (+{$fmt($pct)} %): **`{$fmt($plus)}`**\n"
+            . "- ➖ Abzüglich (-{$fmt($pct)} %): **`{$fmt($minus)}`**";
+        rememberAssistantTurn($qTrim, $reply, 'math_helper');
+        return [
+            'reply'     => $reply,
+            'actions'   => [['label' => '💰 Haushaltsplaner', 'url' => 'budget.php'], ['label' => '📝 Excel Light', 'url' => 'office.php']],
+            'followups' => ['Wie steht mein Haushaltsbuch diesen Monat?', $pack['q_office']],
+            'lang'      => $lang,
+        ];
+    }
+
+    // 2) Taschenrechner ("Rechne (1250 + 480) / 12", "Was ist 145 * 19?")
+    if (preg_match('/^(?:rechne|berechne|was\s+ist|wie\s+viel\s+ist|calculate|what\s+is)?\s*([0-9(),.\s+\-*\/×÷:^]{3,})\s*[=?]*$/iu', $qTrim, $mMath)) {
+        $mathCandidate = trim($mMath[1]);
+        $mathResult = evaluateSafeMathExpression($mathCandidate);
+        if ($mathResult !== null) {
+            $formattedRes = (abs($mathResult - round($mathResult)) < 1e-9)
+                ? number_format($mathResult, 0, ',', '.')
+                : rtrim(rtrim(number_format($mathResult, 4, ',', '.'), '0'), ',');
+            $reply = "🧮 **Rechenergebnis:**\n\n"
+                . "`" . htmlspecialchars($mathCandidate, ENT_QUOTES, 'UTF-8') . "` = **`{$formattedRes}`**";
+            rememberAssistantTurn($qTrim, $reply, 'math_helper');
+            return [
+                'reply'     => $reply,
+                'actions'   => [['label' => '📝 Excel Light', 'url' => 'office.php'], ['label' => '💰 Haushaltsplaner', 'url' => 'budget.php']],
+                'followups' => ['Was ist 19% von 249,50?', $pack['q_office']],
+                'lang'      => $lang,
+            ];
+        }
+    }
+
+    // 3) Datums-, Wochentags- & Countdown-Rechner
+    $weekdaysDe = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+    if (hasAnyKeyword($norm, [
+        'welches datum', 'welcher tag ist heute', 'welche kalenderwoche', 'welche kw', 'wie viel uhr',
+        'wie viele tage bis', 'wieviele tage bis', 'welcher wochentag ist der', 'welcher tag ist der',
+    ])) {
+        $nowTs = time();
+        $todayName = $weekdaysDe[(int)date('w', $nowTs)];
+        $kw = date('W', $nowTs);
+
+        if (preg_match('/(\d{1,2})\.(\d{1,2})\.(\d{4})/', $qTrim, $mTargetDate)) {
+            $tTs = mktime(0, 0, 0, (int)$mTargetDate[2], (int)$mTargetDate[1], (int)$mTargetDate[3]);
+            if ($tTs !== false) {
+                $tDayName = $weekdaysDe[(int)date('w', $tTs)];
+                $diffDays = (int)round(($tTs - strtotime('today')) / 86400);
+                $diffText = $diffDays === 0
+                    ? 'Das ist **heute**!'
+                    : ($diffDays > 0 ? "Das ist in **{$diffDays} Tag(en)**." : "Das war vor **" . abs($diffDays) . " Tag(en)**.");
+                $reply = "📆 **Datums- & Wochentagsrechner:**\n\n"
+                    . "- Der **" . date('d.m.Y', $tTs) . "** fällt auf einen **{$tDayName}** (Kalenderwoche **" . date('W', $tTs) . "**).\n"
+                    . "- {$diffText}";
+                rememberAssistantTurn($qTrim, $reply, 'date_helper');
+                return [
+                    'reply'     => $reply,
+                    'actions'   => [['label' => $pack['act_calendar'], 'url' => 'calendar.php']],
+                    'followups' => [$pack['q_events'], 'Termin: Morgen 15:00 Besprechung'],
+                    'lang'      => $lang,
+                ];
+            }
+        }
+
+        if (str_contains($norm, 'weihnacht') || str_contains($norm, 'heiligabend')) {
+            $year = (int)date('Y');
+            $xmasTs = mktime(0, 0, 0, 12, 24, $year);
+            if ($xmasTs < strtotime('today')) {
+                $xmasTs = mktime(0, 0, 0, 12, 24, $year + 1);
+            }
+            $daysLeft = (int)round(($xmasTs - strtotime('today')) / 86400);
+            $wDay = $weekdaysDe[(int)date('w', $xmasTs)];
+            $reply = "🎄 **Countdown bis Heiligabend (" . date('d.m.Y', $xmasTs) . "):**\n\n"
+                . "Es sind noch **{$daysLeft} Tage** bis zum 24. Dezember (fällt auf einen **{$wDay}**).";
+            rememberAssistantTurn($qTrim, $reply, 'date_helper');
+            return [
+                'reply'     => $reply,
+                'actions'   => [['label' => $pack['act_calendar'], 'url' => 'calendar.php']],
+                'followups' => [$pack['q_events']],
+                'lang'      => $lang,
+            ];
+        }
+
+        if (str_contains($norm, 'silvester') || str_contains($norm, 'neujahr')) {
+            $year = (int)date('Y');
+            $nyiTs = mktime(0, 0, 0, 12, 31, $year);
+            $daysLeft = (int)round(($nyiTs - strtotime('today')) / 86400);
+            $reply = "🎆 **Countdown bis Silvester (" . date('d.m.Y', $nyiTs) . "):**\n\n"
+                . "Es sind noch **{$daysLeft} Tage** bis zum Jahreswechsel.";
+            rememberAssistantTurn($qTrim, $reply, 'date_helper');
+            return [
+                'reply'     => $reply,
+                'actions'   => [['label' => $pack['act_calendar'], 'url' => 'calendar.php']],
+                'followups' => [$pack['q_events']],
+                'lang'      => $lang,
+            ];
+        }
+
+        $dayOfYear = (int)date('z', $nowTs) + 1;
+        $reply = "📆 **Aktuelles Datum & Kalenderwoche:**\n\n"
+            . "- **Heute:** {$todayName}, der **" . date('d.m.Y') . "** (" . date('H:i') . " Uhr)\n"
+            . "- **Kalenderwoche:** KW **{$kw}** (Tag {$dayOfYear} des Jahres)";
+        rememberAssistantTurn($qTrim, $reply, 'date_helper');
+        return [
+            'reply'     => $reply,
+            'actions'   => [['label' => $pack['act_calendar'], 'url' => 'calendar.php']],
+            'followups' => [$pack['q_events'], $pack['q_tasks']],
+            'lang'      => $lang,
+        ];
+    }
+
+    // 4) Kryptografischer Passwort- & PIN-Generator ("Generiere ein sicheres Passwort", "Passwort vorschlagen")
+    if (hasAnyKeyword($norm, [
+        'generiere ein passwort', 'generiere ein sicheres passwort', 'sicheres passwort generieren',
+        'passwort vorschlagen', 'neues passwort generieren', 'zufallspasswort', 'generate password',
+    ])) {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*+-=?';
+        $alphaLen = strlen($alphabet) - 1;
+        $genPass  = static function (int $length) use ($alphabet, $alphaLen): string {
+            $out = '';
+            for ($i = 0; $i < $length; $i++) {
+                $out .= $alphabet[random_int(0, $alphaLen)];
+            }
+            return $out;
+        };
+        $p16 = $genPass(16);
+        $p24 = $genPass(24);
+        $pin = sprintf('%06d', random_int(100000, 999999));
+        $reply = "🔑 **Frisch generierte, kryptografisch sichere Passwörter (`random_int`):**\n\n"
+            . "- **16 Zeichen (Standard):** `" . $p16 . "`\n"
+            . "- **24 Zeichen (Hochsicher / Tresor):** `" . $p24 . "`\n"
+            . "- **6-stellige PIN:** `" . $pin . "`\n\n"
+            . "💡 *Tipp:* Du kannst das gewünschte Passwort direkt im **🔐 Schlüsselbund** (`passwords.php`) AES-256-verschlüsselt ablegen.";
+        rememberAssistantTurn($qTrim, $reply, 'passwords_manager', [['label' => '🔐 Schlüsselbund', 'url' => 'passwords.php']]);
+        return [
+            'reply'     => $reply,
+            'actions'   => [['label' => '🔐 Schlüsselbund öffnen', 'url' => 'passwords.php'], ['label' => '⚙️ Einstellungen', 'url' => 'settings.php']],
+            'followups' => [$pack['q_vault'], 'Wie ist die Cloud laut IT-Sicherheitskonzept geschützt?'],
+            'lang'      => $lang,
+        ];
+    }
+
+    // =========================================================================
     // 9. EXPLIZITE LIVE-SUCHE IN DATEIEN, KONTAKTEN & NOTIZEN (11 SPRACHEN)
     // =========================================================================
     if (preg_match('/^(?:suche\s+nach|suche\s+datei|suche|finde\s+datei|finde|wo\s+ist\s+die\s+datei|wo\s+liegt|wo\s+finde\s+ich|telefonnummer\s+von|kontakt\s+von|adresse\s+von|search\s+for|search|find\s+file|find|where\s+is|chercher|cherche|rechercher|trouver|buscar|busca|encontrar|cerca|trova|zoek|zoeken|szukaj|znajdz|znajdź|procurar|procura|hledat|najit|najít|ara|bul|пошук|знайди|знайти)\s+(.+)$/isu', $question, $mSearch)) {
@@ -2892,10 +3207,13 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     // =========================================================================
     // 10b. STUFE 2 (OPTIONAL): LOKALES KI-SPRACHMODELL (OLLAMA AUF 127.0.0.1)
     // =========================================================================
-    // Wenn Ollama aktiv ist und entweder eine freie/kombinierte Frage, eine
-    // Anschlussfrage im Gesprächskontext oder kein eindeutiger Einzel-KB-Treffer
-    // vorliegt, formuliert das lokale Sprachmodell eine maßgeschneiderte Antwort
-    // auf Basis der Top-KB-Artikel + Live-Kontodaten.
+    // Dual-Modus:
+    // - Wenn die Frage klar einen einzelnen MiniCloud-KB-Artikel trifft ($bestScore >= 10),
+    //   liefert Stufe 1 sofort (< 5 ms) die exakte Handbuch-Antwort.
+    // - Wenn es sich um eine allgemeine Wissens-/Text-/Alltagsfrage ($bestScore < 6),
+    //   eine kombinierte Frage oder eine Anschlussfrage handelt, antwortet das
+    //   lokale Sprachmodell (qwen2.5:3b) im Dual-Modus.
+    $isGeneralQuestion  = ($bestScore < 6.0 && !$isFollowUpPhrase);
     $shouldInvokeOllama = ($bestScore < 10.0 || $isFollowUpPhrase || count($queryWords) >= 7);
     if ($shouldInvokeOllama && ($appSettings['assistant_use_ollama'] ?? '1') === '1') {
         $ollamaReply = queryLocalOllamaAssistant(
@@ -2906,19 +3224,25 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             $appSettings,
             $qTrim,
             $lang,
-            $topKbForRag
+            $topKbForRag,
+            $isGeneralQuestion
         );
         if ($ollamaReply !== null && $ollamaReply !== '') {
-            $topicId = $bestEntry['id'] ?? ($lastTopicId !== '' ? $lastTopicId : 'ollama_rag');
-            $actions = $bestEntry['actions'] ?? [
-                ['label' => $pack['act_dashboard'], 'url' => 'dashboard.php'],
-                ['label' => $pack['act_help'], 'url' => 'help.php'],
-            ];
-            $followups = $bestEntry['followups'] ?? [
-                $pack['q_storage'],
-                $pack['q_events'],
-                $pack['q_tasks'],
-            ];
+            $topicId = $bestEntry['id'] ?? ($lastTopicId !== '' ? $lastTopicId : 'ollama_general');
+            $actions = ($bestEntry !== null && !$isGeneralQuestion)
+                ? $bestEntry['actions']
+                : [
+                    ['label' => '📝 Office Light', 'url' => 'office.php'],
+                    ['label' => $pack['act_notes'], 'url' => 'notes.php'],
+                    ['label' => $pack['act_dashboard'], 'url' => 'dashboard.php'],
+                ];
+            $followups = ($bestEntry !== null && !$isGeneralQuestion)
+                ? $bestEntry['followups']
+                : [
+                    $pack['q_storage'],
+                    $pack['q_events'],
+                    'Generiere ein sicheres Passwort',
+                ];
             rememberAssistantTurn($qTrim, $ollamaReply, (string)$topicId);
             return [
                 'reply'     => "🧠 **Lokale KI-Antwort**\n\n" . $ollamaReply,
@@ -3203,6 +3527,35 @@ $csrfToken = getCsrfToken();
                     <button type="button" onclick="askAssistantQuick(<?= e(json_encode($uiPack['q_vault'])) ?>)"
                             class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
                         🔒 <?= e($uiPack['q_vault']) ?>
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Wie ist die Cloud laut IT-Sicherheitskonzept geschützt?')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        🛡️ Wie ist die Cloud laut Sicherheitskonzept geschützt?
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2b. Allgemeinwissen, Text-KI & Alltags-Helfer -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-2.5">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                    <span>🌍</span> Allgemeinwissen, Text-KI &amp; Alltags-Helfer
+                </h2>
+                <div class="flex flex-col gap-1.5">
+                    <button type="button" onclick="askAssistantQuick('Schreib mir eine freundliche Einladung zur Jahreshauptversammlung unseres Vereins')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        ✍️ Einladung zur Vereinsversammlung entwerfen
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Was ist 19% von 249,50?')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        🧮 Prozent- &amp; Taschenrechner: 19% von 249,50
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Generiere ein sicheres Passwort')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        🔑 Kryptografisch sicheres Passwort generieren
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Wie viele Tage bis Weihnachten?')"
+                            class="text-left px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/80 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer">
+                        📆 Datums- &amp; Countdown-Rechner
                     </button>
                 </div>
             </div>
