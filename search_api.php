@@ -240,22 +240,28 @@ try {
 } catch (Throwable) {
 }
 
-// 4. Whiteboards durchsuchen
+// 4. Whiteboards durchsuchen (nur eigene oder explizit für mich freigegebene)
 if (($appSettings['enable_whiteboard'] ?? '1') === '1') {
     try {
         $stmtWb = $pdo->prepare(
-            "SELECT `id`, `title`, `is_shared`
-             FROM `whiteboards`
-             WHERE (`user_id` = :uid OR `is_shared` = 1) AND `title` LIKE :q
-             ORDER BY `updated_at` DESC
+            "SELECT w.`id`, w.`title`, w.`is_shared`
+             FROM `whiteboards` w
+             WHERE (
+                 w.`user_id` = :uid
+                 OR EXISTS (
+                     SELECT 1 FROM `whiteboard_shares` ws
+                     WHERE ws.`board_id` = w.`id` AND ws.`user_id` = :uid2
+                 )
+             ) AND w.`title` LIKE :q
+             ORDER BY w.`updated_at` DESC
              LIMIT 5"
         );
-        $stmtWb->execute([':uid' => $userId, ':q' => $like]);
+        $stmtWb->execute([':uid' => $userId, ':uid2' => $userId, ':q' => $like]);
         foreach ($stmtWb->fetchAll() as $wb) {
             $items[] = [
                 'icon'  => '🎨',
                 'title' => (string)$wb['title'],
-                'sub'   => ((int)$wb['is_shared'] === 1 ? 'Team-Whiteboard' : 'Privates Whiteboard'),
+                'sub'   => ((int)$wb['is_shared'] === 1 ? 'Geteiltes Whiteboard' : 'Privates Whiteboard'),
                 'cat'   => 'Whiteboard',
                 'url'   => 'whiteboard.php?id=' . (int)$wb['id'],
             ];

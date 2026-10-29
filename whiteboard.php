@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['ajax'])) {
 function ensureWhiteboardSchema(PDO $pdo): void
 {
     static $checked = false;
-    if ($checked || (!empty($_SESSION['_mc_whiteboard_schema_ok']) && $_SESSION['_mc_whiteboard_schema_ok'] === 1)) {
+    if ($checked || (!empty($_SESSION['_mc_whiteboard_schema_v2']) && $_SESSION['_mc_whiteboard_schema_v2'] === 1)) {
         $checked = true;
         return;
     }
@@ -50,7 +50,7 @@ function ensureWhiteboardSchema(PDO $pdo): void
                 `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 `user_id` INT UNSIGNED NOT NULL,
                 `title` VARCHAR(160) NOT NULL DEFAULT 'Neues Whiteboard',
-                `is_shared` TINYINT(1) NOT NULL DEFAULT 1,
+                `is_shared` TINYINT(1) NOT NULL DEFAULT 0,
                 `bg_style` VARCHAR(24) NOT NULL DEFAULT 'dots',
                 `elements_json` MEDIUMTEXT NOT NULL,
                 `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,6 +58,24 @@ function ensureWhiteboardSchema(PDO $pdo): void
                 INDEX `idx_wb_user` (`user_id`),
                 INDEX `idx_wb_shared` (`is_shared`, `updated_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `whiteboard_shares` (
+                `board_id` INT UNSIGNED NOT NULL,
+                `user_id` INT UNSIGNED NOT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`board_id`, `user_id`),
+                INDEX `idx_wbs_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
+        // Einmalige Bereinigung: Boards ohne explizite Benutzerfreigabe in whiteboard_shares sind privat (is_shared = 0)
+        $pdo->exec(
+            "UPDATE `whiteboards` w
+             SET w.`is_shared` = 0
+             WHERE w.`is_shared` = 1
+               AND NOT EXISTS (SELECT 1 FROM `whiteboard_shares` ws WHERE ws.`board_id` = w.`id`)"
         );
 
         $pdo->exec(
@@ -72,13 +90,39 @@ function ensureWhiteboardSchema(PDO $pdo): void
                 INDEX `idx_wb_peers_time` (`board_id`, `updated_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
-        $_SESSION['_mc_whiteboard_schema_ok'] = 1;
+        $_SESSION['_mc_whiteboard_schema_v2'] = 1;
     } catch (Throwable) {
     }
 }
 
+/**
+ * Prüft, ob ein Benutzer Eigentümer des Whiteboards ist oder explizit in `whiteboard_shares` freigegeben wurde.
+ */
+function getAccessibleWhiteboard(PDO $pdo, int $boardId, int $userId): ?array
+{
+    if ($boardId <= 0) {
+        return null;
+    }
+    $stmt = $pdo->prepare(
+        "SELECT w.*
+         FROM `whiteboards` w
+         WHERE w.`id` = :id
+           AND (
+               w.`user_id` = :uid
+               OR EXISTS (
+                   SELECT 1 FROM `whiteboard_shares` ws
+                   WHERE ws.`board_id` = w.`id` AND ws.`user_id` = :uid2
+               )
+           )
+         LIMIT 1"
+    );
+    $stmt->execute([':id' => $boardId, ':uid' => $userId, ':uid2' => $userId]);
+    $row = $stmt->fetch();
+    return is_array($row) ? $row : null;
+}
+
 // =============================================================================
-// AJAX-ENDPUNKTE FÜR WHITEBOARD-SPEICHERUNG, LIVE-SYNC & CLOUD-EXPORT
+// AJAX-ENDPUNKTE FÜR WHITEBOARD-SPEICHERUNG, FREIGABE, LIVE-SYNC & CLOUD-EXPORT
 // =============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     header('Content-Type: application/json; charset=UTF-8');
@@ -90,11 +134,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
 
     $action = (string)($_POST['action'] ?? '');
 
-    // 1. Neues Whiteboard anlegen
+    // 1. Neues Whiteboard anlegen (standardmäßig privat)
     if ($action === 'create_board') {
         $title    = trim((string)($_POST['title'] ?? 'Neues Whiteboard'));
         $title    = $title !== '' ? mb_substr($title, 0, 150) : 'Neues Whiteboard';
-        $isShared = (int)($_POST['is_shared'] ?? 1) === 1 ? 1 : 0;
         $elements = (string)($_POST['elements_json'] ?? '[]');
         if (json_decode($elements, true) === null) {
             $elements = '[]';
@@ -102,12 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
 
         $stmt = $pdo->prepare(
             "INSERT INTO `whiteboards` (`user_id`, `title`, `is_shared`, `bg_style`, `elements_json`)
-             VALUES (:uid, :t, :sh, 'dots', :el)"
+             VALUES (:uid, :t, 0, 'dots', :el)"
         );
         $stmt->execute([
             ':uid' => $userId,
             ':t'   => $title,
-            ':sh'  => $isShared,
             ':el'  => $elements,
         ]);
         $newId = (int)$pdo->lastInsertId();
@@ -115,36 +157,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         exit;
     }
 
-    // 2. Whiteboard speichern (Elemente, Titel, Hintergrund, Freigabe-Modus)
+    // 1b. Gezielte Benutzer-Freigabe speichern (nur durch Eigentümer)
+    if ($action === 'save_shares') {
+        $boardId = (int)($_POST['board_id'] ?? 0);
+        $stmtChk = $pdo->prepare("SELECT `id`, `user_id` FROM `whiteboards` WHERE `id` = :id LIMIT 1");
+        $stmtChk->execute([':id' => $boardId]);
+        $board = $stmtChk->fetch();
+
+        if (!$board || (int)$board['user_id'] !== $userId) {
+            echo json_encode(['ok' => false, 'error' => 'Nur der Eigentümer kann die Freigabe dieses Whiteboards ändern.']);
+            exit;
+        }
+
+        $rawIds = json_decode((string)($_POST['user_ids_json'] ?? '[]'), true);
+        $cleanIds = [];
+        if (is_array($rawIds)) {
+            foreach ($rawIds as $val) {
+                $uidCandidate = (int)$val;
+                if ($uidCandidate > 0 && $uidCandidate !== $userId) {
+                    $cleanIds[$uidCandidate] = $uidCandidate;
+                }
+            }
+        }
+
+        $pdo->prepare("DELETE FROM `whiteboard_shares` WHERE `board_id` = :bid")->execute([':bid' => $boardId]);
+
+        $validSharedIds = [];
+        if (!empty($cleanIds)) {
+            $inPlaceholders = implode(',', array_fill(0, count($cleanIds), '?'));
+            $stmtValidUsers = $pdo->prepare("SELECT `id` FROM `users` WHERE `id` IN ($inPlaceholders)");
+            $stmtValidUsers->execute(array_values($cleanIds));
+            $validSharedIds = array_map('intval', $stmtValidUsers->fetchAll(PDO::FETCH_COLUMN));
+
+            $stmtInsShare = $pdo->prepare("INSERT IGNORE INTO `whiteboard_shares` (`board_id`, `user_id`) VALUES (:bid, :uid)");
+            foreach ($validSharedIds as $targetUid) {
+                $stmtInsShare->execute([':bid' => $boardId, ':uid' => $targetUid]);
+            }
+        }
+
+        $isNowShared = !empty($validSharedIds) ? 1 : 0;
+        $pdo->prepare("UPDATE `whiteboards` SET `is_shared` = :sh WHERE `id` = :id")
+            ->execute([':sh' => $isNowShared, ':id' => $boardId]);
+
+        echo json_encode([
+            'ok'           => true,
+            'is_shared'    => $isNowShared,
+            'shared_count' => count($validSharedIds),
+            'shared_ids'   => $validSharedIds,
+        ]);
+        exit;
+    }
+
+    // 2. Whiteboard speichern (Elemente, Titel, Hintergrund)
     if ($action === 'save_board') {
         session_write_close();
         $boardId  = (int)($_POST['board_id'] ?? 0);
         $title    = trim((string)($_POST['title'] ?? 'Whiteboard'));
         $title    = $title !== '' ? mb_substr($title, 0, 150) : 'Whiteboard';
-        $isShared = (int)($_POST['is_shared'] ?? 1) === 1 ? 1 : 0;
         $bgStyle  = in_array($_POST['bg_style'] ?? '', ['dots', 'grid', 'blank'], true) ? (string)$_POST['bg_style'] : 'dots';
         $elements = (string)($_POST['elements_json'] ?? '[]');
 
-        $stmtChk = $pdo->prepare("SELECT * FROM `whiteboards` WHERE `id` = :id LIMIT 1");
-        $stmtChk->execute([':id' => $boardId]);
-        $board = $stmtChk->fetch();
-
-        if (!$board || ((int)$board['user_id'] !== $userId && (int)$board['is_shared'] !== 1)) {
+        $board = getAccessibleWhiteboard($pdo, $boardId, $userId);
+        if (!$board) {
             echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Whiteboard.']);
             exit;
         }
 
-        // Nur der Eigentümer darf den Freigabestatus ändern
-        $finalShared = ((int)$board['user_id'] === $userId) ? $isShared : (int)$board['is_shared'];
-
         $stmtUp = $pdo->prepare(
             "UPDATE `whiteboards`
-             SET `title` = :t, `is_shared` = :sh, `bg_style` = :bg, `elements_json` = :el
+             SET `title` = :t, `bg_style` = :bg, `elements_json` = :el
              WHERE `id` = :id"
         );
         $stmtUp->execute([
             ':t'  => $title,
-            ':sh' => $finalShared,
             ':bg' => $bgStyle,
             ':el' => $elements,
             ':id' => $boardId,
@@ -161,15 +246,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         $cx      = (float)($_POST['cursor_x'] ?? 0);
         $cy      = (float)($_POST['cursor_y'] ?? 0);
 
-        if ($boardId <= 0) {
-            echo json_encode(['ok' => false]);
-            exit;
-        }
-
-        $stmtB = $pdo->prepare("SELECT `user_id`, `title`, `is_shared`, `bg_style`, `elements_json`, `updated_at` FROM `whiteboards` WHERE `id` = :id LIMIT 1");
-        $stmtB->execute([':id' => $boardId]);
-        $bRow = $stmtB->fetch();
-        if (!$bRow || ((int)$bRow['user_id'] !== $userId && (int)$bRow['is_shared'] !== 1)) {
+        $bRow = getAccessibleWhiteboard($pdo, $boardId, $userId);
+        if (!$bRow) {
             echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Whiteboard.']);
             exit;
         }
@@ -220,6 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         $boardId = (int)($_POST['board_id'] ?? 0);
         $stmtDel = $pdo->prepare("DELETE FROM `whiteboards` WHERE `id` = :id AND `user_id` = :uid");
         $stmtDel->execute([':id' => $boardId, ':uid' => $userId]);
+        $pdo->prepare("DELETE FROM `whiteboard_shares` WHERE `board_id` = :id")->execute([':id' => $boardId]);
         $pdo->prepare("DELETE FROM `whiteboard_peers` WHERE `board_id` = :id")->execute([':id' => $boardId]);
         echo json_encode(['ok' => true]);
         exit;
@@ -283,20 +362,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
 }
 
 // =============================================================================
-// ALLE VERFÜGBAREN WHITEBOARDS LADEN (ODER ERSTES BOARD AUTOMATISCH ERSTELLEN)
+// ALLE VERFÜGBAREN WHITEBOARDS LADEN (EIGENE + FÜR MICH FREIGEGEBENE)
 // =============================================================================
 $stmtList = $pdo->prepare(
-    "SELECT w.`id`, w.`user_id`, w.`title`, w.`is_shared`, w.`bg_style`, w.`updated_at`, u.`username` AS `owner_name`
+    "SELECT w.`id`, w.`user_id`, w.`title`, w.`is_shared`, w.`bg_style`, w.`updated_at`, u.`username` AS `owner_name`,
+            (SELECT COUNT(*) FROM `whiteboard_shares` ws_cnt WHERE ws_cnt.`board_id` = w.`id`) AS `shared_count`
      FROM `whiteboards` w
      INNER JOIN `users` u ON u.`id` = w.`user_id`
-     WHERE w.`user_id` = :uid OR w.`is_shared` = 1
-     ORDER BY (w.`user_id` = :uid2) DESC, w.`updated_at` DESC"
+     WHERE w.`user_id` = :uid
+        OR EXISTS (
+            SELECT 1 FROM `whiteboard_shares` ws
+            WHERE ws.`board_id` = w.`id` AND ws.`user_id` = :uid2
+        )
+     ORDER BY (w.`user_id` = :uid3) DESC, w.`updated_at` DESC"
 );
-$stmtList->execute([':uid' => $userId, ':uid2' => $userId]);
+$stmtList->execute([':uid' => $userId, ':uid2' => $userId, ':uid3' => $userId]);
 $boardsList = $stmtList->fetchAll();
 
 if (empty($boardsList)) {
-    // Starter-Whiteboard mit Begrüßungs-Elementen anlegen
+    // Starter-Whiteboard (standardmäßig privat) mit Begrüßungs-Elementen anlegen
     $starterElements = [
         [
             'id'    => 'el_welcome_1',
@@ -316,7 +400,7 @@ if (empty($boardsList)) {
             'w'     => 220,
             'h'     => 145,
             'color' => '#bbf7d0',
-            'text'  => "👥 Live-Team-Modus:\nWenn „Team-Board“ aktiv ist, können alle Cloud-Mitglieder gleichzeitig mitzeichnen!",
+            'text'  => "👥 Gezielte Team-Freigabe:\nÜber „👥 Freigabe“ wählst du genau die Cloud-Mitglieder aus, die mitzeichnen dürfen!",
         ],
         [
             'id'    => 'el_welcome_arrow',
@@ -331,13 +415,13 @@ if (empty($boardsList)) {
     ];
     $stmtSeed = $pdo->prepare(
         "INSERT INTO `whiteboards` (`user_id`, `title`, `is_shared`, `bg_style`, `elements_json`)
-         VALUES (:uid, 'Ideen & Team-Whiteboard', 1, 'dots', :el)"
+         VALUES (:uid, 'Mein Ideen-Whiteboard', 0, 'dots', :el)"
     );
     $stmtSeed->execute([
         ':uid' => $userId,
         ':el'  => json_encode($starterElements, JSON_UNESCAPED_UNICODE),
     ]);
-    $stmtList->execute([':uid' => $userId, ':uid2' => $userId]);
+    $stmtList->execute([':uid' => $userId, ':uid2' => $userId, ':uid3' => $userId]);
     $boardsList = $stmtList->fetchAll();
 }
 
@@ -356,6 +440,16 @@ if ($activeBoard === null) {
 $stmtFull = $pdo->prepare("SELECT * FROM `whiteboards` WHERE `id` = :id LIMIT 1");
 $stmtFull->execute([':id' => (int)$activeBoard['id']]);
 $activeBoardFull = $stmtFull->fetch() ?: $activeBoard;
+$isBoardOwner    = ((int)$activeBoardFull['user_id'] === $userId);
+
+// Alle anderen Cloud-Benutzer & aktuell freigegebene Benutzer für dieses Board laden
+$stmtUsers = $pdo->prepare("SELECT `id`, `username` FROM `users` WHERE `id` != :uid ORDER BY `username` ASC");
+$stmtUsers->execute([':uid' => $userId]);
+$allOtherUsers = $stmtUsers->fetchAll();
+
+$stmtSharedIds = $pdo->prepare("SELECT `user_id` FROM `whiteboard_shares` WHERE `board_id` = :bid");
+$stmtSharedIds->execute([':bid' => (int)$activeBoardFull['id']]);
+$currentSharedUserIds = array_map('intval', $stmtSharedIds->fetchAll(PDO::FETCH_COLUMN));
 
 $pageTitle = '🎨 Whiteboard & Skizzenbuch';
 require_once __DIR__ . '/includes/header.php';
@@ -385,12 +479,12 @@ $csrfToken = getCsrfToken();
                     <div id="wbLivePeersBox" class="flex items-center gap-1"></div>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Freihand-Skizzen, Flussdiagramme, Klebezettel &amp; Live-Kollaboration im Browser
+                    Freihand-Skizzen, Flussdiagramme, Klebezettel &amp; gezielte Team-Kollaboration im Browser
                 </p>
             </div>
         </div>
 
-        <!-- Board-Wechsler, Vorlagen & Export -->
+        <!-- Board-Wechsler, Vorlagen, gezielte Freigabe & Export -->
         <div class="flex flex-wrap items-center gap-2 text-xs">
             <select
                 id="wbBoardSwitcher"
@@ -398,8 +492,9 @@ $csrfToken = getCsrfToken();
                 class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
             >
                 <?php foreach ($boardsList as $bItem): ?>
+                    <?php $bSharedCnt = (int)($bItem['shared_count'] ?? 0); ?>
                     <option value="<?= (int)$bItem['id'] ?>" <?= (int)$bItem['id'] === (int)$activeBoardFull['id'] ? 'selected' : '' ?>>
-                        <?= (int)$bItem['is_shared'] === 1 ? '👥' : '🔒' ?> <?= e((string)$bItem['title']) ?> (<?= e((string)$bItem['owner_name']) ?>)
+                        <?= $bSharedCnt > 0 ? '👥' : '🔒' ?> <?= e((string)$bItem['title']) ?> (<?= (int)$bItem['user_id'] === $userId ? ($bSharedCnt > 0 ? $bSharedCnt . ' Mitzeichner' : 'Privat') : 'von ' . e((string)$bItem['owner_name']) ?>)
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -417,12 +512,22 @@ $csrfToken = getCsrfToken();
                 <option value="kanban">📋 3-Spalten Projekt-Board</option>
             </select>
 
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-semibold cursor-pointer select-none"
-                   title="Wenn aktiviert, können alle Cloud-Benutzer live auf diesem Whiteboard mitzeichnen">
-                <input type="checkbox" id="wbSharedToggle" <?= (int)$activeBoardFull['is_shared'] === 1 ? 'checked' : '' ?>
-                       onchange="wbScheduleSave()" class="rounded text-brand-600">
-                <span>👥 Team-Board</span>
-            </label>
+            <?php if ($isBoardOwner): ?>
+                <button
+                    type="button"
+                    id="wbOpenShareModalBtn"
+                    onclick="wbOpenShareModal()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold border transition-colors cursor-pointer <?= count($currentSharedUserIds) > 0 ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700' ?>"
+                    title="Auswählen, welche Cloud-Benutzer dieses Whiteboard sehen und mitzeichnen dürfen"
+                >
+                    <span id="wbShareBtnIcon"><?= count($currentSharedUserIds) > 0 ? '👥' : '🔒' ?></span>
+                    <span id="wbShareBtnLabel"><?= count($currentSharedUserIds) > 0 ? 'Freigegeben (' . count($currentSharedUserIds) . ')' : 'Privat · Freigeben…' ?></span>
+                </button>
+            <?php else: ?>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
+                    👥 Freigegeben von <?= e((string)($activeBoard['owner_name'] ?? 'Team')) ?>
+                </span>
+            <?php endif; ?>
 
             <button type="button" onclick="wbExportPngDownload()"
                     class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold cursor-pointer"
@@ -436,7 +541,7 @@ $csrfToken = getCsrfToken();
                 ☁️ In Dateien speichern
             </button>
 
-            <?php if ((int)$activeBoardFull['user_id'] === $userId && count($boardsList) > 1): ?>
+            <?php if ($isBoardOwner && count($boardsList) > 1): ?>
                 <button type="button" onclick="wbDeleteCurrentBoard()"
                         class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 hover:bg-rose-100 font-semibold cursor-pointer"
                         title="Dieses Whiteboard löschen">
@@ -445,6 +550,73 @@ $csrfToken = getCsrfToken();
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if ($isBoardOwner): ?>
+    <!-- MODAL: GEZIELTE BENUTZER-FREIGABE FÜR DIESES WHITEBOARD -->
+    <div id="wbShareModal" class="hidden fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4" onclick="if(event.target===this)wbCloseShareModal()">
+        <div class="mc-card w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5 sm:p-6 space-y-4">
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                    <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">👥 Whiteboard gezielt freigeben</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Wähle aus, welche Benutzer dieses Whiteboard sehen und live mitzeichnen dürfen. Ohne Auswahl ist das Board <strong>🔒 komplett privat</strong>.
+                    </p>
+                </div>
+                <button type="button" onclick="wbCloseShareModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg px-2 cursor-pointer">✕</button>
+            </div>
+
+            <?php if (empty($allOtherUsers)): ?>
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs text-slate-500 text-center">
+                    Es sind aktuell keine weiteren Benutzerkonten in der Cloud angelegt.
+                </div>
+            <?php else: ?>
+                <div class="flex items-center justify-between gap-2">
+                    <input
+                        type="search"
+                        id="wbShareUserFilter"
+                        oninput="wbFilterShareUsers(this.value)"
+                        placeholder="Benutzer suchen…"
+                        class="flex-1 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                    >
+                    <button type="button" onclick="wbToggleAllShareUsers(true)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer">Alle</button>
+                    <button type="button" onclick="wbToggleAllShareUsers(false)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer">Keine (Privat)</button>
+                </div>
+
+                <div id="wbShareUserList" class="max-h-60 overflow-y-auto divide-y divide-slate-200/70 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <?php foreach ($allOtherUsers as $uRow): ?>
+                        <?php $uidItem = (int)$uRow['id']; $isChecked = in_array($uidItem, $currentSharedUserIds, true); ?>
+                        <label
+                            data-wb-user-name="<?= e(mb_strtolower((string)$uRow['username'])) ?>"
+                            class="wb-share-user-row flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer text-xs sm:text-sm"
+                        >
+                            <span class="flex items-center gap-2.5 font-medium text-slate-800 dark:text-slate-100">
+                                <span class="w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300 font-bold text-xs flex items-center justify-center">
+                                    <?= e(mb_strtoupper(mb_substr((string)$uRow['username'], 0, 1))) ?>
+                                </span>
+                                <span><?= e((string)$uRow['username']) ?></span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                value="<?= $uidItem ?>"
+                                <?= $isChecked ? 'checked' : '' ?>
+                                class="wb-share-user-cb w-4 h-4 rounded text-brand-600 focus:ring-brand-500"
+                            >
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="wbCloseShareModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 cursor-pointer">
+                    Abbrechen
+                </button>
+                <button type="button" onclick="wbSaveSharedUsers()" class="px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-xs cursor-pointer">
+                    💾 Freigabe speichern
+                </button>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- WERKZEUGLEISTE (TOOLBAR) -->
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2.5 sm:p-3 shadow-xs flex flex-wrap items-center justify-between gap-2">
@@ -1209,7 +1381,6 @@ async function wbSaveNow() {
     fd.append('action', 'save_board');
     fd.append('board_id', String(WB_BOARD_ID));
     fd.append('title', document.getElementById('wbTitleInput')?.value || 'Whiteboard');
-    fd.append('is_shared', document.getElementById('wbSharedToggle')?.checked ? '1' : '0');
     fd.append('bg_style', wbBgStyle);
     fd.append('elements_json', JSON.stringify(wbElements));
 
@@ -1220,6 +1391,61 @@ async function wbSaveNow() {
         if (d && d.ok && badge) {
             badge.textContent = '✓ Gespeichert (' + d.updated_at + ')';
             badge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
+        }
+    } catch (e) {}
+}
+
+function wbOpenShareModal() {
+    const modal = document.getElementById('wbShareModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function wbCloseShareModal() {
+    const modal = document.getElementById('wbShareModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function wbFilterShareUsers(q) {
+    const term = String(q || '').trim().toLowerCase();
+    document.querySelectorAll('.wb-share-user-row').forEach(row => {
+        const uname = row.getAttribute('data-wb-user-name') || '';
+        row.style.display = (term === '' || uname.includes(term)) ? '' : 'none';
+    });
+}
+
+function wbToggleAllShareUsers(checked) {
+    document.querySelectorAll('.wb-share-user-cb').forEach(cb => {
+        cb.checked = !!checked;
+    });
+}
+
+async function wbSaveSharedUsers() {
+    const selectedIds = Array.from(document.querySelectorAll('.wb-share-user-cb:checked')).map(cb => parseInt(cb.value, 10)).filter(Boolean);
+    const fd = new FormData();
+    fd.append('ajax', '1');
+    fd.append('csrf_token', WB_CSRF);
+    fd.append('action', 'save_shares');
+    fd.append('board_id', String(WB_BOARD_ID));
+    fd.append('user_ids_json', JSON.stringify(selectedIds));
+
+    try {
+        const r = await fetch('whiteboard.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d && d.ok) {
+            const cnt = d.shared_count || 0;
+            const iconEl = document.getElementById('wbShareBtnIcon');
+            const lblEl  = document.getElementById('wbShareBtnLabel');
+            const btnEl  = document.getElementById('wbOpenShareModalBtn');
+            if (iconEl) iconEl.textContent = cnt > 0 ? '👥' : '🔒';
+            if (lblEl) lblEl.textContent   = cnt > 0 ? `Freigegeben (${cnt})` : 'Privat · Freigeben…';
+            if (btnEl) {
+                btnEl.className = cnt > 0
+                    ? 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold border transition-colors cursor-pointer bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                    : 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold border transition-colors cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700';
+            }
+            wbCloseShareModal();
+        } else {
+            alert(d?.error || 'Fehler beim Speichern der Freigabe.');
         }
     } catch (e) {}
 }
