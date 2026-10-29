@@ -1843,8 +1843,9 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<!-- Verstecktes HTML5-Audio-Element -->
-<audio id="cloudAudioElement" preload="metadata" crossorigin="anonymous"></audio>
+<!-- Verstecktes HTML5-Audio-Element (ohne WebAudio-Zwang für nahtlose Smartphone-Sperrbildschirm-Wiedergabe) -->
+<audio id="cloudAudioElement" preload="auto" playsinline></audio>
+<audio id="cloudAudioPreloader" preload="auto" muted class="hidden"></audio>
 
 <?php if (!$isGuestMode): ?>
 <!-- MODAL 1: MUSIK / HÖRBUCH HOCHLADEN -->
@@ -2104,17 +2105,24 @@ const MUSIC_TRACKS = <?= json_encode(array_map(static function (array $t) use ($
 }, $displayedTracks), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 
 const audioEl        = document.getElementById('cloudAudioElement');
+const preloaderEl    = document.getElementById('cloudAudioPreloader');
 const seekSlider     = document.getElementById('playerSeekSlider');
 const visCanvas      = document.getElementById('audioVisualizerCanvas');
 const visCtx         = visCanvas ? visCanvas.getContext('2d') : null;
 
+// Auf Android & iOS unterbricht WebAudio (createMediaElementSource) den Titelwechsel bei gesperrtem Bildschirm.
+// Daher bleibt <audio> auf Mobilgeräten zu 100 % in der nativen Hardware-Pipeline des Betriebssystems!
+const IS_MOBILE_AUDIO_DEVICE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')
+    || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
 let currentTrackIdx  = -1;
+let preloadedTrackIdx = -1;
 let isSeekingSlider  = false;
 let shuffleEnabled   = false;
 let repeatMode       = 'all'; // 'all' | 'one' | 'off'
 let lastSavedSec     = 0;
 
-// Web Audio API (Visualizer & 3-Band Equalizer)
+// Web Audio API (Visualizer & 3-Band Equalizer – nur Desktop bei aktivem Klangprofil)
 let audioCtx         = null;
 let analyserNode     = null;
 let eqLowNode        = null;
@@ -2138,7 +2146,13 @@ function formatAudioSeconds(sec) {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-function ensureWebAudioGraph() {
+function ensureWebAudioGraph(forceAttach = false) {
+    // Auf Smartphones/Tablets niemals createMediaElementSource anhängen, damit Android/iOS
+    // im Sperrbildschirm nahtlos von Titel zu Titel weiterspielen kann!
+    if (IS_MOBILE_AUDIO_DEVICE || !forceAttach) {
+        if (!visAnimId) startVisualizerLoop();
+        return;
+    }
     if (audioCtx || !audioEl) return;
     try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -2168,12 +2182,14 @@ function ensureWebAudioGraph() {
         eqHighNode.connect(analyserNode);
         analyserNode.connect(audioCtx.destination);
 
-        startVisualizerLoop();
+        if (!visAnimId) startVisualizerLoop();
     } catch (e) {}
 }
 
 function applyEqualizerPreset(preset) {
-    ensureWebAudioGraph();
+    if (preset !== 'flat') {
+        ensureWebAudioGraph(true);
+    }
     if (!eqLowNode || !eqMidNode || !eqHighNode) return;
     if (preset === 'bass') {
         eqLowNode.gain.value  = 7.5;
@@ -2195,18 +2211,19 @@ function applyEqualizerPreset(preset) {
 }
 
 function startVisualizerLoop() {
-    if (!visCtx || !analyserNode) return;
-    const bufferLen = analyserNode.frequencyBinCount;
-    const dataArr   = new Uint8Array(bufferLen);
+    if (!visCtx || !visCanvas) return;
+    if (visAnimId) cancelAnimationFrame(visAnimId);
+    const dataArr = new Uint8Array(32);
 
     const draw = () => {
         visAnimId = requestAnimationFrame(draw);
+        if (document.hidden) return;
         visCtx.clearRect(0, 0, visCanvas.width, visCanvas.height);
 
-        if (audioEl.paused) {
-            // Dezente Ruheliniendarstellung
-            const bars = 24;
-            const barW = (visCanvas.width / bars) - 3;
+        const bars = 24;
+        const barW = (visCanvas.width / bars) - 3;
+
+        if (!audioEl || audioEl.paused) {
             visCtx.fillStyle = 'rgba(244, 63, 94, 0.28)';
             for (let i = 0; i < bars; i++) {
                 visCtx.fillRect(i * (barW + 3), visCanvas.height - 4, barW, 3);
@@ -2214,9 +2231,17 @@ function startVisualizerLoop() {
             return;
         }
 
-        analyserNode.getByteFrequencyData(dataArr);
-        const bars = 24;
-        const barW = (visCanvas.width / bars) - 3;
+        if (analyserNode) {
+            analyserNode.getByteFrequencyData(dataArr);
+        } else {
+            // Flüssige Echtzeit-Pegel-Simulation, wenn <audio> direkt über die Hardware-Pipeline läuft
+            const t = (audioEl.currentTime || 0) * 6.5;
+            for (let i = 0; i < bars; i++) {
+                const wave = Math.sin(t + i * 0.55) * 0.45 + Math.cos(t * 1.7 - i * 0.35) * 0.35 + 0.5;
+                dataArr[i] = Math.min(245, Math.max(28, Math.floor(wave * 195)));
+            }
+        }
+
         for (let i = 0; i < bars; i++) {
             const val  = dataArr[i] || 0;
             const barH = Math.max(3, (val / 255) * (visCanvas.height - 4));
@@ -2228,6 +2253,15 @@ function startVisualizerLoop() {
         }
     };
     draw();
+}
+
+function preloadUpcomingTrack(fromIndex) {
+    if (!preloaderEl || MUSIC_TRACKS.length < 2 || shuffleEnabled) return;
+    const nextIdx = (fromIndex + 1) % MUSIC_TRACKS.length;
+    if (nextIdx === preloadedTrackIdx || !MUSIC_TRACKS[nextIdx]) return;
+    preloadedTrackIdx = nextIdx;
+    preloaderEl.src = MUSIC_TRACKS[nextIdx].streamUrl;
+    try { preloaderEl.load(); } catch (e) {}
 }
 
 function highlightActiveTrackRow() {
@@ -2277,10 +2311,36 @@ function playTrackAtIndex(index, autoStart = true) {
     const track = MUSIC_TRACKS[currentTrackIdx];
     if (!track) return;
 
-    ensureWebAudioGraph();
-    if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
+    // WICHTIG FÜR ANDROID / iOS SPERRBILDSCHIRM:
+    // Sofort synchron im ersten Schritt src setzen und play() aufrufen, damit das Betriebssystem
+    // den Audio-Fokus beim automatischen Titelwechsel (ended -> nächster Titel) nicht verliert!
+    audioEl.src = track.streamUrl;
+    const rateSel = document.getElementById('playbackRateSelect');
+    if (rateSel) {
+        audioEl.playbackRate = parseFloat(rateSel.value) || 1.0;
     }
+
+    if (autoStart) {
+        if ('mediaSession' in navigator) {
+            try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {}
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+        const playPromise = audioEl.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {
+                // Falls der Netzwerk-Puffer im Hintergrund kurz braucht, sobald bereit sofort starten
+                const retryPlay = () => {
+                    audioEl.play().catch(() => {});
+                };
+                audioEl.addEventListener('canplay', retryPlay, { once: true });
+            });
+        }
+    }
+
+    ensureWebAudioGraph(false);
+    updateMediaSessionMetadata(track);
 
     const chapterPrefix = audiobookModeActive
         ? `📖 Kapitel ${currentTrackIdx + 1}/${MUSIC_TRACKS.length} • `
@@ -2313,18 +2373,12 @@ function playTrackAtIndex(index, autoStart = true) {
         resumeBtn.classList.add('hidden');
     }
 
-    audioEl.src = track.streamUrl;
-    const rateSel = document.getElementById('playbackRateSelect');
-    if (rateSel) {
-        audioEl.playbackRate = parseFloat(rateSel.value) || 1.0;
-    }
-
-    updateMediaSessionMetadata(track);
     highlightActiveTrackRow();
 
     if (autoStart) {
-        audioEl.play().catch(() => {});
         saveTrackProgressAjax(track.id, 0, true);
+        // Nächsten Titel im Hintergrund vorpuffern, damit er bei gesperrtem Bildschirm sofort bereitsteht
+        setTimeout(() => preloadUpcomingTrack(currentTrackIdx), 1500);
     }
 }
 
@@ -2528,7 +2582,7 @@ function saveTrackProgressAjax(fileId, posSec, incPlay = false) {
     fd.append('file_id', String(fileId));
     fd.append('position_sec', String(Math.floor(posSec)));
     if (incPlay) fd.append('inc_play', '1');
-    fetch('music.php', { method: 'POST', body: fd }).catch(() => {});
+    fetch('music.php', { method: 'POST', body: fd, keepalive: true }).catch(() => {});
 }
 
 async function toggleTrackFavorite(fileId, btnEl) {
@@ -2552,6 +2606,9 @@ if (audioEl) {
         document.getElementById('btnPlayPauseMini').textContent = '⏸️';
         const disc = document.getElementById('playerVinylDisc');
         if (disc) disc.classList.add('animate-spin');
+        if ('mediaSession' in navigator) {
+            try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {}
+        }
         highlightActiveTrackRow();
     });
 
@@ -2560,8 +2617,11 @@ if (audioEl) {
         document.getElementById('btnPlayPauseMini').textContent = '▶️';
         const disc = document.getElementById('playerVinylDisc');
         if (disc) disc.classList.remove('animate-spin');
+        if ('mediaSession' in navigator && !audioEl.ended) {
+            try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {}
+        }
         highlightActiveTrackRow();
-        if (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx]) {
+        if (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx] && !audioEl.ended) {
             saveTrackProgressAjax(MUSIC_TRACKS[currentTrackIdx].id, audioEl.currentTime, false);
         }
     });
@@ -2576,6 +2636,16 @@ if (audioEl) {
         document.getElementById('playerTimeTotal').textContent     = formatAudioSeconds(dur);
         document.getElementById('playerTimeRemaining').textContent = dur > cur ? ('-' + formatAudioSeconds(dur - cur)) : '-00:00';
 
+        if ('mediaSession' in navigator && typeof navigator.mediaSession.setPositionState === 'function' && dur > 0 && isFinite(dur)) {
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration: dur,
+                    playbackRate: audioEl.playbackRate || 1.0,
+                    position: Math.min(dur, Math.max(0, cur))
+                });
+            } catch (e) {}
+        }
+
         // Alle 10 Sekunden Hörbuch-/Wiedergabeposition im Hintergrund sichern
         if (currentTrackIdx >= 0 && Math.abs(cur - lastSavedSec) >= 10) {
             lastSavedSec = cur;
@@ -2585,15 +2655,23 @@ if (audioEl) {
     });
 
     audioEl.addEventListener('ended', () => {
-        if (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx]) {
-            MUSIC_TRACKS[currentTrackIdx].lastPos = 0;
-            saveTrackProgressAjax(MUSIC_TRACKS[currentTrackIdx].id, 0, false);
+        const finishedIdx = currentTrackIdx;
+        const finishedId  = (finishedIdx >= 0 && MUSIC_TRACKS[finishedIdx]) ? MUSIC_TRACKS[finishedIdx].id : 0;
+        if (finishedIdx >= 0 && MUSIC_TRACKS[finishedIdx]) {
+            MUSIC_TRACKS[finishedIdx].lastPos = 0;
         }
+
+        // ZUERST synchron den nächsten Titel starten, damit Android bei gesperrtem Bildschirm
+        // den aktiven Audio-Fokus ohne Unterbrechung auf den Folgetitel überträgt!
         if (repeatMode === 'one') {
             audioEl.currentTime = 0;
             audioEl.play().catch(() => {});
-        } else if (repeatMode === 'all' || currentTrackIdx < MUSIC_TRACKS.length - 1 || shuffleEnabled) {
+        } else if (repeatMode === 'all' || finishedIdx < MUSIC_TRACKS.length - 1 || shuffleEnabled) {
             stepTrack(1);
+        }
+
+        if (finishedId > 0) {
+            saveTrackProgressAjax(finishedId, 0, false);
         }
     });
 }
