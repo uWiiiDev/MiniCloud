@@ -4322,6 +4322,7 @@ let gummiTrackKey         = 'circuit';
 let gummiDenseTrack       = [];
 let gummiSkids            = [];
 let gummiSmoke            = [];
+let gummiSparks           = [];
 let gummiKeys             = {};
 let gummiTouchState       = { left: false, right: false, gas: false, brake: false };
 let gummiRaceState        = 'ready'; // 'ready' | 'countdown' | 'racing' | 'finished'
@@ -4347,6 +4348,12 @@ let gummiKart = {
     vx: 0,
     vy: 0,
     angle: 0,
+    steer: 0,
+    wheelSpin: 0,
+    braking: false,
+    drifting: false,
+    prevSkidL: null,
+    prevSkidR: null,
     lap: 1,
     maxSectors: 4,
     sectorPassed: [true, false, false, false],
@@ -4419,6 +4426,12 @@ function gummiResetRace() {
         vx: 0,
         vy: 0,
         angle: tr.startAngle,
+        steer: 0,
+        wheelSpin: 0,
+        braking: false,
+        drifting: false,
+        prevSkidL: null,
+        prevSkidR: null,
         lap: 1,
         sectorPassed: [true, false, false, false],
         boostReady: true,
@@ -4426,6 +4439,7 @@ function gummiResetRace() {
     };
     gummiSkids = [];
     gummiSmoke = [];
+    gummiSparks = [];
     gummiMyRecording = [];
     gummiLastRecordSample = 0;
     gummiElapsedMs = 0;
@@ -4437,9 +4451,9 @@ function gummiResetRace() {
     const useAi = document.getElementById('gummiAiToggle')?.checked !== false;
     if (useAi && gummiDenseTrack.length > 10) {
         const aiConfigs = [
-            { name: 'Roter Blitz',  color: '#ef4444', speed: 192, laneOffset: -14, startIdx: 2 },
-            { name: 'Gelber Pfeil', color: '#eab308', speed: 180, laneOffset: 14,  startIdx: 4 },
-            { name: 'Grüner Gift',  color: '#22c55e', speed: 170, laneOffset: -6,  startIdx: 6 },
+            { name: 'Roter Blitz',  color: '#ef4444', accent: '#fef08a', num: '7',  speed: 192, laneOffset: -14, startIdx: 2 },
+            { name: 'Gelber Pfeil', color: '#eab308', accent: '#1e293b', num: '12', speed: 180, laneOffset: 14,  startIdx: 4 },
+            { name: 'Grüner Gift',  color: '#10b981', accent: '#ecfdf5', num: '23', speed: 170, laneOffset: -6,  startIdx: 6 },
         ];
         for (const cfg of aiConfigs) {
             const p = gummiDenseTrack[cfg.startIdx];
@@ -4447,12 +4461,16 @@ function gummiResetRace() {
             gummiAiKarts.push({
                 name: cfg.name,
                 color: cfg.color,
+                accent: cfg.accent,
+                num: cfg.num,
                 speed: cfg.speed,
                 laneOffset: cfg.laneOffset,
                 wpIdx: cfg.startIdx,
                 x: p[0],
                 y: p[1] + cfg.laneOffset * 0.5,
                 angle: Math.atan2(pNext[1] - p[1], pNext[0] - p[0]),
+                steer: 0,
+                wheelSpin: 0,
                 lap: 1
             });
         }
@@ -4710,8 +4728,13 @@ function gummiGameLoop(now) {
         const { dist: trackDist, sector } = gummiGetTrackDistAndSector(gummiKart.x, gummiKart.y);
         const onAsphalt = trackDist <= (tr.roadWidth * 0.56);
 
-        // 2. Lenkung & echte Drift-Physik
+        // 2. Lenkung, animierter Lenkeinschlag & echte Drift-Physik
         const speed = Math.hypot(gummiKart.vx, gummiKart.vy);
+        const targetSteer = (leftPressed ? -1 : 0) + (rightPressed ? 1 : 0);
+        gummiKart.steer += (targetSteer * 0.44 - gummiKart.steer) * Math.min(1, dt * 14);
+        gummiKart.wheelSpin = (gummiKart.wheelSpin + speed * dt * 0.22) % (Math.PI * 2);
+        gummiKart.braking = Boolean(brakePressed || driftPressed);
+
         if (speed > 8) {
             const steerRate = (driftPressed ? 3.5 : 2.75) * Math.min(1, speed / 75);
             if (leftPressed)  gummiKart.angle -= steerRate * dt;
@@ -4727,6 +4750,20 @@ function gummiGameLoop(now) {
         if (gasPressed) {
             gummiKart.vx += forwardX * accel * dt;
             gummiKart.vy += forwardY * accel * dt;
+            // Leichter Auspuff-Dampf beim starken Beschleunigen
+            if (Math.random() < (isBoosting ? 0.85 : 0.25)) {
+                const exX = gummiKart.x - forwardX * 15 + (Math.random() * 4 - 2);
+                const exY = gummiKart.y - forwardY * 15 + (Math.random() * 4 - 2);
+                gummiSmoke.push({
+                    x: exX,
+                    y: exY,
+                    vx: -forwardX * (isBoosting ? 65 : 25) + (Math.random() * 14 - 7),
+                    vy: -forwardY * (isBoosting ? 65 : 25) + (Math.random() * 14 - 7),
+                    r: isBoosting ? 3.5 : 2.2,
+                    alpha: isBoosting ? 0.75 : 0.35,
+                    color: isBoosting ? 'rgba(56,189,248,' : 'rgba(148,163,184,'
+                });
+            }
         }
         if (brakePressed) {
             gummiKart.vx -= forwardX * 190 * dt;
@@ -4735,6 +4772,7 @@ function gummiGameLoop(now) {
 
         // Seitenführungskraft vs. Drift (Handbremse / hohes Tempo in der Kurve)
         const curSpeed = Math.hypot(gummiKart.vx, gummiKart.vy);
+        let isCurrentlyDrifting = false;
         if (curSpeed > 1) {
             const moveAngle = Math.atan2(gummiKart.vy, gummiKart.vx);
             let slip = Math.atan2(Math.sin(gummiKart.angle - moveAngle), Math.cos(gummiKart.angle - moveAngle));
@@ -4746,29 +4784,66 @@ function gummiGameLoop(now) {
             gummiKart.vx = gummiKart.vx * (1 - blend) + targetVx * blend;
             gummiKart.vy = gummiKart.vy * (1 - blend) + targetVy * blend;
 
-            // Gummispuren & Reifenqualm erzeugen, wenn das Kart stark driftet!
-            if (curSpeed > 95 && (Math.abs(slip) > 0.24 || driftPressed)) {
-                const perpX = -Math.sin(gummiKart.angle) * 7;
-                const perpY =  Math.cos(gummiKart.angle) * 7;
+            // Gummispuren (durchgehende Reifenspuren), Funkenflug & Reifenqualm erzeugen, wenn das Kart stark driftet!
+            if (curSpeed > 90 && (Math.abs(slip) > 0.22 || driftPressed)) {
+                isCurrentlyDrifting = true;
+                const perpX = -Math.sin(gummiKart.angle) * 7.5;
+                const perpY =  Math.cos(gummiKart.angle) * 7.5;
                 const backX = gummiKart.x - forwardX * 10;
                 const backY = gummiKart.y - forwardY * 10;
 
-                gummiSkids.push({ x: backX + perpX, y: backY + perpY });
-                gummiSkids.push({ x: backX - perpX, y: backY - perpY });
-                if (gummiSkids.length > 900) {
-                    gummiSkids.splice(0, 2);
-                }
+                const curL = { x: backX + perpX, y: backY + perpY };
+                const curR = { x: backX - perpX, y: backY - perpY };
+                const skidAlpha = Math.min(0.82, 0.35 + Math.abs(slip) * 0.7);
 
-                if (Math.random() < 0.65) {
+                if (gummiKart.prevSkidL && gummiKart.prevSkidR && Math.hypot(curL.x - gummiKart.prevSkidL.x, curL.y - gummiKart.prevSkidL.y) < 32) {
+                    gummiSkids.push({
+                        x1: gummiKart.prevSkidL.x, y1: gummiKart.prevSkidL.y,
+                        x2: curL.x, y2: curL.y,
+                        alpha: skidAlpha
+                    });
+                    gummiSkids.push({
+                        x1: gummiKart.prevSkidR.x, y1: gummiKart.prevSkidR.y,
+                        x2: curR.x, y2: curR.y,
+                        alpha: skidAlpha
+                    });
+                    if (gummiSkids.length > 900) {
+                        gummiSkids.splice(0, 2);
+                    }
+                }
+                gummiKart.prevSkidL = curL;
+                gummiKart.prevSkidR = curR;
+
+                if (Math.random() < 0.78) {
                     gummiSmoke.push({
-                        x: backX + (Math.random() * 10 - 5),
-                        y: backY + (Math.random() * 10 - 5),
-                        r: 4,
-                        alpha: 0.65,
+                        x: (Math.random() < 0.5 ? curL.x : curR.x) + (Math.random() * 6 - 3),
+                        y: (Math.random() < 0.5 ? curL.y : curR.y) + (Math.random() * 6 - 3),
+                        vx: -gummiKart.vx * 0.12 + (Math.random() * 18 - 9),
+                        vy: -gummiKart.vy * 0.12 + (Math.random() * 18 - 9),
+                        r: 3.5 + Math.random() * 2.5,
+                        alpha: 0.68,
                         color: onAsphalt ? 'rgba(226,232,240,' : 'rgba(74,222,128,'
                     });
                 }
+
+                // Gold-orange Drift-Funken auf Asphalt
+                if (onAsphalt && (Math.abs(slip) > 0.38 || driftPressed || isBoosting) && Math.random() < 0.65) {
+                    const spOrigin = Math.random() < 0.5 ? curL : curR;
+                    gummiSparks.push({
+                        x: spOrigin.x,
+                        y: spOrigin.y,
+                        vx: -forwardX * (55 + Math.random() * 65) + (Math.random() * 50 - 25),
+                        vy: -forwardY * (55 + Math.random() * 65) + (Math.random() * 50 - 25),
+                        life: 1.0,
+                        color: Math.random() < 0.5 ? '#fde047' : '#f97316'
+                    });
+                }
             }
+        }
+        gummiKart.drifting = isCurrentlyDrifting;
+        if (!isCurrentlyDrifting) {
+            gummiKart.prevSkidL = null;
+            gummiKart.prevSkidR = null;
         }
 
         // Reibung / Höchstgeschwindigkeit (Gras bremst stark ab!)
@@ -4816,7 +4891,7 @@ function gummiGameLoop(now) {
             ]);
         }
 
-        // 5. KI-Karts entlang der Ideallinie bewegen
+        // 5. KI-Karts entlang der Ideallinie bewegen & Räder/Lenkung animieren
         for (const ai of gummiAiKarts) {
             const targetPt = gummiDenseTrack[ai.wpIdx];
             const dx = targetPt[0] - ai.x;
@@ -4827,6 +4902,8 @@ function gummiGameLoop(now) {
             }
             const desiredAngle = Math.atan2(dy, dx);
             const diff = Math.atan2(Math.sin(desiredAngle - ai.angle), Math.cos(desiredAngle - ai.angle));
+            ai.steer = Math.max(-0.42, Math.min(0.42, diff * 1.4));
+            ai.wheelSpin = ((ai.wheelSpin || 0) + ai.speed * dt * 0.22) % (Math.PI * 2);
             ai.angle += diff * 6.5 * dt;
             ai.x += Math.cos(ai.angle) * ai.speed * dt;
             ai.y += Math.sin(ai.angle) * ai.speed * dt;
@@ -4838,57 +4915,292 @@ function gummiGameLoop(now) {
     gummiDraw(now);
 }
 
-function gummiDrawKartSprite(ctx, x, y, angle, bodyColor, label, isGhost = false, isBoosting = false) {
+function gummiDrawWheel(ctx, wx, wy, wLen, wWid, steerAngle, spinPhase) {
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    if (isGhost) {
-        ctx.globalAlpha = 0.52;
+    ctx.translate(wx, wy);
+    if (steerAngle) {
+        ctx.rotate(steerAngle);
     }
 
-    // Nitro-Flamme am Auspuff
-    if (isBoosting) {
-        ctx.fillStyle = '#f97316';
+    // Reifen-Außenmantel (Gummi mit abgerundeten Schultern)
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect(-wLen / 2, -wWid / 2, wLen, wWid, 2.2);
+    ctx.fill();
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Animiertes Reifenprofil (wandert mit der Raddrehung!)
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(-wLen / 2, -wWid / 2, wLen, wWid, 2.2);
+    ctx.clip();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1.2;
+    const treadOffset = ((spinPhase || 0) / (Math.PI * 2)) * 4;
+    for (let tx = -wLen / 2 - 2 + treadOffset; tx <= wLen / 2 + 2; tx += 3.5) {
         ctx.beginPath();
-        ctx.moveTo(-13, -4);
-        ctx.lineTo(-25 - Math.random() * 6, 0);
-        ctx.lineTo(-13, 4);
+        ctx.moveTo(tx, -wWid / 2);
+        ctx.lineTo(tx + 1.2, wWid / 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Silberne Leichtmetall-Felge an der Außenseite
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(-1.8, -wWid / 2 + 0.8, 3.6, wWid - 1.6);
+
+    ctx.restore();
+}
+
+function gummiDrawKartSprite(ctx, x, y, angle, bodyColor, label, isGhost = false, isBoosting = false, opts = {}) {
+    const now        = performance.now();
+    const steer      = Number(opts.steer || 0);
+    const wheelSpin  = Number(opts.wheelSpin || 0);
+    const isBraking  = Boolean(opts.braking);
+    const isDrifting = Boolean(opts.drifting);
+    const accentCol  = opts.accent || '#ffffff';
+    const raceNum    = opts.num || '1';
+    const speed      = Number(opts.speed || 0);
+
+    // Subtile Motor-Vibration im Leerlauf / während der Fahrt & Chassis-Neigung in der Kurve
+    const engineVibY = !isGhost ? Math.sin(now * 0.055 + x) * (speed > 20 ? 0.35 : 0.2) : 0;
+    const bodyRollY  = !isGhost ? steer * Math.min(1.6, speed / 95) : 0;
+
+    ctx.save();
+    ctx.translate(x, y + engineVibY);
+    ctx.rotate(angle);
+
+    if (isGhost) {
+        ctx.globalAlpha = 0.56 + Math.sin(now * 0.008) * 0.08;
+        ctx.shadowColor = bodyColor;
+        ctx.shadowBlur  = 10;
+    }
+
+    // 1. Weicher dynamischer Schlagschatten unter dem Rennkart
+    if (!isGhost) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.42)';
+        ctx.beginPath();
+        ctx.ellipse(-1, 2.2 + bodyRollY * 0.5, 17.5, 11.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 2. Scheinwerfer-Lichtkegel nach vorne (besonders eindrucksvoll auf dem Nacht-Ring!)
+    if (!isGhost) {
+        const isNight = gummiTrackKey === 'night';
+        const coneLen = isNight ? 72 : 30;
+        const coneAlpha = isNight ? 0.28 : 0.09;
+        const beamGrad = ctx.createLinearGradient(14, 0, 14 + coneLen, 0);
+        beamGrad.addColorStop(0, `rgba(254, 240, 138, ${coneAlpha})`);
+        beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        ctx.moveTo(14, -6);
+        ctx.lineTo(14 + coneLen, -22);
+        ctx.lineTo(14 + coneLen, 22);
+        ctx.lineTo(14, 6);
         ctx.closePath();
         ctx.fill();
     }
 
-    // 4 schwarze Kart-Reifen
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(-11, -10, 7, 4);
-    ctx.fillRect(5, -10, 7, 4);
-    ctx.fillRect(-11, 6, 7, 4);
-    ctx.fillRect(5, 6, 7, 4);
+    // 3. Doppel-Auspuffrohre & animierte Twin-Turbo-Nitro-Flamme am Heck
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(-16.5, -5.2, 4.5, 2.6);
+    ctx.fillRect(-16.5, 2.6, 4.5, 2.6);
 
-    // Kart-Chassis
-    ctx.fillStyle = bodyColor;
+    if (isBoosting) {
+        const flameFlicker = Math.sin(now * 0.09) * 5 + Math.random() * 5;
+        for (const ey of [-3.9, 3.9]) {
+            // Äußere orange-blaue Nachbrenner-Flamme
+            const fGrad = ctx.createLinearGradient(-16, ey, -34 - flameFlicker, ey);
+            fGrad.addColorStop(0, '#38bdf8');
+            fGrad.addColorStop(0.45, '#f97316');
+            fGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+            ctx.fillStyle = fGrad;
+            ctx.beginPath();
+            ctx.moveTo(-16, ey - 3.2);
+            ctx.lineTo(-33 - flameFlicker, ey + (Math.random() * 2 - 1));
+            ctx.lineTo(-16, ey + 3.2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Weiß-blauer Plasma-Kern
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath();
+            ctx.moveTo(-16, ey - 1.4);
+            ctx.lineTo(-24 - flameFlicker * 0.5, ey);
+            ctx.lineTo(-16, ey + 1.4);
+            ctx.closePath();
+            ctx.fill();
+        }
+    } else if (isDrifting && Math.random() < 0.45) {
+        // Kurzes Fehlzündungs-Flämmchen beim harten Anbremsen/Driften
+        const backfireY = Math.random() < 0.5 ? -3.9 : 3.9;
+        ctx.fillStyle = '#fb923c';
+        ctx.beginPath();
+        ctx.arc(-18, backfireY, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 4. Spurstangen / Querlenker zu den 4 Rädern
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.roundRect(-12, -7, 25, 14, 4);
-    ctx.fill();
-    ctx.strokeStyle = isGhost ? '#38bdf8' : '#ffffff';
-    ctx.lineWidth = 1.4;
+    ctx.moveTo(-9.5, -10.5); ctx.lineTo(-9.5, 10.5);
+    ctx.moveTo(8.5, -10.5);  ctx.lineTo(8.5, 10.5);
     ctx.stroke();
 
-    // Fahrer-Helm
-    ctx.fillStyle = '#f8fafc';
+    // 5. 4 Räder zeichnen (Hinterräder breit & starr, Vorderräder lenken live mit `steer` ein!)
+    gummiDrawWheel(ctx, -9.5, -11.2, 8.8, 5.0, 0, wheelSpin);     // Hinten links
+    gummiDrawWheel(ctx, -9.5,  11.2, 8.8, 5.0, 0, wheelSpin);     // Hinten rechts
+    gummiDrawWheel(ctx,  8.5, -10.8, 7.8, 4.4, steer, wheelSpin); // Vorne links (mit Lenkeinschlag!)
+    gummiDrawWheel(ctx,  8.5,  10.8, 7.8, 4.4, steer, wheelSpin); // Vorne rechts (mit Lenkeinschlag!)
+
+    // 6. Aerodynamisches Renn-Chassis (Seitenkästen + verjüngte Frontnase)
+    ctx.save();
+    ctx.translate(0, bodyRollY * 0.45);
+
+    // Seitenkästen (Sidepods links & rechts)
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
-    ctx.arc(-1, 0, 4.2, 0, Math.PI * 2);
+    ctx.roundRect(-8, -9.2, 13, 18.4, 3.5);
     ctx.fill();
 
+    // Kühler-Lufteinlässe an den Seitenkästen
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(2.2, -8.4, 2.2, 3.2);
+    ctx.fillRect(2.2,  5.2, 2.2, 3.2);
+
+    // Hauptrumpf & spitz zulaufende Formel-/Kart-Frontnase mit 3D-Metallic-Glanz
+    const bodyGrad = ctx.createLinearGradient(0, -8, 0, 8);
+    bodyGrad.addColorStop(0, bodyColor);
+    bodyGrad.addColorStop(0.5, '#ffffff38');
+    bodyGrad.addColorStop(1, bodyColor);
+
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-13.5, -6.5);
+    ctx.lineTo(5.5, -6.8);
+    ctx.quadraticCurveTo(16.5, -4.2, 17.5, 0);
+    ctx.quadraticCurveTo(16.5,  4.2, 5.5,  6.8);
+    ctx.lineTo(-13.5,  6.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Metallic-Glanzschicht darüberlegen
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    ctx.strokeStyle = isGhost ? '#7dd3fc' : 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+
+    // Doppelter Racing-Streifen über die Fahrzeugmitte
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(-12, -2.1, 26, 1.3);
+    ctx.fillRect(-12,  0.8, 26, 1.3);
+
+    // 7. Frontspoiler / Frontflügel mit Endplatten
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.roundRect(14.2, -8.8, 3.4, 17.6, 1.4);
+    ctx.fill();
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(14.0, -9.2, 3.8, 1.6);
+    ctx.fillRect(14.0,  7.6, 3.8, 1.6);
+
+    // Helle LED-Tagfahrlichter an der Frontnase
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(15.6, -5.2, 1.8, 2.2);
+    ctx.fillRect(15.6,  3.0, 1.8, 2.2);
+
+    // 8. Carbon-Heckspoiler (Rear Wing) + leuchtende rote LED-Bremslichter
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect(-15.5, -8.8, 4.2, 17.6, 1.4);
+    ctx.fill();
+    ctx.strokeStyle = accentCol;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Rote LED-Rück-/Bremsleuchten (leuchten beim Bremsen & Driften hell auf!)
+    ctx.save();
+    if (isBraking || isDrifting) {
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur  = 9;
+        ctx.fillStyle   = '#ff2a2a';
+    } else {
+        ctx.fillStyle   = '#991b1b';
+    }
+    ctx.fillRect(-15.8, -6.6, 1.8, 3.4);
+    ctx.fillRect(-15.8,  3.2, 1.8, 3.4);
     ctx.restore();
+
+    // 9. Cockpit, Lenkrad & animierter Rennfahrer-Helm (blickt in die Kurve!)
+    ctx.fillStyle = '#090d16';
+    ctx.beginPath();
+    ctx.ellipse(-0.5, 0, 5.8, 4.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Lenkrad + Hände des Fahrers (drehen sich mit dem Lenkeinschlag `steer`)
+    ctx.save();
+    ctx.translate(3.2, 0);
+    ctx.rotate(steer * 1.35);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -2.8);
+    ctx.lineTo(0,  2.8);
+    ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(-1.0, -3.2, 2.0, 1.4);
+    ctx.fillRect(-1.0,  1.8, 2.0, 1.4);
+    ctx.restore();
+
+    // Fahrer-Helm (dreht sich leicht in Kurvenrichtung)
+    ctx.save();
+    ctx.translate(-1.6, 0);
+    ctx.rotate(steer * 0.65);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+
+    // Dunkles verspiegeltes Helm-Visier
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.arc(0.9, 0, 3.4, -0.85, 0.85);
+    ctx.fill();
+
+    // Lichtreflex auf dem Helm
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath();
+    ctx.arc(-1.2, -1.4, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Startnummer auf der Frontnase
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 6px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(raceNum), 9.5, 2.1);
+
+    ctx.restore(); // Ende Chassis-Roll
+    ctx.restore(); // Ende Kart-Transform
 
     if (label) {
         ctx.save();
         ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#000000';
-        ctx.fillText(label, x + 1, y - 15);
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+        ctx.fillText(label, x + 1, y - 17);
         ctx.fillStyle = isGhost ? '#7dd3fc' : '#ffffff';
-        ctx.fillText(label, x, y - 16);
+        ctx.fillText(label, x, y - 18);
         ctx.restore();
     }
 }
@@ -4906,8 +5218,16 @@ function gummiDrawGhostAtTime(ctx, frames, elapsedMs, color, label) {
 
     const gx = f0[0] + (f1[0] - f0[0]) * frac;
     const gy = f0[1] + (f1[1] - f0[1]) * frac;
-    const ga = f0[2];
-    gummiDrawKartSprite(ctx, gx, gy, ga, color, label, true, false);
+    const angleDiff = Math.atan2(Math.sin(f1[2] - f0[2]), Math.cos(f1[2] - f0[2]));
+    const ga = f0[2] + angleDiff * frac;
+    const gSteer = Math.max(-0.42, Math.min(0.42, angleDiff * 3.5));
+
+    gummiDrawKartSprite(ctx, gx, gy, ga, color, label, true, false, {
+        steer: gSteer,
+        wheelSpin: (elapsedMs * 0.035) % (Math.PI * 2),
+        accent: '#e0f2fe',
+        num: 'G'
+    });
 }
 
 function gummiDraw(now) {
@@ -4979,17 +5299,31 @@ function gummiDraw(now) {
         }
     }
 
-    // 3. Dauerhafte schwarze Gummispuren (Bremsspuren / Drifts) auf dem Asphalt!
-    ctx.fillStyle = 'rgba(9, 13, 22, 0.68)';
+    // 3. Dauerhafte schwarze Gummispuren (durchgehende Doppel-Reifenbänder) auf dem Asphalt!
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 3.2;
     for (const sk of gummiSkids) {
-        ctx.fillRect(sk.x - 1.5, sk.y - 1.5, 3.2, 3.2);
+        if (sk.x1 !== undefined) {
+            ctx.strokeStyle = `rgba(9, 13, 22, ${(sk.alpha || 0.65).toFixed(2)})`;
+            ctx.beginPath();
+            ctx.moveTo(sk.x1, sk.y1);
+            ctx.lineTo(sk.x2, sk.y2);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = 'rgba(9, 13, 22, 0.68)';
+            ctx.fillRect(sk.x - 1.5, sk.y - 1.5, 3.2, 3.2);
+        }
     }
+    ctx.restore();
 
-    // 4. Reifenqualm-Partikel
+    // 4. Reifenqualm- & Auspuff-Partikel
     for (let i = gummiSmoke.length - 1; i >= 0; i--) {
         const sm = gummiSmoke[i];
-        sm.r += 0.35;
-        sm.alpha -= 0.025;
+        if (sm.vx) sm.x += sm.vx * 0.016;
+        if (sm.vy) sm.y += sm.vy * 0.016;
+        sm.r += 0.32;
+        sm.alpha -= 0.024;
         if (sm.alpha <= 0) {
             gummiSmoke.splice(i, 1);
             continue;
@@ -4998,6 +5332,24 @@ function gummiDraw(now) {
         ctx.arc(sm.x, sm.y, sm.r, 0, Math.PI * 2);
         ctx.fillStyle = sm.color + sm.alpha.toFixed(2) + ')';
         ctx.fill();
+    }
+
+    // 4b. Goldene Drift-Funken (Sparks)
+    for (let i = gummiSparks.length - 1; i >= 0; i--) {
+        const sp = gummiSparks[i];
+        sp.x += sp.vx * 0.016;
+        sp.y += sp.vy * 0.016;
+        sp.life -= 0.075;
+        if (sp.life <= 0) {
+            gummiSparks.splice(i, 1);
+            continue;
+        }
+        ctx.strokeStyle = sp.color;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(sp.x, sp.y);
+        ctx.lineTo(sp.x - sp.vx * 0.022, sp.y - sp.vy * 0.022);
+        ctx.stroke();
     }
 
     // 5. Ghost-Karts zeichnen (Herausforderungs-Ghost & Streckenrekord-Ghost)
@@ -5009,12 +5361,23 @@ function gummiDraw(now) {
 
     // 6. Live fahrende andere Cloud-Mitspieler zeichnen
     for (const lp of gummiLivePeers) {
-        gummiDrawKartSprite(ctx, lp.x, lp.y, lp.angle, '#a855f7', `⚡ ${lp.username} (R${lp.lap})`, false, false);
+        gummiDrawKartSprite(ctx, lp.x, lp.y, lp.angle, '#a855f7', `⚡ ${lp.username} (R${lp.lap})`, false, false, {
+            wheelSpin: (now * 0.025) % (Math.PI * 2),
+            accent: '#f3e8ff',
+            num: '99',
+            speed: 160
+        });
     }
 
     // 7. KI-Karts zeichnen
     for (const ai of gummiAiKarts) {
-        gummiDrawKartSprite(ctx, ai.x, ai.y, ai.angle, ai.color, ai.name, false, false);
+        gummiDrawKartSprite(ctx, ai.x, ai.y, ai.angle, ai.color, ai.name, false, false, {
+            steer: ai.steer || 0,
+            wheelSpin: ai.wheelSpin || 0,
+            accent: ai.accent || '#ffffff',
+            num: ai.num || '7',
+            speed: gummiRaceState === 'racing' ? ai.speed : 0
+        });
     }
 
     // 8. Eigenes Spieler-Kart zeichnen
@@ -5026,7 +5389,16 @@ function gummiDraw(now) {
         '#2563eb',
         `🏎️ ${CURRENT_USERNAME}`,
         false,
-        now < gummiKart.boostUntil
+        now < gummiKart.boostUntil,
+        {
+            steer: gummiKart.steer || 0,
+            wheelSpin: gummiKart.wheelSpin || 0,
+            braking: gummiKart.braking,
+            drifting: gummiKart.drifting,
+            accent: '#38bdf8',
+            num: '1',
+            speed: Math.hypot(gummiKart.vx, gummiKart.vy)
+        }
     );
 
     // 9. Startampel-Overlay bei Countdown
