@@ -611,7 +611,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
     // 8. Gummigeruch Kart: 3-Runden-Rennen speichern, Ghost sichern & Herausforderungen auswerten
     if ($action === 'gummi_save_run') {
         session_write_close();
-        $trackId    = in_array($_POST['track_id'] ?? '', ['circuit', 'coast', 'night'], true) ? (string)$_POST['track_id'] : 'circuit';
+        $allowedTracks = ['circuit', 'coast', 'night', 'alps', 'desert', 'volcano'];
+        $trackId    = in_array($_POST['track_id'] ?? '', $allowedTracks, true) ? (string)$_POST['track_id'] : 'circuit';
         $timeMs     = max(4000, min(600000, (int)($_POST['time_ms'] ?? 0)));
         $bestLapMs  = max(1200, min(300000, (int)($_POST['best_lap_ms'] ?? 0)));
         $ghostRaw   = (string)($_POST['ghost_json'] ?? '[]');
@@ -624,10 +625,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         }
         $ghostFrames = array_slice($ghostFrames, 0, 900);
 
-        // Punkteberechnung: Je schneller die 3 Runden, desto höher der Score!
-        $score       = max(500, 120000 - (int)round($timeMs * 1.25));
+        // Punkteberechnung: Je schneller die 3 Runden (+ Schwierigkeitsbonus für Profi-Strecken), desto höher der Score!
+        $trackBonuses = [
+            'circuit' => 0,
+            'coast'   => 2000,
+            'night'   => 3500,
+            'alps'    => 9000,
+            'desert'  => 11000,
+            'volcano' => 15000,
+        ];
+        $basePool    = 120000 + ($trackBonuses[$trackId] ?? 0);
+        $score       = max(500, $basePool - (int)round($timeMs * 1.25));
         $durationSec = max(1, (int)round($timeMs / 1000));
-        $trackNames  = ['circuit' => 'GummiCircuit', 'coast' => 'Küsten-GP', 'night' => 'Nacht-Ring'];
+        $trackNames  = [
+            'circuit' => 'GummiCircuit',
+            'coast'   => 'Küsten-GP',
+            'night'   => 'Nacht-Ring',
+            'alps'    => 'Alpen-Serpentinen',
+            'desert'  => 'Wüsten-Schikane',
+            'volcano' => 'Vulkan-Höllenring',
+        ];
         $tName       = $trackNames[$trackId] ?? 'GummiCircuit';
         $fmtTime     = sprintf('%02d:%05.2f', (int)floor($timeMs / 60000), ($timeMs % 60000) / 1000);
 
@@ -762,7 +779,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
     // 9. Gummigeruch Kart: Streckenrekord-Ghost, offene Ghost-Duelle & Live-Mitfahrer abrufen
     if ($action === 'gummi_poll_state') {
         session_write_close();
-        $trackId = in_array($_POST['track_id'] ?? '', ['circuit', 'coast', 'night'], true) ? (string)$_POST['track_id'] : 'circuit';
+        $allowedTracks = ['circuit', 'coast', 'night', 'alps', 'desert', 'volcano'];
+        $trackId = in_array($_POST['track_id'] ?? '', $allowedTracks, true) ? (string)$_POST['track_id'] : 'circuit';
         $saveKey = 'gummi_' . $trackId;
 
         // Optional: Eigene Live-Kart-Position aktualisieren, falls gerade im Rennen
@@ -1029,9 +1047,16 @@ $csrfToken = getCsrfToken();
                     <div class="flex flex-wrap items-center gap-2">
                         <select id="gummiTrackSelect" onchange="gummiChangeTrack(this.value)"
                                 class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
-                            <option value="circuit">🏁 GummiCircuit Klassik (3 Runden)</option>
-                            <option value="coast">🌴 Küsten-Grand-Prix (3 Runden)</option>
-                            <option value="night">🌙 Flutlicht Nacht-Ring (3 Runden)</option>
+                            <optgroup label="🟢 Klassik-Strecken">
+                                <option value="circuit">🏁 GummiCircuit Klassik (Breit · 3 Runden)</option>
+                                <option value="coast">🌴 Küsten-Grand-Prix (Mittel · 3 Runden)</option>
+                                <option value="night">🌙 Flutlicht Nacht-Ring (Mittel · 3 Runden)</option>
+                            </optgroup>
+                            <optgroup label="🔥 Profi-Strecken (Anspruchsvoll)">
+                                <option value="alps">⛰️ Alpen-Serpentinen (Eng · 3 Haarnadelkehren)</option>
+                                <option value="desert">🏜️ Wüsten-Schikane (Rutschig · Doppel-S-Canyon)</option>
+                                <option value="volcano">🌋 Vulkan-Höllenring (Extrem schmal · Profi-Kurs)</option>
+                            </optgroup>
                         </select>
 
                         <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold cursor-pointer select-none">
@@ -4274,7 +4299,10 @@ const GUMMI_TRACKS = {
         grassTop: '#14532d',
         grassBot: '#166534',
         asphalt: '#272c38',
+        curbColor: '#ef4444',
         roadWidth: 64,
+        gripMod: 1.0,
+        isDark: false,
         startX: 350,
         startY: 376,
         startAngle: 0,
@@ -4290,7 +4318,10 @@ const GUMMI_TRACKS = {
         grassTop: '#0f4c5c',
         grassBot: '#155e75',
         asphalt: '#2b303c',
+        curbColor: '#06b6d4',
         roadWidth: 62,
+        gripMod: 1.0,
+        isDark: false,
         startX: 340,
         startY: 382,
         startAngle: 0,
@@ -4306,7 +4337,10 @@ const GUMMI_TRACKS = {
         grassTop: '#0f172a',
         grassBot: '#1e1b4b',
         asphalt: '#1e2430',
+        curbColor: '#ef4444',
         roadWidth: 60,
+        gripMod: 0.96,
+        isDark: true,
         startX: 350,
         startY: 384,
         startAngle: 0,
@@ -4314,6 +4348,67 @@ const GUMMI_TRACKS = {
             [250, 384], [545, 384], [675, 335], [680, 115],
             [540, 75],  [455, 180], [365, 80],  [225, 80],
             [235, 235], [115, 140], [72, 245],  [110, 355]
+        ]
+    },
+    alps: {
+        id: 'alps',
+        name: 'Alpen-Serpentinen',
+        grassTop: '#1e293b',
+        grassBot: '#0f392b',
+        asphalt: '#334155',
+        curbColor: '#0284c7',
+        roadWidth: 52,
+        gripMod: 0.94,
+        isDark: false,
+        startX: 350,
+        startY: 396,
+        startAngle: 0,
+        pts: [
+            [240, 396], [560, 396], [688, 355], [692, 240],
+            [525, 230], [678, 140], [615, 66],  [445, 72],
+            [425, 215], [320, 215], [305, 72],  [135, 72],
+            [72, 145],  [225, 240], [72, 315],  [105, 388]
+        ]
+    },
+    desert: {
+        id: 'desert',
+        name: 'Wüsten-Schikane',
+        grassTop: '#78350f',
+        grassBot: '#451a03',
+        asphalt: '#292524',
+        curbColor: '#f59e0b',
+        roadWidth: 54,
+        gripMod: 0.85,
+        isDark: false,
+        startX: 350,
+        startY: 392,
+        startAngle: 0,
+        pts: [
+            [235, 392], [535, 392], [680, 350], [695, 215],
+            [585, 175], [675, 88],  [515, 65],  [430, 155],
+            [355, 72],  [265, 165], [190, 72],  [82, 105],
+            [72, 225],  [195, 285], [82, 345],  [125, 388]
+        ]
+    },
+    volcano: {
+        id: 'volcano',
+        name: 'Vulkan-Höllenring',
+        grassTop: '#2a0808',
+        grassBot: '#450a0a',
+        asphalt: '#18181b',
+        curbColor: '#f97316',
+        roadWidth: 48,
+        gripMod: 0.90,
+        isDark: true,
+        startX: 350,
+        startY: 398,
+        startAngle: 0,
+        pts: [
+            [245, 398], [555, 398], [692, 360], [696, 260],
+            [545, 250], [688, 165], [645, 65],  [485, 68],
+            [465, 205], [375, 115], [295, 205], [265, 68],
+            [105, 68],  [68, 165],  [215, 255], [72, 335],
+            [115, 392]
         ]
     }
 };
@@ -4776,7 +4871,8 @@ function gummiGameLoop(now) {
         if (curSpeed > 1) {
             const moveAngle = Math.atan2(gummiKart.vy, gummiKart.vx);
             let slip = Math.atan2(Math.sin(gummiKart.angle - moveAngle), Math.cos(gummiKart.angle - moveAngle));
-            const gripFactor = driftPressed ? 2.4 : (onAsphalt ? 5.6 : 3.0);
+            const trackGrip = tr.gripMod || 1.0;
+            const gripFactor = (driftPressed ? 2.4 : (onAsphalt ? 5.6 : 3.0)) * trackGrip;
 
             const targetVx = Math.cos(gummiKart.angle) * curSpeed;
             const targetVy = Math.sin(gummiKart.angle) * curSpeed;
@@ -4986,10 +5082,11 @@ function gummiDrawKartSprite(ctx, x, y, angle, bodyColor, label, isGhost = false
         ctx.fill();
     }
 
-    // 2. Scheinwerfer-Lichtkegel nach vorne (besonders eindrucksvoll auf dem Nacht-Ring!)
+    // 2. Scheinwerfer-Lichtkegel nach vorne (besonders eindrucksvoll auf Nacht-Ring & Vulkan-Höllenring!)
     if (!isGhost) {
-        const isNight = gummiTrackKey === 'night';
-        const coneLen = isNight ? 72 : 30;
+        const trCfg = GUMMI_TRACKS[gummiTrackKey] || GUMMI_TRACKS.circuit;
+        const isNight = Boolean(trCfg.isDark);
+        const coneLen = isNight ? 74 : 30;
         const coneAlpha = isNight ? 0.28 : 0.09;
         const beamGrad = ctx.createLinearGradient(14, 0, 14 + coneLen, 0);
         beamGrad.addColorStop(0, `rgba(254, 240, 138, ${coneAlpha})`);
@@ -5259,9 +5356,9 @@ function gummiDraw(now) {
             ctx.closePath();
         };
 
-        // Rot-weiße Randsteine (Curbs)
+        // Strecken-Randsteine (Curbs) in streckenspezifischer Akzentfarbe + Weiß
         traceTrackPath();
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = tr.curbColor || '#ef4444';
         ctx.lineWidth = tr.roadWidth + 10;
         ctx.stroke();
 
