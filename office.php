@@ -1437,6 +1437,9 @@ $backUrl = $backFromGallery
 $storedFilename = basename((string)$file['filename']);
 $physicalPath   = UPLOAD_DIR . $storedFilename;
 $isVaultLocked  = ((int)($file['is_encrypted'] ?? 0) === 1) || (is_file($physicalPath) && isVaultEncryptedFile($physicalPath));
+$canShareFile   = ((int)$file['user_id'] === $userId)
+    || (!empty($file['group_folder_id']) && canUserAccessGroupFolder($pdo, $userId, (int)$file['group_folder_id'], true, $isAdmin));
+$shareablePeers = ($canShareFile && !$isVaultLocked) ? getVisibleUsersForUser($pdo, $userId) : [];
 
 // Inhalt je nach Editor-Typ laden
 $wordHtmlContent  = '';
@@ -1547,6 +1550,18 @@ require_once __DIR__ . '/includes/header.php';
             </svg>
             <span class="hidden sm:inline">Herunterladen</span>
         </a>
+
+        <?php if ($canShareFile && !$isVaultLocked): ?>
+            <button
+                type="button"
+                onclick="openOfficeShareModal()"
+                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                title="Dokument für andere Cloud-Mitglieder (Live-Team) oder per öffentlichem Link / QR-Code freigeben"
+            >
+                <span>🔗</span>
+                <span>Freigeben</span>
+            </button>
+        <?php endif; ?>
 
         <?php if ($canEdit && !$isVaultLocked): ?>
             <?php if ($editorType === 'image'): ?>
@@ -5434,5 +5449,242 @@ if (document.getElementById('collabPresenceBar')) {
     setInterval(runCollabSyncTick, 1500);
 }
 </script>
+
+<?php if ($canShareFile && !$isVaultLocked): ?>
+<!-- Direktes Freigabe-Modal in Office Light (Benutzer-Live-Team & Öffentlicher Link / QR-Code) -->
+<div id="officeShareModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5">
+        <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-lg shrink-0">🔗</span>
+                <div class="min-w-0">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white truncate">
+                        Dokument freigeben: <?= e($origName) ?>
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Für Live-Team-Mitarbeit mit Cloud-Mitgliedern teilen oder öffentlichen Link erzeugen
+                    </p>
+                </div>
+            </div>
+            <button type="button" onclick="closeOfficeShareModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen">
+                ✕
+            </button>
+        </div>
+
+        <!-- 1. Direkt mit Cloud-Mitgliedern teilen (inkl. Live-Co-Editing) -->
+        <div class="space-y-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                👥 Mit Cloud-Benutzern teilen (für Live-Team-Zusammenarbeit)
+            </h4>
+            <?php if (empty($shareablePeers)): ?>
+                <p class="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    Aktuell haben keine weiteren Cloud-Benutzer die Direktfreigabe in ihren Einstellungen aktiviert.
+                </p>
+            <?php else: ?>
+                <form onsubmit="submitOfficeUserShare(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div class="sm:col-span-5">
+                        <select id="officeShareTargetUser" required
+                            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white">
+                            <option value="">Benutzer wählen...</option>
+                            <?php foreach ($shareablePeers as $peer): ?>
+                                <option value="<?= (int)$peer['id'] ?>"><?= e((string)$peer['username']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-4">
+                        <select id="officeSharePerm"
+                            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white">
+                            <option value="1" selected>✏️ Lesen &amp; Mitschreiben (Live)</option>
+                            <option value="0">👁️ Nur Lesen</option>
+                            <option value="2">🗑️ Lesen, Schreiben &amp; Löschen</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-3">
+                        <button type="submit"
+                            class="w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                            + Freigeben
+                        </button>
+                    </div>
+                </form>
+            <?php endif; ?>
+
+            <div id="officeUserSharesList" class="space-y-1.5 text-xs"></div>
+        </div>
+
+        <!-- 2. Öffentlicher Freigabelink & QR-Code -->
+        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                🌐 Öffentlicher Freigabelink (optional mit Passwort &amp; Ablaufdatum)
+            </h4>
+            <form onsubmit="submitOfficePublicLink(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input type="password" id="officeSharePass" placeholder="Passwort (optional)"
+                    class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                <select id="officeShareDays"
+                    class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white">
+                    <option value="0">Unbegrenzt gültig</option>
+                    <option value="1">1 Tag gültig</option>
+                    <option value="7" selected>7 Tage gültig</option>
+                    <option value="30">30 Tage gültig</option>
+                </select>
+                <button type="submit"
+                    class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                    🔗 Link erzeugen
+                </button>
+            </form>
+
+            <div id="officePublicLinksList" class="space-y-2.5 text-xs"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openOfficeShareModal() {
+    const modal = document.getElementById('officeShareModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    loadOfficeShareDetails();
+}
+
+function closeOfficeShareModal() {
+    const modal = document.getElementById('officeShareModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function escOfficeShareHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+async function loadOfficeShareDetails() {
+    const uList = document.getElementById('officeUserSharesList');
+    const lList = document.getElementById('officePublicLinksList');
+    if (!uList || !lList) return;
+
+    try {
+        const res = await fetch('share_action.php?action=list&file_id=' + encodeURIComponent(OFFICE_FILE_ID));
+        const data = await res.json();
+        if (!data || !data.success) return;
+
+        // Benutzer-Freigaben rendern
+        const users = Array.isArray(data.user_shares) ? data.user_shares : [];
+        if (users.length === 0) {
+            uList.innerHTML = '<p class="text-slate-400 dark:text-slate-500 italic">Noch für keinen anderen Cloud-Benutzer freigegeben.</p>';
+        } else {
+            uList.innerHTML = users.map(u => {
+                const badge = u.can_delete
+                    ? '🗑️ Lesen, Schreiben & Löschen'
+                    : (u.can_write ? '✏️ Lesen & Mitschreiben (Live)' : '👁️ Nur Lesen');
+                return `
+                    <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                        <div>
+                            <span class="font-bold text-slate-900 dark:text-white">👤 ${escOfficeShareHtml(u.username)}</span>
+                            <span class="ml-2 px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-600 dark:text-slate-300">${badge}</span>
+                        </div>
+                        <button type="button" onclick="revokeOfficeUserShare(${Number(u.id)})"
+                            class="px-2 py-1 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 font-bold cursor-pointer">
+                            Entfernen
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Öffentliche Links rendern
+        const links = Array.isArray(data.links) ? data.links : [];
+        if (links.length === 0) {
+            lList.innerHTML = '<p class="text-slate-400 dark:text-slate-500 italic">Noch kein öffentlicher Freigabelink aktiv.</p>';
+        } else {
+            lList.innerHTML = links.map(l => `
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <input type="text" readonly value="${escOfficeShareHtml(l.url)}"
+                            class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[11px] text-slate-800 dark:text-slate-200">
+                        <button type="button" onclick="navigator.clipboard.writeText(${JSON.stringify(l.url).replace(/"/g, '&quot;')})"
+                            class="px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold shrink-0 cursor-pointer">
+                            📋 Kopieren
+                        </button>
+                        <button type="button" onclick="deleteOfficePublicLink(${Number(l.id)})"
+                            class="px-2.5 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold shrink-0 cursor-pointer">
+                            🗑️
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>${l.has_password ? '🔒 Passwortgeschützt' : '🌐 Ohne Passwort'} · ${l.expires_at ? 'Gültig bis ' + escOfficeShareHtml(l.expires_at) : 'Unbegrenzt gültig'}</span>
+                        <span>Downloads: ${Number(l.download_count || 0)}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (e) {}
+}
+
+async function submitOfficeUserShare(ev) {
+    ev.preventDefault();
+    const targetEl = document.getElementById('officeShareTargetUser');
+    const permEl = document.getElementById('officeSharePerm');
+    if (!targetEl || !targetEl.value) return;
+
+    const fd = new FormData();
+    fd.append('action', 'share_user');
+    fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+    fd.append('file_id', String(OFFICE_FILE_ID));
+    fd.append('target_user_id', targetEl.value);
+    fd.append('can_write', permEl ? permEl.value : '1');
+
+    const res = await fetch('share_action.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data && data.success) {
+        targetEl.value = '';
+        loadOfficeShareDetails();
+    } else {
+        alert((data && data.message) ? data.message : 'Fehler beim Freigeben.');
+    }
+}
+
+async function revokeOfficeUserShare(userShareId) {
+    const fd = new FormData();
+    fd.append('action', 'unshare_user');
+    fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+    fd.append('user_share_id', String(userShareId));
+    await fetch('share_action.php', { method: 'POST', body: fd });
+    loadOfficeShareDetails();
+}
+
+async function submitOfficePublicLink(ev) {
+    ev.preventDefault();
+    const passEl = document.getElementById('officeSharePass');
+    const daysEl = document.getElementById('officeShareDays');
+
+    const fd = new FormData();
+    fd.append('action', 'create_link');
+    fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+    fd.append('file_id', String(OFFICE_FILE_ID));
+    fd.append('password', passEl ? passEl.value : '');
+    fd.append('expires_days', daysEl ? daysEl.value : '0');
+
+    const res = await fetch('share_action.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data && data.success) {
+        if (passEl) passEl.value = '';
+        loadOfficeShareDetails();
+    } else {
+        alert((data && data.message) ? data.message : 'Fehler beim Erstellen des Links.');
+    }
+}
+
+async function deleteOfficePublicLink(shareId) {
+    const fd = new FormData();
+    fd.append('action', 'delete_link');
+    fd.append('csrf_token', OFFICE_CSRF_TOKEN);
+    fd.append('share_id', String(shareId));
+    await fetch('share_action.php', { method: 'POST', body: fd });
+    loadOfficeShareDetails();
+}
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
