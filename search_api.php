@@ -98,21 +98,30 @@ foreach ($catalog as $mod) {
 if ($qLow === '') {
     try {
         $stmtRec = $pdo->prepare(
-            "SELECT `id`, `original_name`, `file_size`, `folder_id`
+            "SELECT `id`, `original_name`, `file_size`, `folder_path`, `group_folder_id`
              FROM `files`
              WHERE `user_id` = :uid AND `deleted_at` IS NULL
              ORDER BY `upload_date` DESC
-             LIMIT 5"
+             LIMIT 6"
         );
         $stmtRec->execute([':uid' => $userId]);
         foreach ($stmtRec->fetchAll() as $f) {
-            $folderParam = $f['folder_id'] !== null ? ('?folder=' . (int)$f['folder_id']) : '';
+            $fp   = trim((string)($f['folder_path'] ?? ''));
+            $gfId = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
+            $qUrl = [];
+            if ($gfId > 0) {
+                $qUrl['group_folder'] = $gfId;
+            }
+            if ($fp !== '') {
+                $qUrl['folder'] = $fp;
+            }
+            $locLabel = $fp !== '' ? (' · 📁 ' . $fp) : ' · 🏠 Hauptverzeichnis';
             $items[] = [
                 'icon'  => '📄',
                 'title' => (string)$f['original_name'],
-                'sub'   => 'Zuletzt hochgeladen · ' . formatBytes((int)$f['file_size']),
+                'sub'   => 'Zuletzt hochgeladen · ' . formatBytes((int)$f['file_size']) . $locLabel,
                 'cat'   => 'Datei',
-                'url'   => 'index.php' . $folderParam,
+                'url'   => 'index.php' . (!empty($qUrl) ? '?' . http_build_query($qUrl) : ''),
             ];
         }
     } catch (Throwable) {
@@ -124,46 +133,103 @@ if ($qLow === '') {
 
 $like = '%' . $q . '%';
 
-// 2. Ordner durchsuchen
+// 2. Ordner durchsuchen (sowohl aus user_folders als auch aus files.folder_path)
 try {
+    $foundFolders = [];
+
     $stmtFld = $pdo->prepare(
-        "SELECT `id`, `name`
-         FROM `folders`
-         WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `name` LIKE :q
-         ORDER BY `name` ASC
-         LIMIT 5"
+        "SELECT `folder_path`, `group_folder_id`
+         FROM `user_folders`
+         WHERE `user_id` = :uid AND `folder_path` LIKE :q
+         ORDER BY `folder_path` ASC
+         LIMIT 8"
     );
     $stmtFld->execute([':uid' => $userId, ':q' => $like]);
     foreach ($stmtFld->fetchAll() as $fld) {
+        $fp   = trim((string)$fld['folder_path']);
+        $gfId = !empty($fld['group_folder_id']) ? (int)$fld['group_folder_id'] : 0;
+        if ($fp !== '') {
+            $foundFolders[$gfId . ':' . $fp] = ['fp' => $fp, 'gf_id' => $gfId];
+        }
+    }
+
+    $stmtFldFiles = $pdo->prepare(
+        "SELECT DISTINCT `folder_path`, `group_folder_id`
+         FROM `files`
+         WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `folder_path` != '' AND `folder_path` LIKE :q
+         ORDER BY `folder_path` ASC
+         LIMIT 8"
+    );
+    $stmtFldFiles->execute([':uid' => $userId, ':q' => $like]);
+    foreach ($stmtFldFiles->fetchAll() as $fld) {
+        $fp   = trim((string)$fld['folder_path']);
+        $gfId = !empty($fld['group_folder_id']) ? (int)$fld['group_folder_id'] : 0;
+        if ($fp !== '') {
+            $foundFolders[$gfId . ':' . $fp] = ['fp' => $fp, 'gf_id' => $gfId];
+        }
+    }
+
+    foreach (array_slice(array_values($foundFolders), 0, 6) as $fldInfo) {
+        $fp   = $fldInfo['fp'];
+        $gfId = $fldInfo['gf_id'];
+        $qUrl = [];
+        if ($gfId > 0) {
+            $qUrl['group_folder'] = $gfId;
+        }
+        $qUrl['folder'] = $fp;
         $items[] = [
             'icon'  => '📁',
-            'title' => (string)$fld['name'],
-            'sub'   => 'Ordner öffnen',
+            'title' => $fp,
+            'sub'   => 'Ordner im Dateimanager öffnen',
             'cat'   => 'Ordner',
-            'url'   => 'index.php?folder=' . (int)$fld['id'],
+            'url'   => 'index.php?' . http_build_query($qUrl),
         ];
     }
 } catch (Throwable) {
 }
 
-// 3. Dateien durchsuchen
+// 3. Dateien durchsuchen (Eigene Dateien, Gruppenordner & für mich freigegebene Dateien)
 try {
     $stmtFil = $pdo->prepare(
-        "SELECT `id`, `original_name`, `file_size`, `folder_id`
-         FROM `files`
-         WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `original_name` LIKE :q
-         ORDER BY `upload_date` DESC
-         LIMIT 8"
+        "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`
+         FROM `files` f
+         WHERE f.`deleted_at` IS NULL
+           AND (f.`original_name` LIKE :q1 OR f.`folder_path` LIKE :q2)
+           AND (
+               f.`user_id` = :uid1
+               OR (f.`group_folder_id` IS NOT NULL AND f.`group_folder_id` IN (
+                   SELECT gf.`id` FROM `group_folders` gf
+                   INNER JOIN `group_members` gm ON gm.`group_id` = gf.`group_id`
+                   WHERE gm.`user_id` = :uid2
+               ))
+           )
+         ORDER BY f.`upload_date` DESC
+         LIMIT 10"
     );
-    $stmtFil->execute([':uid' => $userId, ':q' => $like]);
+    $stmtFil->execute([
+        ':q1'   => $like,
+        ':q2'   => $like,
+        ':uid1' => $userId,
+        ':uid2' => $userId,
+    ]);
     foreach ($stmtFil->fetchAll() as $f) {
-        $folderParam = $f['folder_id'] !== null ? ('?folder=' . (int)$f['folder_id']) : '';
+        $fp   = trim((string)($f['folder_path'] ?? ''));
+        $gfId = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
+        $qUrl = [];
+        if ($gfId > 0) {
+            $qUrl['group_folder'] = $gfId;
+        }
+        if ($fp !== '') {
+            $qUrl['folder'] = $fp;
+        }
+        $qUrl['q'] = (string)$f['original_name'];
+        $locLabel  = $fp !== '' ? ('📁 ' . $fp) : '🏠 Hauptverzeichnis';
         $items[] = [
             'icon'  => '📄',
             'title' => (string)$f['original_name'],
-            'sub'   => 'Datei · ' . formatBytes((int)$f['file_size']),
+            'sub'   => formatBytes((int)$f['file_size']) . ' · ' . $locLabel,
             'cat'   => 'Datei',
-            'url'   => 'index.php' . $folderParam,
+            'url'   => 'index.php?' . http_build_query($qUrl),
         ];
     }
 } catch (Throwable) {
