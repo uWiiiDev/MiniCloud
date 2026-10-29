@@ -1095,14 +1095,14 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 <thead>
                     <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
                         <th class="py-3.5 pl-4 pr-2 sm:pl-6 w-9">
-                            <?php if (!empty($files)): ?>
+                            <?php if (!empty($files) || !empty($directSubfolders)): ?>
                                 <input
                                     type="checkbox"
                                     id="selectAllFilesCheckbox"
                                     onchange="toggleSelectAllFiles(this)"
                                     class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer align-middle"
-                                    title="Alle Dateien auf dieser Seite auswählen"
-                                    aria-label="Alle Dateien auswählen"
+                                    title="Alle Ordner &amp; Dateien auf dieser Seite auswählen"
+                                    aria-label="Alle Ordner &amp; Dateien auswählen"
                                 >
                             <?php endif; ?>
                         </th>
@@ -1213,8 +1213,17 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>); }"
                             class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-all"
                         >
-                            <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 text-center text-amber-500">
-                                📁
+                            <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle" onclick="event.stopPropagation()">
+                                <input
+                                    type="checkbox"
+                                    value="<?= e($subPath) ?>"
+                                    data-folder-path="<?= e($subPath) ?>"
+                                    data-can-manage="<?= $canUploadHere ? '1' : '0' ?>"
+                                    data-can-delete="<?= $canUploadHere ? '1' : '0' ?>"
+                                    onchange="updateBatchSelection()"
+                                    class="folder-select-checkbox w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer align-middle"
+                                    aria-label="Ordner <?= e($subDisplayName) ?> auswählen"
+                                >
                             </td>
                             <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
@@ -1892,6 +1901,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     <div class="h-4 w-px bg-slate-700"></div>
     <button
         type="button"
+        id="btnBatchZip"
         onclick="downloadBatchZip()"
         class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
         title="Ausgewählte Dateien als ZIP herunterladen"
@@ -1903,7 +1913,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         id="btnBatchTransfer"
         onclick="openBatchTransferModal()"
         class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
-        title="Ausgewählte Dateien verschieben oder kopieren"
+        title="Ausgewählte Ordner &amp; Dateien verschieben oder kopieren"
     >
         <span>⇄ Verschieben / Kopieren</span>
     </button>
@@ -1912,7 +1922,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         id="btnBatchDelete"
         onclick="deleteBatchFiles()"
         class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
-        title="Ausgewählte Dateien in den Papierkorb verschieben"
+        title="Ausgewählte Ordner &amp; Dateien in den Papierkorb verschieben"
     >
         <span>🗑️ Löschen</span>
     </button>
@@ -1930,6 +1940,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 <form id="batchDeleteForm" action="delete.php" method="post" class="hidden">
     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
     <input type="hidden" name="batch_file_ids" id="batchDeleteIdsInput" value="">
+    <input type="hidden" name="batch_folders" id="batchDeleteFoldersInput" value="">
     <?php if ($currentFolder !== ''): ?>
         <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
     <?php endif; ?>
@@ -2553,6 +2564,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             <input type="hidden" name="action" id="transferModalAction" value="move_file">
             <input type="hidden" name="file_id" id="transferModalFileId" value="">
             <input type="hidden" name="batch_file_ids" id="transferModalBatchIds" value="">
+            <input type="hidden" name="batch_folders" id="transferModalBatchFolders" value="">
             <input type="hidden" name="source_folder" id="transferModalSourceFolder" value="">
             <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
             <?php if ($activeGroupFolder !== null): ?>
@@ -3533,13 +3545,20 @@ function getSelectedFileCheckboxes() {
     return Array.from(document.querySelectorAll('.file-select-checkbox:checked'));
 }
 
+function getSelectedFolderCheckboxes() {
+    return Array.from(document.querySelectorAll('.folder-select-checkbox:checked'));
+}
+
 function updateBatchSelection() {
-    const allCbs = Array.from(document.querySelectorAll('.file-select-checkbox'));
-    const checkedCbs = getSelectedFileCheckboxes();
+    const allCbs = Array.from(document.querySelectorAll('.file-select-checkbox, .folder-select-checkbox'));
+    const checkedFileCbs = getSelectedFileCheckboxes();
+    const checkedFolderCbs = getSelectedFolderCheckboxes();
+    const checkedCbs = [...checkedFolderCbs, ...checkedFileCbs];
     const selectAllCb = document.getElementById('selectAllFilesCheckbox');
     const bar = document.getElementById('batchActionBar');
     const countEl = document.getElementById('batchSelectedCount');
     const btnDelete = document.getElementById('btnBatchDelete');
+    const btnZip = document.getElementById('btnBatchZip');
 
     if (selectAllCb && allCbs.length > 0) {
         selectAllCb.checked = (checkedCbs.length === allCbs.length);
@@ -3554,6 +3573,9 @@ function updateBatchSelection() {
     }
 
     countEl.textContent = String(checkedCbs.length);
+    if (btnZip) {
+        btnZip.classList.toggle('hidden', checkedFileCbs.length === 0);
+    }
     const anyDeletable = checkedCbs.some(cb => cb.getAttribute('data-can-delete') === '1');
     if (btnDelete) {
         btnDelete.classList.toggle('hidden', !anyDeletable);
@@ -3564,7 +3586,7 @@ function updateBatchSelection() {
 
 function toggleSelectAllFiles(masterCb) {
     const checked = Boolean(masterCb && masterCb.checked);
-    document.querySelectorAll('.file-select-checkbox').forEach(cb => {
+    document.querySelectorAll('.file-select-checkbox, .folder-select-checkbox').forEach(cb => {
         cb.checked = checked;
     });
     updateBatchSelection();
@@ -3576,7 +3598,7 @@ function clearBatchSelection() {
         selectAllCb.checked = false;
         selectAllCb.indeterminate = false;
     }
-    document.querySelectorAll('.file-select-checkbox').forEach(cb => {
+    document.querySelectorAll('.file-select-checkbox, .folder-select-checkbox').forEach(cb => {
         cb.checked = false;
     });
     updateBatchSelection();
@@ -3589,16 +3611,31 @@ function downloadBatchZip() {
 }
 
 function openBatchTransferModal() {
-    const checkedCbs = getSelectedFileCheckboxes();
+    const checkedFileCbs = getSelectedFileCheckboxes();
+    const checkedFolderCbs = getSelectedFolderCheckboxes();
+    const checkedCbs = [...checkedFolderCbs, ...checkedFileCbs];
     if (checkedCbs.length === 0) return;
-    const ids = checkedCbs.map(cb => cb.value);
+
+    const ids = checkedFileCbs.map(cb => cb.value);
+    const folders = checkedFolderCbs.map(cb => cb.value);
     const allCanManage = checkedCbs.every(cb => cb.getAttribute('data-can-manage') === '1');
 
-    transferModalTitle.textContent = 'Ausgewählte Dateien verschieben / kopieren';
-    transferModalItemName.textContent = `☑️ ${ids.length} ${ids.length === 1 ? 'ausgewählte Datei' : 'ausgewählte Dateien'}`;
+    if (folders.length > 0 && ids.length > 0) {
+        transferModalTitle.textContent = 'Ausgewählte Ordner & Dateien verschieben / kopieren';
+        transferModalItemName.textContent = `☑️ ${folders.length} ${folders.length === 1 ? 'Ordner' : 'Ordner'} & ${ids.length} ${ids.length === 1 ? 'Datei' : 'Dateien'}`;
+    } else if (folders.length > 0) {
+        transferModalTitle.textContent = 'Ausgewählte Ordner verschieben / kopieren';
+        transferModalItemName.textContent = `☑️ ${folders.length} ${folders.length === 1 ? 'ausgewählter Ordner' : 'ausgewählte Ordner'}`;
+    } else {
+        transferModalTitle.textContent = 'Ausgewählte Dateien verschieben / kopieren';
+        transferModalItemName.textContent = `☑️ ${ids.length} ${ids.length === 1 ? 'ausgewählte Datei' : 'ausgewählte Dateien'}`;
+    }
+
     transferModalAction.value = 'batch_transfer_files';
     transferModalFileId.value = '';
     document.getElementById('transferModalBatchIds').value = ids.join(',');
+    const batchFoldersEl = document.getElementById('transferModalBatchFolders');
+    if (batchFoldersEl) batchFoldersEl.value = folders.length > 0 ? JSON.stringify(folders) : '';
     transferModalSourceFolder.value = '';
     transferTargetSelect.setAttribute('name', 'target_folder');
     transferTargetSelect.value = '';
@@ -3618,16 +3655,33 @@ function openBatchTransferModal() {
 }
 
 function deleteBatchFiles() {
-    const checkedCbs = getSelectedFileCheckboxes().filter(cb => cb.getAttribute('data-can-delete') === '1');
-    if (checkedCbs.length === 0) return;
-    const ids = checkedCbs.map(cb => cb.value);
-    if (!confirm(`Möchten Sie die ${ids.length} ausgewählten Datei(en) wirklich in den Papierkorb verschieben?`)) {
+    const checkedFileCbs = getSelectedFileCheckboxes().filter(cb => cb.getAttribute('data-can-delete') === '1');
+    const checkedFolderCbs = getSelectedFolderCheckboxes().filter(cb => cb.getAttribute('data-can-delete') === '1');
+    if (checkedFileCbs.length === 0 && checkedFolderCbs.length === 0) return;
+
+    const ids = checkedFileCbs.map(cb => cb.value);
+    const folders = checkedFolderCbs.map(cb => cb.value);
+
+    let confirmMsg = '';
+    if (folders.length > 0 && ids.length > 0) {
+        confirmMsg = `Möchten Sie die ${folders.length} ausgewählten Ordner (samt Inhalt) und ${ids.length} Datei(en) wirklich in den Papierkorb verschieben?`;
+    } else if (folders.length > 0) {
+        confirmMsg = `Möchten Sie die ${folders.length} ausgewählten Ordner (samt enthaltenen Dateien) wirklich in den Papierkorb verschieben?`;
+    } else {
+        confirmMsg = `Möchten Sie die ${ids.length} ausgewählten Datei(en) wirklich in den Papierkorb verschieben?`;
+    }
+    if (!confirm(confirmMsg)) {
         return;
     }
-    const input = document.getElementById('batchDeleteIdsInput');
+
+    const inputIds = document.getElementById('batchDeleteIdsInput');
+    const inputFolders = document.getElementById('batchDeleteFoldersInput');
     const form = document.getElementById('batchDeleteForm');
-    if (input && form) {
-        input.value = ids.join(',');
+    if (inputIds && form) {
+        inputIds.value = ids.join(',');
+        if (inputFolders) {
+            inputFolders.value = folders.length > 0 ? JSON.stringify(folders) : '';
+        }
         form.submit();
     }
 }
@@ -3646,6 +3700,8 @@ const optGroupMoveGroup = document.getElementById('optGroupMoveGroup');
 function openTransferModal(type, fileId, displayName, folderPath = '', canMove = true) {
     const batchIdsEl = document.getElementById('transferModalBatchIds');
     if (batchIdsEl) batchIdsEl.value = '';
+    const batchFoldersEl = document.getElementById('transferModalBatchFolders');
+    if (batchFoldersEl) batchFoldersEl.value = '';
     if (type === 'folder') {
         transferModalTitle.textContent = 'Ordner verschieben oder kopieren';
         transferModalItemName.textContent = '📁 ' + displayName;

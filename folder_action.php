@@ -667,9 +667,16 @@ if ($action === 'toggle_favorite') {
     exit;
 }
 
-// 6. Mehrfachauswahl (Batch): Ausgewählte Dateien gemeinsam verschieben oder kopieren
+// 6. Mehrfachauswahl (Batch): Ausgewählte Ordner & Dateien gemeinsam verschieben oder kopieren
 if ($action === 'batch_transfer_files') {
     $rawIds       = isset($_POST['batch_file_ids']) ? explode(',', (string)$_POST['batch_file_ids']) : [];
+    $rawFolders   = [];
+    if (!empty($_POST['batch_folders']) && is_string($_POST['batch_folders'])) {
+        $decodedFolders = json_decode($_POST['batch_folders'], true);
+        if (is_array($decodedFolders)) {
+            $rawFolders = $decodedFolders;
+        }
+    }
     $rawTarget    = isset($_POST['target_folder']) ? (string)$_POST['target_folder'] : '';
     $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
 
@@ -690,6 +697,195 @@ if ($action === 'batch_transfer_files') {
 
     $destLabel = formatTransferTargetLabel($pdo, $targetGfId, $targetFolder);
     $processedCount = 0;
+    $processedFolderCount = 0;
+
+    // 6a. Ausgewählte Ordner verschieben oder kopieren
+    if (!empty($rawFolders)) {
+        $canSourceFolderOp = ($groupFolderId === null)
+            || canUserAccessGroupFolder($pdo, $userId, $groupFolderId, $mode === 'move', $isAdmin);
+
+        if ($canSourceFolderOp) {
+            foreach ($rawFolders as $rawFolderItem) {
+                $sourceFolder = sanitizeFolderPathInput((string)$rawFolderItem);
+                if ($sourceFolder === '') {
+                    continue;
+                }
+
+                $folderBaseName = basename($sourceFolder);
+                $newFolderPath  = $targetFolder !== ''
+                    ? sanitizeFolderPathInput($targetFolder . '/' . $folderBaseName)
+                    : sanitizeFolderPathInput($folderBaseName);
+
+                // Selbst-Verschiebung / Schleife im selben Speicherbereich verhindern
+                if ($groupFolderId === $targetGfId) {
+                    if ($targetFolder === $sourceFolder || str_starts_with($targetFolder, $sourceFolder . '/')) {
+                        continue;
+                    }
+                    if ($newFolderPath === $sourceFolder) {
+                        if ($mode === 'move') {
+                            continue;
+                        }
+                        $newFolderPath = sanitizeFolderPathInput($newFolderPath . ' (Kopie)');
+                    }
+                }
+
+                if ($groupFolderId !== null) {
+                    $stmtFolderFiles = $pdo->prepare(
+                        'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+                         FROM files
+                         WHERE group_folder_id = :gf_id AND deleted_at IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    );
+                    $stmtFolderFiles->execute([
+                        ':gf_id'  => $groupFolderId,
+                        ':exact'  => $sourceFolder,
+                        ':prefix' => $sourceFolder . '/%',
+                    ]);
+                    $sourceFiles = $stmtFolderFiles->fetchAll();
+
+                    $stmtUf = $pdo->prepare(
+                        'SELECT id, folder_path FROM user_folders
+                         WHERE group_folder_id = :gf_id AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    );
+                    $stmtUf->execute([
+                        ':gf_id'  => $groupFolderId,
+                        ':exact'  => $sourceFolder,
+                        ':prefix' => $sourceFolder . '/%',
+                    ]);
+                    $sourceUfRows = $stmtUf->fetchAll();
+                } else {
+                    $stmtFolderFiles = $pdo->prepare(
+                        'SELECT id, user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+                         FROM files
+                         WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    );
+                    $stmtFolderFiles->execute([
+                        ':uid'    => $userId,
+                        ':exact'  => $sourceFolder,
+                        ':prefix' => $sourceFolder . '/%',
+                    ]);
+                    $sourceFiles = $stmtFolderFiles->fetchAll();
+
+                    $stmtUf = $pdo->prepare(
+                        'SELECT id, folder_path FROM user_folders
+                         WHERE user_id = :uid AND group_folder_id IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    );
+                    $stmtUf->execute([
+                        ':uid'    => $userId,
+                        ':exact'  => $sourceFolder,
+                        ':prefix' => $sourceFolder . '/%',
+                    ]);
+                    $sourceUfRows = $stmtUf->fetchAll();
+                }
+
+                if ($mode === 'move') {
+                    registerFolderHierarchy($pdo, $userId, $newFolderPath, $targetGfId);
+                    foreach ($sourceFiles as $fRow) {
+                        $updatedPath = $newFolderPath . substr((string)$fRow['folder_path'], strlen($sourceFolder));
+                        $newOwnerId  = $targetGfId === null ? $userId : (int)$fRow['user_id'];
+                        $pdo->prepare('UPDATE files SET user_id = :uid, group_folder_id = :gf_id, folder_path = :fp WHERE id = :id')
+                            ->execute([
+                                ':uid'   => $newOwnerId,
+                                ':gf_id' => $targetGfId,
+                                ':fp'    => $updatedPath,
+                                ':id'    => (int)$fRow['id'],
+                            ]);
+                    }
+                    foreach ($sourceUfRows as $ufRow) {
+                        $updatedPath = $newFolderPath . substr((string)$ufRow['folder_path'], strlen($sourceFolder));
+                        registerFolderHierarchy($pdo, $userId, $updatedPath, $targetGfId);
+                        $pdo->prepare('DELETE FROM user_folders WHERE id = :id')
+                            ->execute([':id' => (int)$ufRow['id']]);
+                    }
+                    if ($groupFolderId === null) {
+                        if ($targetGfId === null) {
+                            $stmtShares = $pdo->prepare(
+                                'SELECT id, folder_path FROM shares
+                                 WHERE user_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                            );
+                            $stmtShares->execute([
+                                ':uid'    => $userId,
+                                ':exact'  => $sourceFolder,
+                                ':prefix' => $sourceFolder . '/%',
+                            ]);
+                            foreach ($stmtShares->fetchAll() as $sRow) {
+                                $updatedPath = $newFolderPath . substr((string)$sRow['folder_path'], strlen($sourceFolder));
+                                $pdo->prepare('UPDATE shares SET folder_path = :fp WHERE id = :id')
+                                    ->execute([':fp' => $updatedPath, ':id' => (int)$sRow['id']]);
+                            }
+                            $stmtUserShares = $pdo->prepare(
+                                'SELECT id, folder_path FROM user_shares
+                                 WHERE owner_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                            );
+                            $stmtUserShares->execute([
+                                ':uid'    => $userId,
+                                ':exact'  => $sourceFolder,
+                                ':prefix' => $sourceFolder . '/%',
+                            ]);
+                            foreach ($stmtUserShares->fetchAll() as $usRow) {
+                                $updatedPath = $newFolderPath . substr((string)$usRow['folder_path'], strlen($sourceFolder));
+                                $pdo->prepare('UPDATE user_shares SET folder_path = :fp WHERE id = :id')
+                                    ->execute([':fp' => $updatedPath, ':id' => (int)$usRow['id']]);
+                            }
+                        } else {
+                            $pdo->prepare(
+                                'DELETE FROM shares WHERE user_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                            )->execute([':uid' => $userId, ':exact' => $sourceFolder, ':prefix' => $sourceFolder . '/%']);
+                            $pdo->prepare(
+                                'DELETE FROM user_shares WHERE owner_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                            )->execute([':uid' => $userId, ':exact' => $sourceFolder, ':prefix' => $sourceFolder . '/%']);
+                        }
+                    }
+                    $processedFolderCount++;
+                } else {
+                    if ($targetGfId === null && !empty($sourceFiles)) {
+                        $totalCopyBytes = 0;
+                        foreach ($sourceFiles as $fRow) {
+                            $totalCopyBytes += (int)$fRow['file_size'];
+                        }
+                        $stats = getUserStorageStats($pdo, $userId);
+                        if ($totalCopyBytes > $stats['free']) {
+                            continue;
+                        }
+                    }
+                    registerFolderHierarchy($pdo, $userId, $newFolderPath, $targetGfId);
+                    foreach ($sourceUfRows as $ufRow) {
+                        $updatedPath = $newFolderPath . substr((string)$ufRow['folder_path'], strlen($sourceFolder));
+                        registerFolderHierarchy($pdo, $userId, $updatedPath, $targetGfId);
+                    }
+                    $stmtInsertCopy = $pdo->prepare(
+                        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+                         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, :enc)'
+                    );
+                    foreach ($sourceFiles as $fRow) {
+                        $srcStored = basename((string)$fRow['filename']);
+                        $srcPath   = UPLOAD_DIR . $srcStored;
+                        if (!is_file($srcPath) || !is_readable($srcPath)) {
+                            continue;
+                        }
+                        $newStored = generateSafeStoredFilename();
+                        $dstPath   = UPLOAD_DIR . $newStored;
+                        if (!@copy($srcPath, $dstPath)) {
+                            continue;
+                        }
+                        @chmod($dstPath, 0640);
+                        $updatedPath = $newFolderPath . substr((string)$fRow['folder_path'], strlen($sourceFolder));
+                        registerFolderHierarchy($pdo, $userId, $updatedPath, $targetGfId);
+                        $stmtInsertCopy->execute([
+                            ':uid'   => $userId,
+                            ':gf_id' => $targetGfId,
+                            ':fn'    => $newStored,
+                            ':orig'  => (string)$fRow['original_name'],
+                            ':fp'    => $updatedPath,
+                            ':sz'    => (int)$fRow['file_size'],
+                            ':mime'  => (string)$fRow['mime_type'],
+                            ':enc'   => (int)($fRow['is_encrypted'] ?? 0),
+                        ]);
+                    }
+                    $processedFolderCount++;
+                }
+            }
+        }
+    }
 
     $stmtSel = $pdo->prepare(
         'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
@@ -783,19 +979,25 @@ if ($action === 'batch_transfer_files') {
         }
     }
 
-    if ($processedCount > 0) {
+    if ($processedFolderCount > 0 || $processedCount > 0) {
+        $parts = [];
+        if ($processedFolderCount > 0) {
+            $parts[] = sprintf('%d Ordner', $processedFolderCount);
+        }
+        if ($processedCount > 0) {
+            $parts[] = sprintf('%d %s', $processedCount, $processedCount === 1 ? 'Datei' : 'Dateien');
+        }
         setFlash(
             'success',
             sprintf(
-                '%d %s in %s %s.',
-                $processedCount,
-                $processedCount === 1 ? 'Datei wurde' : 'Dateien wurden',
+                '%s in %s %s.',
+                implode(' und ', $parts),
                 $destLabel,
                 $mode === 'move' ? 'verschoben' : 'kopiert'
             )
         );
     } else {
-        setFlash('warning', 'Es wurden keine Dateien übertragen (bereits am Zielort oder fehlende Berechtigung).');
+        setFlash('warning', 'Es wurden keine Ordner oder Dateien übertragen (bereits am Zielort oder fehlende Berechtigung).');
     }
 
     $queryParams = [];

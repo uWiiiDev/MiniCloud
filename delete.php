@@ -112,11 +112,106 @@ if (isset($_POST['delete_folder']) && is_string($_POST['delete_folder']) && trim
     exit;
 }
 
-// Option B0: Mehrfachauswahl (Batch-Löschen mehrerer ausgewählter Dateien in den Papierkorb)
-if (isset($_POST['batch_file_ids']) && is_string($_POST['batch_file_ids']) && trim($_POST['batch_file_ids']) !== '') {
-    $rawIds = explode(',', $_POST['batch_file_ids']);
-    $trashedBatchCount = 0;
+// Option B0: Mehrfachauswahl (Batch-Löschen mehrerer ausgewählter Ordner & Dateien in den Papierkorb)
+$hasBatchFiles   = isset($_POST['batch_file_ids']) && is_string($_POST['batch_file_ids']) && trim($_POST['batch_file_ids']) !== '';
+$hasBatchFolders = isset($_POST['batch_folders']) && is_string($_POST['batch_folders']) && trim($_POST['batch_folders']) !== '';
+if ($hasBatchFiles || $hasBatchFolders) {
+    $rawIds = $hasBatchFiles ? explode(',', $_POST['batch_file_ids']) : [];
+    $rawFolders = [];
+    if ($hasBatchFolders) {
+        $decodedFolders = json_decode($_POST['batch_folders'], true);
+        if (is_array($decodedFolders)) {
+            $rawFolders = $decodedFolders;
+        }
+    }
 
+    $trashedBatchCount  = 0;
+    $deletedFolderCount = 0;
+
+    // 1. Ausgewählte Ordner samt Inhalt in den Papierkorb verschieben
+    foreach ($rawFolders as $rawFolderItem) {
+        $folderToDelete = extractSanitizedFolderPath(trim((string)$rawFolderItem) . '/placeholder');
+        if ($folderToDelete === '') {
+            continue;
+        }
+
+        if ($returnGfId > 0) {
+            if (!canUserAccessGroupFolder($pdo, $userId, $returnGfId, true, $isAdmin)) {
+                continue;
+            }
+            $stmtTrashGfFiles = $pdo->prepare(
+                'UPDATE files
+                 SET deleted_at = NOW()
+                 WHERE group_folder_id = :gf_id AND deleted_at IS NULL
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            );
+            $stmtTrashGfFiles->execute([
+                ':gf_id'         => $returnGfId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+            $trashedBatchCount += $stmtTrashGfFiles->rowCount();
+
+            $stmtDeleteGfUf = $pdo->prepare(
+                'DELETE FROM user_folders
+                 WHERE group_folder_id = :gf_id
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            );
+            $stmtDeleteGfUf->execute([
+                ':gf_id'         => $returnGfId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+            $deletedFolderCount++;
+        } else {
+            $stmtTrashFiles = $pdo->prepare(
+                'UPDATE files
+                 SET deleted_at = NOW()
+                 WHERE user_id = :user_id AND group_folder_id IS NULL AND deleted_at IS NULL
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            );
+            $stmtTrashFiles->execute([
+                ':user_id'       => $userId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+            $trashedBatchCount += $stmtTrashFiles->rowCount();
+
+            $stmtDeleteUf = $pdo->prepare(
+                'DELETE FROM user_folders
+                 WHERE user_id = :user_id AND group_folder_id IS NULL
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            );
+            $stmtDeleteUf->execute([
+                ':user_id'       => $userId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+
+            $pdo->prepare(
+                'DELETE FROM shares
+                 WHERE user_id = :user_id AND folder_path IS NOT NULL
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            )->execute([
+                ':user_id'       => $userId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+
+            $pdo->prepare(
+                'DELETE FROM user_shares
+                 WHERE owner_id = :user_id AND folder_path IS NOT NULL
+                   AND (folder_path = :folder_exact OR folder_path LIKE :folder_prefix)'
+            )->execute([
+                ':user_id'       => $userId,
+                ':folder_exact'  => $folderToDelete,
+                ':folder_prefix' => $folderToDelete . '/%',
+            ]);
+            $deletedFolderCount++;
+        }
+    }
+
+    // 2. Einzelne ausgewählte Dateien in den Papierkorb verschieben
     $stmtSel = $pdo->prepare('SELECT id, user_id, group_folder_id, folder_path, filename, original_name FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
     $stmtUpd = $pdo->prepare('UPDATE files SET deleted_at = NOW() WHERE id = :id');
 
@@ -146,18 +241,36 @@ if (isset($_POST['batch_file_ids']) && is_string($_POST['batch_file_ids']) && tr
         }
     }
 
-    if ($trashedBatchCount > 0) {
-        setFlash(
-            'success',
-            sprintf(
-                '%d ausgewählte %s in den Papierkorb verschoben (%d Tage Aufbewahrung).',
-                $trashedBatchCount,
-                $trashedBatchCount === 1 ? 'Datei wurde' : 'Dateien wurden',
-                TRASH_RETENTION_DAYS
-            )
-        );
+    if ($deletedFolderCount > 0 || $trashedBatchCount > 0) {
+        if ($deletedFolderCount > 0 && $trashedBatchCount > 0) {
+            setFlash(
+                'success',
+                sprintf(
+                    '%d Ordner aufgelöst und insgesamt %d %s in den Papierkorb verschoben (%d Tage Aufbewahrung).',
+                    $deletedFolderCount,
+                    $trashedBatchCount,
+                    $trashedBatchCount === 1 ? 'Datei' : 'Dateien',
+                    TRASH_RETENTION_DAYS
+                )
+            );
+        } elseif ($deletedFolderCount > 0) {
+            setFlash(
+                'success',
+                sprintf('%d ausgewählte Ordner wurden gelöscht.', $deletedFolderCount)
+            );
+        } else {
+            setFlash(
+                'success',
+                sprintf(
+                    '%d ausgewählte %s in den Papierkorb verschoben (%d Tage Aufbewahrung).',
+                    $trashedBatchCount,
+                    $trashedBatchCount === 1 ? 'Datei wurde' : 'Dateien wurden',
+                    TRASH_RETENTION_DAYS
+                )
+            );
+        }
     } else {
-        setFlash('error', 'Keine der ausgewählten Dateien konnte gelöscht werden (fehlende Berechtigung).');
+        setFlash('error', 'Keine der ausgewählten Ordner oder Dateien konnte gelöscht werden (fehlende Berechtigung).');
     }
 
     $queryParams = [];

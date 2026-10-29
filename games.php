@@ -117,8 +117,16 @@ function getGamesCatalog(): array
             'title'    => 'Gummigeruch Kart',
             'icon'     => '🏎️',
             'category' => 'Rennspiel',
-            'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, Bremsspuren, 3 Strecken, Ghost-Duellen & Live-Herausforderungen!',
+            'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, Bremsspuren, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'pacman' => [
+            'key'      => 'pacman',
+            'title'    => 'Cloud-PacMan',
+            'icon'     => '🟡',
+            'category' => 'Arcade',
+            'desc'     => 'Der Neon-Labyrinth-Klassiker mit 4 schlauen Geistern (Blinky, Pinky, Inky, Clyde), Power-Pillen & Bonusfrüchten!',
+            'color'    => 'from-amber-400 to-yellow-600',
         ],
         'sudoku' => [
             'key'      => 'sudoku',
@@ -975,7 +983,7 @@ $csrfToken = getCsrfToken();
                         MiniCloud Spiele-Zentrale &amp; Pausenraum
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                        9 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
+                        10 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
                     </span>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -995,8 +1003,8 @@ $csrfToken = getCsrfToken();
         </div>
     </div>
 
-    <!-- SPIELAUSWAHL-LEISTE (9 SPIEL-KARTEN) -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
+    <!-- SPIELAUSWAHL-LEISTE (10 SPIEL-KARTEN) -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
             <?php
             $gKeyStr = (string)$gKey;
@@ -1636,6 +1644,90 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 10. SPIEL: CLOUD-PACMAN (NEON-ARCADE) -->
+            <div id="gamePanel-pacman" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🟡 Cloud-PacMan</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                                👻 4 Geister-KIs &middot; Power-Pillen &middot; Warp-Tunnel
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung mit <strong>Pfeiltasten</strong> oder <strong>W A S D</strong> (Richtung kann schon vor der nächsten Kreuzung vorab gedrückt werden!).
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" id="pacmanPauseBtn" onclick="pacmanTogglePause()"
+                                class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
+                            ⏸️ Pause
+                        </button>
+                        <button type="button" onclick="pacmanStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Neues Spiel starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Punktezeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="pacmanScore" class="text-amber-600 dark:text-amber-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Level:</span>
+                        <strong id="pacmanLevel" class="text-slate-900 dark:text-white font-extrabold">1</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Leben:</span>
+                        <strong id="pacmanLives" class="tracking-widest">❤️❤️❤️</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Status:</span>
+                        <strong id="pacmanStatus" class="text-emerald-600 dark:text-emerald-400 font-extrabold truncate">Bereit</strong>
+                    </div>
+                </div>
+
+                <!-- Geister-Legende -->
+                <div class="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> <strong>Blinky</strong> (Verfolger)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block"></span> <strong>Pinky</strong> (Hinterhalt)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> <strong>Inky</strong> (Flankierer)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"></span> <strong>Clyde</strong> (Streuner)</span>
+                    <span>&middot; ⚡ Power-Pille = <strong>+200 / +400 / +800 / +1600 Pkt.</strong></span>
+                </div>
+
+                <!-- Arcade-Spielfeld (Canvas) -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="pacmanCanvas" width="456" height="504"
+                            class="rounded-2xl bg-slate-950 border-2 border-blue-900/80 shadow-xl max-w-full h-auto"></canvas>
+
+                    <!-- Touch- / Mobil-Steuerkreuz -->
+                    <div class="grid grid-cols-3 gap-2 w-44 sm:w-48 select-none">
+                        <div></div>
+                        <button type="button" onclick="pacmanQueueDir(0, -1)"
+                                class="py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-500 active:text-slate-950 font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬆️
+                        </button>
+                        <div></div>
+                        <button type="button" onclick="pacmanQueueDir(-1, 0)"
+                                class="py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-500 active:text-slate-950 font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬅️
+                        </button>
+                        <button type="button" onclick="pacmanQueueDir(0, 1)"
+                                class="py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-500 active:text-slate-950 font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬇️
+                        </button>
+                        <button type="button" onclick="pacmanQueueDir(1, 0)"
+                                class="py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-amber-500 active:text-slate-950 font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ➡️
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -1727,6 +1819,11 @@ function selectCloudGame(gameKey) {
             gummiInit();
         }
         gummiPollState();
+    } else if (gameKey === 'pacman') {
+        if (!pacmanInitialized) {
+            pacmanInit();
+        }
+        pacmanDraw();
     } else if (gameKey === 'wow') {
         if (!wowInitialized) {
             wowInit();
@@ -5589,6 +5686,12 @@ window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowDown'  || e.key === 's') { e.preventDefault(); snakeSetDir(0, 1); }
         if (e.key === 'ArrowLeft'  || e.key === 'a') { e.preventDefault(); snakeSetDir(-1, 0); }
         if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); snakeSetDir(1, 0); }
+    } else if (activeGameKey === 'pacman') {
+        if (e.key === 'ArrowUp'    || e.key === 'w' || e.key === 'W') { e.preventDefault(); pacmanQueueDir(0, -1); }
+        if (e.key === 'ArrowDown'  || e.key === 's' || e.key === 'S') { e.preventDefault(); pacmanQueueDir(0, 1); }
+        if (e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'A') { e.preventDefault(); pacmanQueueDir(-1, 0); }
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); pacmanQueueDir(1, 0); }
+        if (e.key === 'p' || e.key === 'P') { e.preventDefault(); pacmanTogglePause(); }
     } else if (activeGameKey === 'breakout' && boRunning) {
         if (e.key === 'ArrowLeft')  boPaddleX = Math.max(0, boPaddleX - 24);
         if (e.key === 'ArrowRight') boPaddleX = Math.min(390, boPaddleX + 24);
@@ -5623,9 +5726,682 @@ setInterval(() => {
     }
 }, 4000);
 
+// =============================================================================
+// SPIEL 10: CLOUD-PACMAN (NEON-LABYRINTH, 4 GEISTER-KIS, POWER-PILLEN & FRÜCHTE)
+// =============================================================================
+const PACMAN_TILE = 24;
+const PACMAN_COLS = 19;
+const PACMAN_ROWS = 21;
+const PACMAN_MAZE_TEMPLATE = [
+    "1111111111111111111",
+    "1322222221222222231",
+    "1211211121211121121",
+    "1211211121211121121",
+    "1222222222222222221",
+    "1211212111112121121",
+    "1222212221222122221",
+    "1111211101011121111",
+    "0001210000000121000",
+    "1111210114110121111",
+    "0000200100010020000",
+    "1111210111110121111",
+    "0001210000000121000",
+    "1111210111110121111",
+    "1222222221222222221",
+    "1211211121211121121",
+    "1321222220222221231",
+    "1121212111112121211",
+    "1222212221222122221",
+    "1211111121211111121",
+    "1111111111111111111"
+];
+
+let pacmanInitialized = false;
+let pacmanRunning     = false;
+let pacmanPaused      = false;
+let pacmanRafId       = null;
+let pacmanGrid        = [];
+let pacmanDotsLeft    = 0;
+let pacmanScoreVal    = 0;
+let pacmanLevelVal    = 1;
+let pacmanLivesVal    = 3;
+let pacmanStartTime   = 0;
+let pacmanTickCount   = 0;
+let pacmanFrightTimer = 0;
+let pacmanGhostCombo  = 0;
+let pacmanBonusFruit  = null; // { col: 9, row: 12, icon: '🍒', pts: 300, timer: 450 }
+let pacmanPopups      = [];   // [{ x, y, text, color, life }]
+
+let pacmanPlayer = {
+    x: 9 * PACMAN_TILE,
+    y: 16 * PACMAN_TILE,
+    dx: 0,
+    dy: 0,
+    nextDx: -1,
+    nextDy: 0,
+    mouthAngle: 0.2,
+    mouthSpeed: 0.025,
+    facingAngle: Math.PI
+};
+
+let pacmanGhosts = [];
+
+function pacmanBuildGrid() {
+    pacmanGrid = [];
+    pacmanDotsLeft = 0;
+    for (let r = 0; r < PACMAN_ROWS; r++) {
+        const rowArr = [];
+        const line = PACMAN_MAZE_TEMPLATE[r];
+        for (let c = 0; c < PACMAN_COLS; c++) {
+            const ch = Number(line[c] || 0);
+            rowArr.push(ch);
+            if (ch === 2 || ch === 3) {
+                pacmanDotsLeft++;
+            }
+        }
+        pacmanGrid.push(rowArr);
+    }
+}
+
+function pacmanResetPositions() {
+    pacmanPlayer.x = 9 * PACMAN_TILE;
+    pacmanPlayer.y = 16 * PACMAN_TILE;
+    pacmanPlayer.dx = 0;
+    pacmanPlayer.dy = 0;
+    pacmanPlayer.nextDx = -1;
+    pacmanPlayer.nextDy = 0;
+    pacmanPlayer.facingAngle = Math.PI;
+
+    pacmanGhosts = [
+        { name: 'Blinky', color: '#ef4444', x: 9 * PACMAN_TILE,  y: 8 * PACMAN_TILE,  dx: -1, dy: 0, scatterX: 17, scatterY: 1,  eaten: false, releaseDelay: 0 },
+        { name: 'Pinky',  color: '#f472b6', x: 9 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 1,  eaten: false, releaseDelay: 35 },
+        { name: 'Inky',   color: '#38bdf8', x: 8 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 17, scatterY: 19, eaten: false, releaseDelay: 90 },
+        { name: 'Clyde',  color: '#fb923c', x: 10 * PACMAN_TILE, y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 19, eaten: false, releaseDelay: 150 }
+    ];
+}
+
+function pacmanInit() {
+    pacmanInitialized = true;
+    pacmanBuildGrid();
+    pacmanResetPositions();
+    pacmanUpdateHud('Drücke Start oder Pfeiltaste');
+    pacmanDraw();
+}
+
+function pacmanStartGame() {
+    if (pacmanRafId) cancelAnimationFrame(pacmanRafId);
+    pacmanScoreVal    = 0;
+    pacmanLevelVal    = 1;
+    pacmanLivesVal    = 3;
+    pacmanFrightTimer = 0;
+    pacmanGhostCombo  = 0;
+    pacmanBonusFruit  = null;
+    pacmanPopups      = [];
+    pacmanRunning     = true;
+    pacmanPaused      = false;
+    pacmanStartTime   = performance.now();
+    pacmanTickCount   = 0;
+
+    const pauseBtn = document.getElementById('pacmanPauseBtn');
+    if (pauseBtn) pauseBtn.textContent = '⏸️ Pause';
+
+    pacmanBuildGrid();
+    pacmanResetPositions();
+    pacmanUpdateHud('Auf geht’s!');
+    pacmanLoop();
+}
+
+function pacmanTogglePause() {
+    if (!pacmanRunning) return;
+    pacmanPaused = !pacmanPaused;
+    const pauseBtn = document.getElementById('pacmanPauseBtn');
+    if (pauseBtn) pauseBtn.textContent = pacmanPaused ? '▶️ Weiter' : '⏸️ Pause';
+    pacmanUpdateHud(pacmanPaused ? '⏸️ Pausiert' : (pacmanFrightTimer > 0 ? '⚡ JAGD-MODUS!' : 'Aktiv'));
+    if (!pacmanPaused) {
+        pacmanLoop();
+    } else {
+        pacmanDraw();
+    }
+}
+
+function pacmanQueueDir(dx, dy) {
+    pacmanPlayer.nextDx = dx;
+    pacmanPlayer.nextDy = dy;
+    if (!pacmanRunning && pacmanInitialized) {
+        pacmanStartGame();
+        pacmanPlayer.nextDx = dx;
+        pacmanPlayer.nextDy = dy;
+    }
+    // Sofortiger 180-Grad-Richtungswechsel ist jederzeit möglich
+    if (pacmanPlayer.dx === -dx && pacmanPlayer.dy === -dy && (dx !== 0 || dy !== 0)) {
+        pacmanPlayer.dx = dx;
+        pacmanPlayer.dy = dy;
+        pacmanPlayer.facingAngle = Math.atan2(dy, dx);
+    }
+}
+
+function pacmanUpdateHud(statusText = null) {
+    const scEl = document.getElementById('pacmanScore');
+    const lvEl = document.getElementById('pacmanLevel');
+    const liEl = document.getElementById('pacmanLives');
+    const stEl = document.getElementById('pacmanStatus');
+
+    if (scEl) scEl.textContent = pacmanScoreVal.toLocaleString('de-DE');
+    if (lvEl) lvEl.textContent = String(pacmanLevelVal);
+    if (liEl) liEl.textContent = '❤️'.repeat(Math.max(0, pacmanLivesVal)) || '💀';
+    if (stEl && statusText !== null) {
+        stEl.textContent = statusText;
+    }
+}
+
+function pacmanCanMoveTile(col, row, isGhost = false, inGhostHouse = false) {
+    if (row < 0 || row >= PACMAN_ROWS) return false;
+    // Warp-Tunnel links/rechts
+    if (col < 0 || col >= PACMAN_COLS) {
+        return row === 10;
+    }
+    const cell = pacmanGrid[row][col];
+    if (cell === 1) return false;
+    if (cell === 4) return isGhost && inGhostHouse;
+    return true;
+}
+
+function pacmanStepPlayer() {
+    const speed = 2; // Teiler von 24 (24 / 2 = 12 Subschritte pro Kachel)
+    // Warp-Tunnel-Umbruch
+    if (pacmanPlayer.x < -PACMAN_TILE / 2) {
+        pacmanPlayer.x = (PACMAN_COLS - 1) * PACMAN_TILE;
+    } else if (pacmanPlayer.x > (PACMAN_COLS - 1) * PACMAN_TILE + PACMAN_TILE / 2) {
+        pacmanPlayer.x = 0;
+    }
+
+    const onGridX = (pacmanPlayer.x % PACMAN_TILE === 0);
+    const onGridY = (pacmanPlayer.y % PACMAN_TILE === 0);
+
+    if (onGridX && onGridY) {
+        const col = Math.round(pacmanPlayer.x / PACMAN_TILE);
+        const row = Math.round(pacmanPlayer.y / PACMAN_TILE);
+
+        // Punkt oder Power-Pille auf dieser Kachel einsammeln
+        if (col >= 0 && col < PACMAN_COLS && row >= 0 && row < PACMAN_ROWS) {
+            const cell = pacmanGrid[row][col];
+            if (cell === 2) {
+                pacmanGrid[row][col] = 0;
+                pacmanScoreVal += 10;
+                pacmanDotsLeft--;
+                pacmanUpdateHud();
+            } else if (cell === 3) {
+                pacmanGrid[row][col] = 0;
+                pacmanScoreVal += 50;
+                pacmanDotsLeft--;
+                pacmanFrightTimer = Math.max(180, 440 - (pacmanLevelVal - 1) * 45);
+                pacmanGhostCombo  = 0;
+                // Geister kehren bei Power-Pille sofort die Richtung um
+                pacmanGhosts.forEach((g) => {
+                    if (!g.eaten) {
+                        g.dx = -g.dx;
+                        g.dy = -g.dy;
+                    }
+                });
+                pacmanUpdateHud('⚡ JAGD-MODUS!');
+            }
+
+            // Bonusfrucht erscheint bei 70 und 30 verbleibenden Punkten
+            if ((pacmanDotsLeft === 70 || pacmanDotsLeft === 30) && !pacmanBonusFruit) {
+                const fruits = [
+                    { icon: '🍒', pts: 200 },
+                    { icon: '🍓', pts: 350 },
+                    { icon: '🍊', pts: 500 },
+                    { icon: '🍎', pts: 700 },
+                    { icon: '👑', pts: 1000 }
+                ];
+                const f = fruits[(pacmanLevelVal - 1) % fruits.length];
+                pacmanBonusFruit = { col: 9, row: 12, icon: f.icon, pts: f.pts, timer: 480 };
+            }
+
+            // Alle Punkte im Level abgeräumt?
+            if (pacmanDotsLeft <= 0) {
+                pacmanLevelVal++;
+                pacmanScoreVal += 500;
+                pacmanFrightTimer = 0;
+                pacmanBonusFruit  = null;
+                pacmanPopups.push({ x: 9 * PACMAN_TILE, y: 10 * PACMAN_TILE, text: 'LEVEL ' + pacmanLevelVal + '! +500', color: '#fde047', life: 70 });
+                pacmanBuildGrid();
+                pacmanResetPositions();
+                pacmanUpdateHud('🎉 Level ' + pacmanLevelVal + '!');
+                return;
+            }
+        }
+
+        // Vorgemerkte Richtung prüfen
+        if (pacmanPlayer.nextDx !== 0 || pacmanPlayer.nextDy !== 0) {
+            if (pacmanCanMoveTile(col + pacmanPlayer.nextDx, row + pacmanPlayer.nextDy, false, false)) {
+                pacmanPlayer.dx = pacmanPlayer.nextDx;
+                pacmanPlayer.dy = pacmanPlayer.nextDy;
+                pacmanPlayer.facingAngle = Math.atan2(pacmanPlayer.dy, pacmanPlayer.dx);
+            }
+        }
+
+        // Ist die aktuelle Richtung blockiert?
+        if (!pacmanCanMoveTile(col + pacmanPlayer.dx, row + pacmanPlayer.dy, false, false)) {
+            pacmanPlayer.dx = 0;
+            pacmanPlayer.dy = 0;
+        }
+    }
+
+    pacmanPlayer.x += pacmanPlayer.dx * speed;
+    pacmanPlayer.y += pacmanPlayer.dy * speed;
+
+    // Mund-Animation
+    if (pacmanPlayer.dx !== 0 || pacmanPlayer.dy !== 0) {
+        pacmanPlayer.mouthAngle += pacmanPlayer.mouthSpeed;
+        if (pacmanPlayer.mouthAngle > 0.36 || pacmanPlayer.mouthAngle < 0.03) {
+            pacmanPlayer.mouthSpeed = -pacmanPlayer.mouthSpeed;
+        }
+    }
+
+    // Bonusfrucht-Kollision prüfen
+    if (pacmanBonusFruit) {
+        pacmanBonusFruit.timer--;
+        const fx = pacmanBonusFruit.col * PACMAN_TILE;
+        const fy = pacmanBonusFruit.row * PACMAN_TILE;
+        if (Math.hypot(pacmanPlayer.x - fx, pacmanPlayer.y - fy) < PACMAN_TILE * 0.75) {
+            pacmanScoreVal += pacmanBonusFruit.pts;
+            pacmanPopups.push({
+                x: fx + 12,
+                y: fy,
+                text: '+' + pacmanBonusFruit.pts + ' ' + pacmanBonusFruit.icon,
+                color: '#4ade80',
+                life: 55
+            });
+            pacmanBonusFruit = null;
+            pacmanUpdateHud('🍒 Bonus gesammelt!');
+        } else if (pacmanBonusFruit.timer <= 0) {
+            pacmanBonusFruit = null;
+        }
+    }
+}
+
+function pacmanStepGhosts() {
+    const pacCol = Math.round(pacmanPlayer.x / PACMAN_TILE);
+    const pacRow = Math.round(pacmanPlayer.y / PACMAN_TILE);
+    const scatterMode = (Math.floor(pacmanTickCount / 420) % 3 === 1) && pacmanFrightTimer === 0;
+
+    pacmanGhosts.forEach((g, idx) => {
+        if (g.releaseDelay > 0) {
+            g.releaseDelay--;
+            return;
+        }
+
+        // Geschwindigkeit muss Teiler von 24 sein (1, 2 oder 4), bzw. wenn nicht auf Gitter, sanft einrasten
+        let speed = 2;
+        if (g.eaten) {
+            speed = 4;
+        } else if (pacmanFrightTimer > 0) {
+            speed = (pacmanTickCount % 2 === 0) ? 2 : 0; // halbierte Geschwindigkeit im Frightened-Modus, bleibt auf 2px-Raster!
+        }
+        if (speed === 0) return;
+
+        // Sicherstellen, dass Koordinaten für speed=4 auf Vielfaches von 4 einrasten
+        if (speed === 4) {
+            if (g.x % 4 !== 0) g.x += (g.dx >= 0 ? 2 : -2);
+            if (g.y % 4 !== 0) g.y += (g.dy >= 0 ? 2 : -2);
+        }
+
+        // Warp-Tunnel
+        if (g.x < -PACMAN_TILE / 2) {
+            g.x = (PACMAN_COLS - 1) * PACMAN_TILE;
+        } else if (g.x > (PACMAN_COLS - 1) * PACMAN_TILE + PACMAN_TILE / 2) {
+            g.x = 0;
+        }
+
+        const onGridX = (g.x % PACMAN_TILE === 0);
+        const onGridY = (g.y % PACMAN_TILE === 0);
+
+        if (onGridX && onGridY) {
+            const col = Math.round(g.x / PACMAN_TILE);
+            const row = Math.round(g.y / PACMAN_TILE);
+            const inHouse = (row >= 9 && row <= 10 && col >= 8 && col <= 10);
+
+            // Wenn gefressener Geist vor oder im Geisterhaus ankommt -> wiederbeleben!
+            if (g.eaten && ((col === 9 && row === 8) || inHouse)) {
+                g.eaten = false;
+                g.dx = (Math.random() < 0.5) ? -1 : 1;
+                g.dy = 0;
+            }
+
+            // Zielkachel bestimmen
+            let targetX = pacCol;
+            let targetY = pacRow;
+
+            if (g.eaten) {
+                targetX = 9;
+                targetY = 8;
+            } else if (inHouse) {
+                targetX = 9;
+                targetY = 7;
+            } else if (scatterMode) {
+                targetX = g.scatterX;
+                targetY = g.scatterY;
+            } else {
+                if (idx === 0) {
+                    // Blinky: direkte Jagd
+                    targetX = pacCol;
+                    targetY = pacRow;
+                } else if (idx === 1) {
+                    // Pinky: 4 Felder vor Pac-Man
+                    targetX = pacCol + pacmanPlayer.dx * 4;
+                    targetY = pacRow + pacmanPlayer.dy * 4;
+                } else if (idx === 2) {
+                    // Inky: Flankiert zusammen mit Blinky
+                    const blinky = pacmanGhosts[0];
+                    const bCol = Math.round(blinky.x / PACMAN_TILE);
+                    const bRow = Math.round(blinky.y / PACMAN_TILE);
+                    const aheadX = pacCol + pacmanPlayer.dx * 2;
+                    const aheadY = pacRow + pacmanPlayer.dy * 2;
+                    targetX = aheadX + (aheadX - bCol);
+                    targetY = aheadY + (aheadY - bRow);
+                } else {
+                    // Clyde: Jagt wenn weit weg, zieht sich in die Ecke zurück wenn nah
+                    const dist = Math.hypot(col - pacCol, row - pacRow);
+                    if (dist > 6) {
+                        targetX = pacCol;
+                        targetY = pacRow;
+                    } else {
+                        targetX = g.scatterX;
+                        targetY = g.scatterY;
+                    }
+                }
+            }
+
+            const dirs = [
+                { dx: 0, dy: -1 },
+                { dx: -1, dy: 0 },
+                { dx: 0, dy: 1 },
+                { dx: 1, dy: 0 }
+            ];
+
+            let validDirs = dirs.filter((d) => {
+                // Kein direktes Umdrehen (außer in Sackgasse)
+                if (d.dx === -g.dx && d.dy === -g.dy) return false;
+                return pacmanCanMoveTile(col + d.dx, row + d.dy, true, inHouse || g.eaten);
+            });
+
+            if (validDirs.length === 0) {
+                validDirs = dirs.filter((d) => pacmanCanMoveTile(col + d.dx, row + d.dy, true, inHouse || g.eaten));
+            }
+
+            if (validDirs.length > 0) {
+                if (pacmanFrightTimer > 0 && !g.eaten && !inHouse) {
+                    // Im Frightened-Modus zufällige Abzweigung wählen
+                    const pick = validDirs[Math.floor(Math.random() * validDirs.length)];
+                    g.dx = pick.dx;
+                    g.dy = pick.dy;
+                } else {
+                    // Kürzeste Distanz zur Zielkachel wählen
+                    validDirs.sort((a, b) => {
+                        const da = Math.hypot((col + a.dx) - targetX, (row + a.dy) - targetY);
+                        const db = Math.hypot((col + b.dx) - targetX, (row + b.dy) - targetY);
+                        return da - db;
+                    });
+                    g.dx = validDirs[0].dx;
+                    g.dy = validDirs[0].dy;
+                }
+            }
+        }
+
+        g.x += g.dx * speed;
+        g.y += g.dy * speed;
+    });
+}
+
+function pacmanCheckCollisions() {
+    for (const g of pacmanGhosts) {
+        const dist = Math.hypot(pacmanPlayer.x - g.x, pacmanPlayer.y - g.y);
+        if (dist < PACMAN_TILE * 0.68) {
+            if (g.eaten) {
+                continue;
+            }
+            if (pacmanFrightTimer > 0) {
+                // Geist gefressen!
+                g.eaten = true;
+                pacmanGhostCombo++;
+                const pts = 200 * Math.pow(2, pacmanGhostCombo - 1);
+                pacmanScoreVal += pts;
+                pacmanPopups.push({
+                    x: g.x + 12,
+                    y: g.y,
+                    text: '+' + pts,
+                    color: '#38bdf8',
+                    life: 50
+                });
+                pacmanUpdateHud('👻 +' + pts + ' Pkt.!');
+            } else {
+                // Leben verloren!
+                pacmanLivesVal--;
+                pacmanFrightTimer = 0;
+                if (pacmanLivesVal <= 0) {
+                    pacmanRunning = false;
+                    pacmanUpdateHud('💥 Game Over!');
+                    const durSec = Math.max(1, Math.round((performance.now() - pacmanStartTime) / 1000));
+                    submitCloudScore('pacman', pacmanScoreVal, durSec, 'Level ' + pacmanLevelVal);
+                    return;
+                } else {
+                    pacmanPopups.push({
+                        x: pacmanPlayer.x + 12,
+                        y: pacmanPlayer.y,
+                        text: '💔 Autsch!',
+                        color: '#f87171',
+                        life: 55
+                    });
+                    pacmanResetPositions();
+                    pacmanUpdateHud('Noch ' + pacmanLivesVal + ' Leben');
+                    return;
+                }
+            }
+        }
+    }
+}
+
+function pacmanDraw() {
+    const cvs = document.getElementById('pacmanCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // 1. Labyrinth, Punkte & Power-Pillen zeichnen
+    const pelletBlink = Math.floor(pacmanTickCount / 12) % 2 === 0;
+    for (let r = 0; r < PACMAN_ROWS; r++) {
+        for (let c = 0; c < PACMAN_COLS; c++) {
+            const cell = pacmanGrid[r]?.[c] ?? 0;
+            const x = c * PACMAN_TILE;
+            const y = r * PACMAN_TILE;
+
+            if (cell === 1) {
+                ctx.fillStyle   = '#1e3a8a';
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth   = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(x + 2, y + 2, PACMAN_TILE - 4, PACMAN_TILE - 4, 5);
+                ctx.fill();
+                ctx.stroke();
+            } else if (cell === 4) {
+                // Geisterhaus-Schranke
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(x + 2, y + 10, PACMAN_TILE - 4, 4);
+            } else if (cell === 2) {
+                // Pac-Dot
+                ctx.fillStyle = '#fde68a';
+                ctx.beginPath();
+                ctx.arc(x + PACMAN_TILE / 2, y + PACMAN_TILE / 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (cell === 3) {
+                // Blinkende Power-Pille
+                ctx.fillStyle = pelletBlink ? '#facc15' : '#fef08a';
+                ctx.beginPath();
+                ctx.arc(x + PACMAN_TILE / 2, y + PACMAN_TILE / 2, pelletBlink ? 7.5 : 5.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // 2. Bonusfrucht zeichnen
+    if (pacmanBonusFruit) {
+        const fx = pacmanBonusFruit.col * PACMAN_TILE + PACMAN_TILE / 2;
+        const fy = pacmanBonusFruit.row * PACMAN_TILE + PACMAN_TILE / 2 + 5;
+        ctx.font = '18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(pacmanBonusFruit.icon, fx, fy);
+    }
+
+    // 3. Pac-Man zeichnen
+    const px = pacmanPlayer.x + PACMAN_TILE / 2;
+    const py = pacmanPlayer.y + PACMAN_TILE / 2;
+    const mouth = pacmanPlayer.mouthAngle * Math.PI;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(pacmanPlayer.facingAngle);
+    ctx.fillStyle = '#facc15';
+    ctx.shadowColor = '#facc15';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 10.5, mouth, Math.PI * 2 - mouth);
+    ctx.lineTo(0, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // 4. Die 4 Geister zeichnen
+    pacmanGhosts.forEach((g) => {
+        const gx = g.x + PACMAN_TILE / 2;
+        const gy = g.y + PACMAN_TILE / 2;
+
+        ctx.save();
+        ctx.translate(gx, gy);
+
+        if (!g.eaten) {
+            let bodyColor = g.color;
+            if (pacmanFrightTimer > 0) {
+                const flashWhite = pacmanFrightTimer < 110 && (Math.floor(pacmanTickCount / 8) % 2 === 0);
+                bodyColor = flashWhite ? '#f8fafc' : '#1d4ed8';
+            }
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.arc(0, -2, 10, Math.PI, 0, false);
+            ctx.lineTo(10, 9);
+            // Gewellter Geister-Saum unten
+            const waveShift = (Math.floor(pacmanTickCount / 6) % 2 === 0) ? 1 : -1;
+            ctx.lineTo(6, 7 + waveShift);
+            ctx.lineTo(2, 9 - waveShift);
+            ctx.lineTo(-2, 7 + waveShift);
+            ctx.lineTo(-6, 9 - waveShift);
+            ctx.lineTo(-10, 9);
+            ctx.closePath();
+            ctx.fill();
+
+            if (pacmanFrightTimer > 0) {
+                // Gezackter erschrockener Mund
+                ctx.strokeStyle = '#fde047';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-6, 4);
+                ctx.lineTo(-3, 2);
+                ctx.lineTo(0, 4);
+                ctx.lineTo(3, 2);
+                ctx.lineTo(6, 4);
+                ctx.stroke();
+            }
+        }
+
+        // Geister-Augen (schauen in Bewegungsrichtung)
+        const lookX = g.dx * 2;
+        const lookY = g.dy * 2;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(-4 + lookX * 0.5, -3 + lookY * 0.5, 3.3, 0, Math.PI * 2);
+        ctx.arc(4 + lookX * 0.5, -3 + lookY * 0.5, 3.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = (pacmanFrightTimer > 0 && !g.eaten) ? '#fde047' : '#0f172a';
+        ctx.beginPath();
+        ctx.arc(-4 + lookX * 1.2, -3 + lookY * 1.2, 1.7, 0, Math.PI * 2);
+        ctx.arc(4 + lookX * 1.2, -3 + lookY * 1.2, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    });
+
+    // 5. Schwebende Punkte-Popups (+200, +400, Bonusfrucht)
+    for (let i = pacmanPopups.length - 1; i >= 0; i--) {
+        const p = pacmanPopups[i];
+        ctx.save();
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.restore();
+        p.y -= 0.5;
+        p.life--;
+        if (p.life <= 0) {
+            pacmanPopups.splice(i, 1);
+        }
+    }
+
+    // 6. Start- / Pausen- / Game-Over-Banner
+    if (!pacmanRunning || pacmanPaused) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.72)';
+        ctx.fillRect(0, cvs.height / 2 - 42, cvs.width, 84);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'bold 22px sans-serif';
+        if (pacmanPaused) {
+            ctx.fillText('⏸️ SPIEL PAUSIERT', cvs.width / 2, cvs.height / 2 - 4);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Klicke auf „Weiter“ oder drücke P zum Fortsetzen', cvs.width / 2, cvs.height / 2 + 20);
+        } else if (pacmanLivesVal <= 0) {
+            ctx.fillText('👻 GAME OVER – ' + pacmanScoreVal.toLocaleString('de-DE') + ' Pkt.', cvs.width / 2, cvs.height / 2 - 4);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Drücke eine Pfeiltaste oder „Neues Spiel starten“', cvs.width / 2, cvs.height / 2 + 20);
+        } else {
+            ctx.fillText('🟡 CLOUD-PACMAN BEREIT!', cvs.width / 2, cvs.height / 2 - 4);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Drücke eine Pfeiltaste / WASD oder „Neues Spiel starten“', cvs.width / 2, cvs.height / 2 + 20);
+        }
+    }
+}
+
+function pacmanLoop() {
+    if (!pacmanRunning || pacmanPaused) return;
+    pacmanTickCount++;
+
+    if (pacmanFrightTimer > 0) {
+        pacmanFrightTimer--;
+        if (pacmanFrightTimer === 0) {
+            pacmanUpdateHud('Aktiv');
+        }
+    }
+
+    pacmanStepPlayer();
+    if (pacmanRunning) {
+        pacmanStepGhosts();
+        pacmanCheckCollisions();
+    }
+    pacmanDraw();
+
+    if (pacmanRunning && !pacmanPaused) {
+        pacmanRafId = requestAnimationFrame(pacmanLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     gummiInit();
+    pacmanInit();
     sudokuInit();
     mineNewGame('medium');
     memoryNewGame(16);
