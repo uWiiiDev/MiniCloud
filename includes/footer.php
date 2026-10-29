@@ -943,6 +943,22 @@ if (
 ):
 ?>
 <!-- Schwebendes Schnell-Chat-Widget: 🤖 Lokaler Cloud-Assistent -->
+<style>
+@keyframes mcTypingBounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-4px); opacity: 1; }
+}
+.mc-typing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background-color: currentColor;
+    animation: mcTypingBounce 1.2s infinite ease-in-out;
+}
+.mc-typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.mc-typing-dot:nth-child(3) { animation-delay: 0.36s; }
+</style>
 <div id="mcQuickAssistantContainer" class="fixed bottom-4 right-4 z-40 flex flex-col items-end">
     <!-- Aufklappbares Chat-Fenster -->
     <div id="mcQuickAssistantPanel"
@@ -1148,6 +1164,26 @@ if (
         saveHist(hist);
         renderQuick();
 
+        const box = document.getElementById('mcQuickAssistantMessages');
+        let typingEl = null;
+        if (box) {
+            typingEl = document.createElement('div');
+            typingEl.className = 'flex items-start gap-2';
+            typingEl.innerHTML = `
+                <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-xs shrink-0 mt-0.5 animate-pulse">🤖</span>
+                <div class="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2 shadow-2xs">
+                    <span class="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400">
+                        <span class="mc-typing-dot"></span>
+                        <span class="mc-typing-dot"></span>
+                        <span class="mc-typing-dot"></span>
+                    </span>
+                    <span class="font-medium">Assistent denkt nach…</span>
+                </div>
+            `;
+            box.appendChild(typingEl);
+            box.scrollTop = box.scrollHeight;
+        }
+
         const btn = document.getElementById('mcQuickAssistantSendBtn');
         if (btn) btn.disabled = true;
 
@@ -1171,6 +1207,9 @@ if (
         } catch (e) {
             hist.push({ role: 'assistant', reply: '⚠️ Verbindungsfehler.', actions: [], followups: [] });
         } finally {
+            if (typingEl && typingEl.parentNode) {
+                typingEl.parentNode.removeChild(typingEl);
+            }
             if (btn) btn.disabled = false;
             saveHist(hist);
             renderQuick();

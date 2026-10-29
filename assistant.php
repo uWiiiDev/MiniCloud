@@ -3790,11 +3790,16 @@ async function sendAssistantMessage(text) {
     let typingEl = null;
     if (container) {
         typingEl = document.createElement('div');
-        typingEl.className = 'flex items-start gap-2.5 animate-pulse';
+        typingEl.className = 'flex items-start gap-2.5';
         typingEl.innerHTML = `
-            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
-            <div class="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400">
-                ⏳ Assistent formuliert Antwort…
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-sm shrink-0 mt-0.5 animate-pulse">🤖</div>
+            <div class="px-4 py-3 rounded-2xl rounded-tl-sm bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2.5">
+                <span class="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400">
+                    <span class="inline-block w-2 h-2 rounded-full bg-current animate-bounce" style="animation-delay:0ms"></span>
+                    <span class="inline-block w-2 h-2 rounded-full bg-current animate-bounce" style="animation-delay:150ms"></span>
+                    <span class="inline-block w-2 h-2 rounded-full bg-current animate-bounce" style="animation-delay:300ms"></span>
+                </span>
+                <span class="font-medium">Assistent denkt nach…</span>
             </div>
         `;
         container.appendChild(typingEl);
