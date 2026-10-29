@@ -117,7 +117,8 @@ function getGamesCatalog(): array
             'title'    => 'Gummigeruch Kart',
             'icon'     => '🏎️',
             'category' => 'Rennspiel',
-            'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, Bremsspuren, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
+            'group'    => 'action',
+            'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
         ],
         'pacman' => [
@@ -125,46 +126,43 @@ function getGamesCatalog(): array
             'title'    => 'Cloud-PacMan',
             'icon'     => '🟡',
             'category' => 'Arcade',
-            'desc'     => 'Der Neon-Labyrinth-Klassiker mit 4 schlauen Geistern (Blinky, Pinky, Inky, Clyde), Power-Pillen & Bonusfrüchten!',
+            'group'    => 'arcade',
+            'desc'     => 'Neon-Labyrinth mit 4 schlauen Geistern (Blinky, Pinky, Inky, Clyde), Power-Pillen & Bonusfrüchten!',
             'color'    => 'from-amber-400 to-yellow-600',
+        ],
+        'kong' => [
+            'key'      => 'kong',
+            'title'    => 'Cloud-Kong (1981)',
+            'icon'     => '🦍',
+            'category' => 'Arcade 1981',
+            'group'    => 'arcade',
+            'desc'     => 'Weiche auf dem Stahlträger-Gerüst rollenden Fässern aus, schnapp dir den 🔨 Hammer & klettere nach ganz oben!',
+            'color'    => 'from-red-600 to-rose-700',
         ],
         'blitz' => [
             'key'      => 'blitz',
             'title'    => 'VC-20 Blitz',
             'icon'     => '✈️',
             'category' => 'Retro 1981',
+            'group'    => 'arcade',
             'desc'     => 'Der Commodore VC-20 Kult-Klassiker: Trage im Sinkflug alle Wolkenkratzer per Bombe ab, um sicher zu landen!',
             'color'    => 'from-cyan-500 to-blue-700',
         ],
-        'sudoku' => [
-            'key'      => 'sudoku',
-            'title'    => 'Cloud-Sudoku',
-            'icon'     => '🧠',
-            'category' => 'Logik',
-            'desc'     => '9×9 Logik-Rätsel mit 3 Schwierigkeitsgraden, Bleistift-Notizen & Spielstand-Sync.',
-            'color'    => 'from-indigo-500 to-blue-600',
-        ],
-        'minesweeper' => [
-            'key'      => 'minesweeper',
-            'title'    => 'Minesweeper',
-            'icon'     => '💣',
-            'category' => 'Klassiker',
-            'desc'     => 'Spüre alle Minen fehlerfrei auf – mit Touch-Flaggen-Umschalter und Stoppuhr.',
-            'color'    => 'from-slate-600 to-slate-800',
-        ],
-        'memory' => [
-            'key'      => 'memory',
-            'title'    => 'Cloud-Memory',
-            'icon'     => '🃏',
-            'category' => 'Gedächtnis',
-            'desc'     => 'Finde alle verdeckten Kartenpaare in möglichst wenigen Zügen und Bestzeit.',
-            'color'    => 'from-pink-500 to-rose-600',
+        'wow' => [
+            'key'      => 'wow',
+            'title'    => 'World of MiniCloud',
+            'icon'     => '⚔️',
+            'category' => 'MMO-RPG',
+            'group'    => 'action',
+            'desc'     => 'Fantasy-Rollenspiel im WoW-Stil: 3 Klassen, Quests, 4 Zonen, Raid-Bosse, Epischer Loot & Live-Mitspieler!',
+            'color'    => 'from-amber-600 to-red-700',
         ],
         'tetris' => [
             'key'      => 'tetris',
             'title'    => 'Block-Puzzle',
             'icon'     => '🧱',
             'category' => 'Arcade',
+            'group'    => 'arcade',
             'desc'     => 'Staple fallende Blöcke, räume bis zu 4 Reihen gleichzeitig ab und knacke den Highscore.',
             'color'    => 'from-purple-500 to-indigo-600',
         ],
@@ -173,6 +171,7 @@ function getGamesCatalog(): array
             'title'    => 'Retro-Snake',
             'icon'     => '🐍',
             'category' => 'Arcade',
+            'group'    => 'arcade',
             'desc'     => 'Sammle Energiepunkte, werde länger und weiche den Wänden und dir selbst aus.',
             'color'    => 'from-green-500 to-emerald-700',
         ],
@@ -181,6 +180,7 @@ function getGamesCatalog(): array
             'title'    => 'Brick Breaker',
             'icon'     => '🏓',
             'category' => 'Arcade',
+            'group'    => 'arcade',
             'desc'     => 'Halte den Ball mit dem Paddel im Spiel und räume alle farbigen Steinreihen ab.',
             'color'    => 'from-sky-500 to-blue-700',
         ],
@@ -189,16 +189,36 @@ function getGamesCatalog(): array
             'title'    => 'Vier Gewinnt & Tic-Tac-Toe',
             'icon'     => '🔴',
             'category' => 'Duell & KI',
+            'group'    => 'logic',
             'desc'     => 'Spiele gegen die Computer-KI oder fordere andere Cloud-Benutzer zum Live-Duell heraus!',
             'color'    => 'from-red-500 to-amber-500',
         ],
-        'wow' => [
-            'key'      => 'wow',
-            'title'    => 'World of MiniCloud',
-            'icon'     => '⚔️',
-            'category' => 'MMO-RPG',
-            'desc'     => 'Fantasy-Rollenspiel im WoW-Stil: 3 Klassen, Quests, 4 Zonen, Raid-Bosse, Epischer Loot & Live-Mitspieler!',
-            'color'    => 'from-amber-600 to-red-700',
+        'sudoku' => [
+            'key'      => 'sudoku',
+            'title'    => 'Cloud-Sudoku',
+            'icon'     => '🧠',
+            'category' => 'Logik',
+            'group'    => 'logic',
+            'desc'     => '9×9 Logik-Rätsel mit 3 Schwierigkeitsgraden, Bleistift-Notizen & Spielstand-Sync.',
+            'color'    => 'from-indigo-500 to-blue-600',
+        ],
+        'minesweeper' => [
+            'key'      => 'minesweeper',
+            'title'    => 'Minesweeper',
+            'icon'     => '💣',
+            'category' => 'Logik',
+            'group'    => 'logic',
+            'desc'     => 'Spüre alle Minen fehlerfrei auf – mit Touch-Flaggen-Umschalter und Stoppuhr.',
+            'color'    => 'from-slate-600 to-slate-800',
+        ],
+        'memory' => [
+            'key'      => 'memory',
+            'title'    => 'Cloud-Memory',
+            'icon'     => '🃏',
+            'category' => 'Gedächtnis',
+            'group'    => 'logic',
+            'desc'     => 'Finde alle verdeckten Kartenpaare in möglichst wenigen Zügen und Bestzeit.',
+            'color'    => 'from-pink-500 to-rose-600',
         ],
     ];
 }
@@ -979,63 +999,131 @@ $csrfToken = getCsrfToken();
 ?>
 
 <div class="space-y-6">
-    <!-- KOPFBEREICH -->
-    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shadow-xs shrink-0">
-                🎮
-            </div>
-            <div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                        MiniCloud Spiele-Zentrale &amp; Pausenraum
-                    </h1>
-                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                        11 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
-                    </span>
-                </div>
-                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                    100 % werbefrei &amp; lokal im Browser – inklusive Cloud-Bestenlisten, automatischer Spielstand-Speicherung und Duellen gegen andere Cloud-Mitglieder.
-                </p>
-            </div>
-        </div>
-
-        <div class="flex items-center gap-3 text-xs">
-            <div class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <span class="text-slate-500 dark:text-slate-400">Meine Runden:</span>
-                <strong class="ml-1 text-slate-900 dark:text-white" id="myTotalPlaysBadge"><?= $myTotalPlays ?></strong>
-            </div>
-            <div class="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 font-semibold">
-                🏎️ Gummigeruch Kart-Cup aktiv
-            </div>
-        </div>
-    </div>
-
-    <!-- SPIELAUSWAHL-LEISTE (11 SPIEL-KARTEN) -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 gap-2">
-        <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
-            <?php
-            $gKeyStr = (string)$gKey;
-            $myBest  = $myBestByGame[$gKeyStr] ?? 0;
-            ?>
-            <button type="button"
-                    onclick="selectCloudGame('<?= e($gKeyStr) ?>')"
-                    id="gameTabBtn-<?= e($gKeyStr) ?>"
-                    class="game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 <?= $gKeyStr === 'gummigeruch' ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400' ?>">
-                <div class="flex items-center justify-between gap-1">
-                    <span class="text-xl"><?= $gMeta['icon'] ?></span>
-                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
-                        <?= e($gMeta['category']) ?>
-                    </span>
+    <!-- KOPFBEREICH & KOMFORT-SPIELAUSWAHL -->
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shadow-xs shrink-0">
+                    🎮
                 </div>
                 <div>
-                    <p class="text-xs font-extrabold leading-tight truncate"><?= e($gMeta['title']) ?></p>
-                    <p class="text-[10px] opacity-80 mt-0.5 truncate" id="myBestLabel-<?= e($gKeyStr) ?>">
-                        <?= $myBest > 0 ? '🏆 ' . number_format($myBest, 0, ',', '.') : 'Noch ohne Wertung' ?>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+                            MiniCloud Spiele-Zentrale &amp; Pausenraum
+                        </h1>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                            <?= count($gamesCatalog) ?> Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
+                        </span>
+                    </div>
+                    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        100 % werbefrei &amp; lokal im Browser – wähle unten eine Kategorie, hefte deine Lieblingsspiele per <strong>⭐ Stern</strong> an oder wechsle direkt per Schnellauswahl.
                     </p>
                 </div>
-            </button>
-        <?php endforeach; ?>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5 text-xs">
+                <!-- Direkt-Umschalter (auch sichtbar, wenn die große Übersicht eingeklappt ist) -->
+                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span class="text-slate-500 dark:text-slate-400 font-semibold">Spiel:</span>
+                    <select id="quickGameSelect" onchange="selectCloudGame(this.value)"
+                            class="bg-transparent font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer">
+                        <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
+                            <option value="<?= e((string)$gKey) ?>" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                <?= $gMeta['icon'] ?> <?= e($gMeta['title']) ?> (<?= e($gMeta['category']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span class="text-slate-500 dark:text-slate-400">Meine Runden:</span>
+                    <strong class="ml-1 text-slate-900 dark:text-white" id="myTotalPlaysBadge"><?= $myTotalPlays ?></strong>
+                </div>
+
+                <button type="button" id="toggleCatalogBtn" onclick="toggleGamesCatalogCollapse()"
+                        class="px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/70 hover:bg-brand-100 dark:hover:bg-brand-900/70 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 font-bold cursor-pointer transition-colors">
+                    🔼 Übersicht einklappen
+                </button>
+            </div>
+        </div>
+
+        <!-- KATEGORIE-REITER, SUCHE & ÜBERSICHTLICHES 4-SPALTEN-KARTENRASTER -->
+        <div id="gamesCatalogWrapper" class="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                    <button type="button" onclick="filterGamesCatalog('all')" id="gameCatBtn-all"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-brand-600 text-white shadow-2xs cursor-pointer transition-all">
+                        🌟 Alle Spiele (<?= count($gamesCatalog) ?>)
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('fav')" id="gameCatBtn-fav"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        ⭐ Favoriten
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🕹️ Retro &amp; Arcade (6)
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🏎️ Rennspiel &amp; RPG (2)
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🧠 Logik &amp; Duell (4)
+                    </button>
+                </div>
+
+                <div class="relative w-full sm:w-56">
+                    <input type="search" id="gameSearchInput" oninput="filterGamesCatalog(activeGameCategory)"
+                           placeholder="🔎 Spiel suchen…"
+                           class="w-full pl-3 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+
+            <div id="gamesCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
+                    <?php
+                    $gKeyStr = (string)$gKey;
+                    $myBest  = $myBestByGame[$gKeyStr] ?? 0;
+                    $gGroup  = (string)($gMeta['group'] ?? 'arcade');
+                    ?>
+                    <div onclick="selectCloudGame('<?= e($gKeyStr) ?>')"
+                         id="gameTabBtn-<?= e($gKeyStr) ?>"
+                         data-game-key="<?= e($gKeyStr) ?>"
+                         data-game-group="<?= e($gGroup) ?>"
+                         data-game-search="<?= e(mb_strtolower($gMeta['title'] . ' ' . $gMeta['category'] . ' ' . $gMeta['desc'], 'UTF-8')) ?>"
+                         class="game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 <?= $gKeyStr === 'gummigeruch' ? 'bg-brand-600 text-white border-brand-600 shadow-md ring-2 ring-brand-400/50' : 'bg-slate-50/70 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-700/80 hover:border-brand-400 hover:bg-white dark:hover:bg-slate-800' ?>">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br <?= e($gMeta['color']) ?> text-white flex items-center justify-center text-xl shadow-xs shrink-0">
+                            <?= $gMeta['icon'] ?>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1">
+                                <p class="text-xs sm:text-sm font-extrabold leading-tight truncate"><?= e($gMeta['title']) ?></p>
+                                <button type="button"
+                                        onclick="event.stopPropagation(); toggleFavoriteGame('<?= e($gKeyStr) ?>')"
+                                        id="gameFavStar-<?= e($gKeyStr) ?>"
+                                        class="text-sm opacity-60 hover:opacity-100 hover:scale-110 transition-transform cursor-pointer shrink-0"
+                                        title="Als Lieblingsspiel anheften / lösen">
+                                    ☆
+                                </button>
+                            </div>
+                            <p class="text-[11px] opacity-80 line-clamp-1 mt-0.5"><?= e($gMeta['desc']) ?></p>
+                            <div class="flex items-center justify-between gap-2 mt-1.5">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
+                                    <?= e($gMeta['category']) ?>
+                                </span>
+                                <span class="text-[10px] font-bold opacity-90 truncate" id="myBestLabel-<?= e($gKeyStr) ?>">
+                                    <?= $myBest > 0 ? '🏆 ' . number_format($myBest, 0, ',', '.') : 'Noch ohne Wertung' ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <p id="gamesEmptyFilterHint" class="hidden text-center text-xs text-slate-400 py-3 italic">
+                Keine Spiele in dieser Ansicht gefunden. Klicke auf den ☆ Stern einer Spielkarte, um Favoriten zu markieren!
+            </p>
+        </div>
     </div>
 
     <!-- HAUPTBEREICH: LINKS DAS AKTIVE SPIEL (8 SPALTEN) / RECHTS DIE CLOUD-BESTENLISTE (4 SPALTEN) -->
@@ -1796,6 +1884,88 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 12. SPIEL: CLOUD-KONG (1981 DONKEY-KONG ARCADE-KLASSIKER) -->
+            <div id="gamePanel-kong" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🦍 Cloud-Kong (1981 Arcade)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800">
+                                🛢️ Rollende Fässer &middot; 🔨 Power-Hammer &middot; 6 Etagen
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: <strong>← → / A D</strong> Laufen &middot; <strong>↑ ↓ / W S</strong> Leitern klettern &middot; <strong>Leertaste</strong> über Fässer springen (<code>+100 Pkt.</code>) oder den <strong>🔨 Hammer</strong> einsammeln!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="kongStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Neues Spiel starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Punktezeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="kongScore" class="text-rose-600 dark:text-rose-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Level (Stage):</span>
+                        <strong id="kongLevel" class="text-slate-900 dark:text-white font-extrabold">1</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Leben:</span>
+                        <strong id="kongLives" class="tracking-widest">❤️❤️❤️</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Bonus / Status:</span>
+                        <strong id="kongBonus" class="text-amber-600 dark:text-amber-400 font-extrabold truncate">5000</strong>
+                    </div>
+                </div>
+
+                <!-- Arcade-Spielfeld (Canvas) + Touch-Steuerung -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="kongCanvas" width="480" height="520"
+                            class="rounded-2xl bg-slate-950 border-2 border-rose-900/80 shadow-xl max-w-full h-auto select-none"></canvas>
+
+                    <!-- Touch- / Mobil-Steuerleiste -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="kongKeys['ArrowLeft']=true" onmouseup="kongKeys['ArrowLeft']=false" onmouseleave="kongKeys['ArrowLeft']=false"
+                                ontouchstart="event.preventDefault(); kongKeys['ArrowLeft']=true" ontouchend="kongKeys['ArrowLeft']=false"
+                                class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-rose-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬅️ Links
+                        </button>
+                        <button type="button"
+                                onmousedown="kongKeys['ArrowUp']=true" onmouseup="kongKeys['ArrowUp']=false" onmouseleave="kongKeys['ArrowUp']=false"
+                                ontouchstart="event.preventDefault(); kongKeys['ArrowUp']=true" ontouchend="kongKeys['ArrowUp']=false"
+                                class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-rose-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬆️ Leiter hoch
+                        </button>
+                        <button type="button"
+                                onmousedown="kongKeys['ArrowDown']=true" onmouseup="kongKeys['ArrowDown']=false" onmouseleave="kongKeys['ArrowDown']=false"
+                                ontouchstart="event.preventDefault(); kongKeys['ArrowDown']=true" ontouchend="kongKeys['ArrowDown']=false"
+                                class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-rose-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬇️ Leiter runter
+                        </button>
+                        <button type="button"
+                                onmousedown="kongKeys['ArrowRight']=true" onmouseup="kongKeys['ArrowRight']=false" onmouseleave="kongKeys['ArrowRight']=false"
+                                ontouchstart="event.preventDefault(); kongKeys['ArrowRight']=true" ontouchend="kongKeys['ArrowRight']=false"
+                                class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-rose-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ➡️ Rechts
+                        </button>
+                        <button type="button"
+                                onclick="kongTriggerJump()"
+                                class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-sm cursor-pointer">
+                            🦘 SPRINGEN (Space)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -1853,10 +2023,100 @@ const CURRENT_USERNAME  = <?= json_encode($username) ?>;
 const GAMES_CATALOG     = <?= json_encode($gamesCatalog) ?>;
 const SAVED_GAME_STATES = <?= json_encode($savedStates) ?>;
 
-let activeGameKey    = 'gummigeruch';
-let activeLbPeriod   = 'all';
-let myBestScores     = <?= json_encode($myBestByGame) ?>;
-let totalPlaysCount  = <?= (int)$myTotalPlays ?>;
+let activeGameKey      = 'gummigeruch';
+let activeGameCategory = 'all';
+let activeLbPeriod     = 'all';
+let myBestScores       = <?= json_encode($myBestByGame) ?>;
+let totalPlaysCount    = <?= (int)$myTotalPlays ?>;
+const FAV_GAMES_STORAGE_KEY = 'mc_fav_games_u' + CURRENT_USER_ID;
+
+function getFavoriteGamesList() {
+    try {
+        const raw = localStorage.getItem(FAV_GAMES_STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function toggleFavoriteGame(gameKey) {
+    const favs = getFavoriteGamesList();
+    const idx  = favs.indexOf(gameKey);
+    if (idx >= 0) {
+        favs.splice(idx, 1);
+    } else {
+        favs.push(gameKey);
+    }
+    try {
+        localStorage.setItem(FAV_GAMES_STORAGE_KEY, JSON.stringify(favs));
+    } catch (e) {}
+    renderFavoriteGameStars();
+    if (activeGameCategory === 'fav') {
+        filterGamesCatalog('fav');
+    }
+}
+
+function renderFavoriteGameStars() {
+    const favs = getFavoriteGamesList();
+    Object.keys(GAMES_CATALOG).forEach((k) => {
+        const starBtn = document.getElementById('gameFavStar-' + k);
+        if (starBtn) {
+            const isFav = favs.includes(k);
+            starBtn.textContent = isFav ? '⭐' : '☆';
+            starBtn.classList.toggle('opacity-100', isFav);
+            starBtn.classList.toggle('opacity-60', !isFav);
+        }
+    });
+}
+
+function filterGamesCatalog(cat) {
+    activeGameCategory = cat || 'all';
+    const searchVal = (document.getElementById('gameSearchInput')?.value || '').trim().toLowerCase();
+    const favs      = getFavoriteGamesList();
+
+    ['all', 'fav', 'arcade', 'action', 'logic'].forEach((c) => {
+        const btn = document.getElementById('gameCatBtn-' + c);
+        if (!btn) return;
+        if (c === activeGameCategory) {
+            btn.className = 'game-cat-btn px-3 py-1.5 rounded-xl bg-brand-600 text-white shadow-2xs cursor-pointer transition-all';
+        } else {
+            btn.className = 'game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all';
+        }
+    });
+
+    let visibleCount = 0;
+    document.querySelectorAll('#gamesCatalogGrid .game-tab-btn').forEach((card) => {
+        const gKey   = card.getAttribute('data-game-key') || '';
+        const gGroup = card.getAttribute('data-game-group') || '';
+        const gText  = card.getAttribute('data-game-search') || '';
+
+        const matchCat = (activeGameCategory === 'all')
+            || (activeGameCategory === 'fav' && favs.includes(gKey))
+            || (gGroup === activeGameCategory);
+        const matchSearch = (searchVal === '' || gText.includes(searchVal));
+
+        if (matchCat && matchSearch) {
+            card.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+
+    const emptyHint = document.getElementById('gamesEmptyFilterHint');
+    if (emptyHint) {
+        emptyHint.classList.toggle('hidden', visibleCount > 0);
+    }
+}
+
+function toggleGamesCatalogCollapse() {
+    const wrap = document.getElementById('gamesCatalogWrapper');
+    const btn  = document.getElementById('toggleCatalogBtn');
+    if (!wrap || !btn) return;
+    const isHidden = wrap.classList.toggle('hidden');
+    btn.textContent = isHidden ? '🔽 Spiele-Übersicht öffnen' : '🔼 Übersicht einklappen';
+}
 
 // =============================================================================
 // ZENTRALE SPIEL-UMSCHALTUNG & HIGHSCORE-API
@@ -1865,17 +2125,23 @@ function selectCloudGame(gameKey) {
     if (!GAMES_CATALOG[gameKey]) return;
     activeGameKey = gameKey;
 
+    const quickSel = document.getElementById('quickGameSelect');
+    if (quickSel && quickSel.value !== gameKey) {
+        quickSel.value = gameKey;
+    }
+
     document.querySelectorAll('.game-panel').forEach((el) => el.classList.add('hidden'));
     const targetPanel = document.getElementById('gamePanel-' + gameKey);
     if (targetPanel) targetPanel.classList.remove('hidden');
 
     document.querySelectorAll('.game-tab-btn').forEach((btn) => {
-        btn.className = 'game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400';
+        btn.className = 'game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 bg-slate-50/70 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-700/80 hover:border-brand-400 hover:bg-white dark:hover:bg-slate-800';
     });
     const activeBtn = document.getElementById('gameTabBtn-' + gameKey);
     if (activeBtn) {
-        activeBtn.className = 'game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 bg-brand-600 text-white border-brand-600 shadow-md';
+        activeBtn.className = 'game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 bg-brand-600 text-white border-brand-600 shadow-md ring-2 ring-brand-400/50';
     }
+    filterGamesCatalog(activeGameCategory);
 
     const titleEl = document.getElementById('leaderboardGameTitle');
     if (titleEl) {
@@ -1892,6 +2158,11 @@ function selectCloudGame(gameKey) {
             pacmanInit();
         }
         pacmanDraw();
+    } else if (gameKey === 'kong') {
+        if (!kongInitialized) {
+            kongInit();
+        }
+        kongDraw();
     } else if (gameKey === 'blitz') {
         if (!blitzInitialized) {
             blitzInit();
@@ -5770,6 +6041,14 @@ window.addEventListener('keydown', (e) => {
             e.preventDefault();
             blitzDropBomb();
         }
+    } else if (activeGameKey === 'kong') {
+        kongKeys[e.key] = true;
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+            e.preventDefault();
+        }
+        if (e.key === ' ') {
+            kongTriggerJump();
+        }
     } else if (activeGameKey === 'breakout' && boRunning) {
         if (e.key === 'ArrowLeft')  boPaddleX = Math.max(0, boPaddleX - 24);
         if (e.key === 'ArrowRight') boPaddleX = Math.min(390, boPaddleX + 24);
@@ -6864,10 +7143,555 @@ function blitzLoop() {
     }
 }
 
+// =============================================================================
+// SPIEL 12: CLOUD-KONG (1981 DONKEY-KONG ARCADE-KLASSIKER)
+// =============================================================================
+const KONG_GIRDERS = [
+    // Etage 0 (Unten): leicht von rechts nach links geneigt, reicht über die gesamte Breite
+    { x1: 20,  x2: 460, y1: 492, y2: 484, rollDir: -1 },
+    // Etage 1: fällt von links nach rechts ab
+    { x1: 20,  x2: 435, y1: 404, y2: 416, rollDir: 1 },
+    // Etage 2: fällt von rechts nach links ab
+    { x1: 45,  x2: 460, y1: 338, y2: 326, rollDir: -1 },
+    // Etage 3: fällt von links nach rechts ab
+    { x1: 20,  x2: 435, y1: 246, y2: 258, rollDir: 1 },
+    // Etage 4 (Kongs Etage): links flach, fällt nach rechts ab
+    { x1: 20,  x2: 460, y1: 170, y2: 180, rollDir: 1 },
+    // Etage 5 (Zielplattform oben – Pauline!)
+    { x1: 185, x2: 325, y1: 96,  y2: 96,  rollDir: 0 }
+];
+
+const KONG_LADDERS = [
+    { x: 395, fromGirder: 0, toGirder: 1 },
+    { x: 210, fromGirder: 0, toGirder: 1 },
+    { x: 85,  fromGirder: 1, toGirder: 2 },
+    { x: 265, fromGirder: 1, toGirder: 2 },
+    { x: 385, fromGirder: 2, toGirder: 3 },
+    { x: 165, fromGirder: 2, toGirder: 3 },
+    { x: 85,  fromGirder: 3, toGirder: 4 },
+    { x: 280, fromGirder: 3, toGirder: 4 },
+    { x: 295, fromGirder: 4, toGirder: 5 }
+];
+
+let kongInitialized = false;
+let kongRunning     = false;
+let kongRafId       = null;
+let kongScoreVal    = 0;
+let kongLevelVal    = 1;
+let kongLivesVal    = 3;
+let kongBonusTimer  = 5000;
+let kongStartTime   = 0;
+let kongTick        = 0;
+let kongKeys        = {};
+let kongBarrels     = [];
+let kongHammers     = [];
+let kongPopups      = [];
+let kongBannerText  = '';
+
+let kongPlayer = {
+    x: 62,
+    y: 490,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    onGround: true,
+    climbing: false,
+    hammerTimer: 0
+};
+
+window.addEventListener('keyup', (e) => {
+    if (kongKeys[e.key]) {
+        kongKeys[e.key] = false;
+    }
+});
+
+function kongGirderYAt(girderIdx, x) {
+    const g = KONG_GIRDERS[girderIdx];
+    if (!g) return 490;
+    const t = Math.max(0, Math.min(1, (x - g.x1) / Math.max(1, g.x2 - g.x1)));
+    return g.y1 + (g.y2 - g.y1) * t;
+}
+
+function kongFindGirderUnder(x, y) {
+    for (let i = 0; i < KONG_GIRDERS.length; i++) {
+        const g = KONG_GIRDERS[i];
+        if (x >= g.x1 - 8 && x <= g.x2 + 8) {
+            const gy = kongGirderYAt(i, x);
+            if (Math.abs(y - gy) <= 12) {
+                return { idx: i, y: gy };
+            }
+        }
+    }
+    return null;
+}
+
+function kongResetRound(resetHammers = true) {
+    kongPlayer.x           = 62;
+    kongPlayer.y           = kongGirderYAt(0, 62);
+    kongPlayer.vx          = 0;
+    kongPlayer.vy          = 0;
+    kongPlayer.facing      = 1;
+    kongPlayer.onGround    = true;
+    kongPlayer.climbing    = false;
+    kongPlayer.hammerTimer = 0;
+    kongBarrels            = [];
+    kongBonusTimer         = 5000;
+
+    if (resetHammers) {
+        kongHammers = [
+            { x: 120, y: 376, active: true },
+            { x: 335, y: 218, active: true }
+        ];
+    }
+}
+
+function kongUpdateHud(statusOverride = null) {
+    const scEl = document.getElementById('kongScore');
+    const lvEl = document.getElementById('kongLevel');
+    const liEl = document.getElementById('kongLives');
+    const bnEl = document.getElementById('kongBonus');
+
+    if (scEl) scEl.textContent = kongScoreVal.toLocaleString('de-DE');
+    if (lvEl) lvEl.textContent = String(kongLevelVal);
+    if (liEl) liEl.textContent = '❤️'.repeat(Math.max(0, kongLivesVal)) || '💀';
+    if (bnEl) {
+        if (statusOverride !== null) {
+            bnEl.textContent = statusOverride;
+        } else if (kongPlayer.hammerTimer > 0) {
+            bnEl.textContent = '🔨 HAMMER (' + Math.ceil(kongPlayer.hammerTimer / 60) + 's)';
+        } else {
+            bnEl.textContent = String(kongBonusTimer);
+        }
+    }
+}
+
+function kongInit() {
+    kongInitialized = true;
+    kongScoreVal    = 0;
+    kongLevelVal    = 1;
+    kongLivesVal    = 3;
+    kongResetRound(true);
+    kongBannerText  = '🦍 CLOUD-KONG BEREIT!';
+    kongUpdateHud();
+    kongDraw();
+}
+
+function kongStartGame() {
+    if (kongRafId) cancelAnimationFrame(kongRafId);
+    kongScoreVal   = 0;
+    kongLevelVal   = 1;
+    kongLivesVal   = 3;
+    kongRunning    = true;
+    kongTick       = 0;
+    kongPopups     = [];
+    kongBannerText = '';
+    kongStartTime  = performance.now();
+    kongResetRound(true);
+    kongSpawnBarrel();
+    kongUpdateHud();
+    kongLoop();
+}
+
+function kongTriggerJump() {
+    if (!kongRunning && kongInitialized) {
+        kongStartGame();
+        return;
+    }
+    if (kongPlayer.onGround && !kongPlayer.climbing) {
+        kongPlayer.vy       = -6.4;
+        kongPlayer.onGround = false;
+    }
+}
+
+function kongSpawnBarrel() {
+    kongBarrels.push({
+        x: 112,
+        y: kongGirderYAt(4, 112),
+        girderIdx: 4,
+        falling: false,
+        onLadder: false,
+        targetGirder: 3,
+        vy: 0,
+        rot: 0,
+        jumpedOver: false
+    });
+}
+
+function kongStepPlayer() {
+    const moveLeft  = kongKeys['ArrowLeft']  || kongKeys['a'] || kongKeys['A'];
+    const moveRight = kongKeys['ArrowRight'] || kongKeys['d'] || kongKeys['D'];
+    const moveUp    = kongKeys['ArrowUp']    || kongKeys['w'] || kongKeys['W'];
+    const moveDown  = kongKeys['ArrowDown']  || kongKeys['s'] || kongKeys['S'];
+
+    if (kongPlayer.hammerTimer > 0) {
+        kongPlayer.hammerTimer--;
+    }
+
+    // Leiter-Prüfung (nur ohne aktiven Hammer)
+    let activeLadder = null;
+    if (kongPlayer.hammerTimer === 0) {
+        for (const lad of KONG_LADDERS) {
+            const botY = kongGirderYAt(lad.fromGirder, lad.x);
+            const topY = kongGirderYAt(lad.toGirder, lad.x);
+            if (Math.abs(kongPlayer.x - lad.x) <= 13 && kongPlayer.y <= botY + 6 && kongPlayer.y >= topY - 6) {
+                activeLadder = { ...lad, botY, topY };
+                break;
+            }
+        }
+    }
+
+    if (activeLadder && (moveUp || moveDown || kongPlayer.climbing)) {
+        if (moveUp && kongPlayer.y > activeLadder.topY) {
+            kongPlayer.climbing = true;
+            kongPlayer.x        = activeLadder.x;
+            kongPlayer.y        = Math.max(activeLadder.topY, kongPlayer.y - 2.3);
+            kongPlayer.vy       = 0;
+        } else if (moveDown && kongPlayer.y < activeLadder.botY) {
+            kongPlayer.climbing = true;
+            kongPlayer.x        = activeLadder.x;
+            kongPlayer.y        = Math.min(activeLadder.botY, kongPlayer.y + 2.3);
+            kongPlayer.vy       = 0;
+        }
+        if (kongPlayer.y <= activeLadder.topY + 1 || kongPlayer.y >= activeLadder.botY - 1) {
+            if (!moveUp && !moveDown) {
+                kongPlayer.climbing = false;
+                kongPlayer.onGround = true;
+            }
+        }
+    } else {
+        kongPlayer.climbing = false;
+    }
+
+    if (!kongPlayer.climbing) {
+        if (moveLeft) {
+            kongPlayer.x -= 2.6;
+            kongPlayer.facing = -1;
+        }
+        if (moveRight) {
+            kongPlayer.x += 2.6;
+            kongPlayer.facing = 1;
+        }
+        kongPlayer.x = Math.max(24, Math.min(456, kongPlayer.x));
+
+        // Schwerkraft & Plattform-Kontakt
+        kongPlayer.vy += 0.34;
+        kongPlayer.y  += kongPlayer.vy;
+
+        if (kongPlayer.vy >= 0) {
+            const gHit = kongFindGirderUnder(kongPlayer.x, kongPlayer.y);
+            if (gHit) {
+                kongPlayer.y        = gHit.y;
+                kongPlayer.vy       = 0;
+                kongPlayer.onGround = true;
+            } else {
+                kongPlayer.onGround = false;
+            }
+        }
+    }
+
+    // Power-Hammer aufsammeln
+    for (const hm of kongHammers) {
+        if (hm.active && Math.hypot(kongPlayer.x - hm.x, (kongPlayer.y - 14) - hm.y) < 22) {
+            hm.active = false;
+            kongPlayer.hammerTimer = 460; // ~7,5 Sekunden Hammer-Power!
+            kongPopups.push({ x: hm.x, y: hm.y, text: '🔨 HAMMER!', color: '#facc15', life: 45 });
+            kongUpdateHud();
+        }
+    }
+
+    // Hat der Spieler die oberste Plattform (Etage 5 bei Pauline) erreicht?
+    if (kongPlayer.y <= 102 && kongPlayer.x >= 185 && kongPlayer.x <= 325 && kongPlayer.onGround) {
+        const stageBonus = kongBonusTimer + 1000 * kongLevelVal;
+        kongScoreVal += stageBonus;
+        kongLevelVal++;
+        kongPopups.push({ x: 250, y: 80, text: '💖 GERETTET! +' + stageBonus, color: '#4ade80', life: 70 });
+        kongResetRound(true);
+        kongSpawnBarrel();
+        kongUpdateHud('🎉 Stage ' + kongLevelVal + '!');
+    }
+}
+
+function kongStepBarrels() {
+    const spawnInterval = Math.max(78, 145 - (kongLevelVal - 1) * 14);
+    if (kongTick % spawnInterval === 0) {
+        kongSpawnBarrel();
+    }
+
+    const rollSpeed = Math.min(3.9, 2.2 + (kongLevelVal - 1) * 0.25);
+
+    for (let i = kongBarrels.length - 1; i >= 0; i--) {
+        const b = kongBarrels[i];
+        b.rot += 0.16;
+
+        if (b.onLadder) {
+            const targetY = kongGirderYAt(b.targetGirder, b.x);
+            b.y += 3.1;
+            if (b.y >= targetY) {
+                b.y         = targetY;
+                b.girderIdx = b.targetGirder;
+                b.onLadder  = false;
+            }
+        } else if (b.falling) {
+            b.vy += 0.35;
+            b.y  += b.vy;
+            const nextG = b.girderIdx - 1;
+            if (nextG >= 0) {
+                const gy = kongGirderYAt(nextG, b.x);
+                if (b.y >= gy) {
+                    b.y         = gy;
+                    b.vy        = 0;
+                    b.falling   = false;
+                    b.girderIdx = nextG;
+                }
+            } else if (b.y > 520) {
+                kongBarrels.splice(i, 1);
+                continue;
+            }
+        } else {
+            const g = KONG_GIRDERS[b.girderIdx];
+            b.x += g.rollDir * rollSpeed;
+            b.y  = kongGirderYAt(b.girderIdx, b.x);
+
+            // Mit 25 % Chance kullert ein Fass eine kreuzende Leiter hinab!
+            for (const lad of KONG_LADDERS) {
+                if (lad.toGirder === b.girderIdx && Math.abs(b.x - lad.x) < 2.2 && Math.random() < 0.22) {
+                    b.x            = lad.x;
+                    b.onLadder     = true;
+                    b.targetGirder = lad.fromGirder;
+                    break;
+                }
+            }
+
+            if (!b.onLadder) {
+                if (b.girderIdx === 0 && b.x <= 42) {
+                    // Unten links im Ölfass verschwunden
+                    kongBarrels.splice(i, 1);
+                    continue;
+                }
+                if ((g.rollDir > 0 && b.x >= g.x2) || (g.rollDir < 0 && b.x <= g.x1)) {
+                    b.falling = true;
+                    b.vy      = 1.2;
+                }
+            }
+        }
+
+        // 1. Prüfen, ob Spieler über das Fass gesprungen ist (+100 Pkt.)
+        if (!b.jumpedOver && !kongPlayer.onGround && !kongPlayer.climbing) {
+            const dx = Math.abs(kongPlayer.x - b.x);
+            const dy = b.y - kongPlayer.y;
+            if (dx < 16 && dy > 10 && dy < 44) {
+                b.jumpedOver = true;
+                kongScoreVal += 100;
+                kongPopups.push({ x: b.x, y: b.y - 16, text: '+100', color: '#38bdf8', life: 40 });
+                kongUpdateHud();
+            }
+        }
+
+        // 2. Kollision mit Spieler oder aktivem Power-Hammer prüfen
+        const dist = Math.hypot(kongPlayer.x - b.x, (kongPlayer.y - 10) - (b.y - 8));
+        if (dist < (kongPlayer.hammerTimer > 0 ? 25 : 15)) {
+            if (kongPlayer.hammerTimer > 0) {
+                // Fass mit dem Hammer zerschmettert!
+                kongScoreVal += 300;
+                kongPopups.push({ x: b.x, y: b.y - 12, text: '💥 +300', color: '#facc15', life: 45 });
+                kongBarrels.splice(i, 1);
+                kongUpdateHud();
+            } else {
+                // Getroffen!
+                kongLivesVal--;
+                if (kongLivesVal <= 0) {
+                    kongRunning    = false;
+                    kongBannerText = '💥 GAME OVER – ' + kongScoreVal.toLocaleString('de-DE') + ' PKT.';
+                    kongUpdateHud('💥 Game Over');
+                    const durSec = Math.max(1, Math.round((performance.now() - kongStartTime) / 1000));
+                    submitCloudScore('kong', kongScoreVal, durSec, 'Stage ' + kongLevelVal);
+                    return;
+                } else {
+                    kongPopups.push({ x: kongPlayer.x, y: kongPlayer.y - 20, text: '💔 Autsch!', color: '#f87171', life: 55 });
+                    kongResetRound(false);
+                    kongUpdateHud('Noch ' + kongLivesVal + ' Leben');
+                    return;
+                }
+            }
+        }
+    }
+}
+
+function kongDraw() {
+    const cvs = document.getElementById('kongCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // 1. Türkisfarbene Leitern zeichnen
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth   = 2.5;
+    for (const lad of KONG_LADDERS) {
+        const yBot = kongGirderYAt(lad.fromGirder, lad.x);
+        const yTop = kongGirderYAt(lad.toGirder, lad.x);
+        ctx.beginPath();
+        ctx.moveTo(lad.x - 7, yTop);
+        ctx.lineTo(lad.x - 7, yBot);
+        ctx.moveTo(lad.x + 7, yTop);
+        ctx.lineTo(lad.x + 7, yBot);
+        for (let ry = yTop + 6; ry < yBot; ry += 9) {
+            ctx.moveTo(lad.x - 7, ry);
+            ctx.lineTo(lad.x + 7, ry);
+        }
+        ctx.stroke();
+    }
+
+    // 2. Rote Arcade-Stahlträger (Girders) mit Fachwerk-Zickzack zeichnen
+    for (const g of KONG_GIRDERS) {
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth   = 4;
+        ctx.beginPath();
+        ctx.moveTo(g.x1, g.y1);
+        ctx.lineTo(g.x2, g.y2);
+        ctx.moveTo(g.x1, g.y1 + 8);
+        ctx.lineTo(g.x2, g.y2 + 8);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        const len = g.x2 - g.x1;
+        for (let sx = 0; sx < len - 10; sx += 14) {
+            const xA = g.x1 + sx;
+            const xB = g.x1 + sx + 7;
+            const yA = g.y1 + (g.y2 - g.y1) * (sx / len);
+            const yB = g.y1 + (g.y2 - g.y1) * ((sx + 7) / len);
+            ctx.moveTo(xA, yA);
+            ctx.lineTo(xB, yB + 8);
+            ctx.lineTo(xA + 14, yA);
+        }
+        ctx.stroke();
+    }
+
+    // 3. Brennendes Ölfass unten links & Fässer-Vorrat oben links
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(22, 462, 24, 28);
+    ctx.fillStyle = '#facc15';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('OIL', 34, 480);
+    ctx.font = '16px sans-serif';
+    ctx.fillText((Math.floor(kongTick / 10) % 2 === 0) ? '🔥' : '💥', 34, 458);
+
+    // 4. 🦍 Kong oben links & 👸 Pauline auf der Zielplattform
+    const kongShake = (Math.floor(kongTick / 18) % 2 === 0) ? -2 : 2;
+    ctx.font = '36px sans-serif';
+    ctx.fillText('🦍', 72 + kongShake, 166);
+    ctx.font = '24px sans-serif';
+    ctx.fillText('👸', 245, 92);
+    ctx.fillStyle = '#f472b6';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('HELP! 💖', 210, 74);
+
+    // 5. Power-Hämmer zeichnen
+    for (const hm of kongHammers) {
+        if (!hm.active) continue;
+        ctx.font = '20px sans-serif';
+        ctx.fillText('🔨', hm.x, hm.y);
+    }
+
+    // 6. Rollende Fässer zeichnen
+    for (const b of kongBarrels) {
+        ctx.save();
+        ctx.translate(b.x, b.y - 8);
+        ctx.rotate(b.rot);
+        ctx.fillStyle   = '#d97706';
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth   = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.lineTo(6, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 7. Spieler (Jumpman) zeichnen
+    ctx.save();
+    ctx.translate(kongPlayer.x, kongPlayer.y);
+    // Schuhe & blauer Overall
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(-6, -14, 12, 11);
+    // Rotes Hemd & Mütze
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(-7, -20, 14, 7);
+    ctx.fillRect(-7, -27, 14, 4);
+    // Gesicht
+    ctx.fillStyle = '#fde68a';
+    ctx.fillRect(-5, -24, 10, 5);
+
+    // Schwingender Hammer, falls aktiv!
+    if (kongPlayer.hammerTimer > 0) {
+        const swingUp = (Math.floor(kongTick / 5) % 2 === 0);
+        ctx.font = '20px sans-serif';
+        ctx.fillText('🔨', kongPlayer.facing * 14, swingUp ? -24 : -8);
+    }
+    ctx.restore();
+
+    // 8. Punkte-Popups
+    for (let i = kongPopups.length - 1; i >= 0; i--) {
+        const p = kongPopups[i];
+        ctx.fillStyle = p.color;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+        p.y -= 0.5;
+        p.life--;
+        if (p.life <= 0) {
+            kongPopups.splice(i, 1);
+        }
+    }
+
+    // 9. Start- / Game-Over-Banner
+    if (!kongRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.78)';
+        ctx.fillRect(0, cvs.height / 2 - 44, cvs.width, 88);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fb7185';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText(kongBannerText || '🦍 CLOUD-KONG BEREIT!', cvs.width / 2, cvs.height / 2 - 6);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Drücke LEERTASTE oder „Neues Spiel starten“ zum Klettern & Springen!', cvs.width / 2, cvs.height / 2 + 20);
+    }
+}
+
+function kongLoop() {
+    if (!kongRunning) {
+        kongDraw();
+        return;
+    }
+    kongTick++;
+    if (kongTick % 45 === 0 && kongBonusTimer > 100) {
+        kongBonusTimer = Math.max(0, kongBonusTimer - 100);
+        kongUpdateHud();
+    }
+    kongStepPlayer();
+    if (kongRunning) {
+        kongStepBarrels();
+    }
+    kongDraw();
+    if (kongRunning) {
+        kongRafId = requestAnimationFrame(kongLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
+    renderFavoriteGameStars();
     gummiInit();
     pacmanInit();
+    kongInit();
     blitzInit();
     sudokuInit();
     mineNewGame('medium');
