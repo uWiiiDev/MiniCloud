@@ -52,6 +52,21 @@ function normalizeAssistantText(string $text): string
 }
 
 /**
+ * Prüft, ob mindestens eines der übergebenen Schlüsselwörter im normalisierten Text vorkommt.
+ *
+ * @param array<int, string> $keywords
+ */
+function hasAnyKeyword(string $norm, array $keywords): bool
+{
+    foreach ($keywords as $kw) {
+        if ($kw !== '' && str_contains($norm, $kw)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Erkennt automatisch die Sprache einer eingegebenen Frage anhand charakteristischer
  * Wörter/Schriftzeichen oder fällt auf die gewählte UI-/Antwortsprache zurück.
  */
@@ -2081,7 +2096,7 @@ function queryLocalOllamaAssistant(
         'keep_alive' => '30m',
         'options'    => [
             'temperature' => $isGeneralQuestion ? 0.4 : 0.25,
-            'num_predict' => 380,
+            'num_predict' => 240,
             'num_ctx'     => 2048,
         ],
     ], JSON_UNESCAPED_UNICODE);
@@ -2090,12 +2105,17 @@ function queryLocalOllamaAssistant(
         return null;
     }
 
+    // PHP-Session-Sperre vor dem lokalen KI-Aufruf freigeben, damit andere Requests nicht warten
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
     $ctx = stream_context_create([
         'http' => [
             'method'        => 'POST',
             'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
             'content'       => $payload,
-            'timeout'       => 15.0,
+            'timeout'       => 30.0,
             'ignore_errors' => true,
         ],
     ]);
@@ -2131,6 +2151,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     $allowed  = array_keys(getAllowedLanguages());
 
     $question = trim($rawQuestion);
+    $qTrim    = $question;
     if ($preferredLang !== 'auto' && in_array($preferredLang, $allowed, true)) {
         $lang = $preferredLang;
     } else {
@@ -3726,6 +3747,21 @@ async function sendAssistantMessage(text) {
     saveAssistantHistory(history);
     renderAssistantMessages();
 
+    const container = document.getElementById('assistantChatMessages');
+    let typingEl = null;
+    if (container) {
+        typingEl = document.createElement('div');
+        typingEl.className = 'flex items-start gap-2.5 animate-pulse';
+        typingEl.innerHTML = `
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
+            <div class="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400">
+                ⏳ Assistent formuliert Antwort…
+            </div>
+        `;
+        container.appendChild(typingEl);
+        container.scrollTop = container.scrollHeight;
+    }
+
     const btn = document.getElementById('assistantSendBtn');
     if (btn) btn.disabled = true;
 
@@ -3765,6 +3801,9 @@ async function sendAssistantMessage(text) {
             followups: []
         });
     } finally {
+        if (typingEl && typingEl.parentNode) {
+            typingEl.parentNode.removeChild(typingEl);
+        }
         if (btn) btn.disabled = false;
         saveAssistantHistory(history);
         renderAssistantMessages();
