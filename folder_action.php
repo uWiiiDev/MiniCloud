@@ -1266,5 +1266,390 @@ if ($action === 'delete_comment') {
     exit;
 }
 
+// 14. Direkt-Import per Dropbox-Freigabelink / Cloud-URL (Server-zu-Server Migration inkl. Auto-Entpacken)
+if ($action === 'import_cloud_url') {
+    $rawUrl       = trim((string)($_POST['import_url'] ?? ''));
+    $parentFolder = isset($_POST['parent_folder']) ? sanitizeFolderPathInput((string)$_POST['parent_folder']) : '';
+    $customSub    = isset($_POST['target_subfolder']) ? sanitizeFolderPathInput((string)$_POST['target_subfolder']) : '';
+    $groupFolderId = isset($_POST['group_folder_id']) && (int)$_POST['group_folder_id'] > 0
+        ? (int)$_POST['group_folder_id']
+        : null;
+    $autoUnpack   = isset($_POST['auto_unpack']) && (string)$_POST['auto_unpack'] === '1';
+
+    $returnQuery = [];
+    if ($groupFolderId !== null) {
+        $returnQuery['group_folder'] = (string)$groupFolderId;
+    }
+    if ($parentFolder !== '') {
+        $returnQuery['folder'] = $parentFolder;
+    }
+    $redirectUrl = 'index.php' . (!empty($returnQuery) ? '?' . http_build_query($returnQuery) : '');
+
+    if ($rawUrl === '' || !preg_match('#^https://#i', $rawUrl)) {
+        setFlash('error', 'Bitte gib einen gültigen HTTPS-Freigabelink (z. B. von Dropbox) ein.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    if ($groupFolderId !== null && !canUserAccessGroupFolder($pdo, $userId, $groupFolderId, true, $isAdmin)) {
+        setFlash('error', 'Keine Schreibberechtigung für diesen Gruppen-Ordner.');
+        header('Location: index.php');
+        exit;
+    }
+
+    // 1. Dropbox- / Google-Drive- / Nextcloud-Freigabelinks automatisch in Direkt-Download-URLs umwandeln
+    $downloadUrl = $rawUrl;
+    $parsedInit  = parse_url($downloadUrl);
+    $initHost    = strtolower((string)($parsedInit['host'] ?? ''));
+
+    if ($initHost === 'www.dropbox.com' || $initHost === 'dropbox.com' || str_ends_with($initHost, '.dropbox.com')) {
+        // Dropbox: dl=0 durch dl=1 ersetzen oder ?dl=1 / &dl=1 anhängen (liefert Dateien direkt bzw. Ordner als .zip!)
+        if (preg_match('/([?&])dl=0\b/i', $downloadUrl)) {
+            $downloadUrl = (string)preg_replace('/([?&])dl=0\b/i', '$1dl=1', $downloadUrl);
+        } elseif (!preg_match('/([?&])dl=1\b/i', $downloadUrl)) {
+            $downloadUrl .= (str_contains($downloadUrl, '?') ? '&' : '?') . 'dl=1';
+        }
+    } elseif (($initHost === 'drive.google.com' || $initHost === 'docs.google.com') && preg_match('#/file/d/([a-zA-Z0-9_-]+)#', $downloadUrl, $mGDrive)) {
+        $downloadUrl = 'https://drive.google.com/uc?export=download&id=' . $mGDrive[1];
+    } elseif (preg_match('#^(https://[^/]+/(?:index\.php/)?s/[A-Za-z0-9]+)$#', $downloadUrl, $mNc)) {
+        $downloadUrl = $mNc[1] . '/download';
+    }
+
+    // 2. SSRF-Schutz: Nur öffentliche IPv4-Ziele auf HTTPS (Port 443) zulassen
+    $validatePublicHttpsUrl = static function (string $checkUrl): bool {
+        $parts = parse_url($checkUrl);
+        if (!is_array($parts)) {
+            return false;
+        }
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        $host   = strtolower((string)($parts['host'] ?? ''));
+        $port   = isset($parts['port']) ? (int)$parts['port'] : 443;
+        if ($scheme !== 'https' || $host === '' || $port !== 443) {
+            return false;
+        }
+        if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+            return false;
+        }
+        $ips = @gethostbynamel($host);
+        if (!is_array($ips) || empty($ips)) {
+            return false;
+        }
+        foreach ($ips as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if (!$validatePublicHttpsUrl($downloadUrl)) {
+        setFlash('error', 'Der angegebene Link verweist auf kein gültiges öffentliches HTTPS-Ziel.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $stats = getUserStorageStats($pdo, $userId);
+    $freeBytes = (int)$stats['free'];
+    if ($groupFolderId === null && $freeBytes < 65536) {
+        setFlash('error', 'Dein Cloud-Speicherplatz ist erschöpft.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    ensureUploadDirReady();
+    $tmpFile = UPLOAD_DIR . 'tmp_import_' . bin2hex(random_bytes(12)) . '.part';
+    $fhTmp   = @fopen($tmpFile, 'wb');
+    if ($fhTmp === false) {
+        setFlash('error', 'Temporäre Datei für den Cloud-Import konnte nicht angelegt werden.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $downloadedBytes   = 0;
+    $quotaExceeded     = false;
+    $headerFilename    = '';
+    $responseMime      = '';
+    $maxAllowedBytes   = $groupFolderId === null ? $freeBytes : (500 * 1024 * 1024);
+
+    // 3. Server-zu-Server-Download per cURL (mit Redirect-Unterstützung für Dropbox-CDN dl.dropboxusercontent.com)
+    $ch = curl_init($downloadUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 6,
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,
+        CURLOPT_REDIR_PROTOCOLS=> CURLPROTO_HTTPS,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT        => 180,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; MiniCloud-Migrator/1.0)',
+        CURLOPT_HEADERFUNCTION => static function ($ch, string $headerLine) use (&$headerFilename, &$responseMime): int {
+            $trimLine = trim($headerLine);
+            if (stripos($trimLine, 'Content-Disposition:') === 0) {
+                if (preg_match("/filename\\*=UTF-8''([^;\\r\\n]+)/i", $trimLine, $mUtf8)) {
+                    $headerFilename = rawurldecode(trim($mUtf8[1], " \"'"));
+                } elseif (preg_match('/filename="([^"]+)"/i', $trimLine, $mQuoted)) {
+                    $headerFilename = trim($mQuoted[1]);
+                } elseif (preg_match('/filename=([^;\r\n]+)/i', $trimLine, $mPlain)) {
+                    $headerFilename = trim($mPlain[1], " \"'");
+                }
+            } elseif (stripos($trimLine, 'Content-Type:') === 0) {
+                $parts = explode(';', substr($trimLine, 13), 2);
+                $responseMime = strtolower(trim($parts[0]));
+            }
+            return strlen($headerLine);
+        },
+        CURLOPT_WRITEFUNCTION  => static function ($ch, string $chunk) use ($fhTmp, &$downloadedBytes, &$quotaExceeded, $maxAllowedBytes): int {
+            $len = strlen($chunk);
+            if (($downloadedBytes + $len) > $maxAllowedBytes) {
+                $quotaExceeded = true;
+                return 0; // bricht cURL sofort ab
+            }
+            $written = fwrite($fhTmp, $chunk);
+            if ($written === false) {
+                return 0;
+            }
+            $downloadedBytes += $written;
+            return $written;
+        },
+    ]);
+
+    $curlOk   = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+    fclose($fhTmp);
+
+    if ($quotaExceeded) {
+        @unlink($tmpFile);
+        setFlash('error', sprintf('Der Import übersteigt deinen freien Cloud-Speicherplatz (%s frei).', formatBytes($freeBytes)));
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    if ($curlOk === false || $httpCode < 200 || $httpCode >= 400 || $downloadedBytes <= 0) {
+        @unlink($tmpFile);
+        setFlash('error', 'Download vom Quell-Link fehlgeschlagen (HTTP ' . $httpCode . ($curlErr !== '' ? ': ' . $curlErr : '') . '). Prüfe bitte, ob der Dropbox-Link öffentlich freigegeben ist.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    // Prüfen, ob versehentlich eine HTML-Anmeldeseite statt der Datei geladen wurde
+    $firstBytes = (string)@file_get_contents($tmpFile, false, null, 0, 512);
+    $isZipMagic = str_starts_with($firstBytes, "PK\x03\x04") || str_starts_with($firstBytes, "PK\x05\x06");
+    if (!$isZipMagic && str_contains($responseMime, 'text/html') && preg_match('/<!DOCTYPE\s+html|<html/i', $firstBytes)) {
+        @unlink($tmpFile);
+        setFlash('error', 'Der Link lieferte eine Webseite statt einer Datei zurück. Bitte stelle sicher, dass der Dropbox-Link für „Jeder mit diesem Link“ freigegeben ist.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    // Dateinamen ermitteln
+    if ($headerFilename === '') {
+        $urlPath = (string)(parse_url($rawUrl, PHP_URL_PATH) ?? '');
+        $urlBase = rawurldecode(basename($urlPath));
+        if ($urlBase !== '' && $urlBase !== '/' && !in_array(strtolower($urlBase), ['s', 'fo', 'fi', 'view', 'download', 'uc'], true)) {
+            $headerFilename = $urlBase;
+        } else {
+            $headerFilename = $isZipMagic ? ('Dropbox_Import_' . date('Y-m-d_Hi') . '.zip') : ('Import_' . date('Y-m-d_Hi'));
+        }
+    }
+    $cleanOrigName = sanitizeOriginalFilename($headerFilename);
+    if ($isZipMagic && strtolower(pathinfo($cleanOrigName, PATHINFO_EXTENSION)) !== 'zip') {
+        $cleanOrigName .= '.zip';
+    }
+
+    // Zielordner bestimmen
+    $targetBaseFolder = $parentFolder;
+    if ($customSub !== '') {
+        $targetBaseFolder = $targetBaseFolder !== ''
+            ? sanitizeFolderPathInput($targetBaseFolder . '/' . $customSub)
+            : $customSub;
+    }
+
+    // 4. Wenn es ein ZIP-Archiv ist (z. B. ein kompletter Dropbox-Ordner) und Auto-Entpacken aktiv ist -> direkt entpacken!
+    if ($isZipMagic && $autoUnpack && class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($tmpFile) === true) {
+            // Falls kein eigener Unterordner angegeben wurde und das ZIP-Archiv einen sprechenden Namen hat:
+            if ($customSub === '') {
+                $zipTitle = sanitizeFolderPathInput(pathinfo($cleanOrigName, PATHINFO_FILENAME));
+                if ($zipTitle !== '' && !str_starts_with($zipTitle, 'Dropbox_Import_')) {
+                    $targetBaseFolder = $targetBaseFolder !== ''
+                        ? sanitizeFolderPathInput($targetBaseFolder . '/' . $zipTitle)
+                        : $zipTitle;
+                }
+            }
+
+            $maxExtractedFiles = 500;
+            $totalExtractBytes = 0;
+            $validEntryIndices = [];
+
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
+                if (!is_array($stat) || empty($stat['name'])) {
+                    continue;
+                }
+                $rawEntryName = str_replace('\\', '/', (string)$stat['name']);
+                $baseEntry    = basename($rawEntryName);
+                if (str_ends_with($rawEntryName, '/') || str_starts_with($baseEntry, '.__') || $baseEntry === '.DS_Store' || str_starts_with($rawEntryName, '__MACOSX/')) {
+                    continue;
+                }
+                $uSize = max(0, (int)($stat['size'] ?? 0));
+                $totalExtractBytes += $uSize;
+                $validEntryIndices[] = $i;
+                if (count($validEntryIndices) > $maxExtractedFiles) {
+                    break;
+                }
+            }
+
+            if ($groupFolderId === null && $totalExtractBytes > $freeBytes) {
+                $zip->close();
+                @unlink($tmpFile);
+                setFlash('error', sprintf('Der entpackte Dropbox-Ordner (%s) ist größer als dein freier Speicherplatz (%s).', formatBytes($totalExtractBytes), formatBytes($freeBytes)));
+                header('Location: ' . $redirectUrl);
+                exit;
+            }
+
+            if ($targetBaseFolder !== '') {
+                registerFolderHierarchy($pdo, $userId, $targetBaseFolder, $groupFolderId);
+            }
+
+            $finfo = class_exists('finfo') ? new finfo(FILEINFO_MIME_TYPE) : null;
+            $stmtIns = $pdo->prepare(
+                'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+                 VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, 0)'
+            );
+
+            $extractedCount = 0;
+            foreach ($validEntryIndices as $idx) {
+                $stat    = $zip->statIndex($idx);
+                $rawName = str_replace('\\', '/', (string)$stat['name']);
+                $dirPart = dirname($rawName);
+                $cleanSubDir   = ($dirPart !== '.' && $dirPart !== '/') ? sanitizeFolderPathInput($dirPart) : '';
+                $cleanFileName = sanitizeOriginalFilename(basename($rawName));
+
+                $entryFolder = $targetBaseFolder;
+                if ($cleanSubDir !== '') {
+                    $entryFolder = $entryFolder !== ''
+                        ? sanitizeFolderPathInput($entryFolder . '/' . $cleanSubDir)
+                        : $cleanSubDir;
+                }
+
+                $stream = $zip->getStream($stat['name']);
+                if (!is_resource($stream)) {
+                    continue;
+                }
+
+                $storedName = generateSafeStoredFilename();
+                $destPath   = UPLOAD_DIR . $storedName;
+                $outFh      = @fopen($destPath, 'wb');
+                if ($outFh === false) {
+                    fclose($stream);
+                    continue;
+                }
+
+                stream_copy_to_stream($stream, $outFh);
+                fclose($stream);
+                fclose($outFh);
+                @chmod($destPath, 0640);
+
+                if ($entryFolder !== '') {
+                    registerFolderHierarchy($pdo, $userId, $entryFolder, $groupFolderId);
+                }
+
+                $actualSize   = max(0, (int)@filesize($destPath));
+                $detectedMime = ($finfo !== null) ? (string)($finfo->file($destPath) ?: 'application/octet-stream') : 'application/octet-stream';
+
+                $stmtIns->execute([
+                    ':uid'   => $userId,
+                    ':gf_id' => $groupFolderId,
+                    ':fn'    => $storedName,
+                    ':orig'  => $cleanFileName,
+                    ':fp'    => $entryFolder,
+                    ':sz'    => $actualSize,
+                    ':mime'  => mb_substr($detectedMime, 0, 128),
+                ]);
+                $extractedCount++;
+            }
+
+            $zip->close();
+            @unlink($tmpFile);
+
+            logAuditEvent(
+                $pdo,
+                'cloud_import',
+                sprintf('Dropbox-/Cloud-Ordner "%s" importiert & entpackt (%d Dateien nach "%s")', $cleanOrigName, $extractedCount, $targetBaseFolder !== '' ? $targetBaseFolder : 'Hauptverzeichnis')
+            );
+
+            setFlash(
+                'success',
+                sprintf(
+                    '☁️✅ Cloud-Import abgeschlossen: %d %s (%s) wurden direkt samt Ordnerstruktur nach „%s“ übertragen!',
+                    $extractedCount,
+                    $extractedCount === 1 ? 'Datei' : 'Dateien',
+                    formatBytes($totalExtractBytes),
+                    $targetBaseFolder !== '' ? $targetBaseFolder : 'Meine Dateien'
+                )
+            );
+
+            if ($targetBaseFolder !== '') {
+                $returnQuery['folder'] = $targetBaseFolder;
+            }
+            header('Location: index.php' . (!empty($returnQuery) ? '?' . http_build_query($returnQuery) : ''));
+            exit;
+        }
+    }
+
+    // 5. Einzelne Datei (oder unentpacktes ZIP) direkt speichern
+    $storedName = generateSafeStoredFilename();
+    $destPath   = UPLOAD_DIR . $storedName;
+    if (!@rename($tmpFile, $destPath)) {
+        if (!@copy($tmpFile, $destPath)) {
+            @unlink($tmpFile);
+            setFlash('error', 'Importierte Datei konnte nicht gespeichert werden.');
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        @unlink($tmpFile);
+    }
+    @chmod($destPath, 0640);
+
+    if ($targetBaseFolder !== '') {
+        registerFolderHierarchy($pdo, $userId, $targetBaseFolder, $groupFolderId);
+    }
+
+    $finfo        = class_exists('finfo') ? new finfo(FILEINFO_MIME_TYPE) : null;
+    $actualSize   = max(0, (int)@filesize($destPath));
+    $detectedMime = ($finfo !== null) ? (string)($finfo->file($destPath) ?: 'application/octet-stream') : 'application/octet-stream';
+
+    $stmtIns = $pdo->prepare(
+        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
+         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :mime, 0)'
+    );
+    $stmtIns->execute([
+        ':uid'   => $userId,
+        ':gf_id' => $groupFolderId,
+        ':fn'    => $storedName,
+        ':orig'  => $cleanOrigName,
+        ':fp'    => $targetBaseFolder,
+        ':sz'    => $actualSize,
+        ':mime'  => mb_substr($detectedMime, 0, 128),
+    ]);
+
+    logAuditEvent(
+        $pdo,
+        'cloud_import',
+        sprintf('Datei "%s" (%s) per Cloud-Link importiert', $cleanOrigName, formatBytes($actualSize))
+    );
+
+    setFlash('success', sprintf('☁️✅ Datei „%s“ (%s) wurde direkt in deine MiniCloud importiert!', $cleanOrigName, formatBytes($actualSize)));
+    if ($targetBaseFolder !== '') {
+        $returnQuery['folder'] = $targetBaseFolder;
+    }
+    header('Location: index.php' . (!empty($returnQuery) ? '?' . http_build_query($returnQuery) : ''));
+    exit;
+}
+
 header('Location: index.php');
 exit;

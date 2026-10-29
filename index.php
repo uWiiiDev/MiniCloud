@@ -657,6 +657,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <span>📄+</span>
                         <span class="hidden xl:inline">Office</span>
                     </button>
+
+                    <?php if ($activeSharedFolder === null): ?>
+                        <button
+                            type="button"
+                            onclick="toggleCloudImportBar()"
+                            title="Dropbox-Ordner oder Datei per Freigabelink direkt von Server zu Server in die MiniCloud importieren"
+                            class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/70 hover:bg-sky-100 dark:hover:bg-sky-900/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                            <span>☁️↓</span>
+                            <span class="hidden sm:inline">Dropbox / Import</span>
+                        </button>
+                    <?php endif; ?>
                 </form>
             <?php endif; ?>
 
@@ -782,8 +794,85 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             if (!bar) return;
             const show = typeof forceShow === 'boolean' ? forceShow : bar.classList.contains('hidden');
             bar.classList.toggle('hidden', !show);
-            if (show && inp) {
-                setTimeout(() => inp.focus(), 30);
+            if (show) {
+                toggleCloudImportBar(false);
+                if (inp) setTimeout(() => inp.focus(), 30);
+            }
+        }
+        </script>
+
+        <!-- Ausklappbare Schnellleiste: Dropbox- / Cloud-Link Server-zu-Server Import -->
+        <div id="cloudImportInlineBar" class="hidden px-4 sm:px-6 py-3.5 bg-sky-50/80 dark:bg-sky-950/35 border-b border-sky-200/80 dark:border-sky-800/70">
+            <form action="folder_action.php" method="post" onsubmit="const b=this.querySelector('button[type=submit]'); if(b){b.disabled=true; b.innerHTML='⏳ Übertrage direkt auf Server...';}" class="space-y-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="import_cloud_url">
+                <?php if ($activeGroupFolder !== null): ?>
+                    <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+                <?php endif; ?>
+                <input type="hidden" name="parent_folder" value="<?= e($currentFolder) ?>">
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-xs font-bold text-sky-950 dark:text-sky-200">
+                        ☁️↓ Dropbox- &amp; Cloud-Umzug (Server-zu-Server Direktimport<?= $currentFolder !== '' ? ' in „' . e($currentFolder) . '“' : '' ?>)
+                    </span>
+                    <span class="text-[11px] text-sky-700 dark:text-sky-300">
+                        Tipp: In Dropbox auf „Link kopieren“ klicken (Ordner oder Datei) &amp; hier einfügen
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <div class="md:col-span-6">
+                        <input
+                            type="url"
+                            id="cloudImportUrlInput"
+                            name="import_url"
+                            required
+                            placeholder="https://www.dropbox.com/scl/fo/... (oder direkter HTTPS-Link)"
+                            class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                    </div>
+                    <div class="md:col-span-3">
+                        <input
+                            type="text"
+                            name="target_subfolder"
+                            placeholder="Ziel-Unterordner (optional, z. B. Dropbox)"
+                            class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                    </div>
+                    <div class="md:col-span-3 flex items-center gap-1.5">
+                        <button
+                            type="submit"
+                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer"
+                        >
+                            <span>🚀 Importieren</span>
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleCloudImportBar(false)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+
+                <label class="inline-flex items-center gap-2 text-xs text-sky-900 dark:text-sky-200 cursor-pointer select-none">
+                    <input type="checkbox" name="auto_unpack" value="1" checked class="rounded border-sky-300 text-sky-600 focus:ring-sky-500">
+                    <span>📦 <strong>Dropbox-Ordner / ZIP-Archive automatisch entpacken</strong> und alle Unterordner 1:1 in der MiniCloud wiederherstellen</span>
+                </label>
+            </form>
+        </div>
+        <script>
+        function toggleCloudImportBar(forceShow) {
+            const bar = document.getElementById('cloudImportInlineBar');
+            const inp = document.getElementById('cloudImportUrlInput');
+            if (!bar) return;
+            const show = typeof forceShow === 'boolean' ? forceShow : bar.classList.contains('hidden');
+            bar.classList.toggle('hidden', !show);
+            if (show) {
+                const nfBar = document.getElementById('newFolderInlineBar');
+                if (nfBar) nfBar.classList.add('hidden');
+                if (inp) setTimeout(() => inp.focus(), 30);
             }
         }
         </script>
