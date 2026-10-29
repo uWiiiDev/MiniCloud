@@ -1412,8 +1412,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableMusic      = isset($_POST['enable_music']) && $_POST['enable_music'] === '1' ? '1' : '0';
         $enableCalculator = isset($_POST['enable_calculator']) && $_POST['enable_calculator'] === '1' ? '1' : '0';
         $useOllama        = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
-        $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'qwen2.5:1.5b'));
-        $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'qwen2.5:1.5b';
+        $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
+        $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'gemma2:2b';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -3130,7 +3130,7 @@ foreach ($modList as $mItem) {
                 </div>
 
                 <!-- Modul 14: Lokaler KI- & Wissens-Assistent (Stufe 1 + optionales lokales Sprachmodell Stufe 2) -->
-                <?php $ollamaStatus = probeLocalOllamaStatus((string)($currentSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')); ?>
+                <?php $ollamaStatus = probeLocalOllamaStatus((string)($currentSettings['assistant_ollama_model'] ?? 'gemma2:2b')); ?>
                 <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
                     <div class="space-y-2.5">
                         <div class="flex items-center justify-between gap-2">
@@ -3185,8 +3185,8 @@ foreach ($modList as $mItem) {
                                 <input
                                     type="text"
                                     name="assistant_ollama_model"
-                                    value="<?= e((string)($currentSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?>"
-                                    placeholder="qwen2.5:3b"
+                                    value="<?= e((string)($currentSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?>"
+                                    placeholder="gemma2:2b"
                                     class="w-full px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
                                 >
                             </div>

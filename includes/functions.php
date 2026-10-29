@@ -696,7 +696,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_calculator'             => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
-        'assistant_ollama_model'        => 'qwen2.5:1.5b',
+        'assistant_ollama_model'        => 'gemma2:2b',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
@@ -3411,7 +3411,7 @@ function resetModuleUsageStatistics(PDO $pdo): void
  *
  * @return array{available: bool, models: array<int, string>, active_model: string}
  */
-function probeLocalOllamaStatus(string $preferredModel = 'qwen2.5:3b'): array
+function probeLocalOllamaStatus(string $preferredModel = 'gemma2:2b'): array
 {
     static $cached = null;
     if (is_array($cached)) {
@@ -3452,7 +3452,7 @@ function probeLocalOllamaStatus(string $preferredModel = 'qwen2.5:3b'): array
             }
         }
         $result['available'] = true;
-        $pref = trim($preferredModel) !== '' ? trim($preferredModel) : 'qwen2.5:3b';
+        $pref = trim($preferredModel) !== '' ? trim($preferredModel) : 'gemma2:2b';
         if (in_array($pref, $result['models'], true)) {
             $result['active_model'] = $pref;
         } elseif (!empty($result['models'])) {

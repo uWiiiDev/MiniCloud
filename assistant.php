@@ -2026,7 +2026,7 @@ function queryLocalOllamaAssistant(
         return null;
     }
 
-    $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:1.5b')) ?: 'qwen2.5:1.5b';
+    $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
     $status = probeLocalOllamaStatus($preferredModel);
     if (!$status['available'] || $status['active_model'] === '') {
         return null;
@@ -3452,7 +3452,7 @@ $uiPack           = getAssistantLangPack($uiLang, $username, $appTitle);
 $allowedLanguages = getAllowedLanguages();
 $pageTitle        = $uiPack['page_title'];
 $ollamaUiEnabled  = ($appSettings['assistant_use_ollama'] ?? '1') === '1';
-$ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:1.5b')) ?: 'qwen2.5:1.5b';
+$ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
 $ollamaUiProbe    = $ollamaUiEnabled ? probeLocalOllamaStatus($ollamaUiModel) : ['available' => false, 'active_model' => ''];
 require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
