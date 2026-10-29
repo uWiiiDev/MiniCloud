@@ -81,7 +81,7 @@ function ensureGamesSchema(PDO $pdo): void
                 `player1_id` INT UNSIGNED NOT NULL,
                 `player2_id` INT UNSIGNED NOT NULL,
                 `current_turn_id` INT UNSIGNED NOT NULL,
-                `board_json` TEXT NOT NULL,
+                `board_json` MEDIUMTEXT NOT NULL,
                 `status` VARCHAR(20) NOT NULL DEFAULT 'active',
                 `winner_id` INT UNSIGNED NULL DEFAULT NULL,
                 `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -91,6 +91,10 @@ function ensureGamesSchema(PDO $pdo): void
                 KEY `idx_updated` (`updated_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        try {
+            $pdo->exec("ALTER TABLE `game_matches` MODIFY `board_json` MEDIUMTEXT NOT NULL");
+        } catch (Throwable) {
+        }
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION['_mc_games_schema_ok'] = 1;
         }
@@ -108,13 +112,13 @@ ensureGamesSchema($pdo);
 function getGamesCatalog(): array
 {
     return [
-        '2048' => [
-            'key'      => '2048',
-            'title'    => '2048 Puzzle',
-            'icon'     => '🔢',
-            'category' => 'Denkspiel',
-            'desc'     => 'Verbinde gleiche Zahlenkacheln bis zur 2048 (und darüber hinaus!). Mit Auto-Save.',
-            'color'    => 'from-amber-500 to-orange-600',
+        'gummigeruch' => [
+            'key'      => 'gummigeruch',
+            'title'    => 'Gummigeruch Kart',
+            'icon'     => '🏎️',
+            'category' => 'Rennspiel',
+            'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, Bremsspuren, 3 Strecken, Ghost-Duellen & Live-Herausforderungen!',
+            'color'    => 'from-rose-600 to-amber-500',
         ],
         'sudoku' => [
             'key'      => 'sudoku',
@@ -131,14 +135,6 @@ function getGamesCatalog(): array
             'category' => 'Klassiker',
             'desc'     => 'Spüre alle Minen fehlerfrei auf – mit Touch-Flaggen-Umschalter und Stoppuhr.',
             'color'    => 'from-slate-600 to-slate-800',
-        ],
-        'wordle' => [
-            'key'      => 'wordle',
-            'title'    => 'Wort des Tages',
-            'icon'     => '🔤',
-            'category' => 'Worträtsel',
-            'desc'     => 'Errate das tägliche 5-Buchstaben-Wort (für alle Cloud-Nutzer gleich) in 6 Versuchen!',
-            'color'    => 'from-emerald-500 to-teal-600',
         ],
         'memory' => [
             'key'      => 'memory',
@@ -249,7 +245,7 @@ function fetchLeaderboardRows(PDO $pdo, string $gameKey, string $period = 'all')
 {
     $catalog = getGamesCatalog();
     if (!isset($catalog[$gameKey])) {
-        $gameKey = '2048';
+        $gameKey = 'gummigeruch';
     }
 
     $dateFilter = match ($period) {
@@ -540,14 +536,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         exit;
     }
 
-    // 6. Aktuelle Cloud-Mehrspieler-Duelle des Benutzers abrufen
+    // 6. Aktuelle Cloud-Mehrspieler-Duelle (Vier Gewinnt / Tic-Tac-Toe) des Benutzers abrufen
     if ($action === 'poll_matches') {
         $stmt = $pdo->prepare(
             "SELECT m.*, u1.username AS p1_name, u2.username AS p2_name
              FROM `game_matches` m
              INNER JOIN `users` u1 ON u1.id = m.player1_id
              INNER JOIN `users` u2 ON u2.id = m.player2_id
-             WHERE m.player1_id = :u1 OR m.player2_id = :u2
+             WHERE (m.player1_id = :u1 OR m.player2_id = :u2)
+               AND m.game_type IN ('connect4', 'tictactoe')
              ORDER BY (m.status = 'active') DESC, m.updated_at DESC
              LIMIT 12"
         );
@@ -611,6 +608,284 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         exit;
     }
 
+    // 8. Gummigeruch Kart: 3-Runden-Rennen speichern, Ghost sichern & Herausforderungen auswerten
+    if ($action === 'gummi_save_run') {
+        session_write_close();
+        $trackId    = in_array($_POST['track_id'] ?? '', ['circuit', 'coast', 'night'], true) ? (string)$_POST['track_id'] : 'circuit';
+        $timeMs     = max(4000, min(600000, (int)($_POST['time_ms'] ?? 0)));
+        $bestLapMs  = max(1200, min(300000, (int)($_POST['best_lap_ms'] ?? 0)));
+        $ghostRaw   = (string)($_POST['ghost_json'] ?? '[]');
+        $opponentId = (int)($_POST['opponent_id'] ?? 0);
+        $matchId    = (int)($_POST['match_id'] ?? 0);
+
+        $ghostFrames = json_decode($ghostRaw, true);
+        if (!is_array($ghostFrames)) {
+            $ghostFrames = [];
+        }
+        $ghostFrames = array_slice($ghostFrames, 0, 900);
+
+        // Punkteberechnung: Je schneller die 3 Runden, desto höher der Score!
+        $score       = max(500, 120000 - (int)round($timeMs * 1.25));
+        $durationSec = max(1, (int)round($timeMs / 1000));
+        $trackNames  = ['circuit' => 'GummiCircuit', 'coast' => 'Küsten-GP', 'night' => 'Nacht-Ring'];
+        $tName       = $trackNames[$trackId] ?? 'GummiCircuit';
+        $fmtTime     = sprintf('%02d:%05.2f', (int)floor($timeMs / 60000), ($timeMs % 60000) / 1000);
+
+        recordModuleUsage($pdo, 'games', true);
+
+        $stmtSc = $pdo->prepare(
+            "INSERT INTO `game_scores` (`user_id`, `game_key`, `score`, `duration_sec`, `meta_label`)
+             VALUES (:uid, 'gummigeruch', :sc, :dur, :meta)"
+        );
+        $stmtSc->execute([
+            ':uid'  => $userId,
+            ':sc'   => $score,
+            ':dur'  => $durationSec,
+            ':meta' => $tName . ' (' . $fmtTime . ')',
+        ]);
+
+        // Eigenen besten Ghost für diese Strecke in game_saves aktualisieren, falls schneller
+        $saveKey = 'gummi_' . $trackId;
+        $stmtOld = $pdo->prepare("SELECT `state_json` FROM `game_saves` WHERE `user_id` = :uid AND `game_key` = :gk LIMIT 1");
+        $stmtOld->execute([':uid' => $userId, ':gk' => $saveKey]);
+        $oldJson = $stmtOld->fetchColumn();
+        $oldData = is_string($oldJson) ? json_decode($oldJson, true) : null;
+        $oldBest = is_array($oldData) && isset($oldData['time_ms']) ? (int)$oldData['time_ms'] : 99999999;
+
+        if ($timeMs < $oldBest && !empty($ghostFrames)) {
+            $newGhostPayload = json_encode([
+                'track_id'    => $trackId,
+                'time_ms'     => $timeMs,
+                'best_lap_ms' => $bestLapMs,
+                'username'    => $username,
+                'frames'      => $ghostFrames,
+            ], JSON_UNESCAPED_UNICODE);
+            $stmtUpG = $pdo->prepare(
+                "INSERT INTO `game_saves` (`user_id`, `game_key`, `state_json`)
+                 VALUES (:uid, :gk, :st)
+                 ON DUPLICATE KEY UPDATE `state_json` = VALUES(`state_json`)"
+            );
+            $stmtUpG->execute([':uid' => $userId, ':gk' => $saveKey, ':st' => $newGhostPayload]);
+        }
+
+        $challengeMsg = '';
+
+        // Fall A: Benutzer hat eine bestehende Ghost-Herausforderung angenommen und zu Ende gefahren
+        if ($matchId > 0) {
+            $stmtM = $pdo->prepare("SELECT * FROM `game_matches` WHERE `id` = :id LIMIT 1");
+            $stmtM->execute([':id' => $matchId]);
+            $mRow = $stmtM->fetch();
+            if ($mRow && $mRow['status'] === 'active' && (int)$mRow['player2_id'] === $userId) {
+                $bData    = json_decode((string)$mRow['board_json'], true) ?: [];
+                $p1TimeMs = (int)($bData['p1_time_ms'] ?? 999999);
+                $p1Id     = (int)$mRow['player1_id'];
+
+                $winnerId  = null;
+                $newStatus = 'finished';
+                if ($timeMs < $p1TimeMs) {
+                    $winnerId = $userId;
+                    $challengeMsg = '🏆 Du hast die Ghost-Herausforderung gewonnen (' . $fmtTime . ')! +800 Bonus-Punkte!';
+                } elseif ($timeMs > $p1TimeMs) {
+                    $winnerId = $p1Id;
+                    $challengeMsg = '🏁 Herausforderungs-Fahrt beendet (' . $fmtTime . ') – dein Gegner war einen Hauch schneller!';
+                } else {
+                    $newStatus = 'draw';
+                    $challengeMsg = '🤝 Auf die Millisekunde exakt gleich schnell!';
+                }
+
+                $bData['p2_time_ms'] = $timeMs;
+                $bData['p2_ghost']   = array_slice($ghostFrames, 0, 450);
+
+                $stmtUpM = $pdo->prepare(
+                    "UPDATE `game_matches`
+                     SET `board_json` = :bj, `status` = :st, `winner_id` = :wid
+                     WHERE `id` = :id"
+                );
+                $stmtUpM->execute([
+                    ':bj'  => json_encode($bData, JSON_UNESCAPED_UNICODE),
+                    ':st'  => $newStatus,
+                    ':wid' => $winnerId,
+                    ':id'  => $matchId,
+                ]);
+
+                if ($winnerId !== null) {
+                    $stmtBonus = $pdo->prepare(
+                        "INSERT INTO `game_scores` (`user_id`, `game_key`, `score`, `duration_sec`, `meta_label`)
+                         VALUES (:uid, 'gummigeruch', :sc, :dur, :lbl)"
+                    );
+                    $stmtBonus->execute([
+                        ':uid' => $winnerId,
+                        ':sc'  => $score + 800,
+                        ':dur' => $durationSec,
+                        ':lbl' => 'Ghost-Duell Sieg (' . $tName . ')',
+                    ]);
+                }
+            }
+        }
+        // Fall B: Benutzer hat einen anderen Cloud-Benutzer mit dieser Fahrt neu herausgefordert!
+        elseif ($opponentId > 0 && $opponentId !== $userId) {
+            $bData = [
+                'track_id'    => $trackId,
+                'track_name'  => $tName,
+                'p1_time_ms'  => $timeMs,
+                'p1_best_lap' => $bestLapMs,
+                'p1_ghost'    => array_slice($ghostFrames, 0, 600),
+            ];
+            $stmtInsM = $pdo->prepare(
+                "INSERT INTO `game_matches` (`game_type`, `player1_id`, `player2_id`, `current_turn_id`, `board_json`, `status`)
+                 VALUES (:gt, :p1, :p2, :turn, :bj, 'active')"
+            );
+            $stmtInsM->execute([
+                ':gt'   => 'gummi_' . $trackId,
+                ':p1'   => $userId,
+                ':p2'   => $opponentId,
+                ':turn' => $opponentId,
+                ':bj'   => json_encode($bData, JSON_UNESCAPED_UNICODE),
+            ]);
+            $challengeMsg = '👻 Herausforderung mit deinem Ghost-Kart (' . $fmtTime . ') wurde gesendet!';
+        }
+
+        $stmtBest = $pdo->prepare("SELECT MAX(`score`) FROM `game_scores` WHERE `user_id` = :uid AND `game_key` = 'gummigeruch'");
+        $stmtBest->execute([':uid' => $userId]);
+        $personalBest = (int)$stmtBest->fetchColumn();
+
+        echo json_encode([
+            'ok'            => true,
+            'score'         => $score,
+            'personal_best' => $personalBest,
+            'challenge_msg' => $challengeMsg,
+            'leaderboard'   => fetchLeaderboardRows($pdo, 'gummigeruch', 'all'),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 9. Gummigeruch Kart: Streckenrekord-Ghost, offene Ghost-Duelle & Live-Mitfahrer abrufen
+    if ($action === 'gummi_poll_state') {
+        session_write_close();
+        $trackId = in_array($_POST['track_id'] ?? '', ['circuit', 'coast', 'night'], true) ? (string)$_POST['track_id'] : 'circuit';
+        $saveKey = 'gummi_' . $trackId;
+
+        // Optional: Eigene Live-Kart-Position aktualisieren, falls gerade im Rennen
+        if (isset($_POST['live_x'], $_POST['live_y'])) {
+            $livePayload = json_encode([
+                'username' => $username,
+                'track_id' => $trackId,
+                'x'        => (float)$_POST['live_x'],
+                'y'        => (float)$_POST['live_y'],
+                'angle'    => (float)($_POST['live_angle'] ?? 0),
+                'lap'      => (int)($_POST['live_lap'] ?? 1),
+            ], JSON_UNESCAPED_UNICODE);
+            try {
+                $stmtLv = $pdo->prepare(
+                    "INSERT INTO `game_saves` (`user_id`, `game_key`, `state_json`)
+                     VALUES (:uid, 'gummi_live', :st)
+                     ON DUPLICATE KEY UPDATE `state_json` = VALUES(`state_json`)"
+                );
+                $stmtLv->execute([':uid' => $userId, ':st' => $livePayload]);
+            } catch (Throwable) {
+            }
+        }
+
+        // 1. Schnellsten Cloud-Champion-Ghost für diese Strecke ermitteln
+        $recordGhost = null;
+        try {
+            $stmtG = $pdo->prepare(
+                "SELECT s.user_id, u.username, s.state_json
+                 FROM `game_saves` s
+                 INNER JOIN `users` u ON u.id = s.user_id
+                 WHERE s.game_key = :gk"
+            );
+            $stmtG->execute([':gk' => $saveKey]);
+            $bestMs = 99999999;
+            foreach ($stmtG->fetchAll() as $gRow) {
+                $gd = json_decode((string)$gRow['state_json'], true);
+                if (!is_array($gd) || empty($gd['frames'])) {
+                    continue;
+                }
+                $ms = (int)($gd['time_ms'] ?? 99999999);
+                if ($ms < $bestMs) {
+                    $bestMs = $ms;
+                    $recordGhost = [
+                        'username' => (string)$gRow['username'],
+                        'time_ms'  => $ms,
+                        'frames'   => $gd['frames'],
+                    ];
+                }
+            }
+        } catch (Throwable) {
+        }
+
+        // 2. Offene & beendete Ghost-Herausforderungen des Benutzers laden
+        $challenges = [];
+        try {
+            $stmtCh = $pdo->prepare(
+                "SELECT m.*, u1.username AS p1_name, u2.username AS p2_name
+                 FROM `game_matches` m
+                 INNER JOIN `users` u1 ON u1.id = m.player1_id
+                 INNER JOIN `users` u2 ON u2.id = m.player2_id
+                 WHERE (m.player1_id = :u1 OR m.player2_id = :u2)
+                   AND m.game_type LIKE 'gummi_%'
+                 ORDER BY (m.status = 'active') DESC, m.updated_at DESC
+                 LIMIT 10"
+            );
+            $stmtCh->execute([':u1' => $userId, ':u2' => $userId]);
+            foreach ($stmtCh->fetchAll() as $cRow) {
+                $bData = json_decode((string)$cRow['board_json'], true) ?: [];
+                $challenges[] = [
+                    'id'              => (int)$cRow['id'],
+                    'track_id'        => (string)($bData['track_id'] ?? 'circuit'),
+                    'track_name'      => (string)($bData['track_name'] ?? 'GummiCircuit'),
+                    'player1_id'      => (int)$cRow['player1_id'],
+                    'player2_id'      => (int)$cRow['player2_id'],
+                    'p1_name'         => (string)$cRow['p1_name'],
+                    'p2_name'         => (string)$cRow['p2_name'],
+                    'p1_time_ms'      => (int)($bData['p1_time_ms'] ?? 0),
+                    'p2_time_ms'      => isset($bData['p2_time_ms']) ? (int)$bData['p2_time_ms'] : null,
+                    'p1_ghost'        => $bData['p1_ghost'] ?? [],
+                    'status'          => (string)$cRow['status'],
+                    'winner_id'       => $cRow['winner_id'] !== null ? (int)$cRow['winner_id'] : null,
+                    'updated_at'      => date('d.m. H:i', strtotime((string)$cRow['updated_at']) ?: time()),
+                ];
+            }
+        } catch (Throwable) {
+        }
+
+        // 3. Gerade live auf derselben Strecke fahrende Mitspieler laden
+        $livePeers = [];
+        try {
+            $stmtLp = $pdo->prepare(
+                "SELECT u.username, s.state_json
+                 FROM `game_saves` s
+                 INNER JOIN `users` u ON u.id = s.user_id
+                 WHERE s.game_key = 'gummi_live'
+                   AND s.user_id != :uid
+                   AND s.updated_at >= DATE_SUB(NOW(), INTERVAL 15 SECOND)"
+            );
+            $stmtLp->execute([':uid' => $userId]);
+            foreach ($stmtLp->fetchAll() as $lpRow) {
+                $ld = json_decode((string)$lpRow['state_json'], true);
+                if (is_array($ld) && ($ld['track_id'] ?? '') === $trackId) {
+                    $livePeers[] = [
+                        'username' => (string)$lpRow['username'],
+                        'x'        => (float)($ld['x'] ?? 0),
+                        'y'        => (float)($ld['y'] ?? 0),
+                        'angle'    => (float)($ld['angle'] ?? 0),
+                        'lap'      => (int)($ld['lap'] ?? 1),
+                    ];
+                }
+            }
+        } catch (Throwable) {
+        }
+
+        echo json_encode([
+            'ok'           => true,
+            'record_ghost' => $recordGhost,
+            'challenges'   => $challenges,
+            'live_peers'   => $livePeers,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     echo json_encode(['ok' => false, 'error' => 'Unbekannte Aktion.']);
     exit;
 }
@@ -662,32 +937,7 @@ try {
 } catch (Throwable) {
 }
 
-// Tägliches 5-Buchstaben-Wort (für alle Cloud-Nutzer am heutigen Tag identisch)
-$wordList = [
-    'APFEL', 'ADLER', 'ANKER', 'ENGEL', 'FEUER', 'FLUSS', 'GEIST', 'GLANZ', 'HAFEN', 'HERZOG',
-    'INSEL', 'JUBEL', 'KABEL', 'KRAFT', 'KRONE', 'LAMPE', 'LEBEN', 'LICHT', 'LOGIK', 'MALER',
-    'MUSIK', 'NACHT', 'NEBEL', 'OCEAN', 'ORGEL', 'PERLE', 'PILOT', 'PLANO', 'PUNKT', 'QUarz',
-    'RADIO', 'RAUCH', 'REGEN', 'REISE', 'RITTER', 'ROMAN', 'SONNE', 'SPIEL', 'STERN', 'STURM',
-    'TAFEL', 'TRAUM', 'TURBO', 'VOGEL', 'WOLKE', 'WUNDE', 'ZEBRA', 'ZUNGE', 'BLUME', 'BODEN',
-    'BRIEF', 'DATEI', 'DECKE', 'DRAHT', 'EBENE', 'FAHRT', 'FARBE', 'FEDER', 'FELSE', 'FLAMM',
-    'FORST', 'FRAGE', 'GLASF', 'GLEIS', 'GRUND', 'HONIG', 'HOTEL', 'IDEAL', 'KARTA', 'KERZE',
-    'KLANG', 'KLEID', 'KUGEL', 'KUNST', 'LAUNE', 'LEDER', 'LINIE', 'LOEWE', 'MASKE', 'MEILE',
-    'METALL', 'MITTE', 'MODUL', 'MONAT', 'MOTOR', 'NADEL', 'NATUR', 'NOTIZ', 'PALME', 'PAUSE',
-    'PFADE', 'PFUND', 'PLATZ', 'PREIS', 'PRINZ', 'RADAR', 'RANGS', 'RAUMS', 'RECHT', 'REGAL',
-    'RINGS', 'RUDER', 'RUHIG', 'SAITE', 'SALAT', 'SCHAF', 'SCHUH', 'SEELE', 'SEGEL', 'SEITE',
-    'SICHT', 'SILBE', 'Sessel', 'SPURT', 'STADT', 'STAHL', 'STEIN', 'STIMM', 'STOFF', 'STRAND',
-    'STROM', 'STUHL', 'SZENE', 'TANNE', 'TASSE', 'TEMPO', 'THEMA', 'TISCH', 'TITEL', 'TRANK',
-    'TREUE', 'TROPF', 'UFERN', 'UMZUG', 'VATER', 'VIDEO', 'WAGEN', 'WALDE', 'WASSER', 'WELLE',
-    'WERTE', 'WIESE', 'WINDE', 'WISSEN', 'WOCHE', 'WORTE', 'ZAHNE', 'ZELTE', 'ZIELE', 'ZITRO',
-];
-$words5 = array_values(array_unique(array_filter(
-    array_map(static fn(string $w): string => strtoupper(trim($w)), $wordList),
-    static fn(string $w): bool => strlen($w) === 5 && (bool)preg_match('/^[A-Z]+$/', $w)
-)));
-$dailySeed = crc32(date('Y-m-d') . '_minicloud_wordle');
-$dailyWord = $words5[$dailySeed % count($words5)];
-
-$initialLeaderboard = fetchLeaderboardRows($pdo, '2048', 'all');
+$initialLeaderboard = fetchLeaderboardRows($pdo, 'gummigeruch', 'all');
 
 $pageTitle = '🎮 Spiele & Pausenraum';
 require_once __DIR__ . '/includes/header.php';
@@ -707,7 +957,7 @@ $csrfToken = getCsrfToken();
                         MiniCloud Spiele-Zentrale &amp; Pausenraum
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                        10 Spiele &middot; Cloud-Highscores &middot; Live-Duelle &amp; RPG
+                        9 Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
                     </span>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -721,14 +971,14 @@ $csrfToken = getCsrfToken();
                 <span class="text-slate-500 dark:text-slate-400">Meine Runden:</span>
                 <strong class="ml-1 text-slate-900 dark:text-white" id="myTotalPlaysBadge"><?= $myTotalPlays ?></strong>
             </div>
-            <div class="px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-semibold">
-                🏆 Tageswort #<?= (int)date('z') + 1 ?> aktiv
+            <div class="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 font-semibold">
+                🏎️ Gummigeruch Kart-Cup aktiv
             </div>
         </div>
     </div>
 
-    <!-- SPIELAUSWAHL-LEISTE (10 SPIEL-KARTEN) -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
+    <!-- SPIELAUSWAHL-LEISTE (9 SPIEL-KARTEN) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
         <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
             <?php
             $gKeyStr = (string)$gKey;
@@ -737,7 +987,7 @@ $csrfToken = getCsrfToken();
             <button type="button"
                     onclick="selectCloudGame('<?= e($gKeyStr) ?>')"
                     id="gameTabBtn-<?= e($gKeyStr) ?>"
-                    class="game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 <?= $gKeyStr === '2048' ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400' ?>">
+                    class="game-tab-btn text-left p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 <?= $gKeyStr === 'gummigeruch' ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-brand-400' ?>">
                 <div class="flex items-center justify-between gap-1">
                     <span class="text-xl"><?= $gMeta['icon'] ?></span>
                     <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
@@ -762,39 +1012,133 @@ $csrfToken = getCsrfToken();
         <!-- =============================================================== -->
         <div class="lg:col-span-8 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs min-h-[540px]">
 
-            <!-- 1. SPIEL: 2048 -->
-            <div id="gamePanel-2048" class="game-panel space-y-4">
+            <!-- 1. SPIEL: GUMMIGERUCH KART-CUP & GHOST-DUELLE -->
+            <div id="gamePanel-gummigeruch" class="game-panel space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🔢 2048 Puzzle</span>
-                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">💾 Auto-Save aktiv</span>
+                            <span>🏎️ Gummigeruch Kart-Cup</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800">
+                                👻 Ghost-Duelle &amp; Live-Rekordjagd
+                            </span>
                         </h2>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Nutze die Pfeiltasten (`← ↑ → ↓`), `W A S D` oder wische auf dem Smartphone.</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: `↑`/`W` Gas · `↓`/`S` Bremse · `← →`/`A D` Lenken · `Leertaste` Drift-Handbremse · `E` Nitro-Boost (1× pro Runde).
+                        </p>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <div class="px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-200 text-xs font-bold">
-                            Punkte: <span id="g2048Score" class="font-extrabold">0</span>
-                        </div>
-                        <button type="button" onclick="g2048NewGame()" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold cursor-pointer">
-                            🔄 Neu starten
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="gummiTrackSelect" onchange="gummiChangeTrack(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="circuit">🏁 GummiCircuit Klassik (3 Runden)</option>
+                            <option value="coast">🌴 Küsten-Grand-Prix (3 Runden)</option>
+                            <option value="night">🌙 Flutlicht Nacht-Ring (3 Runden)</option>
+                        </select>
+
+                        <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold cursor-pointer select-none">
+                            <input type="checkbox" id="gummiAiToggle" checked onchange="gummiResetRace()" class="rounded border-slate-300 text-brand-600">
+                            <span>🤖 3 KI-Karts</span>
+                        </label>
+
+                        <button type="button" onclick="gummiStartCountdown()"
+                                class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            🚦 Rennen neu starten
                         </button>
                     </div>
                 </div>
 
-                <div class="flex flex-col items-center justify-center py-2">
-                    <div id="g2048Board"
-                         class="w-full max-w-[340px] aspect-square p-3 rounded-2xl bg-slate-300 dark:bg-slate-800 grid grid-cols-4 gap-2.5 select-none touch-none shadow-inner">
+                <!-- Telemetrie- & Rundenzeiten-Zeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Runde:</span>
+                        <strong id="gummiLapBadge" class="text-slate-900 dark:text-white font-extrabold">1 / 3</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Zeit:</span>
+                        <strong id="gummiTimeBadge" class="font-mono text-brand-600 dark:text-brand-400 font-extrabold">00:00.00</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Beste Runde:</span>
+                        <strong id="gummiBestLapBadge" class="font-mono text-emerald-600 dark:text-emerald-400 font-extrabold">--:--.--</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-between">
+                        <span class="text-amber-800 dark:text-amber-300">🔥 Nitro [E]:</span>
+                        <strong id="gummiBoostBadge" class="text-amber-700 dark:text-amber-300 font-extrabold">Bereit!</strong>
+                    </div>
+                    <div class="col-span-2 sm:col-span-1 px-3 py-2 rounded-xl bg-slate-900 text-white flex items-center justify-between">
+                        <span class="text-slate-400">Tacho:</span>
+                        <strong id="gummiSpeedBadge" class="font-mono text-amber-400 font-extrabold">0 km/h</strong>
+                    </div>
+                </div>
+
+                <!-- RENNSTRECKEN-CANVAS -->
+                <div class="relative rounded-2xl overflow-hidden border-2 border-slate-700 bg-emerald-950 shadow-lg select-none">
+                    <canvas id="gummiCanvas" width="760" height="450" class="w-full h-auto block touch-none"></canvas>
+                </div>
+
+                <!-- Touch-Lenkrad & Pedale für Smartphone / Tablet -->
+                <div class="flex sm:hidden items-center justify-between gap-2 pt-1 select-none">
+                    <div class="flex items-center gap-2">
+                        <button type="button" onpointerdown="gummiTouch('left',true)" onpointerup="gummiTouch('left',false)" onpointerleave="gummiTouch('left',false)"
+                                class="px-5 py-3 rounded-xl bg-slate-200 dark:bg-slate-800 font-extrabold text-base">◀</button>
+                        <button type="button" onpointerdown="gummiTouch('right',true)" onpointerup="gummiTouch('right',false)" onpointerleave="gummiTouch('right',false)"
+                                class="px-5 py-3 rounded-xl bg-slate-200 dark:bg-slate-800 font-extrabold text-base">▶</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="gummiTriggerBoost()"
+                                class="px-3.5 py-3 rounded-xl bg-amber-500 text-white font-extrabold text-xs">🔥 Nitro</button>
+                        <button type="button" onpointerdown="gummiTouch('brake',true)" onpointerup="gummiTouch('brake',false)" onpointerleave="gummiTouch('brake',false)"
+                                class="px-4 py-3 rounded-xl bg-rose-600 text-white font-extrabold text-xs">Bremse</button>
+                        <button type="button" onpointerdown="gummiTouch('gas',true)" onpointerup="gummiTouch('gas',false)" onpointerleave="gummiTouch('gas',false)"
+                                class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-extrabold text-xs">GAS ▲</button>
+                    </div>
+                </div>
+
+                <!-- HERAUSFORDERUNGS-ZENTRALE: GHOST-DUELLE & STRECKENREKORD-JAGD -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 pt-1">
+                    <!-- Links: Mitspieler herausfordern + Champion-Ghost Info -->
+                    <div class="md:col-span-6 p-3.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-800/60 space-y-2.5 text-xs">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-extrabold uppercase tracking-wider text-rose-900 dark:text-rose-300 flex items-center gap-1.5">
+                                <span>👻</span>
+                                <span>Cloud-Benutzer zum Ghost-Duell fordern</span>
+                            </h3>
+                        </div>
+
+                        <?php if (empty($otherUsers)): ?>
+                            <p class="text-slate-500 dark:text-slate-400">
+                                Sobald weitere Benutzer in der Cloud angelegt sind, kannst du sie hier zum direkten Ghost-Rennen herausfordern!
+                            </p>
+                        <?php else: ?>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <select id="gummiChallengeOpponent" class="flex-1 min-w-[150px] px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700 font-semibold">
+                                    <option value="0">🏁 Freies Rennen (nur Rekordjagd)</option>
+                                    <?php foreach ($otherUsers as $ou): ?>
+                                        <option value="<?= (int)$ou['id'] ?>">👤 Herausfordern: <?= e((string)$ou['username']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="button" onclick="gummiStartChallengeRun()"
+                                        class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer">
+                                    🏎️ Vorlegen!
+                                </button>
+                            </div>
+                        <?php endif; ?>
+
+                        <div id="gummiRecordGhostBox" class="p-2.5 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+                            👻 <strong>Streckenrekord-Ghost:</strong> Wird geladen…
+                        </div>
                     </div>
 
-                    <!-- Smartphone-/Maus-Steuertasten -->
-                    <div class="grid grid-cols-3 gap-2 mt-4 w-44">
-                        <div></div>
-                        <button type="button" onclick="g2048Move('up')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold text-sm cursor-pointer">▲</button>
-                        <div></div>
-                        <button type="button" onclick="g2048Move('left')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold text-sm cursor-pointer">◀</button>
-                        <button type="button" onclick="g2048Move('down')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold text-sm cursor-pointer">▼</button>
-                        <button type="button" onclick="g2048Move('right')" class="py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold text-sm cursor-pointer">▶</button>
+                    <!-- Rechts: Offene & beendete Gummigeruch-Duelle -->
+                    <div class="md:col-span-6 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                🏆 Meine Ghost-Herausforderungen
+                            </h3>
+                            <span id="gummiActiveMatchBadge" class="text-[11px] font-bold text-rose-600 dark:text-rose-400"></span>
+                        </div>
+                        <div id="gummiChallengesList" class="space-y-1.5 max-h-40 overflow-y-auto">
+                            <p class="text-slate-400 italic py-2">Noch keine offenen Kart-Herausforderungen.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -883,37 +1227,6 @@ $csrfToken = getCsrfToken();
                 <div class="flex flex-col items-center overflow-x-auto py-2">
                     <div id="mineBoard" class="inline-grid gap-1 p-2.5 rounded-2xl bg-slate-200 dark:bg-slate-800 select-none"></div>
                     <p id="mineStatusMsg" class="text-xs font-bold mt-3 text-slate-600 dark:text-slate-300"></p>
-                </div>
-            </div>
-
-            <!-- 4. SPIEL: WORT DES TAGES (CLOUD-WORDLE) -->
-            <div id="gamePanel-wordle" class="game-panel hidden space-y-4">
-                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
-                    <div>
-                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🔤 Wort des Tages (Cloud-Wordle)</span>
-                            <span id="wordleModeBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-                                📅 Tageswort #<?= (int)date('z') + 1 ?>
-                            </span>
-                        </h2>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">
-                            🟩 Richtiger Platz &middot; 🟨 Im Wort enthalten &middot; ⬛ Nicht enthalten.
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="wordleStartDaily()" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer">
-                            📅 Tageswort
-                        </button>
-                        <button type="button" onclick="wordleStartPractice()" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold cursor-pointer">
-                            🎲 Zufallswort üben
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex flex-col items-center gap-4">
-                    <div id="wordleGrid" class="grid grid-rows-6 gap-1.5 w-full max-w-[290px]"></div>
-                    <p id="wordleStatusMsg" class="text-xs font-bold min-h-[20px] text-center"></p>
-                    <div id="wordleKeyboard" class="w-full max-w-md space-y-1.5 select-none"></div>
                 </div>
             </div>
 
@@ -1309,7 +1622,7 @@ $csrfToken = getCsrfToken();
                     <div>
                         <h2 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
                             <span>🏆</span>
-                            <span id="leaderboardGameTitle">Bestenliste: 2048 Puzzle</span>
+                            <span id="leaderboardGameTitle">Bestenliste: Gummigeruch Kart</span>
                         </h2>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400">Top 10 Spieler deiner Cloud</p>
                     </div>
@@ -1340,8 +1653,8 @@ $csrfToken = getCsrfToken();
                 <p class="font-bold text-indigo-950 dark:text-indigo-200">💡 So funktioniert die Cloud-Wertung</p>
                 <p class="text-indigo-900/80 dark:text-indigo-200/80 leading-relaxed">
                     • Deine Highscores werden automatisch am Ende einer Runde gespeichert.<br>
-                    • Bei <strong>2048</strong> und <strong>Sudoku</strong> wird dein laufendes Spiel zusätzlich live auf dem Server gesichert – du kannst nahtlos am Smartphone weiterspielen!<br>
-                    • Im <strong>Wort des Tages</strong> erhalten alle Cloud-Benutzer täglich exakt dasselbe Rätselwort.
+                    • Bei <strong>🏎️ Gummigeruch Kart</strong> wird deine exakte Fahrlinie als <strong>👻 Ghost-Kart</strong> gesichert – du kannst andere Cloud-Benutzer direkt herausfordern oder gegen den Streckenrekord-Ghost antreten!<br>
+                    • Bei <strong>Sudoku</strong> und <strong>World of MiniCloud</strong> wird dein Fortschritt zusätzlich live auf dem Server gesichert.
                 </p>
             </div>
         </div>
@@ -1354,10 +1667,8 @@ const CURRENT_USER_ID   = <?= (int)$userId ?>;
 const CURRENT_USERNAME  = <?= json_encode($username) ?>;
 const GAMES_CATALOG     = <?= json_encode($gamesCatalog) ?>;
 const SAVED_GAME_STATES = <?= json_encode($savedStates) ?>;
-const WORDLE_DAILY_WORD = <?= json_encode($dailyWord) ?>;
-const WORDLE_POOL       = <?= json_encode($words5) ?>;
 
-let activeGameKey    = '2048';
+let activeGameKey    = 'gummigeruch';
 let activeLbPeriod   = 'all';
 let myBestScores     = <?= json_encode($myBestByGame) ?>;
 let totalPlaysCount  = <?= (int)$myTotalPlays ?>;
@@ -1386,7 +1697,12 @@ function selectCloudGame(gameKey) {
         titleEl.textContent = 'Bestenliste: ' + GAMES_CATALOG[gameKey].title;
     }
 
-    if (gameKey === 'wow') {
+    if (gameKey === 'gummigeruch') {
+        if (!gummiInitialized) {
+            gummiInit();
+        }
+        gummiPollState();
+    } else if (gameKey === 'wow') {
         if (!wowInitialized) {
             wowInit();
         }
@@ -1497,172 +1813,6 @@ function renderLeaderboardRows(rows) {
         `;
     }).join('');
 }
-
-// =============================================================================
-// SPIEL 1: 2048 PUZZLE
-// =============================================================================
-let g2048Grid  = [];
-let g2048Score = 0;
-
-function g2048Init() {
-    if (SAVED_GAME_STATES['2048']) {
-        try {
-            const st = JSON.parse(SAVED_GAME_STATES['2048']);
-            if (Array.isArray(st.grid) && st.grid.length === 4) {
-                g2048Grid  = st.grid;
-                g2048Score = Number(st.score) || 0;
-                g2048Render();
-                return;
-            }
-        } catch (e) {}
-    }
-    g2048NewGame(false);
-}
-
-function g2048NewGame(clearRemote = true) {
-    if (clearRemote && g2048Score > 40) {
-        submitCloudScore('2048', g2048Score, 0, '2048');
-    }
-    g2048Grid  = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
-    g2048Score = 0;
-    g2048Spawn();
-    g2048Spawn();
-    g2048Render();
-    if (clearRemote) {
-        saveCloudGameState('2048', { grid: g2048Grid, score: g2048Score });
-    }
-}
-
-function g2048Spawn() {
-    const empty = [];
-    for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 4; c++) {
-            if (g2048Grid[r][c] === 0) empty.push([r, c]);
-        }
-    }
-    if (!empty.length) return;
-    const [r, c] = empty[Math.floor(Math.random() * empty.length)];
-    g2048Grid[r][c] = Math.random() < 0.9 ? 2 : 4;
-}
-
-function g2048SlideLine(row) {
-    const filtered = row.filter((v) => v !== 0);
-    const out = [];
-    let gained = 0;
-    for (let i = 0; i < filtered.length; i++) {
-        if (i + 1 < filtered.length && filtered[i] === filtered[i + 1]) {
-            const merged = filtered[i] * 2;
-            out.push(merged);
-            gained += merged;
-            i++;
-        } else {
-            out.push(filtered[i]);
-        }
-    }
-    while (out.length < 4) out.push(0);
-    return { line: out, gained };
-}
-
-function g2048Move(dir) {
-    let moved = false;
-    let gainedTotal = 0;
-
-    for (let i = 0; i < 4; i++) {
-        let line = [];
-        for (let j = 0; j < 4; j++) {
-            if (dir === 'left')  line.push(g2048Grid[i][j]);
-            if (dir === 'right') line.push(g2048Grid[i][3 - j]);
-            if (dir === 'up')    line.push(g2048Grid[j][i]);
-            if (dir === 'down')  line.push(g2048Grid[3 - j][i]);
-        }
-        const { line: newLine, gained } = g2048SlideLine(line);
-        gainedTotal += gained;
-        for (let j = 0; j < 4; j++) {
-            let r = i, c = j;
-            if (dir === 'right') { r = i; c = 3 - j; }
-            if (dir === 'up')    { r = j; c = i; }
-            if (dir === 'down')  { r = 3 - j; c = i; }
-            if (g2048Grid[r][c] !== newLine[j]) moved = true;
-            g2048Grid[r][c] = newLine[j];
-        }
-    }
-
-    if (!moved) return;
-    g2048Score += gainedTotal;
-    g2048Spawn();
-    g2048Render();
-    saveCloudGameState('2048', { grid: g2048Grid, score: g2048Score });
-
-    if (g2048IsGameOver()) {
-        submitCloudScore('2048', g2048Score, 0, '2048');
-    }
-}
-
-function g2048IsGameOver() {
-    for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 4; c++) {
-            if (g2048Grid[r][c] === 0) return false;
-            if (r < 3 && g2048Grid[r][c] === g2048Grid[r + 1][c]) return false;
-            if (c < 3 && g2048Grid[r][c] === g2048Grid[r][c + 1]) return false;
-        }
-    }
-    return true;
-}
-
-function g2048Render() {
-    const board = document.getElementById('g2048Board');
-    const scEl  = document.getElementById('g2048Score');
-    if (scEl) scEl.textContent = String(g2048Score);
-    if (!board) return;
-
-    const colors = {
-        0:    'bg-slate-200/80 dark:bg-slate-900/60 text-transparent',
-        2:    'bg-amber-50 text-slate-800',
-        4:    'bg-amber-100 text-slate-800',
-        8:    'bg-orange-300 text-white',
-        16:   'bg-orange-400 text-white',
-        32:   'bg-orange-500 text-white',
-        64:   'bg-red-500 text-white',
-        128:  'bg-yellow-400 text-slate-900',
-        256:  'bg-yellow-500 text-white',
-        512:  'bg-amber-500 text-white',
-        1024: 'bg-indigo-600 text-white',
-        2048: 'bg-emerald-600 text-white',
-    };
-
-    board.innerHTML = '';
-    for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 4; c++) {
-            const v = g2048Grid[r][c];
-            const cls = colors[v] || 'bg-purple-600 text-white';
-            const d = document.createElement('div');
-            d.className = `rounded-xl flex items-center justify-center font-extrabold ${v >= 1000 ? 'text-lg' : 'text-2xl'} shadow-2xs transition-all ${cls}`;
-            d.textContent = v > 0 ? String(v) : '';
-            board.appendChild(d);
-        }
-    }
-}
-
-// Touch-Swipe für 2048
-(() => {
-    let sx = 0, sy = 0;
-    const b = document.getElementById('g2048Board');
-    if (!b) return;
-    b.addEventListener('touchstart', (e) => {
-        sx = e.touches[0].clientX;
-        sy = e.touches[0].clientY;
-    }, { passive: true });
-    b.addEventListener('touchend', (e) => {
-        const dx = e.changedTouches[0].clientX - sx;
-        const dy = e.changedTouches[0].clientY - sy;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
-        if (Math.abs(dx) > Math.abs(dy)) {
-            g2048Move(dx > 0 ? 'right' : 'left');
-        } else {
-            g2048Move(dy > 0 ? 'down' : 'up');
-        }
-    }, { passive: true });
-})();
 
 // =============================================================================
 // SPIEL 2: CLOUD-SUDOKU
@@ -1982,133 +2132,7 @@ function mineRender() {
 }
 
 // =============================================================================
-// SPIEL 4: WORT DES TAGES (CLOUD-WORDLE)
-// =============================================================================
-let wordleTarget  = WORDLE_DAILY_WORD;
-let wordleIsDaily = true;
-let wordleGuesses = [];
-let wordleCurrent = '';
-let wordleOver    = false;
-
-function wordleStartDaily() {
-    wordleTarget  = WORDLE_DAILY_WORD;
-    wordleIsDaily = true;
-    wordleGuesses = [];
-    wordleCurrent = '';
-    wordleOver    = false;
-    const b = document.getElementById('wordleModeBadge');
-    if (b) b.textContent = '📅 Tageswort';
-    const msg = document.getElementById('wordleStatusMsg');
-    if (msg) msg.textContent = '';
-    wordleRender();
-}
-
-function wordleStartPractice() {
-    wordleTarget  = WORDLE_POOL[Math.floor(Math.random() * WORDLE_POOL.length)] || 'CLOUD';
-    wordleIsDaily = false;
-    wordleGuesses = [];
-    wordleCurrent = '';
-    wordleOver    = false;
-    const b = document.getElementById('wordleModeBadge');
-    if (b) b.textContent = '🎲 Trainingswort';
-    const msg = document.getElementById('wordleStatusMsg');
-    if (msg) msg.textContent = '';
-    wordleRender();
-}
-
-function wordlePressKey(k) {
-    if (wordleOver) return;
-    if (k === 'BACK') {
-        wordleCurrent = wordleCurrent.slice(0, -1);
-    } else if (k === 'ENTER') {
-        if (wordleCurrent.length !== 5) return;
-        wordleGuesses.push(wordleCurrent);
-        const attempt = wordleCurrent;
-        wordleCurrent = '';
-
-        if (attempt === wordleTarget) {
-            wordleOver = true;
-            const pts = (7 - wordleGuesses.length) * 150 + (wordleIsDaily ? 100 : 0);
-            const msg = document.getElementById('wordleStatusMsg');
-            if (msg) msg.textContent = `🎉 Stark! „${wordleTarget}“ im ${wordleGuesses.length}. Versuch erraten (+${pts} Punkte)!`;
-            submitCloudScore('wordle', pts, 0, wordleIsDaily ? 'Tageswort' : 'Training');
-        } else if (wordleGuesses.length >= 6) {
-            wordleOver = true;
-            const msg = document.getElementById('wordleStatusMsg');
-            if (msg) msg.textContent = `Das gesuchte Wort war: ${wordleTarget}`;
-        }
-    } else if (/^[A-Z]$/.test(k) && wordleCurrent.length < 5) {
-        wordleCurrent += k;
-    }
-    wordleRender();
-}
-
-function wordleRender() {
-    const grid = document.getElementById('wordleGrid');
-    const kb   = document.getElementById('wordleKeyboard');
-    if (!grid || !kb) return;
-
-    const keyStates = {};
-    grid.innerHTML = '';
-
-    for (let r = 0; r < 6; r++) {
-        const rowEl = document.createElement('div');
-        rowEl.className = 'grid grid-cols-5 gap-1.5';
-        const word = r < wordleGuesses.length ? wordleGuesses[r] : (r === wordleGuesses.length ? wordleCurrent : '');
-        const submitted = r < wordleGuesses.length;
-
-        for (let c = 0; c < 5; c++) {
-            const ch = word[c] || '';
-            let cls = 'bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white';
-            if (submitted) {
-                if (ch === wordleTarget[c]) {
-                    cls = 'bg-emerald-600 border-emerald-600 text-white';
-                    keyStates[ch] = 'correct';
-                } else if (wordleTarget.includes(ch)) {
-                    cls = 'bg-amber-500 border-amber-500 text-white';
-                    if (keyStates[ch] !== 'correct') keyStates[ch] = 'present';
-                } else {
-                    cls = 'bg-slate-600 border-slate-600 text-white';
-                    if (!keyStates[ch]) keyStates[ch] = 'absent';
-                }
-            }
-            const cell = document.createElement('div');
-            cell.className = `h-12 rounded-xl font-extrabold text-lg flex items-center justify-center ${cls}`;
-            cell.textContent = ch;
-            rowEl.appendChild(cell);
-        }
-        grid.appendChild(rowEl);
-    }
-
-    const rows = [
-        ['Q','W','E','R','T','Z','U','I','O','P'],
-        ['A','S','D','F','G','H','J','K','L'],
-        ['ENTER','Y','X','C','V','B','N','M','BACK']
-    ];
-    kb.innerHTML = '';
-    rows.forEach((rKeys) => {
-        const line = document.createElement('div');
-        line.className = 'flex justify-center gap-1';
-        rKeys.forEach((k) => {
-            const st = keyStates[k];
-            let kCls = 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white';
-            if (st === 'correct') kCls = 'bg-emerald-600 text-white';
-            else if (st === 'present') kCls = 'bg-amber-500 text-white';
-            else if (st === 'absent') kCls = 'bg-slate-600/60 text-white/70';
-
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.onclick = () => wordlePressKey(k);
-            btn.className = `px-2.5 py-2.5 rounded-lg text-xs font-extrabold cursor-pointer ${kCls}`;
-            btn.textContent = k === 'BACK' ? '⌫' : (k === 'ENTER' ? '✓' : k);
-            line.appendChild(btn);
-        });
-        kb.appendChild(line);
-    });
-}
-
-// =============================================================================
-// SPIEL 5: CLOUD-MEMORY
+// SPIEL 4: CLOUD-MEMORY
 // =============================================================================
 const MEMORY_ICONS = ['🚀','🌈','🎸','🦊','🍕','💎','🏝️','⚡','🦉','🍉','🎯','🛸'];
 let memoryCards = [];
@@ -4241,14 +4265,829 @@ function wowDrawWorld(now) {
 }
 
 // =============================================================================
+// SPIEL 1: GUMMIGERUCH KART-CUP & GHOST-HERAUSFORDERUNGEN
+// =============================================================================
+const GUMMI_TRACKS = {
+    circuit: {
+        id: 'circuit',
+        name: 'GummiCircuit Klassik',
+        grassTop: '#14532d',
+        grassBot: '#166534',
+        asphalt: '#272c38',
+        roadWidth: 64,
+        startX: 350,
+        startY: 376,
+        startAngle: 0,
+        pts: [
+            [260, 376], [520, 376], [655, 345], [685, 235],
+            [610, 115], [465, 115], [390, 205], [285, 195],
+            [220, 95],  [105, 115], [75, 235],  [115, 350]
+        ]
+    },
+    coast: {
+        id: 'coast',
+        name: 'Küsten-Grand-Prix',
+        grassTop: '#0f4c5c',
+        grassBot: '#155e75',
+        asphalt: '#2b303c',
+        roadWidth: 62,
+        startX: 340,
+        startY: 382,
+        startAngle: 0,
+        pts: [
+            [240, 382], [560, 382], [680, 320], [670, 170],
+            [555, 85],  [355, 85],  [280, 165], [440, 235],
+            [245, 265], [140, 110], [75, 185],  [95, 345]
+        ]
+    },
+    night: {
+        id: 'night',
+        name: 'Flutlicht Nacht-Ring',
+        grassTop: '#0f172a',
+        grassBot: '#1e1b4b',
+        asphalt: '#1e2430',
+        roadWidth: 60,
+        startX: 350,
+        startY: 384,
+        startAngle: 0,
+        pts: [
+            [250, 384], [545, 384], [675, 335], [680, 115],
+            [540, 75],  [455, 180], [365, 80],  [225, 80],
+            [235, 235], [115, 140], [72, 245],  [110, 355]
+        ]
+    }
+};
+
+let gummiTrackKey         = 'circuit';
+let gummiDenseTrack       = [];
+let gummiSkids            = [];
+let gummiSmoke            = [];
+let gummiKeys             = {};
+let gummiTouchState       = { left: false, right: false, gas: false, brake: false };
+let gummiRaceState        = 'ready'; // 'ready' | 'countdown' | 'racing' | 'finished'
+let gummiCountdownStart   = 0;
+let gummiRaceStartTs      = 0;
+let gummiLapStartTs       = 0;
+let gummiElapsedMs        = 0;
+let gummiBestLapMs        = 0;
+let gummiMyRecording      = [];
+let gummiLastRecordSample = 0;
+let gummiRecordGhost      = null; // Schnellster Cloud-Champion auf dieser Strecke
+let gummiActiveChallenge  = null; // Falls wir gerade ein Ghost-Duell gegen einen Herausforderer fahren
+let gummiPendingOpponentId= 0;    // Falls wir einen anderen Cloud-Benutzer neu herausfordern
+let gummiChallengesCache  = [];
+let gummiLivePeers        = [];
+let gummiBannerText       = '🚦 Drücke GAS (↑ oder W), um das 3-Runden-Rennen zu starten!';
+let gummiLastFrameTs      = 0;
+let gummiInitialized      = false;
+
+let gummiKart = {
+    x: 350,
+    y: 376,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    lap: 1,
+    maxSectors: 4,
+    sectorPassed: [true, false, false, false],
+    boostReady: true,
+    boostUntil: 0,
+};
+
+let gummiAiKarts = [];
+
+function gummiFormatMs(ms) {
+    ms = Math.max(0, Math.round(Number(ms) || 0));
+    const min = Math.floor(ms / 60000);
+    const sec = Math.floor((ms % 60000) / 1000);
+    const hun = Math.floor((ms % 1000) / 10);
+    return String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0') + '.' + String(hun).padStart(2, '0');
+}
+
+function gummiBuildDenseTrack(trackKey) {
+    const tr = GUMMI_TRACKS[trackKey] || GUMMI_TRACKS.circuit;
+    const pts = tr.pts;
+    const n = pts.length;
+    const dense = [];
+    const stepsPerSeg = 14;
+
+    // Catmull-Rom Spline für geschmeidige Kurven
+    for (let i = 0; i < n; i++) {
+        const p0 = pts[(i - 1 + n) % n];
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % n];
+        const p3 = pts[(i + 2) % n];
+
+        for (let s = 0; s < stepsPerSeg; s++) {
+            const t = s / stepsPerSeg;
+            const t2 = t * t;
+            const t3 = t2 * t;
+            const x = 0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3);
+            const y = 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3);
+            dense.push([x, y]);
+        }
+    }
+    gummiDenseTrack = dense;
+}
+
+function gummiInit() {
+    gummiBuildDenseTrack(gummiTrackKey);
+    gummiResetRace();
+    gummiPollState();
+    if (!gummiInitialized) {
+        gummiInitialized = true;
+        requestAnimationFrame(gummiGameLoop);
+    }
+}
+
+function gummiChangeTrack(newTrack) {
+    if (!GUMMI_TRACKS[newTrack]) return;
+    gummiTrackKey = newTrack;
+    gummiActiveChallenge = null;
+    const badge = document.getElementById('gummiActiveMatchBadge');
+    if (badge) badge.textContent = '';
+    gummiBuildDenseTrack(newTrack);
+    gummiResetRace();
+    gummiPollState();
+}
+
+function gummiResetRace() {
+    const tr = GUMMI_TRACKS[gummiTrackKey] || GUMMI_TRACKS.circuit;
+    gummiKart = {
+        x: tr.startX,
+        y: tr.startY,
+        vx: 0,
+        vy: 0,
+        angle: tr.startAngle,
+        lap: 1,
+        sectorPassed: [true, false, false, false],
+        boostReady: true,
+        boostUntil: 0,
+    };
+    gummiSkids = [];
+    gummiSmoke = [];
+    gummiMyRecording = [];
+    gummiLastRecordSample = 0;
+    gummiElapsedMs = 0;
+    gummiBestLapMs = 0;
+    gummiRaceState = 'ready';
+
+    // 3 KI-Karts aufbauen (falls aktiviert)
+    gummiAiKarts = [];
+    const useAi = document.getElementById('gummiAiToggle')?.checked !== false;
+    if (useAi && gummiDenseTrack.length > 10) {
+        const aiConfigs = [
+            { name: 'Roter Blitz',  color: '#ef4444', speed: 192, laneOffset: -14, startIdx: 2 },
+            { name: 'Gelber Pfeil', color: '#eab308', speed: 180, laneOffset: 14,  startIdx: 4 },
+            { name: 'Grüner Gift',  color: '#22c55e', speed: 170, laneOffset: -6,  startIdx: 6 },
+        ];
+        for (const cfg of aiConfigs) {
+            const p = gummiDenseTrack[cfg.startIdx];
+            const pNext = gummiDenseTrack[(cfg.startIdx + 1) % gummiDenseTrack.length];
+            gummiAiKarts.push({
+                name: cfg.name,
+                color: cfg.color,
+                speed: cfg.speed,
+                laneOffset: cfg.laneOffset,
+                wpIdx: cfg.startIdx,
+                x: p[0],
+                y: p[1] + cfg.laneOffset * 0.5,
+                angle: Math.atan2(pNext[1] - p[1], pNext[0] - p[0]),
+                lap: 1
+            });
+        }
+    }
+
+    if (gummiActiveChallenge) {
+        gummiBannerText = `👻 Ghost-Duell gegen ${gummiActiveChallenge.p1_name} (Zielzeit: ${gummiFormatMs(gummiActiveChallenge.p1_time_ms)}) – Gib Gas!`;
+    } else if (gummiPendingOpponentId > 0) {
+        gummiBannerText = '🏁 Herausforderungs-Fahrt bereit – Fahre 3 schnelle Runden für deinen Ghost!';
+    } else {
+        gummiBannerText = '🚦 Drücke GAS (↑ oder W) oder klicke auf „Rennen neu starten“!';
+    }
+
+    gummiUpdateHud();
+    gummiDraw(performance.now());
+}
+
+function gummiStartCountdown() {
+    gummiResetRace();
+    gummiRaceState = 'countdown';
+    gummiCountdownStart = performance.now();
+}
+
+function gummiStartChallengeRun() {
+    const sel = document.getElementById('gummiChallengeOpponent');
+    gummiPendingOpponentId = Number(sel?.value || 0);
+    gummiActiveChallenge = null;
+    const badge = document.getElementById('gummiActiveMatchBadge');
+    if (badge) {
+        badge.textContent = gummiPendingOpponentId > 0 ? '🎯 Vorlege-Fahrt aktiv' : '';
+    }
+    gummiStartCountdown();
+}
+
+function gummiAcceptChallenge(matchId) {
+    const ch = gummiChallengesCache.find((c) => c.id === matchId);
+    if (!ch) return;
+    gummiActiveChallenge = ch;
+    gummiPendingOpponentId = 0;
+    if (ch.track_id && GUMMI_TRACKS[ch.track_id]) {
+        gummiTrackKey = ch.track_id;
+        const tSel = document.getElementById('gummiTrackSelect');
+        if (tSel) tSel.value = gummiTrackKey;
+        gummiBuildDenseTrack(gummiTrackKey);
+    }
+    const badge = document.getElementById('gummiActiveMatchBadge');
+    if (badge) {
+        badge.textContent = `⚔️ Duell gegen ${ch.p1_name} (${gummiFormatMs(ch.p1_time_ms)})`;
+    }
+    gummiStartCountdown();
+}
+
+function gummiTriggerBoost() {
+    if (gummiRaceState !== 'racing' || !gummiKart.boostReady) return;
+    gummiKart.boostReady = false;
+    gummiKart.boostUntil = performance.now() + 1850;
+    gummiKart.vx += Math.cos(gummiKart.angle) * 95;
+    gummiKart.vy += Math.sin(gummiKart.angle) * 95;
+    gummiUpdateHud();
+}
+
+function gummiTouch(ctrl, state) {
+    gummiTouchState[ctrl] = state;
+    if (ctrl === 'gas' && state && gummiRaceState === 'ready') {
+        gummiStartCountdown();
+    }
+}
+
+function gummiGetTrackDistAndSector(x, y) {
+    let minDist = 99999;
+    let bestIdx = 0;
+    for (let i = 0; i < gummiDenseTrack.length; i++) {
+        const d = Math.hypot(x - gummiDenseTrack[i][0], y - gummiDenseTrack[i][1]);
+        if (d < minDist) {
+            minDist = d;
+            bestIdx = i;
+        }
+    }
+    const ratio = bestIdx / Math.max(1, gummiDenseTrack.length);
+    const sector = Math.min(3, Math.floor(ratio * 4));
+    return { dist: minDist, sector, wpIdx: bestIdx };
+}
+
+function gummiUpdateHud() {
+    const lapEl   = document.getElementById('gummiLapBadge');
+    const timeEl  = document.getElementById('gummiTimeBadge');
+    const bestEl  = document.getElementById('gummiBestLapBadge');
+    const boostEl = document.getElementById('gummiBoostBadge');
+    const spdEl   = document.getElementById('gummiSpeedBadge');
+
+    if (lapEl)   lapEl.textContent  = `${Math.min(3, gummiKart.lap)} / 3`;
+    if (timeEl)  timeEl.textContent = gummiFormatMs(gummiElapsedMs);
+    if (bestEl)  bestEl.textContent = gummiBestLapMs > 0 ? gummiFormatMs(gummiBestLapMs) : '--:--.--';
+    if (boostEl) {
+        boostEl.textContent = gummiKart.boostReady ? '🔥 Bereit!' : 'Verbraucht';
+        boostEl.className   = gummiKart.boostReady
+            ? 'text-amber-600 dark:text-amber-400 font-extrabold'
+            : 'text-slate-400 font-semibold';
+    }
+    if (spdEl) {
+        const kmh = Math.round(Math.hypot(gummiKart.vx, gummiKart.vy) * 0.68);
+        spdEl.textContent = `${kmh} km/h`;
+    }
+}
+
+async function gummiSaveCompletedRun() {
+    const fd = new FormData();
+    fd.append('ajax', '1');
+    fd.append('csrf_token', GAMES_CSRF);
+    fd.append('action', 'gummi_save_run');
+    fd.append('track_id', gummiTrackKey);
+    fd.append('time_ms', String(Math.round(gummiElapsedMs)));
+    fd.append('best_lap_ms', String(Math.round(gummiBestLapMs)));
+    fd.append('ghost_json', JSON.stringify(gummiMyRecording));
+    if (gummiActiveChallenge && gummiActiveChallenge.id) {
+        fd.append('match_id', String(gummiActiveChallenge.id));
+    } else if (gummiPendingOpponentId > 0) {
+        fd.append('opponent_id', String(gummiPendingOpponentId));
+    }
+
+    try {
+        const res = await fetch('games.php', { method: 'POST', body: fd });
+        const d   = await res.json();
+        if (d && d.ok) {
+            totalPlaysCount++;
+            const badge = document.getElementById('myTotalPlaysBadge');
+            if (badge) badge.textContent = String(totalPlaysCount);
+
+            if (d.personal_best) {
+                myBestScores['gummigeruch'] = d.personal_best;
+                const lbl = document.getElementById('myBestLabel-gummigeruch');
+                if (lbl) lbl.textContent = '🏆 ' + Number(d.personal_best).toLocaleString('de-DE');
+            }
+            if (d.challenge_msg) {
+                gummiBannerText = d.challenge_msg;
+            }
+            if (activeGameKey === 'gummigeruch' && Array.isArray(d.leaderboard)) {
+                renderLeaderboardRows(d.leaderboard);
+            }
+            gummiActiveChallenge = null;
+            const mBadge = document.getElementById('gummiActiveMatchBadge');
+            if (mBadge) mBadge.textContent = '';
+            await gummiPollState();
+        }
+    } catch (e) {}
+}
+
+async function gummiPollState() {
+    const fd = new FormData();
+    fd.append('ajax', '1');
+    fd.append('csrf_token', GAMES_CSRF);
+    fd.append('action', 'gummi_poll_state');
+    fd.append('track_id', gummiTrackKey);
+    if (gummiRaceState === 'racing') {
+        fd.append('live_x', String(Math.round(gummiKart.x)));
+        fd.append('live_y', String(Math.round(gummiKart.y)));
+        fd.append('live_angle', String(Number(gummiKart.angle.toFixed(2))));
+        fd.append('live_lap', String(gummiKart.lap));
+    }
+
+    try {
+        const r = await fetch('games.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!d || !d.ok) return;
+
+        gummiRecordGhost = d.record_ghost || null;
+        gummiLivePeers   = Array.isArray(d.live_peers) ? d.live_peers : [];
+        gummiChallengesCache = Array.isArray(d.challenges) ? d.challenges : [];
+
+        const recBox = document.getElementById('gummiRecordGhostBox');
+        if (recBox) {
+            if (gummiRecordGhost) {
+                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost aktiv:</strong> ${gummiRecordGhost.username} (${gummiFormatMs(gummiRecordGhost.time_ms)}) fährt live als Geist mit!`;
+            } else {
+                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost:</strong> Noch kein Rekord auf dieser Strecke – setze jetzt die erste Bestzeit!`;
+            }
+        }
+
+        gummiRenderChallengesUI();
+    } catch (e) {}
+}
+
+function gummiRenderChallengesUI() {
+    const box = document.getElementById('gummiChallengesList');
+    if (!box) return;
+    if (!gummiChallengesCache.length) {
+        box.innerHTML = '<p class="text-slate-400 italic py-2">Noch keine offenen Kart-Herausforderungen.</p>';
+        return;
+    }
+
+    box.innerHTML = gummiChallengesCache.map((c) => {
+        const canAccept = c.status === 'active' && Number(c.player2_id) === CURRENT_USER_ID;
+        const isWaiting = c.status === 'active' && Number(c.player1_id) === CURRENT_USER_ID;
+        let rightHtml = '';
+
+        if (canAccept) {
+            rightHtml = `<button type="button" onclick="gummiAcceptChallenge(${c.id})" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shrink-0 cursor-pointer">🏎️ Gegen Ghost fahren!</button>`;
+        } else if (isWaiting) {
+            rightHtml = `<span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold shrink-0">⏳ Wartet auf ${c.p2_name}</span>`;
+        } else {
+            const won = Number(c.winner_id) === CURRENT_USER_ID;
+            rightHtml = `<span class="px-2 py-0.5 rounded ${won ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'} text-[10px] font-bold shrink-0">${won ? '🏆 Gewonnen' : 'Beendet'}</span>`;
+        }
+
+        const p2Info = c.p2_time_ms ? ` vs. ${gummiFormatMs(c.p2_time_ms)}` : '';
+        return `
+            <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <div class="font-bold text-slate-900 dark:text-white truncate">🏁 ${c.track_name}: ${c.p1_name} vs. ${c.p2_name}</div>
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400">Vorlage: ${gummiFormatMs(c.p1_time_ms)}${p2Info} · ${c.updated_at}</div>
+                </div>
+                ${rightHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+function gummiGameLoop(now) {
+    requestAnimationFrame(gummiGameLoop);
+    if (activeGameKey !== 'gummigeruch') {
+        gummiLastFrameTs = now;
+        return;
+    }
+
+    const dt = Math.min(0.05, (now - (gummiLastFrameTs || now)) / 1000);
+    gummiLastFrameTs = now;
+
+    // Falls im Ready-Zustand Gas gedrückt wird -> sofort Startampel starten!
+    const gasPressed   = gummiKeys['ArrowUp'] || gummiKeys['w'] || gummiKeys['W'] || gummiTouchState.gas;
+    const brakePressed = gummiKeys['ArrowDown'] || gummiKeys['s'] || gummiKeys['S'] || gummiTouchState.brake;
+    const leftPressed  = gummiKeys['ArrowLeft'] || gummiKeys['a'] || gummiKeys['A'] || gummiTouchState.left;
+    const rightPressed = gummiKeys['ArrowRight'] || gummiKeys['d'] || gummiKeys['D'] || gummiTouchState.right;
+    const driftPressed = gummiKeys[' '] || gummiKeys['Shift'];
+
+    if (gummiRaceState === 'ready' && gasPressed) {
+        gummiStartCountdown();
+    }
+
+    if (gummiRaceState === 'countdown') {
+        const cElapsed = now - gummiCountdownStart;
+        if (cElapsed >= 2400) {
+            gummiRaceState      = 'racing';
+            gummiRaceStartTs    = now;
+            gummiLapStartTs     = now;
+            gummiLastRecordSample = 0;
+            gummiBannerText     = '🟢 LOS! Fahre 3 schnelle Runden und bleibe auf dem Asphalt!';
+        }
+    }
+
+    if (gummiRaceState === 'racing') {
+        gummiElapsedMs = now - gummiRaceStartTs;
+
+        // 1. Strecken-Abstand & Untergrund (Asphalt vs. Gras) ermitteln
+        const tr = GUMMI_TRACKS[gummiTrackKey] || GUMMI_TRACKS.circuit;
+        const { dist: trackDist, sector } = gummiGetTrackDistAndSector(gummiKart.x, gummiKart.y);
+        const onAsphalt = trackDist <= (tr.roadWidth * 0.56);
+
+        // 2. Lenkung & echte Drift-Physik
+        const speed = Math.hypot(gummiKart.vx, gummiKart.vy);
+        if (speed > 8) {
+            const steerRate = (driftPressed ? 3.5 : 2.75) * Math.min(1, speed / 75);
+            if (leftPressed)  gummiKart.angle -= steerRate * dt;
+            if (rightPressed) gummiKart.angle += steerRate * dt;
+        }
+
+        const forwardX = Math.cos(gummiKart.angle);
+        const forwardY = Math.sin(gummiKart.angle);
+
+        const isBoosting = now < gummiKart.boostUntil;
+        const accel = isBoosting ? 380 : (onAsphalt ? 245 : 125);
+
+        if (gasPressed) {
+            gummiKart.vx += forwardX * accel * dt;
+            gummiKart.vy += forwardY * accel * dt;
+        }
+        if (brakePressed) {
+            gummiKart.vx -= forwardX * 190 * dt;
+            gummiKart.vy -= forwardY * 190 * dt;
+        }
+
+        // Seitenführungskraft vs. Drift (Handbremse / hohes Tempo in der Kurve)
+        const curSpeed = Math.hypot(gummiKart.vx, gummiKart.vy);
+        if (curSpeed > 1) {
+            const moveAngle = Math.atan2(gummiKart.vy, gummiKart.vx);
+            let slip = Math.atan2(Math.sin(gummiKart.angle - moveAngle), Math.cos(gummiKart.angle - moveAngle));
+            const gripFactor = driftPressed ? 2.4 : (onAsphalt ? 5.6 : 3.0);
+
+            const targetVx = Math.cos(gummiKart.angle) * curSpeed;
+            const targetVy = Math.sin(gummiKart.angle) * curSpeed;
+            const blend = Math.min(1, gripFactor * dt);
+            gummiKart.vx = gummiKart.vx * (1 - blend) + targetVx * blend;
+            gummiKart.vy = gummiKart.vy * (1 - blend) + targetVy * blend;
+
+            // Gummispuren & Reifenqualm erzeugen, wenn das Kart stark driftet!
+            if (curSpeed > 95 && (Math.abs(slip) > 0.24 || driftPressed)) {
+                const perpX = -Math.sin(gummiKart.angle) * 7;
+                const perpY =  Math.cos(gummiKart.angle) * 7;
+                const backX = gummiKart.x - forwardX * 10;
+                const backY = gummiKart.y - forwardY * 10;
+
+                gummiSkids.push({ x: backX + perpX, y: backY + perpY });
+                gummiSkids.push({ x: backX - perpX, y: backY - perpY });
+                if (gummiSkids.length > 900) {
+                    gummiSkids.splice(0, 2);
+                }
+
+                if (Math.random() < 0.65) {
+                    gummiSmoke.push({
+                        x: backX + (Math.random() * 10 - 5),
+                        y: backY + (Math.random() * 10 - 5),
+                        r: 4,
+                        alpha: 0.65,
+                        color: onAsphalt ? 'rgba(226,232,240,' : 'rgba(74,222,128,'
+                    });
+                }
+            }
+        }
+
+        // Reibung / Höchstgeschwindigkeit (Gras bremst stark ab!)
+        const drag = onAsphalt ? (isBoosting ? 0.992 : 0.982) : 0.935;
+        const factor = Math.pow(drag, dt * 60);
+        gummiKart.vx *= factor;
+        gummiKart.vy *= factor;
+
+        gummiKart.x = Math.min(742, Math.max(18, gummiKart.x + gummiKart.vx * dt));
+        gummiKart.y = Math.min(432, Math.max(18, gummiKart.y + gummiKart.vy * dt));
+
+        // 3. Sektor-Checkpoints & Rundenzählung prüfen
+        if (sector === 1 && gummiKart.sectorPassed[0]) gummiKart.sectorPassed[1] = true;
+        if (sector === 2 && gummiKart.sectorPassed[1]) gummiKart.sectorPassed[2] = true;
+        if (sector === 3 && gummiKart.sectorPassed[2]) gummiKart.sectorPassed[3] = true;
+
+        // Ziellinien-Überfahrt prüfen (bei Startpunkt & alle 4 Sektoren durchfahren)
+        if (gummiKart.sectorPassed[3] && Math.hypot(gummiKart.x - tr.startX, gummiKart.y - tr.startY) < 48 && gummiKart.vx > 0) {
+            const lapTime = now - gummiLapStartTs;
+            gummiLapStartTs = now;
+            if (gummiBestLapMs === 0 || lapTime < gummiBestLapMs) {
+                gummiBestLapMs = lapTime;
+            }
+
+            if (gummiKart.lap >= 3) {
+                gummiRaceState = 'finished';
+                gummiElapsedMs = now - gummiRaceStartTs;
+                gummiBannerText = `🏁 ZIEL! 3 Runden in ${gummiFormatMs(gummiElapsedMs)} (Beste Runde: ${gummiFormatMs(gummiBestLapMs)})!`;
+                gummiSaveCompletedRun();
+            } else {
+                gummiKart.lap++;
+                gummiKart.boostReady = true;
+                gummiKart.sectorPassed = [true, false, false, false];
+                gummiBannerText = `⏱️ Runde ${gummiKart.lap - 1}: ${gummiFormatMs(lapTime)} — 🔥 Nitro für Runde ${gummiKart.lap} wieder aufgeladen!`;
+            }
+        }
+
+        // 4. Eigene Ghost-Trajektorie alle 100ms aufzeichnen
+        if (gummiElapsedMs - gummiLastRecordSample >= 100) {
+            gummiLastRecordSample = gummiElapsedMs;
+            gummiMyRecording.push([
+                Math.round(gummiKart.x),
+                Math.round(gummiKart.y),
+                Number(gummiKart.angle.toFixed(2))
+            ]);
+        }
+
+        // 5. KI-Karts entlang der Ideallinie bewegen
+        for (const ai of gummiAiKarts) {
+            const targetPt = gummiDenseTrack[ai.wpIdx];
+            const dx = targetPt[0] - ai.x;
+            const dy = (targetPt[1] + ai.laneOffset * 0.4) - ai.y;
+            const d  = Math.hypot(dx, dy);
+            if (d < 26) {
+                ai.wpIdx = (ai.wpIdx + 1) % gummiDenseTrack.length;
+            }
+            const desiredAngle = Math.atan2(dy, dx);
+            const diff = Math.atan2(Math.sin(desiredAngle - ai.angle), Math.cos(desiredAngle - ai.angle));
+            ai.angle += diff * 6.5 * dt;
+            ai.x += Math.cos(ai.angle) * ai.speed * dt;
+            ai.y += Math.sin(ai.angle) * ai.speed * dt;
+        }
+
+        gummiUpdateHud();
+    }
+
+    gummiDraw(now);
+}
+
+function gummiDrawKartSprite(ctx, x, y, angle, bodyColor, label, isGhost = false, isBoosting = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (isGhost) {
+        ctx.globalAlpha = 0.52;
+    }
+
+    // Nitro-Flamme am Auspuff
+    if (isBoosting) {
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.moveTo(-13, -4);
+        ctx.lineTo(-25 - Math.random() * 6, 0);
+        ctx.lineTo(-13, 4);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // 4 schwarze Kart-Reifen
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(-11, -10, 7, 4);
+    ctx.fillRect(5, -10, 7, 4);
+    ctx.fillRect(-11, 6, 7, 4);
+    ctx.fillRect(5, 6, 7, 4);
+
+    // Kart-Chassis
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.roundRect(-12, -7, 25, 14, 4);
+    ctx.fill();
+    ctx.strokeStyle = isGhost ? '#38bdf8' : '#ffffff';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // Fahrer-Helm
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(-1, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    if (label) {
+        ctx.save();
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(label, x + 1, y - 15);
+        ctx.fillStyle = isGhost ? '#7dd3fc' : '#ffffff';
+        ctx.fillText(label, x, y - 16);
+        ctx.restore();
+    }
+}
+
+function gummiDrawGhostAtTime(ctx, frames, elapsedMs, color, label) {
+    if (!Array.isArray(frames) || frames.length === 0) return;
+    const idxFloat = Math.min(frames.length - 1, Math.max(0, elapsedMs / 100));
+    const idx0 = Math.floor(idxFloat);
+    const idx1 = Math.min(frames.length - 1, idx0 + 1);
+    const frac = idxFloat - idx0;
+
+    const f0 = frames[idx0];
+    const f1 = frames[idx1];
+    if (!Array.isArray(f0) || !Array.isArray(f1)) return;
+
+    const gx = f0[0] + (f1[0] - f0[0]) * frac;
+    const gy = f0[1] + (f1[1] - f0[1]) * frac;
+    const ga = f0[2];
+    gummiDrawKartSprite(ctx, gx, gy, ga, color, label, true, false);
+}
+
+function gummiDraw(now) {
+    const cv = document.getElementById('gummiCanvas');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = cv.width;
+    const H = cv.height;
+    const tr = GUMMI_TRACKS[gummiTrackKey] || GUMMI_TRACKS.circuit;
+
+    // 1. Rasen-Hintergrund
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, tr.grassTop);
+    grad.addColorStop(1, tr.grassBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if (gummiDenseTrack.length > 2) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        const traceTrackPath = () => {
+            ctx.beginPath();
+            ctx.moveTo(gummiDenseTrack[0][0], gummiDenseTrack[0][1]);
+            for (let i = 1; i < gummiDenseTrack.length; i++) {
+                ctx.lineTo(gummiDenseTrack[i][0], gummiDenseTrack[i][1]);
+            }
+            ctx.closePath();
+        };
+
+        // Rot-weiße Randsteine (Curbs)
+        traceTrackPath();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = tr.roadWidth + 10;
+        ctx.stroke();
+
+        traceTrackPath();
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = tr.roadWidth + 10;
+        ctx.setLineDash([14, 14]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Asphalt-Fahrbahn
+        traceTrackPath();
+        ctx.strokeStyle = tr.asphalt;
+        ctx.lineWidth = tr.roadWidth;
+        ctx.stroke();
+
+        // Gestrichelte Ideallinie in der Fahrbahnmitte
+        traceTrackPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([12, 16]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+
+    // 2. Schachbrett-Start-/Ziellinie
+    const sx = tr.startX;
+    const sy = tr.startY;
+    const halfW = tr.roadWidth / 2;
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 2; c++) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#0f172a';
+            ctx.fillRect(sx - 6 + c * 6, sy - halfW + r * (tr.roadWidth / 8), 6, tr.roadWidth / 8);
+        }
+    }
+
+    // 3. Dauerhafte schwarze Gummispuren (Bremsspuren / Drifts) auf dem Asphalt!
+    ctx.fillStyle = 'rgba(9, 13, 22, 0.68)';
+    for (const sk of gummiSkids) {
+        ctx.fillRect(sk.x - 1.5, sk.y - 1.5, 3.2, 3.2);
+    }
+
+    // 4. Reifenqualm-Partikel
+    for (let i = gummiSmoke.length - 1; i >= 0; i--) {
+        const sm = gummiSmoke[i];
+        sm.r += 0.35;
+        sm.alpha -= 0.025;
+        if (sm.alpha <= 0) {
+            gummiSmoke.splice(i, 1);
+            continue;
+        }
+        ctx.beginPath();
+        ctx.arc(sm.x, sm.y, sm.r, 0, Math.PI * 2);
+        ctx.fillStyle = sm.color + sm.alpha.toFixed(2) + ')';
+        ctx.fill();
+    }
+
+    // 5. Ghost-Karts zeichnen (Herausforderungs-Ghost & Streckenrekord-Ghost)
+    if (gummiActiveChallenge && Array.isArray(gummiActiveChallenge.p1_ghost) && gummiActiveChallenge.p1_ghost.length > 0) {
+        gummiDrawGhostAtTime(ctx, gummiActiveChallenge.p1_ghost, gummiElapsedMs, '#f43f5e', `👻 Duell: ${gummiActiveChallenge.p1_name}`);
+    } else if (gummiRecordGhost && Array.isArray(gummiRecordGhost.frames) && gummiRecordGhost.frames.length > 0) {
+        gummiDrawGhostAtTime(ctx, gummiRecordGhost.frames, gummiElapsedMs, '#38bdf8', `👻 Rekord: ${gummiRecordGhost.username}`);
+    }
+
+    // 6. Live fahrende andere Cloud-Mitspieler zeichnen
+    for (const lp of gummiLivePeers) {
+        gummiDrawKartSprite(ctx, lp.x, lp.y, lp.angle, '#a855f7', `⚡ ${lp.username} (R${lp.lap})`, false, false);
+    }
+
+    // 7. KI-Karts zeichnen
+    for (const ai of gummiAiKarts) {
+        gummiDrawKartSprite(ctx, ai.x, ai.y, ai.angle, ai.color, ai.name, false, false);
+    }
+
+    // 8. Eigenes Spieler-Kart zeichnen
+    gummiDrawKartSprite(
+        ctx,
+        gummiKart.x,
+        gummiKart.y,
+        gummiKart.angle,
+        '#2563eb',
+        `🏎️ ${CURRENT_USERNAME}`,
+        false,
+        now < gummiKart.boostUntil
+    );
+
+    // 9. Startampel-Overlay bei Countdown
+    if (gummiRaceState === 'countdown') {
+        const cElapsed = now - gummiCountdownStart;
+        const step = Math.floor(cElapsed / 800); // 0 -> "3", 1 -> "2", 2 -> "1"
+        const numTxt = step === 0 ? '3' : (step === 1 ? '2' : '1');
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(W / 2 - 110, H / 2 - 55, 220, 110, 18);
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // 3 Ampellichter
+        for (let l = 0; l < 3; l++) {
+            ctx.beginPath();
+            ctx.arc(W / 2 - 50 + l * 50, H / 2 - 18, 14, 0, Math.PI * 2);
+            ctx.fillStyle = l <= step ? '#ef4444' : '#334155';
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`START IN ${numTxt}…`, W / 2, H / 2 + 34);
+    }
+
+    // 10. Info-Banner am oberen Rand
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.fillRect(0, 0, W, 26);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(gummiBannerText, W / 2, 17);
+}
+
+// =============================================================================
 // GLOBALE TASTATUR-STEUERUNG & SEKUNDEN-TIMER
 // =============================================================================
 window.addEventListener('keyup', (e) => {
     delete wowKeysDown[e.key];
+    delete gummiKeys[e.key];
 });
 
 window.addEventListener('keydown', (e) => {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) return;
+
+    if (activeGameKey === 'gummigeruch') {
+        gummiKeys[e.key] = true;
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+            e.preventDefault();
+        }
+        if (e.key === 'e' || e.key === 'E' || e.key === 'n' || e.key === 'N') {
+            e.preventDefault();
+            gummiTriggerBoost();
+        }
+        return;
+    }
 
     if (activeGameKey === 'wow') {
         wowKeysDown[e.key] = true;
@@ -4267,16 +5106,9 @@ window.addEventListener('keydown', (e) => {
         return;
     }
 
-    if (activeGameKey === '2048') {
-        const map = { ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down' };
-        if (map[e.key]) { e.preventDefault(); g2048Move(map[e.key]); }
-    } else if (activeGameKey === 'sudoku') {
+    if (activeGameKey === 'sudoku') {
         if (/^[1-9]$/.test(e.key)) sudokuInputNumber(Number(e.key));
         else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') sudokuInputNumber(0);
-    } else if (activeGameKey === 'wordle') {
-        if (e.key === 'Backspace') wordlePressKey('BACK');
-        else if (e.key === 'Enter') wordlePressKey('ENTER');
-        else if (/^[a-zA-Z]$/.test(e.key)) wordlePressKey(e.key.toUpperCase());
     } else if (activeGameKey === 'tetris' && tetrisRunning) {
         if (e.key === 'ArrowLeft')  { e.preventDefault(); tetrisAction('left'); }
         if (e.key === 'ArrowRight') { e.preventDefault(); tetrisAction('right'); }
@@ -4313,7 +5145,9 @@ setInterval(() => {
 }, 1000);
 
 setInterval(() => {
-    if (activeGameKey === 'connect4' && c4Mode === 'cloud') {
+    if (activeGameKey === 'gummigeruch') {
+        gummiPollState();
+    } else if (activeGameKey === 'connect4' && c4Mode === 'cloud') {
         pollCloudMatches();
     } else if (activeGameKey === 'wow') {
         wowSyncPeers();
@@ -4322,10 +5156,9 @@ setInterval(() => {
 
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
-    g2048Init();
+    gummiInit();
     sudokuInit();
     mineNewGame('medium');
-    wordleStartDaily();
     memoryNewGame(16);
     tetrisDraw();
     snakeDraw();
