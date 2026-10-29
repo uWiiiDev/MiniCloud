@@ -695,7 +695,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_music'                  => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
-        'assistant_ollama_model'        => 'qwen2.5:3b',
+        'assistant_ollama_model'        => 'qwen2.5:1.5b',
         'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',

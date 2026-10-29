@@ -2001,7 +2001,7 @@ function queryLocalOllamaAssistant(
         return null;
     }
 
-    $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?: 'qwen2.5:3b';
+    $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:1.5b')) ?: 'qwen2.5:1.5b';
     $status = probeLocalOllamaStatus($preferredModel);
     if (!$status['available'] || $status['active_model'] === '') {
         return null;
@@ -2085,8 +2085,7 @@ function queryLocalOllamaAssistant(
         'keep_alive' => '30m',
         'options'    => [
             'temperature' => $isGeneralQuestion ? 0.35 : 0.2,
-            'num_predict' => 165,
-            'num_ctx'     => 1024,
+            'num_predict' => 145,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -3410,7 +3409,7 @@ $uiPack           = getAssistantLangPack($uiLang, $username, $appTitle);
 $allowedLanguages = getAllowedLanguages();
 $pageTitle        = $uiPack['page_title'];
 $ollamaUiEnabled  = ($appSettings['assistant_use_ollama'] ?? '1') === '1';
-$ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:3b')) ?: 'qwen2.5:3b';
+$ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'qwen2.5:1.5b')) ?: 'qwen2.5:1.5b';
 $ollamaUiProbe    = $ollamaUiEnabled ? probeLocalOllamaStatus($ollamaUiModel) : ['available' => false, 'active_model' => ''];
 require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
