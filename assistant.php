@@ -1891,14 +1891,14 @@ function queryLocalOllamaAssistant(
     ];
     $targetLangName = $langNames[$lang] ?? 'Deutsch';
 
-    $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent von {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
+    $sysPrompt = "Du bist der freundliche, präzise lokale KI-Assistent der selbstgehosteten Cloud-Plattform {$appTitle} (Benutzer: {$username}, Rolle: " . ($isAdmin ? 'Administrator' : 'Mitglied') . ", Datum: " . date('d.m.Y H:i') . ").\n"
         . "Antworte IMMER in der Sprache: {$targetLangName}. Formatiere übersichtlich mit kurzen Absätzen, Aufzählungspunkten und **Fettdruck**.\n"
-        . "Erfinde KEINE Funktionen, die nicht in {$appTitle} existieren. Halte die Antwort kompakt (ca. 3 bis 6 Sätze oder Stichpunkte).\n\n"
+        . "WICHTIG: Beziehe dich AUSSCHLIESSLICH auf die untenstehenden offiziellen {$appTitle}-Handbuch-Fakten und Live-Kontodaten. Nenne NIEMALS fremde Dienste wie Google Drive, Dropbox oder Amazon S3. Halte die Antwort kompakt (ca. 3 bis 6 Sätze oder Stichpunkte).\n\n"
         . "Live-Kontodaten von {$username}:\n"
         . "- Speicherplatz: {$usedStr} von {$quotaStr} belegt ({$freeStr} frei, {$stats['file_count']} Dateien)\n"
         . "- Offene Aufgaben: {$openTasksCount} | Ungelesene Chat-Nachrichten: {$unread}\n"
         . "- Nächste Termine: {$nextEventStr}\n\n"
-        . "Relevantes Handbuch-Wissen zu dieser Frage:\n"
+        . "Offizielle {$appTitle}-Fakten zu dieser Frage:\n"
         . $kbContextStr;
 
     $messages = [
@@ -2893,15 +2893,16 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     // 10b. STUFE 2 (OPTIONAL): LOKALES KI-SPRACHMODELL (OLLAMA AUF 127.0.0.1)
     // =========================================================================
     // Wenn Ollama aktiv ist und entweder eine freie/kombinierte Frage, eine
-    // Anschlussfrage im Gesprächskontext oder ein moderater KB-Score vorliegt,
-    // formuliert das lokale Sprachmodell eine maßgeschneiderte Antwort auf Basis
-    // der Top-KB-Artikel + Live-Kontodaten.
-    $shouldInvokeOllama = ($bestScore < 16.0 || $isFollowUpPhrase || count($queryWords) >= 6);
+    // Anschlussfrage im Gesprächskontext oder kein eindeutiger Einzel-KB-Treffer
+    // vorliegt, formuliert das lokale Sprachmodell eine maßgeschneiderte Antwort
+    // auf Basis der Top-KB-Artikel + Live-Kontodaten.
+    $shouldInvokeOllama = ($bestScore < 10.0 || $isFollowUpPhrase || count($queryWords) >= 7);
     if ($shouldInvokeOllama && ($appSettings['assistant_use_ollama'] ?? '1') === '1') {
         $ollamaReply = queryLocalOllamaAssistant(
             $pdo,
             $userId,
             $username,
+            $isAdmin,
             $appSettings,
             $qTrim,
             $lang,
