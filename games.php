@@ -5,19 +5,20 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 12 Spiele:
+ * Enthaltene 13 Spiele:
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
- * 2.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 3.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 4.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 5.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 6.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 7.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 8.  🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 9.  🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 10. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 11. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 12. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 2.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
+ * 3.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 4.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
+ * 5.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 6.  ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 7.  🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 8.  💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 9.  🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 10. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
+ * 11. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 12. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 13. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -108,7 +109,7 @@ function ensureGamesSchema(PDO $pdo): void
 ensureGamesSchema($pdo);
 
 /**
- * Liefert den Katalog aller 12 Spiele inklusive Metadaten.
+ * Liefert den Katalog aller 13 Spiele inklusive Metadaten.
  *
  * @return array<string, array{key: string, title: string, icon: string, category: string, group: string, desc: string, color: string}>
  */
@@ -123,6 +124,15 @@ function getGamesCatalog(): array
             'group'    => 'action',
             'desc'     => 'Kult-Kart-Rennen mit Drift-Physik, 6 Strecken, Ghost-Duellen & Live-Herausforderungen!',
             'color'    => 'from-rose-600 to-amber-500',
+        ],
+        'invaders' => [
+            'key'      => 'invaders',
+            'title'    => 'Cloud-Invaders (1978)',
+            'icon'     => '👾',
+            'category' => 'Arcade 1978',
+            'group'    => 'arcade',
+            'desc'     => 'Verteidige die Erde hinter 4 Schutzbunkern gegen 55 marschierende Pixel-Aliens & das Mystery-UFO!',
+            'color'    => 'from-emerald-500 to-teal-700',
         ],
         'pacman' => [
             'key'      => 'pacman',
@@ -1064,7 +1074,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (6)
+                        🕹️ Retro &amp; Arcade (7)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -1969,6 +1979,76 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 13. SPIEL: CLOUD-INVADERS (1978 SPACE-INVADERS ARCADE-KLASSIKER) -->
+            <div id="gamePanel-invaders" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>👾 Cloud-Invaders (1978 Arcade)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800">
+                                🛸 Mystery-UFO &middot; 🛡️ 4 Schutzbunker &middot; 55 Pixel-Aliens
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Steuerung: <strong>← → / A D</strong> Laser-Kanone bewegen &middot; <strong>Leertaste / W / ↑</strong> Laser abfeuern &middot; Je weniger Aliens übrig sind, desto schneller marschieren sie!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="invadersStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
+                            ▶️ Neues Spiel starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status- & Punktezeile -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Punkte:</span>
+                        <strong id="invadersScore" class="text-emerald-600 dark:text-emerald-400 font-extrabold text-sm">0</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Welle (Wave):</span>
+                        <strong id="invadersWave" class="text-slate-900 dark:text-white font-extrabold">1</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Leben:</span>
+                        <strong id="invadersLives" class="tracking-widest">❤️❤️❤️</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span class="text-slate-500 dark:text-slate-400">Übrige Aliens:</span>
+                        <strong id="invadersLeft" class="text-cyan-600 dark:text-cyan-400 font-extrabold">55 / 55</strong>
+                    </div>
+                </div>
+
+                <!-- Arcade-Spielfeld (Canvas) + Touch-Steuerung -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="invadersCanvas" width="520" height="480"
+                            class="rounded-2xl bg-slate-950 border-2 border-emerald-900/80 shadow-xl max-w-full h-auto select-none"></canvas>
+
+                    <!-- Touch- / Mobil-Steuerleiste -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="invadersKeys['ArrowLeft']=true" onmouseup="invadersKeys['ArrowLeft']=false" onmouseleave="invadersKeys['ArrowLeft']=false"
+                                ontouchstart="event.preventDefault(); invadersKeys['ArrowLeft']=true" ontouchend="invadersKeys['ArrowLeft']=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-emerald-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ⬅️ Links
+                        </button>
+                        <button type="button"
+                                onclick="invadersFireLaser()"
+                                class="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-sm shadow-sm cursor-pointer">
+                            ⚡ LASER FEUERN (Space)
+                        </button>
+                        <button type="button"
+                                onmousedown="invadersKeys['ArrowRight']=true" onmouseup="invadersKeys['ArrowRight']=false" onmouseleave="invadersKeys['ArrowRight']=false"
+                                ontouchstart="event.preventDefault(); invadersKeys['ArrowRight']=true" ontouchend="invadersKeys['ArrowRight']=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-emerald-600 active:text-white font-extrabold text-sm shadow-2xs cursor-pointer">
+                            ➡️ Rechts
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2161,6 +2241,11 @@ function selectCloudGame(gameKey) {
             pacmanInit();
         }
         pacmanDraw();
+    } else if (gameKey === 'invaders') {
+        if (!invadersInitialized) {
+            invadersInit();
+        }
+        invadersDraw();
     } else if (gameKey === 'kong') {
         if (!kongInitialized) {
             kongInit();
@@ -7689,10 +7774,636 @@ function kongLoop() {
     }
 }
 
+// =============================================================================
+// 13. CLOUD-INVADERS (1978 TAITO SPACE-INVADERS ARCADE-KLASSIKER)
+// =============================================================================
+let invadersInitialized = false;
+let invadersRunning     = false;
+let invadersRafId       = null;
+let invadersScore       = 0;
+let invadersWave        = 1;
+let invadersLives       = 3;
+let invadersStartAt     = 0;
+let invadersTick        = 0;
+let invadersBannerText  = '';
+const invadersKeys      = {};
+
+let invadersPlayer = { x: 260, y: 442, w: 34, h: 16, invuln: 0 };
+let invadersShots  = []; // Spieler-Laser
+let invadersBombs  = []; // Alien-Plasmabomben
+let invadersAliens = []; // { row, col, x, y, w, h, alive, type, points, color }
+let invadersBunkers = []; // Zerstörbare Pixel-Blöcke { x, y, w, h, hp }
+let invadersUfo     = null; // { x, y, vx, points }
+let invadersPopups  = []; // { x, y, text, color, life }
+let invadersPart    = []; // Funken
+let invadersDir     = 1;  // +1 rechts, -1 links
+let invadersStepAcc = 0;
+let invadersStepFrame = 0; // 0 oder 1 für 2-Frame-Marsch-Animation
+
+const INVADERS_PIXEL_SPRITES = {
+    // 🦑 Squid (Reihe 0, +30 Pkt.) – 8x8 Pixelmatrix
+    squid0: [
+        '00011000',
+        '00111100',
+        '01111110',
+        '11011011',
+        '11111111',
+        '00100100',
+        '01011010',
+        '10100101'
+    ],
+    squid1: [
+        '00011000',
+        '00111100',
+        '01111110',
+        '11011011',
+        '11111111',
+        '01011010',
+        '10000001',
+        '01000010'
+    ],
+    // 🦀 Crab (Reihe 1-2, +20 Pkt.) – 11x8 Pixelmatrix
+    crab0: [
+        '00100000100',
+        '00010001000',
+        '00111111100',
+        '01101110110',
+        '11111111111',
+        '10111111101',
+        '10100000101',
+        '00011011000'
+    ],
+    crab1: [
+        '00100000100',
+        '10010001001',
+        '10111111101',
+        '11101110111',
+        '11111111111',
+        '01111111110',
+        '00100000100',
+        '01000000010'
+    ],
+    // 🐙 Octopus (Reihe 3-4, +10 Pkt.) – 12x8 Pixelmatrix
+    octo0: [
+        '000011110000',
+        '011111111110',
+        '111111111111',
+        '111001100111',
+        '111111111111',
+        '000110011000',
+        '001101101100',
+        '110000000011'
+    ],
+    octo1: [
+        '000011110000',
+        '011111111110',
+        '111111111111',
+        '111001100111',
+        '111111111111',
+        '001110011100',
+        '011001100110',
+        '001100001100'
+    ]
+};
+
+function invadersBuildBunkers() {
+    invadersBunkers = [];
+    const bunkerXs = [62, 174, 286, 398];
+    const baseY    = 378;
+    const blockW   = 6;
+    const blockH   = 6;
+    // Klassische Schutzbunker-Form (10x6 Blöcke mit Ausschnitt unten in der Mitte)
+    const shape = [
+        '0011111100',
+        '0111111110',
+        '1111111111',
+        '1111111111',
+        '1110000111',
+        '1100000011'
+    ];
+    for (const bx of bunkerXs) {
+        for (let r = 0; r < shape.length; r++) {
+            for (let c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] === '1') {
+                    invadersBunkers.push({
+                        x: bx + c * blockW,
+                        y: baseY + r * blockH,
+                        w: blockW,
+                        h: blockH,
+                        hp: 2
+                    });
+                }
+            }
+        }
+    }
+}
+
+function invadersBuildWave(waveNum) {
+    invadersAliens    = [];
+    invadersShots     = [];
+    invadersBombs     = [];
+    invadersUfo       = null;
+    invadersDir       = 1;
+    invadersStepAcc   = 0;
+    invadersStepFrame = 0;
+
+    // 5 Reihen x 11 Spalten = 55 Aliens
+    const startX = 48;
+    const startY = Math.min(130, 68 + (waveNum - 1) * 10);
+    const gapX   = 36;
+    const gapY   = 28;
+
+    for (let r = 0; r < 5; r++) {
+        let type   = 'octo';
+        let points = 10;
+        let color  = '#4ade80'; // Neon-Grün
+        if (r === 0) {
+            type   = 'squid';
+            points = 30;
+            color  = '#f43f5e'; // Neon-Rose
+        } else if (r === 1 || r === 2) {
+            type   = 'crab';
+            points = 20;
+            color  = '#38bdf8'; // Neon-Cyan
+        }
+        for (let c = 0; c < 11; c++) {
+            invadersAliens.push({
+                row: r,
+                col: c,
+                x: startX + c * gapX,
+                y: startY + r * gapY,
+                w: 24,
+                h: 16,
+                alive: true,
+                type: type,
+                points: points,
+                color: color
+            });
+        }
+    }
+    invadersUpdateHud();
+}
+
+function invadersInit() {
+    if (invadersInitialized) return;
+    invadersInitialized = true;
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'invaders') return;
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', ' ', 'a', 'A', 'd', 'D', 'w', 'W', 'p', 'P'].includes(e.key)) {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', ' '].includes(e.key)) {
+                e.preventDefault();
+            }
+            if (e.key === 'a' || e.key === 'A') invadersKeys['ArrowLeft'] = true;
+            else if (e.key === 'd' || e.key === 'D') invadersKeys['ArrowRight'] = true;
+            else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                invadersFireLaser();
+            } else if (e.key === 'p' || e.key === 'P') {
+                if (invadersRunning) {
+                    invadersRunning = false;
+                    invadersBannerText = '⏸️ PAUSE';
+                    invadersDraw();
+                } else if (invadersLives > 0) {
+                    invadersRunning = true;
+                    invadersBannerText = '';
+                    invadersRafId = requestAnimationFrame(invadersLoop);
+                }
+            } else {
+                invadersKeys[e.key] = true;
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'a' || e.key === 'A') invadersKeys['ArrowLeft'] = false;
+        else if (e.key === 'd' || e.key === 'D') invadersKeys['ArrowRight'] = false;
+        else invadersKeys[e.key] = false;
+    });
+
+    invadersBuildBunkers();
+    invadersBuildWave(1);
+    invadersBannerText = '👾 CLOUD-INVADERS BEREIT!';
+    invadersDraw();
+}
+
+function invadersStartGame() {
+    if (invadersRafId) cancelAnimationFrame(invadersRafId);
+    invadersScore      = 0;
+    invadersWave       = 1;
+    invadersLives      = 3;
+    invadersStartAt    = Date.now();
+    invadersTick       = 0;
+    invadersBannerText = '';
+    invadersPopups     = [];
+    invadersPart       = [];
+    invadersPlayer     = { x: 260, y: 442, w: 34, h: 16, invuln: 0 };
+    invadersBuildBunkers();
+    invadersBuildWave(1);
+    invadersRunning    = true;
+    invadersRafId      = requestAnimationFrame(invadersLoop);
+}
+
+function invadersFireLaser() {
+    if (!invadersRunning) {
+        invadersStartGame();
+        return;
+    }
+    // Originalgetreu: Maximal 2 aktive Laser-Schüsse gleichzeitig auf dem Schirm
+    if (invadersShots.length >= 2) return;
+    invadersShots.push({
+        x: invadersPlayer.x,
+        y: invadersPlayer.y - 10,
+        vy: -7.5
+    });
+}
+
+function invadersUpdateHud() {
+    const scEl = document.getElementById('invadersScore');
+    const wvEl = document.getElementById('invadersWave');
+    const lfEl = document.getElementById('invadersLives');
+    const alEl = document.getElementById('invadersLeft');
+    if (scEl) scEl.textContent = invadersScore.toLocaleString('de-DE');
+    if (wvEl) wvEl.textContent = String(invadersWave);
+    if (lfEl) lfEl.textContent = '❤️'.repeat(Math.max(0, invadersLives)) || '💀';
+    if (alEl) {
+        const aliveCnt = invadersAliens.filter((a) => a.alive).length;
+        alEl.textContent = aliveCnt + ' / 55';
+    }
+}
+
+function invadersSpawnExplosion(x, y, color, count = 12) {
+    for (let i = 0; i < count; i++) {
+        invadersPart.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 4.5,
+            vy: (Math.random() - 0.5) * 4.5,
+            life: 16 + Math.floor(Math.random() * 10),
+            color: color
+        });
+    }
+}
+
+function invadersLoseLife() {
+    invadersLives--;
+    invadersSpawnExplosion(invadersPlayer.x, invadersPlayer.y, '#34d399', 22);
+    invadersUpdateHud();
+    if (invadersLives <= 0) {
+        invadersRunning = false;
+        invadersBannerText = '💀 GAME OVER – ERDE EROBERT!';
+        const durSec = Math.max(1, Math.round((Date.now() - invadersStartAt) / 1000));
+        submitCloudScore('invaders', invadersScore, durSec, 'Welle ' + invadersWave);
+    } else {
+        invadersPlayer.x = 260;
+        invadersPlayer.invuln = 85;
+        invadersBombs = [];
+    }
+}
+
+function invadersStep() {
+    invadersTick++;
+    if (invadersPlayer.invuln > 0) invadersPlayer.invuln--;
+
+    // 1. Spieler-Kanone links/rechts
+    if (invadersKeys['ArrowLeft']) {
+        invadersPlayer.x = Math.max(26, invadersPlayer.x - 4.0);
+    }
+    if (invadersKeys['ArrowRight']) {
+        invadersPlayer.x = Math.min(494, invadersPlayer.x + 4.0);
+    }
+
+    // 2. Mystery-UFO oben (erscheint alle ~420 Ticks)
+    if (!invadersUfo && invadersTick % 420 === 200) {
+        const fromLeft = Math.random() < 0.5;
+        const bonusPool = [100, 150, 200, 300];
+        invadersUfo = {
+            x: fromLeft ? -24 : 544,
+            y: 36,
+            vx: fromLeft ? 2.2 : -2.2,
+            points: bonusPool[Math.floor(Math.random() * bonusPool.length)]
+        };
+    }
+    if (invadersUfo) {
+        invadersUfo.x += invadersUfo.vx;
+        if (invadersUfo.x < -40 || invadersUfo.x > 560) {
+            invadersUfo = null;
+        }
+    }
+
+    // 3. Alien-Formation marschiert (je weniger Aliens leben, desto kürzer das Marsch-Intervall!)
+    const aliveAliens = invadersAliens.filter((a) => a.alive);
+    if (aliveAliens.length === 0) {
+        // Welle komplett besiegt!
+        invadersScore += 500 * invadersWave;
+        invadersWave++;
+        invadersPopups.push({ x: 260, y: 220, text: '🎉 WELLE ' + invadersWave + '! (+500 BONUS)', color: '#fde047', life: 60 });
+        if (invadersWave % 2 === 1) {
+            invadersBuildBunkers(); // Alle 2 Wellen frische Bunker
+        }
+        invadersBuildWave(invadersWave);
+        return;
+    }
+
+    // Marsch-Verzögerung: Bei 55 Aliens alle 30 Frames, bei 1 Alien alle 2 Frames!
+    const stepDelay = Math.max(2, Math.floor(3 + (aliveAliens.length / 55) * 26 - Math.min(8, invadersWave)));
+    invadersStepAcc++;
+    if (invadersStepAcc >= stepDelay) {
+        invadersStepAcc = 0;
+        invadersStepFrame = 1 - invadersStepFrame;
+
+        let hitEdge = false;
+        const stepX = 8 * invadersDir;
+        for (const a of aliveAliens) {
+            if (a.x + stepX > 492 || a.x + stepX < 28) {
+                hitEdge = true;
+                break;
+            }
+        }
+
+        if (hitEdge) {
+            invadersDir = -invadersDir;
+            for (const a of aliveAliens) {
+                a.y += 14;
+                // Wenn Aliens die Bunker berühren, werden Bunker-Blöcke abgetragen
+                for (let b = invadersBunkers.length - 1; b >= 0; b--) {
+                    const bk = invadersBunkers[b];
+                    if (Math.abs(a.x - bk.x) < 16 && Math.abs(a.y - bk.y) < 14) {
+                        invadersBunkers.splice(b, 1);
+                    }
+                }
+                // Wenn Aliens die Höhe der Kanone erreichen -> sofortige Invasion!
+                if (a.y + a.h / 2 >= invadersPlayer.y - 8) {
+                    invadersLives = 1;
+                    invadersLoseLife();
+                    return;
+                }
+            }
+        } else {
+            for (const a of aliveAliens) {
+                a.x += stepX;
+            }
+        }
+    }
+
+    // 4. Unterste Aliens jeder Spalte werfen Plasmabomben ab
+    const fireChance = Math.min(0.055, 0.016 + invadersWave * 0.004 + (55 - aliveAliens.length) * 0.0004);
+    if (Math.random() < fireChance && invadersBombs.length < 5 + Math.floor(invadersWave / 2)) {
+        // Wähle ein zufälliges lebendes Alien, das in seiner Spalte am tiefsten steht
+        const bottomByCol = {};
+        for (const a of aliveAliens) {
+            if (!bottomByCol[a.col] || a.row > bottomByCol[a.col].row) {
+                bottomByCol[a.col] = a;
+            }
+        }
+        const cols = Object.values(bottomByCol);
+        if (cols.length > 0) {
+            const shooter = cols[Math.floor(Math.random() * cols.length)];
+            invadersBombs.push({
+                x: shooter.x,
+                y: shooter.y + 10,
+                vy: 3.4 + Math.min(2.2, invadersWave * 0.25)
+            });
+        }
+    }
+
+    // 5. Spieler-Laser bewegen & Treffer prüfen
+    for (let i = invadersShots.length - 1; i >= 0; i--) {
+        const s = invadersShots[i];
+        s.y += s.vy;
+        if (s.y < 10) {
+            invadersShots.splice(i, 1);
+            continue;
+        }
+
+        // a) Treffer auf Schutzbunker?
+        let hitBunker = false;
+        for (let b = invadersBunkers.length - 1; b >= 0; b--) {
+            const bk = invadersBunkers[b];
+            if (s.x >= bk.x - 2 && s.x <= bk.x + bk.w + 2 && s.y >= bk.y && s.y <= bk.y + bk.h) {
+                bk.hp--;
+                if (bk.hp <= 0) invadersBunkers.splice(b, 1);
+                invadersShots.splice(i, 1);
+                hitBunker = true;
+                break;
+            }
+        }
+        if (hitBunker) continue;
+
+        // b) Treffer auf Mystery-UFO?
+        if (invadersUfo && Math.abs(s.x - invadersUfo.x) < 18 && Math.abs(s.y - invadersUfo.y) < 11) {
+            invadersScore += invadersUfo.points;
+            invadersSpawnExplosion(invadersUfo.x, invadersUfo.y, '#f43f5e', 18);
+            invadersPopups.push({ x: invadersUfo.x, y: invadersUfo.y, text: '🛸 +' + invadersUfo.points + '!', color: '#fda4af', life: 45 });
+            invadersUfo = null;
+            invadersShots.splice(i, 1);
+            invadersUpdateHud();
+            continue;
+        }
+
+        // c) Treffer auf Alien?
+        let hitAlien = false;
+        for (const a of aliveAliens) {
+            if (Math.abs(s.x - a.x) <= a.w / 2 + 2 && Math.abs(s.y - a.y) <= a.h / 2 + 2) {
+                a.alive = false;
+                invadersScore += a.points;
+                invadersSpawnExplosion(a.x, a.y, a.color, 12);
+                invadersShots.splice(i, 1);
+                invadersUpdateHud();
+                hitAlien = true;
+                break;
+            }
+        }
+        if (hitAlien) continue;
+    }
+
+    // 6. Alien-Plasmabomben bewegen & Treffer prüfen
+    for (let i = invadersBombs.length - 1; i >= 0; i--) {
+        const b = invadersBombs[i];
+        b.y += b.vy;
+        if (b.y > 465) {
+            invadersBombs.splice(i, 1);
+            continue;
+        }
+
+        // Treffer auf Schutzbunker?
+        let hitBunker = false;
+        for (let k = invadersBunkers.length - 1; k >= 0; k--) {
+            const bk = invadersBunkers[k];
+            if (b.x >= bk.x - 3 && b.x <= bk.x + bk.w + 3 && b.y >= bk.y && b.y <= bk.y + bk.h) {
+                bk.hp--;
+                if (bk.hp <= 0) invadersBunkers.splice(k, 1);
+                invadersSpawnExplosion(b.x, b.y, '#22c55e', 4);
+                invadersBombs.splice(i, 1);
+                hitBunker = true;
+                break;
+            }
+        }
+        if (hitBunker) continue;
+
+        // Treffer auf Spieler-Laserkanone?
+        if (invadersPlayer.invuln <= 0 &&
+            Math.abs(b.x - invadersPlayer.x) < invadersPlayer.w / 2 &&
+            Math.abs(b.y - invadersPlayer.y) < invadersPlayer.h / 2 + 4) {
+            invadersBombs.splice(i, 1);
+            invadersLoseLife();
+            return;
+        }
+    }
+}
+
+function invadersDrawPixelSprite(ctx, matrix, centerX, centerY, pixelSize, color) {
+    const rows = matrix.length;
+    const cols = matrix[0].length;
+    const startX = centerX - (cols * pixelSize) / 2;
+    const startY = centerY - (rows * pixelSize) / 2;
+    ctx.fillStyle = color;
+    for (let r = 0; r < rows; r++) {
+        const rowStr = matrix[r];
+        for (let c = 0; c < cols; c++) {
+            if (rowStr[c] === '1') {
+                ctx.fillRect(startX + c * pixelSize, startY + r * pixelSize, pixelSize, pixelSize);
+            }
+        }
+    }
+}
+
+function invadersDraw() {
+    const cvs = document.getElementById('invadersCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    // 1. Weltraum-Hintergrund + CRT-Scanlines
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // Sternenhimmel
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+    for (let i = 0; i < 36; i++) {
+        const sx = (i * 97 + 19) % cvs.width;
+        const sy = (i * 61 + 23) % (cvs.height - 40);
+        ctx.fillRect(sx, sy, i % 3 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1);
+    }
+
+    // Grüne Bodenlinie wie beim 1978er Arcade-Automaten
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(12, 462);
+    ctx.lineTo(cvs.width - 12, 462);
+    ctx.stroke();
+
+    // 2. Mystery-UFO oben zeichnen
+    if (invadersUfo) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.ellipse(invadersUfo.x, invadersUfo.y, 16, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fda4af';
+        ctx.beginPath();
+        ctx.ellipse(invadersUfo.x, invadersUfo.y - 4, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Blinkende UFO-Lichter
+        ctx.fillStyle = '#fde047';
+        for (let lx = -10; lx <= 10; lx += 5) {
+            ctx.fillRect(invadersUfo.x + lx - 1, invadersUfo.y - 1, 2, 2);
+        }
+    }
+
+    // 3. 4 Schutzbunker (destructible shields) zeichnen
+    for (const bk of invadersBunkers) {
+        ctx.fillStyle = bk.hp === 2 ? '#22c55e' : '#15803d';
+        ctx.fillRect(bk.x, bk.y, bk.w - 0.5, bk.h - 0.5);
+    }
+
+    // 4. 55 Pixel-Aliens in 2-Frame-Marsch-Animation zeichnen
+    for (const a of invadersAliens) {
+        if (!a.alive) continue;
+        const key = a.type + invadersStepFrame;
+        const sprite = INVADERS_PIXEL_SPRITES[key] || INVADERS_PIXEL_SPRITES.octo0;
+        invadersDrawPixelSprite(ctx, sprite, a.x, a.y, 2, a.color);
+    }
+
+    // 5. Spieler-Laserkanone unten zeichnen
+    if (invadersPlayer.invuln % 4 < 2) {
+        const px = invadersPlayer.x;
+        const py = invadersPlayer.y;
+        ctx.fillStyle = '#34d399';
+        // Kanonen-Basis
+        ctx.fillRect(px - 15, py, 30, 9);
+        ctx.fillRect(px - 11, py - 4, 22, 4);
+        // Laser-Rohr
+        ctx.fillStyle = '#a7f3d0';
+        ctx.fillRect(px - 2, py - 10, 4, 6);
+    }
+
+    // 6. Spieler-Laser & Alien-Plasmabomben zeichnen
+    ctx.fillStyle = '#fde047';
+    for (const s of invadersShots) {
+        ctx.fillRect(s.x - 1.5, s.y - 6, 3, 11);
+    }
+    ctx.fillStyle = '#fb7185';
+    for (const b of invadersBombs) {
+        // Zickzack-Plasmabombe
+        const zig = (invadersTick % 6 < 3) ? -2 : 2;
+        ctx.fillRect(b.x - 1.5 + zig, b.y - 5, 3, 5);
+        ctx.fillRect(b.x - 1.5 - zig, b.y, 3, 5);
+    }
+
+    // 7. Explosions-Partikel & Punkte-Popups
+    for (let i = invadersPart.length - 1; i >= 0; i--) {
+        const pt = invadersPart[i];
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x, pt.y, 3, 3);
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.life--;
+        if (pt.life <= 0) invadersPart.splice(i, 1);
+    }
+
+    for (let i = invadersPopups.length - 1; i >= 0; i--) {
+        const p = invadersPopups[i];
+        ctx.fillStyle = p.color;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+        p.y -= 0.5;
+        p.life--;
+        if (p.life <= 0) invadersPopups.splice(i, 1);
+    }
+
+    // 8. Start- / Game-Over-Banner
+    if (!invadersRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.80)';
+        ctx.fillRect(0, cvs.height / 2 - 48, cvs.width, 96);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#34d399';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText(invadersBannerText || '👾 CLOUD-INVADERS (1978)', cvs.width / 2, cvs.height / 2 - 10);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('🦑 = 30 Pkt.  |  🦀 = 20 Pkt.  |  🐙 = 10 Pkt.  |  🛸 = Mystery-Bonus', cvs.width / 2, cvs.height / 2 + 12);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Drücke LEERTASTE oder „Neues Spiel starten“ zum Verteidigen der Erde!', cvs.width / 2, cvs.height / 2 + 32);
+    }
+}
+
+function invadersLoop() {
+    if (!invadersRunning) {
+        invadersDraw();
+        return;
+    }
+    invadersStep();
+    invadersDraw();
+    if (invadersRunning) {
+        invadersRafId = requestAnimationFrame(invadersLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
+    invadersInit();
     pacmanInit();
     kongInit();
     blitzInit();

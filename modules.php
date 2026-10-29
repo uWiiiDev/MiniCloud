@@ -308,8 +308,8 @@ $allModules = [
         'url'      => 'games.php',
         'category' => 'extra',
         'catLabel' => 'Sicherheit, KI & Freizeit',
-        'desc'     => '12 werbefreie Browserspiele (Gummigeruch Kart-Cup, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Tetris, Snake, Breakout & Live-Duelle) mit Cloud-Highscores.',
-        'badge'    => '12 Spiele',
+        'desc'     => '13 werbefreie Browserspiele (Gummigeruch Kart-Cup, Cloud-Invaders, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Tetris, Snake, Breakout & Live-Duelle) mit Cloud-Highscores.',
+        'badge'    => '13 Spiele',
         'badgeCls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300',
     ],
     [
