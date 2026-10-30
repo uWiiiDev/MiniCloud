@@ -130,7 +130,7 @@ $ffmpegBin = findVideoCliBinary('ffmpeg');
 // ============================================================================
 // AJAX-ENDPUNKTE: Chunked-Upload für geschnittene Videos, Standbilder & FFmpeg
 // ============================================================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax_action'])) {
     header('Content-Type: application/json; charset=UTF-8');
 
     $csrf = (string)($_POST['csrf_token'] ?? '');

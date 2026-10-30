@@ -301,6 +301,18 @@ $allModules = [
         'badgeCls' => 'bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300',
     ],
     [
+        'key'      => 'surflog',
+        'enabled'  => ($appSettings['enable_surflog'] ?? '1') === '1',
+        'title'    => 'Surftagebuch & Quiver-Log',
+        'icon'     => '🏄‍♂️',
+        'url'      => 'surflog.php',
+        'category' => 'extra',
+        'catLabel' => 'Sicherheit, KI & Freizeit',
+        'desc'     => 'Session-Logbuch für Windsurfen, Kiten, Wingfoilen, Wellenreiten & SUP mit Knoten↔Beaufort-Rechner, 16er-Windrose, Quiver-Materialverwaltung (Kosten/Session), GPX-Speed-Heatmap & Foto-/Video-Verknüpfung.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300',
+    ],
+    [
         'key'      => 'calculator',
         'enabled'  => ($appSettings['enable_calculator'] ?? '1') === '1',
         'title'    => 'Taschenrechner & Rechen-Studio',

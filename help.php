@@ -1663,6 +1663,12 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4">Bis zum Löschen der Playlist / Audiodatei oder Kontolöschung</td>
                     </tr>
                     <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">surf_gear &amp; surf_sessions</td>
+                        <td class="py-3 px-4"><code>user_id, category, brand, model, size_label, purchase_price</code> / <code>session_date, sport_type, spot_name, wind_kn_min, wind_kn_max, wind_bft, wind_dir, board_gear_id, rig_gear_id, max_speed_kmh, gpx_summary_json, media_file_id</code></td>
+                        <td class="py-3 px-4">Surftagebuch &amp; Quiver-Materialverwaltung (<code>surflog.php</code>): Wassersport-Sessions, Spot-/Wind-/Wellen-Logbuch, Quiver-Ausrüstung (inkl. Kosten/Session) und lokale GPX-Track-Zusammenfassung</td>
+                        <td class="py-3 px-4">Bis zum Löschen der Session / des Ausrüstungs-Eintrags oder Kontolöschung</td>
+                    </tr>
+                    <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">game_scores, game_saves &amp; game_matches</td>
                         <td class="py-3 px-4"><code>user_id, game_key, score, duration_sec</code> / <code>state_json</code> / <code>game_type, player1_id, player2_id, board_json, winner_id</code></td>
                         <td class="py-3 px-4">Highscore-Bestenlisten, gespeicherte Einzelspieler-Spielstände und Live-Mehrspieler-Duelle in der Spiele-Zentrale (<code>games.php</code>)</td>

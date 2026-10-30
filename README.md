@@ -89,6 +89,12 @@
   - **🔊 Audio Mixer, Cloud Background Music & Speed (`0.5×–2.0×`):** Mute or adjust original video audio, mix in any `.mp3`/`.wav`/`.m4a` track directly from your MiniCloud, apply fade-in/out, and save rendered videos or **📸 full-resolution frame snapshots** directly back to your Cloud via resilient **2 MB chunked uploads**.
   - **📹 Built-In Webcam & 🖥️ Screen Recorder:** Record camera clips or desktop screencasts directly inside the studio and edit them immediately.
 
+### 13c. 🏄‍♂️ Watersports Surf Logbook & Quiver Manager (`surflog.php`)
+- **🌊 Session Logbook for Windsurfing, Kitesurfing, Wingfoiling, Surfing & SUP:** Log date, spot, country/region, water duration, wind range in knots with **automatic Beaufort (`Bft`) calculator**, interactive **16-point wind rose**, wave height/conditions, wetsuit thickness, session rating (`1–5 ⭐`), and maneuver notes.
+- **🛹 Quiver Gear Management & Cost-per-Session Analytics:** Manage boards, sails, kites, wings, and foils with automatic session counters, total water hours per item, and automatic **cost-per-session amortization** based on purchase price.
+- **📍 Client-Side `.gpx` GPS Track Analyzer & Speed Heatmap:** Drop any `.gpx` file from a Garmin/Coros/Apple Watch to compute distance (`km`), top speed (`km/h` & `knots`), and render a color-coded **GPS speed heatmap track** on an interactive HTML5 canvas.
+- **📸 Cloud Photo/Video Linking & CSV Export:** Link session highlights directly to Cloud photos or edited clips from `video_studio.php`, and export your logbook to `Surftagebuch/` as an Excel-compatible `.csv` file with 1 click.
+
 ### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 20 ad-free HTML5 games with fullscreen mode, cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
   - **Racing, Sports & RPG:** *Gummigeruch Kart-Cup (6 tracks, selectable 3/5/8/11 laps & Ghost Duels)*, *Cloud-Traffic-Racer*, *Cloud-Darts (Master Arena)*, and *Heroes of MiniCloud (Co-Op RPG)*.

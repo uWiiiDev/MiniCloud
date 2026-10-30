@@ -1870,6 +1870,42 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 'Welche Spiele gibt es in der Cloud?',
             ],
         ],
+        [
+            'id'       => 'video_studio',
+            'title'    => 'Video-Studio & Browser-Videoschnittplatz (video_studio.php)',
+            'icon'     => '🎬',
+            'keywords' => ['video', 'videoschnitt', 'video studio', 'schneiden', 'trimmen', 'kürzen', 'drehen', 'bauchbinde', 'untertitel', 'farbfilter', 'hintergrundmusik', 'standbild', 'screencast', 'webcam'],
+            'answer'   => "Das **🎬 Video-Studio** (`video_studio.php`) schneidet Videos 100 % im Browser (ohne Serverlast, voll STRATO-tauglich):\n\n"
+                . "- **✂️ Trimmen & Filmstreifen:** Sekundengenauer `[In]` / `[Out]`-Zuschnitt mit automatischen Vorschaubildern.\n"
+                . "- **📐 Drehen & Format (16:9 / 9:16):** Gedrehte Handyvideos um 90°/180° korrigieren und auf `16:9`, `9:16` oder `1:1` mit **Kino-Unschärferand** bringen.\n"
+                . "- **🔤 Bauchbinden, 🎨 8 Farbfilter & 🎵 Hintergrundmusik:** Titel-Einblendungen, Farbkorrektur und Musik direkt aus deiner Cloud darunterlegen oder **📸 Standbilder** speichern.",
+            'actions'  => [
+                ['label' => '🎬 Video-Studio öffnen', 'url' => 'video_studio.php'],
+                ['label' => '🖼️ Foto-Galerie', 'url' => 'gallery.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert das Surftagebuch?',
+                'Wie funktioniert die Foto-Galerie?',
+            ],
+        ],
+        [
+            'id'       => 'surflog_quiver',
+            'title'    => 'Surftagebuch & Quiver-Materialverwaltung (surflog.php)',
+            'icon'     => '🏄‍♂️',
+            'keywords' => ['surftagebuch', 'surflog', 'windsurfen', 'kitesurfen', 'kiten', 'wingfoilen', 'wingfoil', 'wellenreiten', 'sup', 'quiver', 'segel', 'board', 'foil', 'windstärke', 'knoten', 'beaufort', 'bft', 'gpx', 'spot'],
+            'answer'   => "Das **🏄‍♂️ Surftagebuch & Quiver-Log** (`surflog.php`) ist dein persönliches Wassersport-Logbuch:\n\n"
+                . "1. **🌊 Session-Logbuch:** Erfasse Datum, Sportart (*Windsurfen, Kitesurfen, Wingfoilen, Wellenreiten, SUP*), Spot, Wasserzeit, Wind in Knoten (automatischer **Beaufort-Rechner**), **16er-Windrose**, Wellenhöhe, Neopren-Dicke & Manöver-Notizen.\n"
+                . "2. **🛹 Quiver-Materialverwaltung:** Hinterlege deine Boards, Segel, Kites, Wings & Foils – das Tagebuch zählt automatisch die Einsätze, Wasserstunden und berechnet den **Preis pro Session**.\n"
+                . "3. **📍 GPX-Speed-Tracker & 📸 Cloud-Medien:** Lade `.gpx`-Tracks deiner GPS-Uhr für Top-Speed-Heatmaps (`km/h` & `kn`) und verknüpfe Actioncam-Videos aus dem **🎬 Video-Studio**.",
+            'actions'  => [
+                ['label' => '🏄‍♂️ Surftagebuch öffnen', 'url' => 'surflog.php'],
+                ['label' => '🎬 Video-Studio', 'url' => 'video_studio.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert das Video-Studio?',
+                'Wie funktioniert die Foto-Galerie?',
+            ],
+        ],
     ];
 
     if ($isAdmin) {
