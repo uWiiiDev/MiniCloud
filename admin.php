@@ -211,7 +211,7 @@ function fetchUrlBytes(string $url, ?string &$errorOut = null): ?string
                 CURLOPT_CONNECTTIMEOUT => 10,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
-                CURLOPT_USERAGENT      => 'MiniCloud-Updater/1.5 (+https://github.com/uWiiiMiniCloud/MiniCloud)',
+                CURLOPT_USERAGENT      => 'MiniCloud-Updater/1.5 (+https://github.com/uWiiiDev/MiniCloud)',
                 CURLOPT_HTTPHEADER     => ['Accept: application/vnd.github+json'],
             ]);
             $res = curl_exec($ch);
@@ -277,10 +277,14 @@ function getLocalInstalledCommitInfo(PDO $pdo): array
  *
  * @return array<string, mixed>
  */
-function checkGitHubUpdates(PDO $pdo, string $repo = 'uWiiiMiniCloud/MiniCloud'): array
+function checkGitHubUpdates(PDO $pdo, string $repo = 'uWiiiDev/MiniCloud'): array
 {
-    if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo) || strcasecmp($repo, 'uwebenzelrath/MiniCloud') === 0) {
-        $repo = 'uWiiiMiniCloud/MiniCloud';
+    if (
+        !preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo)
+        || strcasecmp($repo, 'uwebenzelrath/MiniCloud') === 0
+        || strcasecmp($repo, 'uWiiiMiniCloud/MiniCloud') === 0
+    ) {
+        $repo = 'uWiiiDev/MiniCloud';
     }
 
     $err = null;
@@ -618,7 +622,7 @@ function restoreLocalAppSnapshot(PDO $pdo, string $snapshotFilename): array
  */
 function performGitHubUpdate(
     PDO $pdo,
-    string $repo = 'uWiiiMiniCloud/MiniCloud',
+    string $repo = 'uWiiiDev/MiniCloud',
     string $targetSha = '',
     string $targetDate = '',
     string $targetMessage = ''
@@ -630,8 +634,12 @@ function performGitHubUpdate(
         ];
     }
 
-    if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo) || strcasecmp($repo, 'uwebenzelrath/MiniCloud') === 0) {
-        $repo = 'uWiiiMiniCloud/MiniCloud';
+    if (
+        !preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repo)
+        || strcasecmp($repo, 'uwebenzelrath/MiniCloud') === 0
+        || strcasecmp($repo, 'uWiiiMiniCloud/MiniCloud') === 0
+    ) {
+        $repo = 'uWiiiDev/MiniCloud';
     }
 
     $cleanTargetSha = strtolower(trim($targetSha));
@@ -903,7 +911,7 @@ if (isset($_GET['ajax_check_update']) && $_GET['ajax_check_update'] === '1') {
         exit;
     }
     $settings = getAppSettings($pdo);
-    $repo = trim((string)($settings['github_repo'] ?? 'uWiiiMiniCloud/MiniCloud')) ?: 'uWiiiMiniCloud/MiniCloud';
+    $repo = trim((string)($settings['github_repo'] ?? 'uWiiiDev/MiniCloud')) ?: 'uWiiiDev/MiniCloud';
     echo json_encode(checkGitHubUpdates($pdo, $repo), JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -1691,9 +1699,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // -------------------------------------------------------------------------
     if ($action === 'run_github_update') {
         $settings = getAppSettings($pdo);
-        $repoInput = trim((string)($_POST['github_repo'] ?? ($settings['github_repo'] ?? 'uWiiiMiniCloud/MiniCloud')));
-        if (!preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repoInput) || strcasecmp($repoInput, 'uwebenzelrath/MiniCloud') === 0) {
-            $repoInput = 'uWiiiMiniCloud/MiniCloud';
+        $repoInput = trim((string)($_POST['github_repo'] ?? ($settings['github_repo'] ?? 'uWiiiDev/MiniCloud')));
+        if (
+            !preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $repoInput)
+            || strcasecmp($repoInput, 'uwebenzelrath/MiniCloud') === 0
+            || strcasecmp($repoInput, 'uWiiiMiniCloud/MiniCloud') === 0
+        ) {
+            $repoInput = 'uWiiiDev/MiniCloud';
         }
         saveAppSetting($pdo, 'github_repo', $repoInput);
 
@@ -1810,7 +1822,7 @@ require_once __DIR__ . '/includes/header.php';
 <?php
 $localCommitInfo = getLocalInstalledCommitInfo($pdo);
 $versionMeta     = getAppVersionInfo();
-$configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uWiiiMiniCloud/MiniCloud')) ?: 'uWiiiMiniCloud/MiniCloud';
+$configuredRepo  = trim((string)($currentSettings['github_repo'] ?? 'uWiiiDev/MiniCloud')) ?: 'uWiiiDev/MiniCloud';
 $localSnapshots  = getLocalAppSnapshots();
 ?>
 
@@ -4010,7 +4022,7 @@ foreach ($modList as $mItem) {
                                 name="github_repo"
                                 id="mainGithubRepoInput"
                                 value="<?= e($configuredRepo) ?>"
-                                placeholder="uWiiiMiniCloud/MiniCloud"
+                                placeholder="uWiiiDev/MiniCloud"
                                 class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
                             >
                         </div>

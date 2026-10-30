@@ -698,7 +698,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
-        'github_repo'                   => 'uWiiiMiniCloud/MiniCloud',
+        'github_repo'                   => 'uWiiiDev/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
     ];
@@ -729,8 +729,12 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
     if (trim($defaults['smtp_port']) === '' || (int)$defaults['smtp_port'] <= 0) {
         $defaults['smtp_port'] = $defaults['smtp_encryption'] === 'tls' ? '587' : '465';
     }
-    if (trim($defaults['github_repo']) === '' || strcasecmp(trim($defaults['github_repo']), 'uwebenzelrath/MiniCloud') === 0) {
-        $defaults['github_repo'] = 'uWiiiMiniCloud/MiniCloud';
+    if (
+        trim($defaults['github_repo']) === ''
+        || strcasecmp(trim($defaults['github_repo']), 'uwebenzelrath/MiniCloud') === 0
+        || strcasecmp(trim($defaults['github_repo']), 'uWiiiMiniCloud/MiniCloud') === 0
+    ) {
+        $defaults['github_repo'] = 'uWiiiDev/MiniCloud';
     }
 
     $GLOBALS['_mc_app_settings_cache'] = $defaults;
