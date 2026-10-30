@@ -834,7 +834,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </div>
 
                         <?php if ($headerStorageStats !== null): ?>
-                            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70">
+                            <a href="index.php?large=1&amp;sort=size&amp;dir=desc"
+                               title="Klicken, um große Dateien, Speicherfresser &amp; Duplikate anzuzeigen"
+                               class="block p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-violet-50/70 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
                                 <div class="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1.5">
                                     <span>💾 <?= e(formatBytes($headerStorageStats['used'], 1)) ?> / <?= e(formatBytes($headerStorageStats['quota'], 0)) ?></span>
                                     <span class="font-bold text-slate-800 dark:text-slate-100"><?= e(number_format($headerStorageStats['percent'], 0, ',', '.')) ?>%</span>
@@ -845,8 +847,11 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                         style="width: <?= e((string)max($headerStorageStats['used'] > 0 ? 3 : 0, $headerStorageStats['percent'])) ?>%"
                                     ></div>
                                 </div>
-                                <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Noch <?= e(formatBytes($headerStorageStats['free'])) ?> frei</p>
-                            </div>
+                                <div class="flex items-center justify-between mt-1">
+                                    <span class="text-[10px] text-slate-400 dark:text-slate-500">Noch <?= e(formatBytes($headerStorageStats['free'])) ?> frei</span>
+                                    <span class="text-[10px] font-semibold text-brand-600 dark:text-brand-400">📊 Große Dateien &rarr;</span>
+                                </div>
+                            </a>
                         <?php endif; ?>
 
                         <div class="space-y-1">

@@ -63,24 +63,29 @@ if ($activeSharedFolderId > 0 && $activeGroupFolder === null) {
 }
 
 $rawFolderParam = isset($_GET['folder']) && is_string($_GET['folder']) ? trim($_GET['folder']) : '';
-$showAllFolders = ($rawFolderParam === '__all__');
+$largeFilesMode = isset($_GET['large']) && $_GET['large'] === '1';
+$minSizeMb      = isset($_GET['min_mb']) ? max(0, (int)$_GET['min_mb']) : 0;
+$onlyDuplicates = isset($_GET['dups']) && $_GET['dups'] === '1';
+$showAllFolders = ($rawFolderParam === '__all__' || $largeFilesMode);
 $currentFolder  = (!$showAllFolders && $rawFolderParam !== '')
     ? extractSanitizedFolderPath($rawFolderParam . '/placeholder')
     : '';
 $searchQuery   = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $onlyFavorites = isset($_GET['fav']) && $_GET['fav'] === '1';
 
-// Sortier-Parameter für die Haupttabelle (Standard: Datum absteigend)
+// Sortier-Parameter für die Haupttabelle (Standard: Datum absteigend; im Große-Dateien-Modus: Größe absteigend)
 $allowedSortCols = [
     'name'   => 'f.original_name',
     'folder' => 'f.folder_path',
     'size'   => 'f.file_size',
     'date'   => 'f.upload_date',
 ];
-$rawSort = isset($_GET['sort']) && is_string($_GET['sort']) ? strtolower(trim($_GET['sort'])) : 'date';
-$sortBy  = array_key_exists($rawSort, $allowedSortCols) ? $rawSort : 'date';
-$rawDir  = isset($_GET['dir']) && is_string($_GET['dir']) ? strtolower(trim($_GET['dir'])) : ($sortBy === 'date' ? 'desc' : 'asc');
-$sortDir = ($rawDir === 'asc' || $rawDir === 'desc') ? $rawDir : ($sortBy === 'date' ? 'desc' : 'asc');
+$defaultSortCol = $largeFilesMode ? 'size' : 'date';
+$rawSort = isset($_GET['sort']) && is_string($_GET['sort']) ? strtolower(trim($_GET['sort'])) : $defaultSortCol;
+$sortBy  = array_key_exists($rawSort, $allowedSortCols) ? $rawSort : $defaultSortCol;
+$defaultSortDir = ($sortBy === 'date' || $sortBy === 'size') ? 'desc' : 'asc';
+$rawDir  = isset($_GET['dir']) && is_string($_GET['dir']) ? strtolower(trim($_GET['dir'])) : $defaultSortDir;
+$sortDir = ($rawDir === 'asc' || $rawDir === 'desc') ? $rawDir : $defaultSortDir;
 $sqlSortDir = strtoupper($sortDir);
 
 // Alle Ordner (sowohl explizit angelegte leere Ordner als auch Ordner mit Dateien) ermitteln
@@ -365,6 +370,11 @@ if ($onlyFavorites) {
     $sqlFiles .= ' AND f.is_favorite = 1';
 }
 
+if ($minSizeMb > 0) {
+    $sqlFiles .= ' AND f.file_size >= :min_size_bytes';
+    $params[':min_size_bytes'] = $minSizeMb * 1048576;
+}
+
 if ($searchQuery !== '') {
     $sqlFiles .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
     $params[':search_name']   = '%' . $searchQuery . '%';
@@ -372,11 +382,112 @@ if ($searchQuery !== '') {
 }
 
 $orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
-$sqlFiles .= sprintf(' ORDER BY f.is_favorite DESC, %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+if ($largeFilesMode && $sortBy === 'size') {
+    $sqlFiles .= sprintf(' ORDER BY %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+} else {
+    $sqlFiles .= sprintf(' ORDER BY f.is_favorite DESC, %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+}
 
 $stmtFiles = $pdo->prepare($sqlFiles);
 $stmtFiles->execute($params);
 $files = $stmtFiles->fetchAll();
+
+// Im Modus "📊 Große Dateien & Speicher-Analyse": Kategorie-Verteilung, Größenklassen & Duplikate berechnen
+$storageAnalysis = null;
+if ($largeFilesMode) {
+    $stmtAllScope = $pdo->prepare(
+        $activeGroupFolder !== null
+            ? 'SELECT id, original_name, folder_path, file_size, mime_type FROM files WHERE group_folder_id = :sc_id AND deleted_at IS NULL'
+            : 'SELECT id, original_name, folder_path, file_size, mime_type FROM files WHERE user_id = :sc_id AND group_folder_id IS NULL AND deleted_at IS NULL'
+    );
+    $stmtAllScope->execute([':sc_id' => $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : $userId]);
+    $allScopeFiles = $stmtAllScope->fetchAll();
+
+    $catBuckets = [
+        'video' => ['label' => '🎬 Videos',          'bytes' => 0, 'count' => 0, 'bar' => 'bg-violet-500'],
+        'image' => ['label' => '🖼️ Fotos & Bilder',  'bytes' => 0, 'count' => 0, 'bar' => 'bg-pink-500'],
+        'audio' => ['label' => '🎵 Musik & Audio',   'bytes' => 0, 'count' => 0, 'bar' => 'bg-rose-500'],
+        'zip'   => ['label' => '📦 Archive & Backups','bytes' => 0, 'count' => 0, 'bar' => 'bg-amber-500'],
+        'doc'   => ['label' => '📄 Dokumente & PDF', 'bytes' => 0, 'count' => 0, 'bar' => 'bg-blue-500'],
+        'other' => ['label' => '📁 Sonstiges',       'bytes' => 0, 'count' => 0, 'bar' => 'bg-slate-400'],
+    ];
+    $totalScopeBytes = 0;
+    $cnt10Mb  = 0;
+    $cnt50Mb  = 0;
+    $cnt100Mb = 0;
+    $sigMap   = [];
+
+    foreach ($allScopeFiles as $sf) {
+        $sz   = (int)$sf['file_size'];
+        $name = strtolower(trim((string)$sf['original_name']));
+        $ext  = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+        $mime = strtolower((string)$sf['mime_type']);
+        $totalScopeBytes += $sz;
+
+        if ($sz >= 10 * 1048576) {
+            $cnt10Mb++;
+        }
+        if ($sz >= 50 * 1048576) {
+            $cnt50Mb++;
+        }
+        if ($sz >= 100 * 1048576) {
+            $cnt100Mb++;
+        }
+
+        if ($sz > 0) {
+            $sig = $name . '|' . $sz;
+            $sigMap[$sig][] = (int)$sf['id'];
+        }
+
+        if (str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv'], true)) {
+            $catBuckets['video']['bytes'] += $sz;
+            $catBuckets['video']['count']++;
+        } elseif (str_starts_with($mime, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'svg', 'bmp'], true)) {
+            $catBuckets['image']['bytes'] += $sz;
+            $catBuckets['image']['count']++;
+        } elseif (str_starts_with($mime, 'audio/') || in_array($ext, ['mp3', 'm4a', 'wav', 'flac', 'ogg', 'aac', 'opus'], true)) {
+            $catBuckets['audio']['bytes'] += $sz;
+            $catBuckets['audio']['count']++;
+        } elseif (in_array($ext, ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'iso', 'sql'], true)) {
+            $catBuckets['zip']['bytes'] += $sz;
+            $catBuckets['zip']['count']++;
+        } elseif ($mime === 'application/pdf' || in_array($ext, ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'epub'], true)) {
+            $catBuckets['doc']['bytes'] += $sz;
+            $catBuckets['doc']['count']++;
+        } else {
+            $catBuckets['other']['bytes'] += $sz;
+            $catBuckets['other']['count']++;
+        }
+    }
+
+    $duplicateIds = [];
+    foreach ($sigMap as $ids) {
+        if (count($ids) > 1) {
+            foreach ($ids as $dId) {
+                $duplicateIds[$dId] = true;
+            }
+        }
+    }
+
+    if ($onlyDuplicates) {
+        $files = array_values(array_filter($files, static fn(array $row): bool => isset($duplicateIds[(int)$row['id']])));
+    }
+
+    $topFolders = $userFolders;
+    usort($topFolders, static fn(array $a, array $b): int => ((int)$b['folder_size']) <=> ((int)$a['folder_size']));
+    $topFolders = array_values(array_filter(array_slice($topFolders, 0, 3), static fn(array $fl): bool => (int)$fl['folder_size'] > 0));
+
+    $storageAnalysis = [
+        'total_bytes'   => $totalScopeBytes,
+        'total_files'   => count($allScopeFiles),
+        'buckets'       => $catBuckets,
+        'cnt_10mb'      => $cnt10Mb,
+        'cnt_50mb'      => $cnt50Mb,
+        'cnt_100mb'     => $cnt100Mb,
+        'dup_count'     => count($duplicateIds),
+        'top_folders'   => $topFolders,
+    ];
+}
 
 // Direkte Unterordner des aktuell geöffneten Ordners ermitteln (oder bei globaler Suche alle passenden Ordner)
 $directSubfolders = [];
@@ -478,7 +589,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         <div>
             <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    <?php if ($onlyFavorites): ?>
+                    <?php if ($largeFilesMode): ?>
+                        📊 Speicher-Analyse &amp; Große Dateien <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(ordnerübergreifend)</span>
+                    <?php elseif ($onlyFavorites): ?>
                         ⭐ Meine Favoriten
                     <?php elseif ($searchQuery !== ''): ?>
                         🔎 Globale Suche: <span class="text-brand-600 dark:text-brand-400">„<?= e($searchQuery) ?>“</span>
@@ -691,6 +804,29 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             >
                 <span><?= $onlyFavorites ? '⭐' : '☆' ?></span>
                 <span class="hidden md:inline">Favoriten</span>
+            </a>
+
+            <?php
+            $largeFilterParams = [];
+            if ($activeGroupFolder !== null) {
+                $largeFilterParams['group_folder'] = (int)$activeGroupFolder['id'];
+            }
+            if (!$largeFilesMode) {
+                $largeFilterParams['large'] = '1';
+                $largeFilterParams['sort']  = 'size';
+                $largeFilterParams['dir']   = 'desc';
+            } elseif ($currentFolder !== '') {
+                $largeFilterParams['folder'] = $currentFolder;
+            }
+            $largeFilterUrl = 'index.php' . (!empty($largeFilterParams) ? '?' . http_build_query($largeFilterParams) : '');
+            ?>
+            <a
+                href="<?= e($largeFilterUrl) ?>"
+                title="<?= $largeFilesMode ? 'Zurück zur normalen Ordneransicht' : 'Große Dateien, Speicherfresser & Duplikate über alle Ordner hinweg aufspüren' ?>"
+                class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-semibold transition-colors <?= $largeFilesMode ? 'bg-violet-100 dark:bg-violet-950/80 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300 shadow-2xs' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-violet-50 dark:hover:bg-violet-950/40' ?>"
+            >
+                <span>📊</span>
+                <span class="hidden md:inline">Große Dateien</span>
             </a>
 
             <!-- Umschalter: Listenansicht <-> Kachel-/Galerieansicht -->
@@ -1019,6 +1155,93 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         </script>
     <?php endif; ?>
 
+    <?php if ($largeFilesMode && $storageAnalysis !== null): ?>
+        <?php
+        $baseLargeQ = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroupFolder['id'] . '&' : '';
+        $totB = max(1, (int)$storageAnalysis['total_bytes']);
+        ?>
+        <!-- Dezent eingeblendeter Speicher-Röntgenblick (nur sichtbar wenn "📊 Große Dateien" aktiv ist) -->
+        <div class="px-4 sm:px-6 py-4 bg-violet-50/60 dark:bg-slate-800/70 border-b border-violet-200/80 dark:border-slate-700/80 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-extrabold text-violet-950 dark:text-violet-200">
+                        📊 Speicher-Röntgenblick (<?= (int)$storageAnalysis['total_files'] ?> Dateien · <?= e(formatBytes((int)$storageAnalysis['total_bytes'])) ?> gesamt)
+                    </span>
+                </div>
+                <a href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
+                   class="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white">
+                    ✕ Analyse schließen
+                </a>
+            </div>
+
+            <!-- Farbiger Verteilungs-Balken nach Dateityp -->
+            <div class="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                <?php foreach ($storageAnalysis['buckets'] as $bKey => $bData): ?>
+                    <?php if ($bData['bytes'] > 0): ?>
+                        <?php $pctW = max(1.5, round(($bData['bytes'] / $totB) * 100, 1)); ?>
+                        <div class="h-full <?= $bData['bar'] ?>" style="width: <?= $pctW ?>%"
+                             title="<?= e($bData['label'] . ': ' . formatBytes($bData['bytes']) . ' (' . $bData['count'] . ' Dateien)') ?>"></div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Legende der Dateitypen -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                <?php foreach ($storageAnalysis['buckets'] as $bData): ?>
+                    <?php if ($bData['bytes'] > 0): ?>
+                        <div class="inline-flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-xs <?= $bData['bar'] ?>"></span>
+                            <span class="font-semibold"><?= e($bData['label']) ?>:</span>
+                            <span><?= e(formatBytes($bData['bytes'])) ?></span>
+                            <span class="text-slate-400">(<?= (int)$bData['count'] ?>)</span>
+                        </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Schnellfilter-Pills für Mindestgröße & Duplikate + Top-3 größte Ordner -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2 border-t border-violet-200/60 dark:border-slate-700/70">
+                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1">Größenfilter:</span>
+                    <a href="index.php?<?= $baseLargeQ ?>large=1&amp;sort=size&amp;dir=desc"
+                       class="px-2.5 py-1 rounded-lg font-semibold transition-colors <?= ($minSizeMb === 0 && !$onlyDuplicates) ? 'bg-violet-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-violet-50' ?>">
+                        Alle (nach Größe ↓)
+                    </a>
+                    <a href="index.php?<?= $baseLargeQ ?>large=1&amp;min_mb=10&amp;sort=size&amp;dir=desc"
+                       class="px-2.5 py-1 rounded-lg font-semibold transition-colors <?= ($minSizeMb === 10 && !$onlyDuplicates) ? 'bg-violet-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-violet-50' ?>">
+                        &ge; 10 MB (<?= (int)$storageAnalysis['cnt_10mb'] ?>)
+                    </a>
+                    <a href="index.php?<?= $baseLargeQ ?>large=1&amp;min_mb=50&amp;sort=size&amp;dir=desc"
+                       class="px-2.5 py-1 rounded-lg font-semibold transition-colors <?= ($minSizeMb === 50 && !$onlyDuplicates) ? 'bg-violet-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-violet-50' ?>">
+                        &ge; 50 MB (<?= (int)$storageAnalysis['cnt_50mb'] ?>)
+                    </a>
+                    <a href="index.php?<?= $baseLargeQ ?>large=1&amp;min_mb=100&amp;sort=size&amp;dir=desc"
+                       class="px-2.5 py-1 rounded-lg font-semibold transition-colors <?= ($minSizeMb === 100 && !$onlyDuplicates) ? 'bg-violet-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-violet-50' ?>">
+                        &ge; 100 MB (<?= (int)$storageAnalysis['cnt_100mb'] ?>)
+                    </a>
+                    <a href="index.php?<?= $baseLargeQ ?>large=1&amp;dups=1&amp;sort=size&amp;dir=desc"
+                       class="px-2.5 py-1 rounded-lg font-semibold transition-colors <?= $onlyDuplicates ? 'bg-amber-500 text-slate-950 font-extrabold shadow-2xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-amber-50' ?>"
+                       title="Dateien mit identischem Namen und identischer Dateigröße in verschiedenen Ordnern anzeigen">
+                        🔍 Mögliche Duplikate (<?= (int)$storageAnalysis['dup_count'] ?>)
+                    </a>
+                </div>
+
+                <?php if (!empty($storageAnalysis['top_folders'])): ?>
+                    <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span class="font-bold text-slate-500 dark:text-slate-400">Größte Ordner:</span>
+                        <?php foreach ($storageAnalysis['top_folders'] as $tf): ?>
+                            <a href="index.php?<?= $baseLargeQ ?>folder=<?= rawurlencode((string)$tf['folder_path']) ?>&amp;sort=size&amp;dir=desc"
+                               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-violet-400">
+                                <span>📁 <?= e((string)$tf['folder_path']) ?></span>
+                                <span class="font-bold text-violet-600 dark:text-violet-400">(<?= e(formatBytes((int)$tf['folder_size'])) ?>)</span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <?php if ($canUploadHere): ?>
         <!-- Schlanker Drag-&-Drop-Hinweis & Fortschrittsbalken (erscheint nur bei aktivem Drag & Drop oder Upload) -->
         <div id="globalDropHint" class="hidden px-4 sm:px-6 py-2.5 bg-brand-50/90 dark:bg-brand-950/60 border-b border-brand-200 dark:border-brand-800 text-xs sm:text-sm font-semibold text-brand-700 dark:text-brand-300 items-center justify-between gap-2">
@@ -1057,6 +1280,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             $activeGroupFolder,
             $activeSharedFolder,
             $showAllFolders,
+            $largeFilesMode,
+            $minSizeMb,
+            $onlyDuplicates,
             $currentFolder,
             $searchQuery,
             $onlyFavorites,
@@ -1064,7 +1290,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             $sortDir
         ): string {
             $nextDir = ($sortBy === $col && $sortDir === 'asc') ? 'desc' : 'asc';
-            if ($col === 'date' && $sortBy !== 'date') {
+            if (($col === 'date' && $sortBy !== 'date') || ($col === 'size' && $sortBy !== 'size')) {
                 $nextDir = 'desc';
             }
             $qParams = [];
@@ -1074,7 +1300,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             if ($activeSharedFolder !== null) {
                 $qParams['shared_folder'] = (int)$activeSharedFolder['id'];
             }
-            if ($showAllFolders) {
+            if ($largeFilesMode) {
+                $qParams['large'] = 1;
+                if ($minSizeMb > 0) {
+                    $qParams['min_mb'] = $minSizeMb;
+                }
+                if ($onlyDuplicates) {
+                    $qParams['dups'] = 1;
+                }
+            } elseif ($showAllFolders) {
                 $qParams['folder'] = '__all__';
             } elseif ($currentFolder !== '') {
                 $qParams['folder'] = $currentFolder;

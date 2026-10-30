@@ -36,6 +36,7 @@ $items = [];
 // 1. Aktive Cloud-Module & Direkt-Funktionen
 $catalog = [
     ['title' => 'Dateien & Ordner',               'sub' => 'Cloud-Dateimanager & Freigaben',              'icon' => '📁', 'cat' => 'Modul', 'url' => 'index.php',                'kw' => 'dateien ordner upload download cloud import dropbox nextcloud'],
+    ['title' => 'Große Dateien & Speicher-Analyse','sub' => 'Speicherfresser & Duplikate in allen Ordnern', 'icon' => '📊', 'cat' => 'Funktion','url' => 'index.php?large=1&sort=size&dir=desc', 'kw' => 'große dateien speicherfresser speicherplatz voll aufräumen duplikate doppelte dateien größe'],
     ['title' => 'Mein Tag (Cockpit)',             'sub' => 'Tagesübersicht, Termine & Geburtstage',       'icon' => '🏠', 'cat' => 'Modul', 'url' => 'dashboard.php',            'kw' => 'cockpit dashboard mein tag übersicht', 'setting' => 'enable_dashboard'],
     ['title' => 'Whiteboard & Skizzenbuch',       'sub' => 'Kollaboratives Zeichnen, Formen & Haftnotizen','icon' => '🎨', 'cat' => 'Modul', 'url' => 'whiteboard.php',           'kw' => 'whiteboard zeichnen skizze excalidraw miro tafel malen', 'setting' => 'enable_whiteboard'],
     ['title' => 'Office Light & Bild-Studio',     'sub' => 'Word, Excel, PowerPoint, Visio & Foto-Editor','icon' => '📝', 'cat' => 'Modul', 'url' => 'office.php',               'kw' => 'office word excel powerpoint visio bild foto editor', 'setting' => 'enable_office'],
