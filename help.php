@@ -1663,6 +1663,12 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4">Bis zum Löschen der Playlist / Audiodatei oder Kontolöschung</td>
                     </tr>
                     <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">cinema_media_meta, cinema_user_state, cinema_playlists &amp; cinema_playlist_items</td>
+                        <td class="py-3 px-4"><code>file_id, custom_title, category, release_year, poster_data_uri, subtitle_file_id, bookmarks_json</code> / <code>user_id, last_position_sec, is_watchlist, is_favorite, play_count</code> / <code>title, share_token, password_hash</code></td>
+                        <td class="py-3 px-4">Heimkino &amp; Film-Mediathek (<code>cinema.php</code>): Film-Poster, Szenen-Sprungmarken, sekundengenaue „Weiterschauen“-Position je Benutzer, Watchlist sowie Filmreihen/Gäste-Kino-Tickets</td>
+                        <td class="py-3 px-4">Bis zum Löschen der Videodatei / Filmreihe oder Kontolöschung</td>
+                    </tr>
+                    <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">surf_gear &amp; surf_sessions</td>
                         <td class="py-3 px-4"><code>user_id, category, brand, model, size_label, purchase_price</code> / <code>session_date, sport_type, spot_name, wind_kn_min, wind_kn_max, wind_bft, wind_dir, board_gear_id, rig_gear_id, max_speed_kmh, gpx_summary_json, media_file_id</code></td>
                         <td class="py-3 px-4">Surftagebuch &amp; Quiver-Materialverwaltung (<code>surflog.php</code>): Wassersport-Sessions, Spot-/Wind-/Wellen-Logbuch, Quiver-Ausrüstung (inkl. Kosten/Session) und lokale GPX-Track-Zusammenfassung</td>

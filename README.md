@@ -89,7 +89,12 @@
   - **🔊 Audio Mixer, Cloud Background Music & Speed (`0.5×–2.0×`):** Mute or adjust original video audio, mix in any `.mp3`/`.wav`/`.m4a` track directly from your MiniCloud, apply fade-in/out, and save rendered videos or **📸 full-resolution frame snapshots** directly back to your Cloud via resilient **2 MB chunked uploads**.
   - **📹 Built-In Webcam & 🖥️ Screen Recorder:** Record camera clips or desktop screencasts directly inside the studio and edit them immediately.
 
-### 13c. 🏄‍♂️ Watersports Surf Logbook & Quiver Manager (`surflog.php`)
+### 13c. 🍿 Home Cinema & Movie Mediathek (`cinema.php`)
+- **🛋️ Theatre Stage with Real-Time Ambilight & Lights-Out Mode:** Watch any `.mp4`, `.webm`, `.mov`, `.m4v`, `.mkv`, or `.ogv` video from your Cloud or shared folders with a dynamic HTML5 Canvas **Ambilight glow**, 1-click **🌑 Lights-Out theatre dimming**, Picture-in-Picture, and instant HTTP `206 Partial Content` seeking.
+- **⏯️ Netflix-Style "Continue Watching" & 1-Click Poster Capture:** Automatically remembers your playback position (`last_position_sec`) per user, captures movie poster thumbnails directly from the video stream, and supports timestamped **🔖 scene bookmarks**.
+- **🔊 WebAudio Cinema Sound Booster & 💬 `.srt`/`.vtt` Subtitles:** Switch live between *Original*, *🍿 Cinema Subwoofer Bass*, *🗣️ Dialogue Enhancer*, and *🌙 Night Mode Compressor*, load `.srt`/`.vtt` subtitles (with automatic live SRT-to-WebVTT conversion), and share movie nights externally via **🎟️ Guest Cinema Tickets** (with optional password).
+
+### 13d. 🏄‍♂️ Watersports Surf Logbook & Quiver Manager (`surflog.php`)
 - **🌊 Session Logbook for Windsurfing, Kitesurfing, Wingfoiling, Surfing & SUP:** Log date, spot, country/region, water duration, wind range in knots with **automatic Beaufort (`Bft`) calculator**, interactive **16-point wind rose**, wave height/conditions, wetsuit thickness, session rating (`1–5 ⭐`), and maneuver notes.
 - **🛹 Quiver Gear Management & Cost-per-Session Analytics:** Manage boards, sails, kites, wings, and foils with automatic session counters, total water hours per item, and automatic **cost-per-session amortization** based on purchase price.
 - **📍 Client-Side `.gpx` GPS Track Analyzer & Speed Heatmap:** Drop any `.gpx` file from a Garmin/Coros/Apple Watch to compute distance (`km`), top speed (`km/h` & `knots`), and render a color-coded **GPS speed heatmap track** on an interactive HTML5 canvas.

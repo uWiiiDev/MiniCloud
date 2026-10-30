@@ -301,6 +301,18 @@ $allModules = [
         'badgeCls' => 'bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300',
     ],
     [
+        'key'      => 'cinema',
+        'enabled'  => ($appSettings['enable_cinema'] ?? '1') === '1',
+        'title'    => 'Heimkino & Mediathek',
+        'icon'     => '🍿',
+        'url'      => 'cinema.php',
+        'category' => 'extra',
+        'catLabel' => 'Sicherheit, KI & Freizeit',
+        'desc'     => 'Privates Streaming-Kino für alle Cloud-Videos mit Echtzeit-Ambilight, „Saallicht dimmen“, „Weiterschauen“-Automatik, Kino-Sound-Booster, Untertiteln (.srt/.vtt) & Gäste-Kino-Ticket.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300',
+    ],
+    [
         'key'      => 'surflog',
         'enabled'  => ($appSettings['enable_surflog'] ?? '1') === '1',
         'title'    => 'Surftagebuch & Quiver-Log',

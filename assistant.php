@@ -1889,6 +1889,24 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
         ],
         [
+            'id'       => 'cinema_theatre',
+            'title'    => 'Heimkino & Film-Mediathek (cinema.php)',
+            'icon'     => '🍿',
+            'keywords' => ['kino', 'heimkino', 'cinema', 'filme anschauen', 'film schauen', 'mediathek', 'weiterschauen', 'ambilight', 'saallicht', 'watchlist', 'untertitel', 'srt', 'vtt', 'kino ticket', 'filmabend', 'serie'],
+            'answer'   => "Das **🍿 MiniCloud Heimkino** (`cinema.php`) verwandelt alle Videos deiner Cloud in ein privates Streaming-Portal:\n\n"
+                . "1. **🛋️ Kinosaal mit Echtzeit-Ambilight & „Saallicht dimmen“:** Dynamischer Farbschein hinter der Leinwand, dunkler Kinosaal-Modus (`Taste L`), Vollbild (`Taste F`) und Bild-im-Bild.\n"
+                . "2. **⏯️ „Weiterschauen“-Automatik:** Merkt sich sekundengenau, wo du einen Film pausiert hast, und setzt ihn beim nächsten Mal mit einem Klick fort.\n"
+                . "3. **🔊 Kino-Sound-Booster, 💬 Untertitel (`.srt`/`.vtt`) & 🎟️ Gäste-Kino-Ticket:** Wähle zwischen *Kino-Bass*, *Dialog-Verstärker* und *Nacht-Kompressor*, blende Untertitel ein oder lade Freunde per **Gäste-Kino-Ticket** zum Filmabend ein.",
+            'actions'  => [
+                ['label' => '🍿 Heimkino öffnen', 'url' => 'cinema.php'],
+                ['label' => '🎬 Video-Studio', 'url' => 'video_studio.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert das Video-Studio?',
+                'Wie funktioniert das Surftagebuch?',
+            ],
+        ],
+        [
             'id'       => 'surflog_quiver',
             'title'    => 'Surftagebuch & Quiver-Materialverwaltung (surflog.php)',
             'icon'     => '🏄‍♂️',

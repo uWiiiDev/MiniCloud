@@ -697,6 +697,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_toolbox'                => '1',
         'enable_video_studio'           => '1',
         'enable_surflog'                => '1',
+        'enable_cinema'                 => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
@@ -3155,6 +3156,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_surflog',
             'color'       => 'bg-cyan-600',
         ],
+        'cinema' => [
+            'icon'        => '🍿',
+            'label'       => 'Heimkino & Film-Mediathek',
+            'url'         => 'cinema.php',
+            'setting_key' => 'enable_cinema',
+            'color'       => 'bg-red-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3205,6 +3213,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'toolbox.php'      => 'toolbox',
         'video_studio.php' => 'video_studio',
         'surflog.php'      => 'surflog',
+        'cinema.php'       => 'cinema',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3353,6 +3362,9 @@ function getModuleInventorySummary(PDO $pdo): array
     $surfSessionCount = $safeCount("SELECT COUNT(*) FROM `surf_sessions`");
     $surfGearCount    = $safeCount("SELECT COUNT(*) FROM `surf_gear`");
     $summary['surflog'] = $surfSessionCount . ' ' . ($surfSessionCount === 1 ? 'Session' : 'Sessions') . ' · ' . $surfGearCount . ' Gear';
+
+    $cinemaPlCount = $safeCount("SELECT COUNT(*) FROM `cinema_playlists`");
+    $summary['cinema'] = $videoCount . ' ' . ($videoCount === 1 ? 'Film' : 'Filme') . ' · ' . $cinemaPlCount . ' ' . ($cinemaPlCount === 1 ? 'Filmreihe' : 'Filmreihen');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');
