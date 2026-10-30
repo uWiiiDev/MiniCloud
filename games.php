@@ -724,12 +724,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         exit;
     }
 
-    // 8. Gummigeruch Kart: 3-Runden-Rennen speichern, Ghost sichern & Herausforderungen auswerten
+    // 8. Gummigeruch Kart: Rennen speichern (3, 5, 8 oder 11 Runden), Ghost sichern & Herausforderungen auswerten
     if ($action === 'gummi_save_run') {
         session_write_close();
         $allowedTracks = ['circuit', 'coast', 'night', 'alps', 'desert', 'volcano'];
+        $allowedLaps   = [3, 5, 8, 11];
         $trackId    = in_array($_POST['track_id'] ?? '', $allowedTracks, true) ? (string)$_POST['track_id'] : 'circuit';
-        $timeMs     = max(4000, min(600000, (int)($_POST['time_ms'] ?? 0)));
+        $laps       = in_array((int)($_POST['laps'] ?? 8), $allowedLaps, true) ? (int)$_POST['laps'] : 8;
+        $timeMs     = max(4000, min(900000, (int)($_POST['time_ms'] ?? 0)));
         $bestLapMs  = max(1200, min(300000, (int)($_POST['best_lap_ms'] ?? 0)));
         $ghostRaw   = (string)($_POST['ghost_json'] ?? '[]');
         $opponentId = (int)($_POST['opponent_id'] ?? 0);
@@ -739,9 +741,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         if (!is_array($ghostFrames)) {
             $ghostFrames = [];
         }
-        $ghostFrames = array_slice($ghostFrames, 0, 900);
+        $ghostFrames = array_slice($ghostFrames, 0, 2400);
 
-        // Punkteberechnung: Je schneller die 3 Runden (+ Schwierigkeitsbonus für Profi-Strecken), desto höher der Score!
+        // Punkteberechnung: Normiert auf die durchschnittliche Rundenzeit + Ausdauerbonus für mehr Runden + Streckenbonus
         $trackBonuses = [
             'circuit' => 0,
             'coast'   => 2000,
@@ -750,10 +752,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
             'desert'  => 11000,
             'volcano' => 15000,
         ];
-        $basePool    = 120000 + ($trackBonuses[$trackId] ?? 0);
-        $score       = max(500, $basePool - (int)round($timeMs * 1.25));
-        $durationSec = max(1, (int)round($timeMs / 1000));
-        $trackNames  = [
+        $avgLapMs        = (int)round($timeMs / max(1, $laps));
+        $equivThreeLapMs = $avgLapMs * 3;
+        $enduranceBonus  = max(0, ($laps - 3) * 1200);
+        $basePool        = 120000 + ($trackBonuses[$trackId] ?? 0) + $enduranceBonus;
+        $score           = max(500, $basePool - (int)round($equivThreeLapMs * 1.25));
+        $durationSec     = max(1, (int)round($timeMs / 1000));
+        $trackNames      = [
             'circuit' => 'GummiCircuit',
             'coast'   => 'Küsten-GP',
             'night'   => 'Nacht-Ring',
@@ -774,11 +779,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
             ':uid'  => $userId,
             ':sc'   => $score,
             ':dur'  => $durationSec,
-            ':meta' => $tName . ' (' . $fmtTime . ')',
+            ':meta' => $tName . ' · ' . $laps . ' Runden (' . $fmtTime . ')',
         ]);
 
-        // Eigenen besten Ghost für diese Strecke in game_saves aktualisieren, falls schneller
-        $saveKey = 'gummi_' . $trackId;
+        // Eigenen besten Ghost für diese Strecke + Rundenzahl in game_saves aktualisieren, falls schneller
+        $saveKey = 'gummi_' . $trackId . ($laps === 3 ? '' : '_' . $laps . 'L');
         $stmtOld = $pdo->prepare("SELECT `state_json` FROM `game_saves` WHERE `user_id` = :uid AND `game_key` = :gk LIMIT 1");
         $stmtOld->execute([':uid' => $userId, ':gk' => $saveKey]);
         $oldJson = $stmtOld->fetchColumn();
@@ -788,6 +793,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
         if ($timeMs < $oldBest && !empty($ghostFrames)) {
             $newGhostPayload = json_encode([
                 'track_id'    => $trackId,
+                'laps'        => $laps,
                 'time_ms'     => $timeMs,
                 'best_lap_ms' => $bestLapMs,
                 'username'    => $username,
@@ -827,7 +833,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
                 }
 
                 $bData['p2_time_ms'] = $timeMs;
-                $bData['p2_ghost']   = array_slice($ghostFrames, 0, 450);
+                $bData['p2_ghost']   = array_slice($ghostFrames, 0, 1200);
 
                 $stmtUpM = $pdo->prepare(
                     "UPDATE `game_matches`
@@ -850,7 +856,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
                         ':uid' => $winnerId,
                         ':sc'  => $score + 800,
                         ':dur' => $durationSec,
-                        ':lbl' => 'Ghost-Duell Sieg (' . $tName . ')',
+                        ':lbl' => 'Ghost-Duell Sieg (' . $tName . ' · ' . $laps . 'R)',
                     ]);
                 }
             }
@@ -860,9 +866,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
             $bData = [
                 'track_id'    => $trackId,
                 'track_name'  => $tName,
+                'laps'        => $laps,
                 'p1_time_ms'  => $timeMs,
                 'p1_best_lap' => $bestLapMs,
-                'p1_ghost'    => array_slice($ghostFrames, 0, 600),
+                'p1_ghost'    => array_slice($ghostFrames, 0, 1500),
             ];
             $stmtInsM = $pdo->prepare(
                 "INSERT INTO `game_matches` (`game_type`, `player1_id`, `player2_id`, `current_turn_id`, `board_json`, `status`)
@@ -875,7 +882,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
                 ':turn' => $opponentId,
                 ':bj'   => json_encode($bData, JSON_UNESCAPED_UNICODE),
             ]);
-            $challengeMsg = '👻 Herausforderung mit deinem Ghost-Kart (' . $fmtTime . ') wurde gesendet!';
+            $challengeMsg = '👻 Herausforderung (' . $laps . ' Runden · ' . $fmtTime . ') mit deinem Ghost-Kart wurde gesendet!';
         }
 
         $stmtBest = $pdo->prepare("SELECT MAX(`score`) FROM `game_scores` WHERE `user_id` = :uid AND `game_key` = 'gummigeruch'");
@@ -896,8 +903,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
     if ($action === 'gummi_poll_state') {
         session_write_close();
         $allowedTracks = ['circuit', 'coast', 'night', 'alps', 'desert', 'volcano'];
+        $allowedLaps   = [3, 5, 8, 11];
         $trackId = in_array($_POST['track_id'] ?? '', $allowedTracks, true) ? (string)$_POST['track_id'] : 'circuit';
-        $saveKey = 'gummi_' . $trackId;
+        $laps    = in_array((int)($_POST['laps'] ?? 8), $allowedLaps, true) ? (int)$_POST['laps'] : 8;
+        $saveKey = 'gummi_' . $trackId . ($laps === 3 ? '' : '_' . $laps . 'L');
 
         // Optional: Eigene Live-Kart-Position aktualisieren, falls gerade im Rennen
         if (isset($_POST['live_x'], $_POST['live_y'])) {
@@ -969,6 +978,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax']) &&
                     'id'              => (int)$cRow['id'],
                     'track_id'        => (string)($bData['track_id'] ?? 'circuit'),
                     'track_name'      => (string)($bData['track_name'] ?? 'GummiCircuit'),
+                    'laps'            => in_array((int)($bData['laps'] ?? 3), [3, 5, 8, 11], true) ? (int)$bData['laps'] : 3,
                     'player1_id'      => (int)$cRow['player1_id'],
                     'player2_id'      => (int)$cRow['player2_id'],
                     'p1_name'         => (string)$cRow['p1_name'],
@@ -1300,15 +1310,24 @@ $csrfToken = getCsrfToken();
                         <select id="gummiTrackSelect" onchange="gummiChangeTrack(this.value)"
                                 class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
                             <optgroup label="🟢 Klassik-Strecken">
-                                <option value="circuit">🏁 GummiCircuit Klassik (Breit · 3 Runden)</option>
-                                <option value="coast">🌴 Küsten-Grand-Prix (Mittel · 3 Runden)</option>
-                                <option value="night">🌙 Flutlicht Nacht-Ring (Mittel · 3 Runden)</option>
+                                <option value="circuit">🏁 GummiCircuit Klassik (Breit)</option>
+                                <option value="coast">🌴 Küsten-Grand-Prix (Mittel)</option>
+                                <option value="night">🌙 Flutlicht Nacht-Ring (Mittel)</option>
                             </optgroup>
                             <optgroup label="🔥 Profi-Strecken (Anspruchsvoll)">
                                 <option value="alps">⛰️ Alpen-Serpentinen (Eng · 3 Haarnadelkehren)</option>
                                 <option value="desert">🏜️ Wüsten-Schikane (Rutschig · Doppel-S-Canyon)</option>
                                 <option value="volcano">🌋 Vulkan-Höllenring (Extrem schmal · Profi-Kurs)</option>
                             </optgroup>
+                        </select>
+
+                        <select id="gummiLapsSelect" onchange="gummiChangeLaps(this.value)"
+                                title="Rundenanzahl wählen"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="3">⚡ 3 Runden (Sprint)</option>
+                            <option value="5">🏁 5 Runden (Kurz)</option>
+                            <option value="8" selected>🏆 8 Runden (Standard)</option>
+                            <option value="11">🔥 11 Runden (Grand Prix)</option>
                         </select>
 
                         <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold cursor-pointer select-none">
@@ -1327,7 +1346,7 @@ $csrfToken = getCsrfToken();
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                     <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <span class="text-slate-500 dark:text-slate-400">Runde:</span>
-                        <strong id="gummiLapBadge" class="text-slate-900 dark:text-white font-extrabold">1 / 3</strong>
+                        <strong id="gummiLapBadge" class="text-slate-900 dark:text-white font-extrabold">1 / 8</strong>
                     </div>
                     <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <span class="text-slate-500 dark:text-slate-400">Zeit:</span>
@@ -5853,6 +5872,7 @@ const GUMMI_TRACKS = {
 };
 
 let gummiTrackKey         = 'circuit';
+let gummiTotalLaps        = 8;
 let gummiDenseTrack       = [];
 let gummiSkids            = [];
 let gummiSmoke            = [];
@@ -5872,7 +5892,7 @@ let gummiActiveChallenge  = null; // Falls wir gerade ein Ghost-Duell gegen eine
 let gummiPendingOpponentId= 0;    // Falls wir einen anderen Cloud-Benutzer neu herausfordern
 let gummiChallengesCache  = [];
 let gummiLivePeers        = [];
-let gummiBannerText       = '🚦 Drücke GAS (↑ oder W), um das 3-Runden-Rennen zu starten!';
+let gummiBannerText       = '🚦 Drücke GAS (↑ oder W), um das 8-Runden-Rennen zu starten!';
 let gummiLastFrameTs      = 0;
 let gummiInitialized      = false;
 
@@ -5952,6 +5972,16 @@ function gummiChangeTrack(newTrack) {
     gummiPollState();
 }
 
+function gummiChangeLaps(newLaps) {
+    const parsed = Number(newLaps);
+    gummiTotalLaps = [3, 5, 8, 11].includes(parsed) ? parsed : 8;
+    gummiActiveChallenge = null;
+    const badge = document.getElementById('gummiActiveMatchBadge');
+    if (badge) badge.textContent = '';
+    gummiResetRace();
+    gummiPollState();
+}
+
 function gummiResetRace() {
     const tr = GUMMI_TRACKS[gummiTrackKey] || GUMMI_TRACKS.circuit;
     gummiKart = {
@@ -6011,11 +6041,11 @@ function gummiResetRace() {
     }
 
     if (gummiActiveChallenge) {
-        gummiBannerText = `👻 Ghost-Duell gegen ${gummiActiveChallenge.p1_name} (Zielzeit: ${gummiFormatMs(gummiActiveChallenge.p1_time_ms)}) – Gib Gas!`;
+        gummiBannerText = `👻 Ghost-Duell gegen ${gummiActiveChallenge.p1_name} (${gummiTotalLaps} Runden · Zielzeit: ${gummiFormatMs(gummiActiveChallenge.p1_time_ms)}) – Gib Gas!`;
     } else if (gummiPendingOpponentId > 0) {
-        gummiBannerText = '🏁 Herausforderungs-Fahrt bereit – Fahre 3 schnelle Runden für deinen Ghost!';
+        gummiBannerText = `🏁 Herausforderungs-Fahrt bereit – Fahre ${gummiTotalLaps} schnelle Runden für deinen Ghost!`;
     } else {
-        gummiBannerText = '🚦 Drücke GAS (↑ oder W) oder klicke auf „Rennen neu starten“!';
+        gummiBannerText = `🚦 Drücke GAS (↑ oder W) oder klicke auf „Rennen neu starten“ (${gummiTotalLaps} Runden)!`;
     }
 
     gummiUpdateHud();
@@ -6050,9 +6080,13 @@ function gummiAcceptChallenge(matchId) {
         if (tSel) tSel.value = gummiTrackKey;
         gummiBuildDenseTrack(gummiTrackKey);
     }
+    const chLaps = [3, 5, 8, 11].includes(Number(ch.laps)) ? Number(ch.laps) : 3;
+    gummiTotalLaps = chLaps;
+    const lSel = document.getElementById('gummiLapsSelect');
+    if (lSel) lSel.value = String(chLaps);
     const badge = document.getElementById('gummiActiveMatchBadge');
     if (badge) {
-        badge.textContent = `⚔️ Duell gegen ${ch.p1_name} (${gummiFormatMs(ch.p1_time_ms)})`;
+        badge.textContent = `⚔️ Duell gegen ${ch.p1_name} (${chLaps} Runden · ${gummiFormatMs(ch.p1_time_ms)})`;
     }
     gummiStartCountdown();
 }
@@ -6095,7 +6129,7 @@ function gummiUpdateHud() {
     const boostEl = document.getElementById('gummiBoostBadge');
     const spdEl   = document.getElementById('gummiSpeedBadge');
 
-    if (lapEl)   lapEl.textContent  = `${Math.min(3, gummiKart.lap)} / 3`;
+    if (lapEl)   lapEl.textContent  = `${Math.min(gummiTotalLaps, gummiKart.lap)} / ${gummiTotalLaps}`;
     if (timeEl)  timeEl.textContent = gummiFormatMs(gummiElapsedMs);
     if (bestEl)  bestEl.textContent = gummiBestLapMs > 0 ? gummiFormatMs(gummiBestLapMs) : '--:--.--';
     if (boostEl) {
@@ -6116,6 +6150,7 @@ async function gummiSaveCompletedRun() {
     fd.append('csrf_token', GAMES_CSRF);
     fd.append('action', 'gummi_save_run');
     fd.append('track_id', gummiTrackKey);
+    fd.append('laps', String(gummiTotalLaps));
     fd.append('time_ms', String(Math.round(gummiElapsedMs)));
     fd.append('best_lap_ms', String(Math.round(gummiBestLapMs)));
     fd.append('ghost_json', JSON.stringify(gummiMyRecording));
@@ -6158,6 +6193,7 @@ async function gummiPollState() {
     fd.append('csrf_token', GAMES_CSRF);
     fd.append('action', 'gummi_poll_state');
     fd.append('track_id', gummiTrackKey);
+    fd.append('laps', String(gummiTotalLaps));
     if (gummiRaceState === 'racing') {
         fd.append('live_x', String(Math.round(gummiKart.x)));
         fd.append('live_y', String(Math.round(gummiKart.y)));
@@ -6177,9 +6213,9 @@ async function gummiPollState() {
         const recBox = document.getElementById('gummiRecordGhostBox');
         if (recBox) {
             if (gummiRecordGhost) {
-                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost aktiv:</strong> ${gummiRecordGhost.username} (${gummiFormatMs(gummiRecordGhost.time_ms)}) fährt live als Geist mit!`;
+                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost (${gummiTotalLaps} Runden) aktiv:</strong> ${gummiRecordGhost.username} (${gummiFormatMs(gummiRecordGhost.time_ms)}) fährt live als Geist mit!`;
             } else {
-                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost:</strong> Noch kein Rekord auf dieser Strecke – setze jetzt die erste Bestzeit!`;
+                recBox.innerHTML = `👻 <strong>Streckenrekord-Ghost (${gummiTotalLaps} Runden):</strong> Noch kein Rekord über ${gummiTotalLaps} Runden – setze jetzt die erste Bestzeit!`;
             }
         }
 
@@ -6210,10 +6246,11 @@ function gummiRenderChallengesUI() {
         }
 
         const p2Info = c.p2_time_ms ? ` vs. ${gummiFormatMs(c.p2_time_ms)}` : '';
+        const cLaps  = c.laps || 3;
         return `
             <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
                 <div class="min-w-0">
-                    <div class="font-bold text-slate-900 dark:text-white truncate">🏁 ${c.track_name}: ${c.p1_name} vs. ${c.p2_name}</div>
+                    <div class="font-bold text-slate-900 dark:text-white truncate">🏁 ${c.track_name} (${cLaps}R): ${c.p1_name} vs. ${c.p2_name}</div>
                     <div class="text-[10px] text-slate-500 dark:text-slate-400">Vorlage: ${gummiFormatMs(c.p1_time_ms)}${p2Info} · ${c.updated_at}</div>
                 </div>
                 ${rightHtml}
@@ -6250,7 +6287,7 @@ function gummiGameLoop(now) {
             gummiRaceStartTs    = now;
             gummiLapStartTs     = now;
             gummiLastRecordSample = 0;
-            gummiBannerText     = '🟢 LOS! Fahre 3 schnelle Runden und bleibe auf dem Asphalt!';
+            gummiBannerText     = `🟢 LOS! Fahre ${gummiTotalLaps} schnelle Runden und bleibe auf dem Asphalt!`;
         }
     }
 
@@ -6403,16 +6440,16 @@ function gummiGameLoop(now) {
                 gummiBestLapMs = lapTime;
             }
 
-            if (gummiKart.lap >= 3) {
+            if (gummiKart.lap >= gummiTotalLaps) {
                 gummiRaceState = 'finished';
                 gummiElapsedMs = now - gummiRaceStartTs;
-                gummiBannerText = `🏁 ZIEL! 3 Runden in ${gummiFormatMs(gummiElapsedMs)} (Beste Runde: ${gummiFormatMs(gummiBestLapMs)})!`;
+                gummiBannerText = `🏁 ZIEL! ${gummiTotalLaps} Runden in ${gummiFormatMs(gummiElapsedMs)} (Beste Runde: ${gummiFormatMs(gummiBestLapMs)})!`;
                 gummiSaveCompletedRun();
             } else {
                 gummiKart.lap++;
                 gummiKart.boostReady = true;
                 gummiKart.sectorPassed = [true, false, false, false];
-                gummiBannerText = `⏱️ Runde ${gummiKart.lap - 1}: ${gummiFormatMs(lapTime)} — 🔥 Nitro für Runde ${gummiKart.lap} wieder aufgeladen!`;
+                gummiBannerText = `⏱️ Runde ${gummiKart.lap - 1}/${gummiTotalLaps}: ${gummiFormatMs(lapTime)} — 🔥 Nitro für Runde ${gummiKart.lap} wieder aufgeladen!`;
             }
         }
 
