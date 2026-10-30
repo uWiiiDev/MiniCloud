@@ -165,6 +165,15 @@ function getGamesCatalog(): array
             'desc'     => '„Stay a while… stay forever!“ – Akrobatische Salti über Killer-Roboter, Möbel nach Lochkarten durchsuchen & Elvin Atombender stoppen!',
             'color'    => 'from-cyan-600 to-blue-900',
         ],
+        'frogger' => [
+            'key'      => 'frogger',
+            'title'    => 'Cloud-Frogger (1981)',
+            'icon'     => '🐸',
+            'category' => 'Arcade 1981',
+            'group'    => 'arcade',
+            'desc'     => 'Hüpfe über den 5-spurigen Highway, reite auf Baumstämmen & Tauch-Schildkröten über den reißenden Fluss in die 5 Seerosen-Häuser!',
+            'color'    => 'from-green-500 to-emerald-800',
+        ],
         'lastninja' => [
             'key'      => 'lastninja',
             'title'    => 'The Last Ninja (1987)',
@@ -1178,7 +1187,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (10)
+                        🕹️ Retro &amp; Arcade (11)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2776,6 +2785,74 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 20. SPIEL: CLOUD-FROGGER (1981 ARCADE-KLASSIKER) -->
+            <div id="gamePanel-frogger" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🐸 Cloud-Frogger (1981 Arcade)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950/80 text-green-800 dark:text-green-300">🌊 Baumstämme • 🐢 Tauch-Schildkröten • 🪰 Bonus-Fliege</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Bringe alle <strong>5 Frösche</strong> sicher über den 5-spurigen Highway und über den reißenden Fluss in die 5 Seerosen-Buchten!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
+                            Punkte: <span id="froggerScore">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+                            Level <span id="froggerLevel">1</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 text-xs font-extrabold">
+                            🏡 <span id="froggerHomes">0/5</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 text-xs font-extrabold" id="froggerLives">
+                            🐸🐸🐸
+                        </span>
+                        <button type="button" onclick="froggerToggleSound()" id="froggerSoundBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold cursor-pointer"
+                                title="8-Bit Arcade-Sound ein-/ausschalten">
+                            🔊 Ton
+                        </button>
+                        <button type="button" onclick="froggerNewGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold cursor-pointer shadow-xs">
+                            ▶ Neues Spiel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="froggerCanvas" width="600" height="520"
+                            class="rounded-2xl bg-slate-950 border-2 border-emerald-700/80 shadow-xl max-w-full h-auto select-none touch-none"></canvas>
+
+                    <!-- Touch-Steuerkreuz für Smartphone & Tablet -->
+                    <div class="flex flex-col items-center gap-1.5 select-none">
+                        <button type="button" onclick="froggerHop(0, -1)"
+                                class="w-16 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-base shadow-sm cursor-pointer">
+                            ▲
+                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="froggerHop(-1, 0)"
+                                    class="w-16 h-11 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 active:scale-95 font-extrabold text-base shadow-sm cursor-pointer">
+                                ◀
+                            </button>
+                            <button type="button" onclick="froggerHop(0, 1)"
+                                    class="w-16 h-11 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 active:scale-95 font-extrabold text-base shadow-sm cursor-pointer">
+                                ▼
+                            </button>
+                            <button type="button" onclick="froggerHop(1, 0)"
+                                    class="w-16 h-11 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 active:scale-95 font-extrabold text-base shadow-sm cursor-pointer">
+                                ▶
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">
+                            Steuerung: <strong>Pfeiltasten / WASD</strong> oder Touch-Tasten • Vorsicht vor <strong>🐢 abtauchenden Schildkröten (rot blinkend)</strong>, <strong>🐍 Ufer-Schlangen</strong> und <strong>🐊 Krokodil-Mäulern</strong>!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -3035,6 +3112,11 @@ function selectCloudGame(gameKey) {
             dartsInit();
         }
         dartsDraw();
+    } else if (gameKey === 'frogger') {
+        if (!froggerInitialized) {
+            froggerInit();
+        }
+        froggerDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -14150,12 +14232,980 @@ function dartsLoop() {
     dartsRafId = requestAnimationFrame(dartsLoop);
 }
 
+// =============================================================================
+// 20. SPIEL: CLOUD-FROGGER (1981 KONAMI / SEGA ARCADE-KLASSIKER)
+// =============================================================================
+let froggerInitialized = false;
+let froggerRunning     = false;
+let froggerRafId       = null;
+let froggerSoundOn     = true;
+let froggerAudioCtx    = null;
+
+const FROGGER_COLS = 15;
+const FROGGER_ROWS = 13;
+const FROGGER_TILE = 40; // 15 * 40 = 600px, 13 * 40 = 520px
+
+// 5 Ziel-Buchten (X-Zentren in Pixeln bei Row 0)
+const FROGGER_BAYS_X = [60, 180, 300, 420, 540];
+
+let froggerScore       = 0;
+let froggerLevel       = 1;
+let froggerLives       = 3;
+let froggerHomes       = [false, false, false, false, false];
+let froggerStartTime   = 0;
+let froggerFrogTimer   = 45.0; // 45 Sekunden pro Frosch
+let froggerLastFrameTs = 0;
+
+let froggerFrog = {
+    x: 280,
+    y: 12 * FROGGER_TILE,
+    row: 12,
+    dir: 'up',     // 'up' | 'down' | 'left' | 'right'
+    hopAnim: 0,
+    minRowReached: 12,
+    hasLady: false,
+    deadTimer: 0,
+    deadReason: '',
+};
+
+let froggerLanes = [];
+let froggerFly   = { bayIdx: -1, timer: 0 };
+let froggerCroc  = { bayIdx: -1, timer: 0 };
+let froggerSnake = { active: false, x: 120, vx: 65 };
+let froggerPopups = [];
+let froggerBanner = 'Drücke ▶ Neues Spiel oder eine Pfeiltaste, um den Frosch zu starten!';
+
+function froggerPlaySfx(type) {
+    if (!froggerSoundOn) return;
+    try {
+        if (!froggerAudioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            froggerAudioCtx = new AC();
+        }
+        if (froggerAudioCtx.state === 'suspended') {
+            froggerAudioCtx.resume();
+        }
+        const now = froggerAudioCtx.currentTime;
+        const osc = froggerAudioCtx.createOscillator();
+        const gain = froggerAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(froggerAudioCtx.destination);
+
+        if (type === 'hop') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(320, now);
+            osc.frequency.exponentialRampToValueAtTime(640, now + 0.075);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            osc.start(now);
+            osc.stop(now + 0.085);
+        } else if (type === 'splash') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.linearRampToValueAtTime(75, now + 0.35);
+            gain.gain.setValueAtTime(0.11, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+            osc.start(now);
+            osc.stop(now + 0.37);
+        } else if (type === 'squash') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.linearRampToValueAtTime(48, now + 0.32);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.33);
+            osc.start(now);
+            osc.stop(now + 0.34);
+        } else if (type === 'home') {
+            osc.type = 'triangle';
+            const notes = [523.25, 659.25, 783.99, 1046.5];
+            notes.forEach((f, idx) => {
+                osc.frequency.setValueAtTime(f, now + idx * 0.07);
+            });
+            gain.gain.setValueAtTime(0.11, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+            osc.start(now);
+            osc.stop(now + 0.33);
+        } else if (type === 'levelup') {
+            osc.type = 'square';
+            const notes = [440, 554.37, 659.25, 880, 659.25, 880];
+            notes.forEach((f, idx) => {
+                osc.frequency.setValueAtTime(f, now + idx * 0.08);
+            });
+            gain.gain.setValueAtTime(0.10, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+            osc.start(now);
+            osc.stop(now + 0.54);
+        }
+    } catch (e) {}
+}
+
+function froggerToggleSound() {
+    froggerSoundOn = !froggerSoundOn;
+    const btn = document.getElementById('froggerSoundBtn');
+    if (btn) {
+        btn.textContent = froggerSoundOn ? '🔊 Ton' : '🔇 Stumm';
+    }
+}
+
+function froggerInit() {
+    if (froggerInitialized) return;
+    froggerInitialized = true;
+
+    const cvs = document.getElementById('froggerCanvas');
+    if (cvs) {
+        let touchStartX = 0;
+        let touchStartY = 0;
+        cvs.addEventListener('pointerdown', (e) => {
+            touchStartX = e.clientX;
+            touchStartY = e.clientY;
+        });
+        cvs.addEventListener('pointerup', (e) => {
+            const dx = e.clientX - touchStartX;
+            const dy = e.clientY - touchStartY;
+            if (Math.hypot(dx, dy) > 22) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    froggerHop(dx > 0 ? 1 : -1, 0);
+                } else {
+                    froggerHop(0, dy > 0 ? 1 : -1);
+                }
+            } else {
+                // Kurzer Tipp auf Canvas -> Hüpfer nach vorn
+                froggerHop(0, -1);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'frogger') return;
+        if (['ArrowUp', 'KeyW'].includes(e.code)) {
+            e.preventDefault();
+            froggerHop(0, -1);
+        } else if (['ArrowDown', 'KeyS'].includes(e.code)) {
+            e.preventDefault();
+            froggerHop(0, 1);
+        } else if (['ArrowLeft', 'KeyA'].includes(e.code)) {
+            e.preventDefault();
+            froggerHop(-1, 0);
+        } else if (['ArrowRight', 'KeyD'].includes(e.code)) {
+            e.preventDefault();
+            froggerHop(1, 0);
+        }
+    });
+
+    froggerBuildLanes(1);
+    froggerResetFrog();
+    froggerUpdateHud();
+    froggerDraw();
+
+    if (!froggerRafId) {
+        froggerLastFrameTs = performance.now();
+        froggerRafId = requestAnimationFrame(froggerLoop);
+    }
+}
+
+function froggerBuildLanes(lvl) {
+    const mult = 1 + (lvl - 1) * 0.16;
+    froggerLanes = [
+        // Row 1: Fluss oben – Baumstämme + Krokodil (nach rechts)
+        {
+            row: 1,
+            zone: 'river',
+            speed: 52 * mult,
+            items: [
+                { x: 20,  w: 120, type: 'log' },
+                { x: 230, w: 120, type: 'log' },
+                { x: 440, w: 115, type: lvl >= 2 ? 'croc' : 'log' },
+            ],
+        },
+        // Row 2: 2er-Schildkröten (nach links, 1 Tauch-Gruppe)
+        {
+            row: 2,
+            zone: 'river',
+            speed: -64 * mult,
+            items: [
+                { x: 30,  w: 76, type: 'turtle', count: 2, diver: true, divePhase: 0.4 },
+                { x: 190, w: 76, type: 'turtle', count: 2, diver: false, divePhase: 0 },
+                { x: 350, w: 76, type: 'turtle', count: 2, diver: false, divePhase: 0 },
+                { x: 500, w: 76, type: 'turtle', count: 2, diver: lvl >= 3, divePhase: 2.6 },
+            ],
+        },
+        // Row 3: Riesen-Baumstämme + Lady-Frog (nach rechts)
+        {
+            row: 3,
+            zone: 'river',
+            speed: 74 * mult,
+            items: [
+                { x: 10,  w: 165, type: 'log', hasLady: true, ladyOffset: 70 },
+                { x: 310, w: 165, type: 'log', hasLady: false, ladyOffset: 0 },
+            ],
+        },
+        // Row 4: Kurze Flöße (nach links)
+        {
+            row: 4,
+            zone: 'river',
+            speed: -48 * mult,
+            items: [
+                { x: 40,  w: 96, type: 'log' },
+                { x: 240, w: 96, type: 'log' },
+                { x: 440, w: 96, type: 'log' },
+            ],
+        },
+        // Row 5: 3er-Schildkröten-Kolonnen (nach links, 1 Tauch-Gruppe)
+        {
+            row: 5,
+            zone: 'river',
+            speed: -58 * mult,
+            items: [
+                { x: 20,  w: 110, type: 'turtle', count: 3, diver: false, divePhase: 0 },
+                { x: 220, w: 110, type: 'turtle', count: 3, diver: true,  divePhase: 1.5 },
+                { x: 420, w: 110, type: 'turtle', count: 3, diver: false, divePhase: 0 },
+            ],
+        },
+        // Row 7: Highway Spur 5 – Weiße Sattelschlepper / Trucks (nach links)
+        {
+            row: 7,
+            zone: 'road',
+            speed: -68 * mult,
+            items: [
+                { x: 30,  w: 84, type: 'truck', color: '#f8fafc' },
+                { x: 260, w: 84, type: 'truck', color: '#e2e8f0' },
+                { x: 470, w: 84, type: 'truck', color: '#f8fafc' },
+            ],
+        },
+        // Row 8: Highway Spur 4 – Schnelle rote Turbo-Rennwagen (nach rechts)
+        {
+            row: 8,
+            zone: 'road',
+            speed: 118 * mult,
+            items: [
+                { x: 60,  w: 44, type: 'racecar', color: '#ef4444' },
+                { x: 340, w: 44, type: 'racecar', color: '#f97316' },
+            ],
+        },
+        // Row 9: Highway Spur 3 – Pinke Limousinen (nach links)
+        {
+            row: 9,
+            zone: 'road',
+            speed: -76 * mult,
+            items: [
+                { x: 40,  w: 48, type: 'sedan', color: '#ec4899' },
+                { x: 230, w: 48, type: 'sedan', color: '#d946ef' },
+                { x: 430, w: 48, type: 'sedan', color: '#ec4899' },
+            ],
+        },
+        // Row 10: Highway Spur 2 – Gelbe Planierraupen / Bulldozer (nach rechts)
+        {
+            row: 10,
+            zone: 'road',
+            speed: 48 * mult,
+            items: [
+                { x: 50,  w: 46, type: 'dozer', color: '#eab308' },
+                { x: 240, w: 46, type: 'dozer', color: '#facc15' },
+                { x: 440, w: 46, type: 'dozer', color: '#eab308' },
+            ],
+        },
+        // Row 11: Highway Spur 1 – Gelb-blaue Käfer / Taxis (nach links)
+        {
+            row: 11,
+            zone: 'road',
+            speed: -56 * mult,
+            items: [
+                { x: 30,  w: 44, type: 'bug', color: '#38bdf8' },
+                { x: 210, w: 44, type: 'bug', color: '#fbbf24' },
+                { x: 400, w: 44, type: 'bug', color: '#38bdf8' },
+            ],
+        },
+    ];
+
+    froggerSnake = {
+        active: lvl >= 2,
+        x: 120,
+        vx: (52 + lvl * 8),
+    };
+}
+
+function froggerResetFrog() {
+    froggerFrog.x             = 7 * FROGGER_TILE; // 280
+    froggerFrog.y             = 12 * FROGGER_TILE;
+    froggerFrog.row           = 12;
+    froggerFrog.dir           = 'up';
+    froggerFrog.hopAnim       = 0;
+    froggerFrog.minRowReached = 12;
+    froggerFrog.hasLady       = false;
+    froggerFrog.deadTimer     = 0;
+    froggerFrog.deadReason    = '';
+    froggerFrogTimer          = 45.0;
+}
+
+function froggerNewGame() {
+    froggerScore     = 0;
+    froggerLevel     = 1;
+    froggerLives     = 3;
+    froggerHomes     = [false, false, false, false, false];
+    froggerStartTime = Date.now();
+    froggerRunning   = true;
+    froggerPopups    = [];
+    froggerFly       = { bayIdx: 2, timer: 11.0 };
+    froggerCroc      = { bayIdx: -1, timer: 6.0 };
+    froggerBanner    = '🐸 Los geht’s! Hüpfe zwischen den Autos hindurch und spring auf die Baumstämme!';
+    froggerBuildLanes(1);
+    froggerResetFrog();
+    froggerUpdateHud();
+    froggerDraw();
+}
+
+function froggerUpdateHud() {
+    const scEl = document.getElementById('froggerScore');
+    const lvEl = document.getElementById('froggerLevel');
+    const hmEl = document.getElementById('froggerHomes');
+    const liEl = document.getElementById('froggerLives');
+    if (scEl) scEl.textContent = froggerScore.toLocaleString('de-DE');
+    if (lvEl) lvEl.textContent = String(froggerLevel);
+    if (hmEl) hmEl.textContent = froggerHomes.filter(Boolean).length + '/5';
+    if (liEl) liEl.textContent = froggerLives > 0 ? '🐸'.repeat(froggerLives) : '💀';
+}
+
+function froggerAddPopup(x, y, text, color = '#fde047') {
+    froggerPopups.push({ x, y, text, color, life: 1.1 });
+}
+
+function froggerHop(dx, dy) {
+    if (!froggerRunning) {
+        froggerNewGame();
+        return;
+    }
+    if (froggerFrog.deadTimer > 0) return;
+
+    if (dx < 0) froggerFrog.dir = 'left';
+    else if (dx > 0) froggerFrog.dir = 'right';
+    else if (dy < 0) froggerFrog.dir = 'up';
+    else if (dy > 0) froggerFrog.dir = 'down';
+
+    const newRow = froggerFrog.row + dy;
+    const newX   = froggerFrog.x + dx * FROGGER_TILE;
+
+    if (newRow < 0 || newRow > 12) return;
+    if (newX < 0 || newX > (FROGGER_COLS - 1) * FROGGER_TILE) return;
+
+    froggerFrog.x       = newX;
+    froggerFrog.row     = newRow;
+    froggerFrog.y       = newRow * FROGGER_TILE;
+    froggerFrog.hopAnim = 1.0;
+    froggerPlaySfx('hop');
+
+    // +10 Punkte für jede neu erreichte Reihe nach vorn
+    if (newRow < froggerFrog.minRowReached && newRow > 0) {
+        froggerFrog.minRowReached = newRow;
+        froggerScore += 10;
+        froggerUpdateHud();
+    }
+
+    // Prüfen, ob Reihe 0 (5 Seerosen-Buchten) erreicht wurde
+    if (newRow === 0) {
+        const frogCenterX = froggerFrog.x + FROGGER_TILE / 2;
+        let landedBay = -1;
+        for (let i = 0; i < FROGGER_BAYS_X.length; i++) {
+            if (Math.abs(frogCenterX - FROGGER_BAYS_X[i]) <= 24) {
+                landedBay = i;
+                break;
+            }
+        }
+
+        if (landedBay === -1) {
+            froggerKillFrog('🌿 Im Schilf neben der Seerose gelandet!', 'splash');
+            return;
+        }
+        if (froggerHomes[landedBay]) {
+            froggerKillFrog('🐸 Diese Seerosen-Bucht ist bereits besetzt!', 'splash');
+            return;
+        }
+        if (froggerCroc.bayIdx === landedBay) {
+            froggerKillFrog('🐊 Schnapp! Krokodil in der Seerosen-Bucht!', 'squash');
+            return;
+        }
+
+        // Sicher im Seerosen-Haus gelandet!
+        froggerHomes[landedBay] = true;
+        const timeBonus = Math.max(0, Math.round(froggerFrogTimer)) * 10;
+        let pts = 50 + timeBonus;
+        let msg = `+${pts}`;
+
+        if (froggerFly.bayIdx === landedBay) {
+            pts += 200;
+            msg = `🪰 FLIEGE! +${pts}`;
+            froggerFly.bayIdx = -1;
+        }
+        if (froggerFrog.hasLady) {
+            pts += 200;
+            msg = `🩷 LADY-BONUS! +${pts}`;
+        }
+
+        froggerScore += pts;
+        froggerAddPopup(FROGGER_BAYS_X[landedBay], 34, msg, '#4ade80');
+        froggerBanner = `🏡 Frosch #${froggerHomes.filter(Boolean).length} sicher im Haus! (${msg} Pkt.)`;
+
+        // Alle 5 Häuser voll -> Level abgeschlossen!
+        if (froggerHomes.every(Boolean)) {
+            froggerScore += 1000;
+            froggerLevel++;
+            froggerHomes = [false, false, false, false, false];
+            froggerPlaySfx('levelup');
+            froggerAddPopup(300, 220, `🏆 LEVEL ${froggerLevel}! +1.000 BONUS!`, '#fde047');
+            froggerBanner = `🎉 Alle 5 Frösche gerettet! +1.000 Bonus! Willkommen in Level ${froggerLevel}!`;
+            froggerBuildLanes(froggerLevel);
+        } else {
+            froggerPlaySfx('home');
+        }
+
+        froggerResetFrog();
+        froggerUpdateHud();
+    }
+}
+
+function froggerKillFrog(reason, sfx = 'squash') {
+    if (froggerFrog.deadTimer > 0) return;
+    froggerPlaySfx(sfx);
+    froggerFrog.deadTimer  = 1.15;
+    froggerFrog.deadReason = reason;
+    froggerLives--;
+    froggerBanner = `${reason} (${froggerLives > 0 ? 'Noch ' + froggerLives + ' Leben' : 'GAME OVER'})`;
+    froggerAddPopup(froggerFrog.x + 20, froggerFrog.y + 10, '💀 OUCH!', '#f87171');
+    froggerUpdateHud();
+}
+
+function froggerUpdate(dt) {
+    if (!froggerRunning) return;
+
+    // Popups aktualisieren
+    for (let i = froggerPopups.length - 1; i >= 0; i--) {
+        froggerPopups[i].y -= 22 * dt;
+        froggerPopups[i].life -= dt;
+        if (froggerPopups[i].life <= 0) {
+            froggerPopups.splice(i, 1);
+        }
+    }
+
+    if (froggerFrog.hopAnim > 0) {
+        froggerFrog.hopAnim = Math.max(0, froggerFrog.hopAnim - dt * 6);
+    }
+
+    // Bonus-Fliege & Krokodil in freien Seerosen-Buchten rotieren
+    froggerFly.timer -= dt;
+    if (froggerFly.timer <= 0) {
+        if (froggerFly.bayIdx >= 0) {
+            froggerFly.bayIdx = -1;
+            froggerFly.timer  = 5 + Math.random() * 5;
+        } else {
+            const freeBays = [0, 1, 2, 3, 4].filter((i) => !froggerHomes[i] && i !== froggerCroc.bayIdx);
+            if (freeBays.length > 0) {
+                froggerFly.bayIdx = freeBays[Math.floor(Math.random() * freeBays.length)];
+            }
+            froggerFly.timer = 7 + Math.random() * 4;
+        }
+    }
+
+    if (froggerLevel >= 2) {
+        froggerCroc.timer -= dt;
+        if (froggerCroc.timer <= 0) {
+            if (froggerCroc.bayIdx >= 0) {
+                froggerCroc.bayIdx = -1;
+                froggerCroc.timer  = 6 + Math.random() * 5;
+            } else {
+                const freeBays = [0, 1, 2, 3, 4].filter((i) => !froggerHomes[i] && i !== froggerFly.bayIdx);
+                if (freeBays.length > 0) {
+                    froggerCroc.bayIdx = freeBays[Math.floor(Math.random() * freeBays.length)];
+                }
+                froggerCroc.timer = 4.5;
+            }
+        }
+    }
+
+    // Alle Spuren (Autos, Baumstämme, Schildkröten) bewegen
+    froggerLanes.forEach((lane) => {
+        lane.items.forEach((it) => {
+            it.x += lane.speed * dt;
+            if (lane.speed > 0 && it.x > 620) {
+                it.x = -it.w - 20;
+            } else if (lane.speed < 0 && it.x + it.w < -20) {
+                it.x = 620;
+            }
+            if (it.diver) {
+                it.divePhase = (it.divePhase + dt * 0.85) % 6.0;
+                // 0..3.6 = Über Wasser, 3.6..4.8 = Warn-Blinken, 4.8..6.0 = Abgetaucht!
+                it.diveState = it.divePhase < 3.6 ? 'surface' : (it.divePhase < 4.8 ? 'diving' : 'submerged');
+            } else {
+                it.diveState = 'surface';
+            }
+        });
+    });
+
+    // Schlange auf dem Mittelstreifen (ab Level 2)
+    if (froggerSnake.active) {
+        froggerSnake.x += froggerSnake.vx * dt;
+        if (froggerSnake.x > 550) {
+            froggerSnake.x = 550;
+            froggerSnake.vx = -Math.abs(froggerSnake.vx);
+        } else if (froggerSnake.x < 10) {
+            froggerSnake.x = 10;
+            froggerSnake.vx = Math.abs(froggerSnake.vx);
+        }
+    }
+
+    // Falls Frosch gerade stirbt -> Respawn oder Game Over abwarten
+    if (froggerFrog.deadTimer > 0) {
+        froggerFrog.deadTimer -= dt;
+        if (froggerFrog.deadTimer <= 0) {
+            if (froggerLives <= 0) {
+                froggerRunning = false;
+                const dur = Math.max(1, Math.round((Date.now() - froggerStartTime) / 1000));
+                if (froggerScore > 0) {
+                    submitCloudScore('frogger', froggerScore, dur, 'Level ' + froggerLevel);
+                }
+                froggerBanner = `🏁 GAME OVER! Endstand: ${froggerScore.toLocaleString('de-DE')} Punkte (Level ${froggerLevel}). Klicke auf ▶ Neues Spiel!`;
+            } else {
+                froggerResetFrog();
+            }
+        }
+        return;
+    }
+
+    // Zeitbalken herunterzählen
+    froggerFrogTimer -= dt;
+    if (froggerFrogTimer <= 0) {
+        froggerKillFrog('⏱️ Zeit abgelaufen!', 'squash');
+        return;
+    }
+
+    const frogLeft   = froggerFrog.x + 7;
+    const frogRight  = froggerFrog.x + FROGGER_TILE - 7;
+    const frogCenter = froggerFrog.x + FROGGER_TILE / 2;
+
+    // Kollisionsprüfung Mittelstreifen-Schlange (Row 6)
+    if (froggerFrog.row === 6 && froggerSnake.active) {
+        if (frogRight > froggerSnake.x + 4 && frogLeft < froggerSnake.x + 44) {
+            froggerKillFrog('🐍 Von der Ufer-Schlange gebissen!', 'squash');
+            return;
+        }
+    }
+
+    // Kollisionsprüfung Straße (Rows 7..11) & Fluss (Rows 1..5)
+    const activeLane = froggerLanes.find((l) => l.row === froggerFrog.row);
+    if (!activeLane) return;
+
+    if (activeLane.zone === 'road') {
+        for (const car of activeLane.items) {
+            if (frogRight > car.x + 4 && frogLeft < car.x + car.w - 4) {
+                froggerKillFrog('🚗 Auf dem Highway überfahren!', 'squash');
+                return;
+            }
+        }
+    } else if (activeLane.zone === 'river') {
+        let onSupport = null;
+        for (const plat of activeLane.items) {
+            if (frogCenter >= plat.x + 4 && frogCenter <= plat.x + plat.w - 4) {
+                if (plat.diveState === 'submerged') {
+                    continue; // Schildkröte ist abgetaucht!
+                }
+                // Bei Krokodil auf dem Fluss: vorderes Maul (letzte 24px rechts) ist tödlich!
+                if (plat.type === 'croc' && frogCenter > plat.x + plat.w - 24) {
+                    froggerKillFrog('🐊 Ins offene Krokodil-Maul getreten!', 'squash');
+                    return;
+                }
+                onSupport = plat;
+                break;
+            }
+        }
+
+        if (!onSupport) {
+            froggerKillFrog('🌊 Platsch! Im reißenden Fluss versunken!', 'splash');
+            return;
+        }
+
+        // Frosch reitet auf Baumstamm oder Schildkröte mit!
+        froggerFrog.x += activeLane.speed * dt;
+
+        // Lady-Frog auf dem Baumstamm einsammeln
+        if (onSupport.hasLady && !froggerFrog.hasLady) {
+            const ladyX = onSupport.x + onSupport.ladyOffset;
+            if (Math.abs(frogCenter - ladyX) < 22) {
+                onSupport.hasLady   = false;
+                froggerFrog.hasLady = true;
+                froggerPlaySfx('home');
+                froggerAddPopup(froggerFrog.x + 20, froggerFrog.y, '🩷 LADY-FROG +200!', '#f472b6');
+            }
+        }
+
+        if (froggerFrog.x < -8 || froggerFrog.x > 600 - FROGGER_TILE + 8) {
+            froggerKillFrog('🌊 Vom Baumstamm über den Bildschirmrand getrieben!', 'splash');
+        }
+    }
+}
+
+function froggerDrawFrogSprite(ctx, cx, cy, dir, colorMain = '#22c55e', colorBelly = '#86efac', hopScale = 1.0) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (dir === 'right') ctx.rotate(Math.PI / 2);
+    else if (dir === 'down') ctx.rotate(Math.PI);
+    else if (dir === 'left') ctx.rotate(-Math.PI / 2);
+    ctx.scale(hopScale, hopScale);
+
+    // Hinterbeine & Vorderbeine
+    ctx.strokeStyle = colorMain;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    // Oben links / rechts
+    ctx.moveTo(-8, -4); ctx.lineTo(-14, -11); ctx.lineTo(-14, -15);
+    ctx.moveTo(8, -4);  ctx.lineTo(14, -11);  ctx.lineTo(14, -15);
+    // Unten links / rechts
+    ctx.moveTo(-8, 6);  ctx.lineTo(-15, 11);  ctx.lineTo(-13, 16);
+    ctx.moveTo(8, 6);   ctx.lineTo(15, 11);   ctx.lineTo(13, 16);
+    ctx.stroke();
+
+    // Körper
+    ctx.fillStyle = colorMain;
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 10, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rückenstreifen
+    ctx.fillStyle = colorBelly;
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 5, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glubschaugen vorn
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(-6, -9, 3.5, 0, Math.PI * 2);
+    ctx.arc(6, -9, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(-6, -10, 1.7, 0, Math.PI * 2);
+    ctx.arc(6, -10, 1.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function froggerDraw() {
+    const cvs = document.getElementById('froggerCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    // 1. Hintergrund-Zonen zeichnen
+    // Fluss (Rows 0..5)
+    ctx.fillStyle = '#0c4a6e';
+    ctx.fillRect(0, 0, 600, 6 * FROGGER_TILE);
+
+    // Wellenlinien im Fluss
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+    ctx.lineWidth = 1.5;
+    const waveShift = (performance.now() * 0.025) % 40;
+    for (let r = 1; r <= 5; r++) {
+        const wy = r * FROGGER_TILE + 20;
+        ctx.beginPath();
+        for (let wx = -40; wx < 620; wx += 40) {
+            ctx.moveTo(wx + (r % 2 === 0 ? waveShift : -waveShift), wy);
+            ctx.lineTo(wx + 18 + (r % 2 === 0 ? waveShift : -waveShift), wy);
+        }
+        ctx.stroke();
+    }
+
+    // Row 0: Uferböschung & 5 Seerosen-Buchten
+    ctx.fillStyle = '#14532d';
+    ctx.fillRect(0, 0, 600, FROGGER_TILE);
+    // Gras-Muster
+    ctx.fillStyle = '#166534';
+    for (let gx = 0; gx < 600; gx += 12) {
+        ctx.fillRect(gx, 0, 6, 8);
+    }
+
+    for (let i = 0; i < FROGGER_BAYS_X.length; i++) {
+        const bx = FROGGER_BAYS_X[i];
+        // Wasser-Bucht
+        ctx.fillStyle = '#075985';
+        ctx.beginPath();
+        ctx.roundRect(bx - 26, 4, 52, FROGGER_TILE - 4, [10, 10, 0, 0]);
+        ctx.fill();
+
+        // Seerosenblatt (Lilypad)
+        ctx.fillStyle = '#15803d';
+        ctx.beginPath();
+        ctx.arc(bx, 22, 16, 0.2, Math.PI * 2 - 0.2);
+        ctx.lineTo(bx, 22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Bereits geretteter Frosch in dieser Bucht?
+        if (froggerHomes[i]) {
+            froggerDrawFrogSprite(ctx, bx, 22, 'down', '#22c55e', '#bbf7d0', 0.92);
+        } else if (froggerFly.bayIdx === i) {
+            // Bonus-Fliege (+200 Pkt.)
+            ctx.font = '20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🪰', bx, 28);
+        } else if (froggerCroc.bayIdx === i) {
+            // Gefährliches Krokodil-Maul in der Bucht
+            ctx.font = '21px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🐊', bx, 29);
+        }
+    }
+
+    // Row 6: Sicherer Mittelstreifen (Lila/Grünes Retro-Bankett)
+    ctx.fillStyle = '#4c1d95';
+    ctx.fillRect(0, 6 * FROGGER_TILE, 600, FROGGER_TILE);
+    ctx.fillStyle = '#6d28d9';
+    for (let mx = 0; mx < 600; mx += 20) {
+        ctx.fillRect(mx, 6 * FROGGER_TILE + 4, 12, 6);
+        ctx.fillRect(mx + 6, 6 * FROGGER_TILE + 30, 12, 6);
+    }
+
+    // Rows 7..11: 5-spuriger Asphalt-Highway
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 7 * FROGGER_TILE, 600, 5 * FROGGER_TILE);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.setLineDash([16, 14]);
+    for (let r = 8; r <= 11; r++) {
+        ctx.beginPath();
+        ctx.moveTo(0, r * FROGGER_TILE);
+        ctx.lineTo(600, r * FROGGER_TILE);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Row 12: Sicherer Start-Bürgersteig + Zeitbalken
+    ctx.fillStyle = '#4c1d95';
+    ctx.fillRect(0, 12 * FROGGER_TILE, 600, FROGGER_TILE);
+    ctx.fillStyle = '#6d28d9';
+    for (let mx = 0; mx < 600; mx += 20) {
+        ctx.fillRect(mx, 12 * FROGGER_TILE + 4, 12, 6);
+    }
+
+    // 2. Fluss-Objekte & Straßen-Fahrzeuge zeichnen
+    froggerLanes.forEach((lane) => {
+        const y = lane.row * FROGGER_TILE;
+        lane.items.forEach((it) => {
+            if (lane.zone === 'river') {
+                if (it.type === 'log') {
+                    // Holz-Baumstamm mit Rinden-Maserung
+                    ctx.fillStyle = '#78350f';
+                    ctx.beginPath();
+                    ctx.roundRect(it.x, y + 6, it.w, 28, 13);
+                    ctx.fill();
+                    ctx.strokeStyle = '#451a03';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Jahresringe links/rechts + Maserung
+                    ctx.fillStyle = '#b45309';
+                    ctx.beginPath();
+                    ctx.ellipse(it.x + 10, y + 20, 5, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#92400e';
+                    ctx.beginPath();
+                    ctx.moveTo(it.x + 24, y + 14);
+                    ctx.lineTo(it.x + it.w - 18, y + 14);
+                    ctx.moveTo(it.x + 32, y + 25);
+                    ctx.lineTo(it.x + it.w - 14, y + 25);
+                    ctx.stroke();
+
+                    // Lady-Frog auf dem Baumstamm?
+                    if (it.hasLady) {
+                        froggerDrawFrogSprite(ctx, it.x + it.ladyOffset, y + 20, 'left', '#ec4899', '#fbcfe8', 0.85);
+                    }
+                } else if (it.type === 'croc') {
+                    // Schwimmendes Krokodil (Rücken betretbar, Maul rechts schnappt!)
+                    ctx.fillStyle = '#15803d';
+                    ctx.beginPath();
+                    ctx.roundRect(it.x, y + 8, it.w - 22, 24, 10);
+                    ctx.fill();
+                    // Krokodil-Schuppen
+                    ctx.fillStyle = '#166534';
+                    for (let sx = it.x + 10; sx < it.x + it.w - 28; sx += 16) {
+                        ctx.fillRect(sx, y + 12, 8, 16);
+                    }
+                    // Offenes Maul mit Zähnen rechts
+                    ctx.fillStyle = '#dc2626';
+                    ctx.beginPath();
+                    ctx.moveTo(it.x + it.w - 22, y + 9);
+                    ctx.lineTo(it.x + it.w, y + 5);
+                    ctx.lineTo(it.x + it.w - 6, y + 20);
+                    ctx.lineTo(it.x + it.w, y + 35);
+                    ctx.lineTo(it.x + it.w - 22, y + 31);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (it.type === 'turtle') {
+                    if (it.diveState === 'submerged') {
+                        // Nur noch Wasserblasen/Wirbel sichtbar!
+                        ctx.strokeStyle = 'rgba(125, 211, 252, 0.55)';
+                        ctx.lineWidth = 1.5;
+                        for (let ti = 0; ti < it.count; ti++) {
+                            const tx = it.x + 19 + ti * 36;
+                            ctx.beginPath();
+                            ctx.arc(tx, y + 20, 11, 0, Math.PI * 2);
+                            ctx.stroke();
+                        }
+                    } else {
+                        const isDivingWarn = it.diveState === 'diving';
+                        for (let ti = 0; ti < it.count; ti++) {
+                            const tx = it.x + 19 + ti * 36;
+                            const ty = y + 20;
+                            // Flossen
+                            ctx.fillStyle = '#4ade80';
+                            ctx.fillRect(tx - 12, ty - 13, 5, 5);
+                            ctx.fillRect(tx + 7,  ty - 13, 5, 5);
+                            ctx.fillRect(tx - 12, ty + 8,  5, 5);
+                            ctx.fillRect(tx + 7,  ty + 8,  5, 5);
+                            // Kopf links
+                            ctx.beginPath();
+                            ctx.arc(tx - 14, ty, 4.5, 0, Math.PI * 2);
+                            ctx.fill();
+                            // Panzer
+                            ctx.fillStyle = isDivingWarn ? '#f97316' : '#dc2626';
+                            ctx.beginPath();
+                            ctx.arc(tx, ty, 12.5, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.strokeStyle = isDivingWarn ? '#fde047' : '#16a34a';
+                            ctx.lineWidth = 2.5;
+                            ctx.stroke();
+                        }
+                    }
+                }
+            } else {
+                // Straßen-Fahrzeuge (Rows 7..11)
+                const goingRight = lane.speed > 0;
+                ctx.fillStyle = '#020617';
+                // 4 Reifen
+                ctx.fillRect(it.x + 5, y + 4, 9, 4);
+                ctx.fillRect(it.x + it.w - 14, y + 4, 9, 4);
+                ctx.fillRect(it.x + 5, y + 32, 9, 4);
+                ctx.fillRect(it.x + it.w - 14, y + 32, 9, 4);
+
+                // Karosserie
+                ctx.fillStyle = it.color;
+                ctx.beginPath();
+                ctx.roundRect(it.x, y + 7, it.w, 26, 6);
+                ctx.fill();
+
+                if (it.type === 'truck') {
+                    // Führerhaus + langer Anhänger
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(it.x, y + 8, 22, 24);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(it.x + 25, y + 10, it.w - 29, 20);
+                } else {
+                    // Windschutzscheibe
+                    ctx.fillStyle = '#1e293b';
+                    const wx = goingRight ? it.x + it.w - 15 : it.x + 6;
+                    ctx.fillRect(wx, y + 10, 9, 20);
+                }
+
+                // Scheinwerfer
+                ctx.fillStyle = '#fef08a';
+                const hlX = goingRight ? it.x + it.w - 2 : it.x;
+                ctx.fillRect(hlX, y + 9, 2, 5);
+                ctx.fillRect(hlX, y + 26, 2, 5);
+            }
+        });
+    });
+
+    // 3. Mittelstreifen-Schlange (Row 6, ab Level 2)
+    if (froggerSnake.active) {
+        const sy = 6 * FROGGER_TILE + 20;
+        ctx.strokeStyle = '#a3e635';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        for (let i = 0; i <= 36; i += 6) {
+            const wy = sy + Math.sin((performance.now() * 0.015) + i * 0.4) * 5;
+            if (i === 0) ctx.moveTo(froggerSnake.x + i, wy);
+            else ctx.lineTo(froggerSnake.x + i, wy);
+        }
+        ctx.stroke();
+        // Schlangenkopf + rote Zunge
+        const headX = froggerSnake.vx > 0 ? froggerSnake.x + 38 : froggerSnake.x - 2;
+        ctx.fillStyle = '#65a30d';
+        ctx.beginPath();
+        ctx.arc(headX, sy, 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 4. Spieler-Frosch zeichnen
+    const fcx = froggerFrog.x + FROGGER_TILE / 2;
+    const fcy = froggerFrog.y + FROGGER_TILE / 2;
+    if (froggerFrog.deadTimer > 0) {
+        // Totenkopf / Kreuz bei Verlust eines Lebens
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.88)';
+        ctx.beginPath();
+        ctx.arc(fcx, fcy, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💀', fcx, fcy + 7);
+    } else {
+        const scale = 1.0 + froggerFrog.hopAnim * 0.22;
+        froggerDrawFrogSprite(
+            ctx,
+            fcx,
+            fcy,
+            froggerFrog.dir,
+            froggerFrog.hasLady ? '#10b981' : '#22c55e',
+            froggerFrog.hasLady ? '#f472b6' : '#bbf7d0',
+            scale
+        );
+    }
+
+    // 5. Unten rechts auf Row 12: Arcade TIME-Balken + Status-Text
+    const barW = 150;
+    const pct  = Math.max(0, Math.min(1, froggerFrogTimer / 45.0));
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillRect(6, 12 * FROGGER_TILE + 8, 588, 26);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(froggerBanner.slice(0, 56), 14, 12 * FROGGER_TILE + 25);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'right';
+    ctx.fillText('TIME', 432, 12 * FROGGER_TILE + 25);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(438, 12 * FROGGER_TILE + 13, barW, 14);
+    ctx.fillStyle = pct > 0.25 ? '#22c55e' : '#ef4444';
+    ctx.fillRect(438, 12 * FROGGER_TILE + 13, barW * pct, 14);
+
+    // 6. Schwebende Bonus-Popups
+    froggerPopups.forEach((p) => {
+        ctx.fillStyle = p.color;
+        ctx.font = 'extrabold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+    });
+}
+
+function froggerLoop(ts) {
+    const dt = Math.min(0.05, Math.max(0.001, (ts - froggerLastFrameTs) / 1000));
+    froggerLastFrameTs = ts;
+
+    if (activeGameKey === 'frogger') {
+        froggerUpdate(dt);
+        froggerDraw();
+    }
+    froggerRafId = requestAnimationFrame(froggerLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
     trInit();
     dartsInit();
+    froggerInit();
     imInit();
     lemInit();
     ninjaInit();
