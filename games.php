@@ -2489,6 +2489,11 @@ $csrfToken = getCsrfToken();
                             <option value="desert">☀️ Sonnen-Highway</option>
                             <option value="rain">🌧️ Regen-Autobahn</option>
                         </select>
+                        <button type="button" onclick="trToggleSound()" id="trSoundBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+                                title="Motorsound &amp; Hupe ein-/ausschalten">
+                            🔊 Motorsound
+                        </button>
                         <button type="button" onclick="trStartGame()"
                                 class="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-extrabold shadow-2xs cursor-pointer">
                             ▶️ Auf die Autobahn!
@@ -2537,7 +2542,7 @@ $csrfToken = getCsrfToken();
 
                 <!-- 4-Spur-Highway-Spielfeld (Canvas) + Touch-Cockpit -->
                 <div class="flex flex-col items-center gap-3">
-                    <canvas id="trCanvas" width="460" height="540"
+                    <canvas id="trCanvas" width="600" height="520"
                             class="rounded-2xl bg-slate-950 border-2 border-orange-900/80 shadow-xl max-w-full h-auto select-none"></canvas>
 
                     <!-- Touch- & Mobil-Lenkrad -->
@@ -3095,6 +3100,10 @@ function selectCloudGame(gameKey) {
     const titleEl = document.getElementById('leaderboardGameTitle');
     if (titleEl) {
         titleEl.textContent = 'Bestenliste: ' + GAMES_CATALOG[gameKey].title;
+    }
+
+    if (gameKey !== 'trafficracer' && typeof trStopEngineSound === 'function') {
+        trStopEngineSound();
     }
 
     if (gameKey === 'gummigeruch') {
@@ -11908,6 +11917,194 @@ let trPopups    = []; // { x, y, text, color, life }
 let trScenery   = []; // Bäume, Kakteen, Laternen am Straßenrand { side, y, type }
 let trRoadOffset = 0;
 
+// WebAudio Motorsound & Highway-SFX
+let trSoundOn    = true;
+let trAudioCtx   = null;
+let trEngOsc1    = null;
+let trEngOsc2    = null;
+let trEngFilter  = null;
+let trEngGain    = null;
+let trCurrentGear = 1;
+let trCurrentRpm  = 1800;
+
+function trInitAudio() {
+    if (!trSoundOn) return;
+    try {
+        if (!trAudioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            trAudioCtx = new AC();
+        }
+        if (trAudioCtx.state === 'suspended') {
+            trAudioCtx.resume();
+        }
+        if (!trEngOsc1) {
+            trEngOsc1   = trAudioCtx.createOscillator();
+            trEngOsc2   = trAudioCtx.createOscillator();
+            trEngFilter = trAudioCtx.createBiquadFilter();
+            trEngGain   = trAudioCtx.createGain();
+
+            trEngOsc1.type = 'sawtooth';
+            trEngOsc2.type = 'triangle';
+            trEngOsc1.frequency.value = 55;
+            trEngOsc2.frequency.value = 110;
+
+            trEngFilter.type = 'lowpass';
+            trEngFilter.frequency.value = 260;
+            trEngFilter.Q.value = 3.2;
+
+            trEngGain.gain.value = 0.0;
+
+            trEngOsc1.connect(trEngFilter);
+            trEngOsc2.connect(trEngFilter);
+            trEngFilter.connect(trEngGain);
+            trEngGain.connect(trAudioCtx.destination);
+
+            trEngOsc1.start();
+            trEngOsc2.start();
+        }
+    } catch (e) {}
+}
+
+function trUpdateEngineSound() {
+    if (!trEngGain || !trAudioCtx) return;
+    const now = trAudioCtx.currentTime;
+    if (!trRunning || !trSoundOn || activeGameKey !== 'trafficracer') {
+        trEngGain.gain.setTargetAtTime(0.0, now, 0.08);
+        return;
+    }
+
+    // 5-Gang-Getriebe + Drehzahl (RPM) aus km/h berechnen
+    const kmh = trPlayer.kmh;
+    const newGear = kmh < 62 ? 1 : (kmh < 102 ? 2 : (kmh < 142 ? 3 : (kmh < 182 ? 4 : 5)));
+    if (newGear !== trCurrentGear) {
+        trCurrentGear = newGear;
+        trPlaySfx('gear');
+    }
+
+    const gearBaseKmh = [0, 30, 62, 102, 142, 182][trCurrentGear] || 30;
+    const gearSpan    = 46;
+    const gearRatio   = Math.max(0, Math.min(1.15, (kmh - gearBaseKmh) / gearSpan));
+    const throttleBoost = trKeys['ArrowUp'] ? 650 : (trKeys['ArrowDown'] ? -300 : 0);
+    trCurrentRpm = Math.round(1800 + gearRatio * 4800 + throttleBoost);
+
+    // Grundfrequenz passend zum Fahrzeugtyp (V8 Muscle tiefer, Hypercar giftiger)
+    const carId = trGarage.selectedCar;
+    const pitchMult = carId === 'muscle' ? 0.82 : (carId === 'hyper' ? 1.25 : 1.0);
+    const baseHz = (28 + (trCurrentRpm / 6800) * 92) * pitchMult;
+
+    trEngOsc1.frequency.setTargetAtTime(baseHz, now, 0.04);
+    trEngOsc2.frequency.setTargetAtTime(baseHz * 2.02, now, 0.04);
+    trEngFilter.frequency.setTargetAtTime(190 + (kmh * 2.4) + (trKeys['ArrowUp'] ? 180 : 0), now, 0.05);
+
+    const targetVol = trKeys['ArrowUp'] ? 0.065 : 0.042;
+    trEngGain.gain.setTargetAtTime(targetVol, now, 0.06);
+}
+
+function trStopEngineSound() {
+    if (trEngGain && trAudioCtx) {
+        try {
+            trEngGain.gain.setTargetAtTime(0.0, trAudioCtx.currentTime, 0.05);
+        } catch (e) {}
+    }
+}
+
+function trPlaySfx(type) {
+    if (!trSoundOn) return;
+    trInitAudio();
+    if (!trAudioCtx) return;
+    try {
+        const now = trAudioCtx.currentTime;
+        if (type === 'horn') {
+            // Echte Zweiklang-Autohupe (410 Hz + 510 Hz)
+            [410, 512].forEach((freq) => {
+                const o = trAudioCtx.createOscillator();
+                const g = trAudioCtx.createGain();
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(freq, now);
+                g.gain.setValueAtTime(0.06, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+                o.connect(g);
+                g.connect(trAudioCtx.destination);
+                o.start(now);
+                o.stop(now + 0.35);
+            });
+        } else if (type === 'whoosh') {
+            // Doppler-Vorbeifahr-Wusch bei Close Overtake
+            const o = trAudioCtx.createOscillator();
+            const g = trAudioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(340, now);
+            o.frequency.exponentialRampToValueAtTime(95, now + 0.24);
+            g.gain.setValueAtTime(0.08, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+            o.connect(g);
+            g.connect(trAudioCtx.destination);
+            o.start(now);
+            o.stop(now + 0.26);
+        } else if (type === 'gear') {
+            // Kurzes Turbo-Zischen beim Gangwechsel
+            const o = trAudioCtx.createOscillator();
+            const g = trAudioCtx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(520, now);
+            o.frequency.exponentialRampToValueAtTime(180, now + 0.09);
+            g.gain.setValueAtTime(0.035, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
+            o.connect(g);
+            g.connect(trAudioCtx.destination);
+            o.start(now);
+            o.stop(now + 0.11);
+        } else if (type === 'crash') {
+            const o = trAudioCtx.createOscillator();
+            const g = trAudioCtx.createGain();
+            o.type = 'sawtooth';
+            o.frequency.setValueAtTime(130, now);
+            o.frequency.linearRampToValueAtTime(38, now + 0.45);
+            g.gain.setValueAtTime(0.14, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
+            o.connect(g);
+            g.connect(trAudioCtx.destination);
+            o.start(now);
+            o.stop(now + 0.47);
+        }
+    } catch (e) {}
+}
+
+function trToggleSound() {
+    trSoundOn = !trSoundOn;
+    const btn = document.getElementById('trSoundBtn');
+    if (btn) {
+        btn.textContent = trSoundOn ? '🔊 Motorsound' : '🔇 Stumm';
+    }
+    if (!trSoundOn) {
+        trStopEngineSound();
+    } else if (trRunning) {
+        trInitAudio();
+        trUpdateEngineSound();
+    }
+}
+
+/**
+ * 2.5D Perspektiv-Projektion:
+ * Wandelt logische Highway-Koordinaten (worldX: 70..390, worldY: -40..540)
+ * in trapezförmige 3D-Bildschirmkoordinaten (x, y, scale) um.
+ */
+function trProject(worldX, worldY) {
+    const horizonY = 124;
+    const bottomY  = 520;
+    const rawT     = Math.max(-0.08, Math.min(1.18, worldY / 540));
+    // Nichtlineare Tiefenstaffelung für echtes 3D-Geschwindigkeitsgefühl
+    const depthT   = Math.pow(Math.max(0.001, rawT + 0.08) / 1.08, 1.38);
+    const scale    = 0.22 + depthT * 1.12;
+    const screenY  = horizonY + depthT * (bottomY - horizonY);
+
+    // Leichter Kamera-Schwenk passend zur Spur des Spielers
+    const camOffset = (trPlayer.x - 230) * 0.26 * (1 - depthT);
+    const screenX   = 300 - camOffset + (worldX - 230) * scale * 1.18;
+    return { x: screenX, y: screenY, scale: scale, depthT: depthT };
+}
+
 function trLoadGarageFromSaved() {
     const saved = SAVED_GAME_STATES && SAVED_GAME_STATES['trafficracer'];
     if (saved && typeof saved === 'object') {
@@ -12066,6 +12263,7 @@ function trInit() {
 function trStartGame() {
     if (trRafId) cancelAnimationFrame(trRafId);
     trChangeConfig();
+    trInitAudio();
     trTick        = 0;
     trStartAt     = Date.now();
     trScore       = 0;
@@ -12079,9 +12277,11 @@ function trStartGame() {
     trBannerText  = '';
     trTraffic     = [];
     trPopups      = [];
-    trPlayer      = { x: 270, y: 440, w: 36, h: 68, kmh: 75, tilt: 0 };
+    trPlayer      = { x: 270, y: 448, w: 36, h: 68, kmh: 75, tilt: 0 };
+    trCurrentGear = 2;
     trRunning     = true;
     trUpdateHud();
+    trUpdateEngineSound();
     trRafId       = requestAnimationFrame(trLoop);
 }
 
@@ -12091,6 +12291,7 @@ function trTriggerHorn() {
         return;
     }
     trHornFlash = 26;
+    trPlaySfx('horn');
     // Vorausfahrende Autos in unserer Spur weichen nach Möglichkeit zur Seite aus!
     for (const v of trTraffic) {
         if (v.dir === 1 && v.y < trPlayer.y && v.y > trPlayer.y - 260 && Math.abs(v.x - trPlayer.x) < 32) {
@@ -12187,6 +12388,8 @@ function trUpdateHud() {
 
 function trEndRun(reason) {
     trRunning = false;
+    trStopEngineSound();
+    trPlaySfx('crash');
     const earnedCash = Math.max(25, Math.round(trScore / 18) + trOvertakes * 15);
     trGarage.cash += earnedCash;
     trSaveGarageToCloud();
@@ -12239,6 +12442,9 @@ function trStep() {
         trPlayer.tilt = 0.09;
     }
 
+    // Kontinuierlichen Motorsound aktualisieren
+    trUpdateEngineSound();
+
     // 3. Gefahrene Distanz & laufende Punkte (ab 100 km/h schneller, im Gegenverkehr doppelt!)
     const meterStep = (trPlayer.kmh / 3.6) / 60;
     trDistMeters += meterStep;
@@ -12248,7 +12454,7 @@ function trStep() {
     trScore += meterStep * speedMultiplier;
 
     // Straßenmarkierungen & Rand-Objekte scrollen
-    const roadPxSpeed = trPlayer.kmh * 0.085;
+    const roadPxSpeed = trPlayer.kmh * 0.09;
     trRoadOffset = (trRoadOffset + roadPxSpeed) % 60;
     for (const sc of trScenery) {
         sc.y += roadPxSpeed;
@@ -12263,9 +12469,6 @@ function trStep() {
     // 5. KI-Verkehr bewegen, Spurwechsel & Close-Overtake-Prüfung
     for (let i = trTraffic.length - 1; i >= 0; i--) {
         const v = trTraffic[i];
-        // Relativgeschwindigkeit zum Spieler:
-        // Mitfahrender Verkehr (dir=1) kommt näher, wenn trPlayer.kmh > v.kmh
-        // Gegenverkehr (dir=-1) rast mit (trPlayer.kmh + v.kmh) auf uns zu!
         const relKmh = v.dir === 1 ? (trPlayer.kmh - v.kmh) : (trPlayer.kmh + v.kmh);
         v.y += relKmh * 0.075;
 
@@ -12296,7 +12499,9 @@ function trStep() {
             if (v.hp <= 0) {
                 trScore += 1200;
                 trGarage.cash += 150;
-                trPopups.push({ x: v.x, y: v.y, text: '🚓 RASER GESTOPPT! +1200', color: '#38bdf8', life: 50 });
+                trPlaySfx('whoosh');
+                const pProj = trProject(v.x, v.y);
+                trPopups.push({ x: pProj.x, y: pProj.y - 24, text: '🚓 RASER GESTOPPT! +1200', color: '#38bdf8', life: 50 });
                 trTraffic.splice(i, 1);
                 trUpdateHud();
                 continue;
@@ -12313,12 +12518,14 @@ function trStep() {
                 trComboTimer = 155; // ~2.5 Sekunden für nächsten Overtake
                 const bonus = (v.dir === -1 ? 200 : 100) * trCombo;
                 trScore += bonus;
+                trPlaySfx('whoosh');
+                const pProj = trProject(trPlayer.x, trPlayer.y);
                 trPopups.push({
-                    x: trPlayer.x,
-                    y: trPlayer.y - 38,
+                    x: pProj.x,
+                    y: pProj.y - 52,
                     text: (v.dir === -1 ? '🔥 GEGENVERKEHR ×' : '⚡ CLOSE OVERTAKE ×') + trCombo + ' (+' + bonus + ')',
                     color: v.dir === -1 ? '#f43f5e' : '#fde047',
-                    life: 44
+                    life: 46
                 });
             }
         }
@@ -12328,10 +12535,11 @@ function trStep() {
         const hitY = Math.abs(v.y - trPlayer.y) < (v.h / 2 + trPlayer.h / 2 - 6);
         if (hitX && hitY && !v.isSuspect) {
             if (trMode === 'timeattack') {
-                // Im Zeitfahren: starker Tempoverlust statt sofortigem Game Over
                 trPlayer.kmh = 45;
                 trCombo = 1;
-                trPopups.push({ x: trPlayer.x, y: trPlayer.y - 30, text: '💥 CRASH! TEMPOVERLUST!', color: '#fb7185', life: 35 });
+                trPlaySfx('crash');
+                const pProj = trProject(trPlayer.x, trPlayer.y);
+                trPopups.push({ x: pProj.x, y: pProj.y - 40, text: '💥 CRASH! TEMPOVERLUST!', color: '#fb7185', life: 35 });
                 trTraffic.splice(i, 1);
                 continue;
             } else {
@@ -12349,71 +12557,175 @@ function trStep() {
     trUpdateHud();
 }
 
-function trDrawVehicle(ctx, x, y, w, h, color, stripeColor, dir, isTruck, blinker, blinkerTicks, isPolice, isPlayer, tilt = 0) {
+/**
+ * Zeichnet ein Fahrzeug in 2.5D-Verfolgerperspektive (mit 3D-Stufenheck, Dach, Heckscheibe,
+ * Rücklichtern/Scheinwerfern, Spoiler und Turbo-Auspuffflammen).
+ */
+function trDrawVehicle3D(ctx, worldX, worldY, baseW, baseH, color, stripeColor, dir, isTruck, blinker, blinkerTicks, isPolice, isPlayer, tilt = 0) {
+    const p = trProject(worldX, worldY);
+    if (p.y < 118 || p.y > 560) return;
+
+    const s = p.scale;
+    const w = baseW * s * 1.38;
+    const h = baseH * s * 0.68;
+
     ctx.save();
-    ctx.translate(x, y);
-    if (tilt !== 0) ctx.rotate(tilt);
-    if (dir === -1) ctx.scale(1, -1); // Gegenverkehr schaut nach unten
+    ctx.translate(p.x, p.y);
+    if (tilt !== 0) ctx.rotate(tilt * 0.85);
 
-    // Schatten
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(-w / 2 + 3, -h / 2 + 4, w, h);
-
-    // Reifen
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(-w / 2 - 2, -h / 2 + 8, 4, 12);
-    ctx.fillRect(w / 2 - 2, -h / 2 + 8, 4, 12);
-    ctx.fillRect(-w / 2 - 2, h / 2 - 20, 4, 12);
-    ctx.fillRect(w / 2 - 2, h / 2 - 20, 4, 12);
-
-    // Karosserie
-    ctx.fillStyle = color;
+    // 1. Boden-Schatten unter dem Fahrzeug
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.beginPath();
-    ctx.roundRect(-w / 2, -h / 2, w, h, isTruck ? 4 : 8);
+    ctx.ellipse(0, 4 * s, w * 0.56, h * 0.34, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // 2. Hinterreifen & Vorderreifen (3D-Walzen)
+    ctx.fillStyle = '#090d16';
+    const tireW = Math.max(4, 9 * s);
+    const tireH = Math.max(6, 15 * s);
+    ctx.fillRect(-w * 0.52, -tireH * 0.3, tireW, tireH);
+    ctx.fillRect(w * 0.52 - tireW, -tireH * 0.3, tireW, tireH);
+
     if (isTruck) {
-        // Sattelzug-Führerhaus + heller Auflieger
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 24);
+        // SATTELZUG / LKW IN 3D-KASTENFORM
+        const boxH = 56 * s;
+        // Unteres Chassis
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(-w * 0.5, -10 * s, w, 12 * s);
+        // Hoher Kasten-Auflieger (Perspektive nach oben)
         ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(-w / 2 + 2, -h / 2 + 28, w - 4, h - 32);
+        ctx.beginPath();
+        ctx.roundRect(-w * 0.48, -boxH, w * 0.96, boxH - 4 * s, 4 * s);
+        ctx.fill();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = Math.max(1, 1.5 * s);
+        ctx.strokeRect(-w * 0.48, -boxH, w * 0.96, boxH - 4 * s);
+
+        // Dachkante oben
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-w * 0.46, -boxH - 4 * s, w * 0.92, 5 * s);
+
+        // LKW-Rücklichter oder Frontscheinwerfer (bei Gegenverkehr)
+        ctx.fillStyle = dir === -1 ? '#fef08a' : '#ef4444';
+        ctx.fillRect(-w * 0.44, -8 * s, 10 * s, 4 * s);
+        ctx.fillRect(w * 0.44 - 10 * s, -8 * s, 10 * s, 4 * s);
     } else {
-        // Rennstreifen
+        // PKW / SPORTWAGEN IN 2.5D-CHASE-CAM-PERSPEKTIVE
+        const bodyH = 22 * s;
+        const roofH = 18 * s;
+
+        // Unterer Stoßfänger / Diffusor
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(-w * 0.5, -6 * s, w, 9 * s, 3 * s);
+        ctx.fill();
+
+        // Doppel-Auspuff + blaue/orange Flammen bei Vollgas des Spielers
+        if (isPlayer && trKeys['ArrowUp'] && (trTick % 4 < 2)) {
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(-w * 0.26, 5 * s, 4.5 * s, 0, Math.PI * 2);
+            ctx.arc(w * 0.26, 5 * s, 4.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f97316';
+            ctx.beginPath();
+            ctx.arc(-w * 0.26, 8 * s, 3 * s, 0, Math.PI * 2);
+            ctx.arc(w * 0.26, 8 * s, 3 * s, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Haupt-Karosserie (Trapez nach oben leicht verjüngt)
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.52, -3 * s);
+        ctx.lineTo(w * 0.52, -3 * s);
+        ctx.lineTo(w * 0.46, -bodyH);
+        ctx.lineTo(-w * 0.46, -bodyH);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3D-Kabine & Dachaufbau
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.42, -bodyH);
+        ctx.lineTo(w * 0.42, -bodyH);
+        ctx.lineTo(w * 0.31, -bodyH - roofH);
+        ctx.lineTo(-w * 0.31, -bodyH - roofH);
+        ctx.closePath();
+        ctx.fill();
+
+        // Schräge Heckscheibe (oder Frontscheibe bei Gegenverkehr)
+        ctx.fillStyle = dir === -1 ? '#1e293b' : '#090d16';
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.36, -bodyH - 2 * s);
+        ctx.lineTo(w * 0.36, -bodyH - 2 * s);
+        ctx.lineTo(w * 0.27, -bodyH - roofH + 3 * s);
+        ctx.lineTo(-w * 0.27, -bodyH - roofH + 3 * s);
+        ctx.closePath();
+        ctx.fill();
+
+        // Heller Glanzstreifen auf der Scheibe
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.lineWidth = Math.max(1, 1.5 * s);
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.22, -bodyH - 4 * s);
+        ctx.lineTo(-w * 0.14, -bodyH - roofH + 5 * s);
+        ctx.stroke();
+
+        // Rennstreifen über Dach & Heck
         if (stripeColor) {
             ctx.fillStyle = stripeColor;
-            ctx.fillRect(-3, -h / 2 + 2, 6, h - 4);
+            ctx.fillRect(-3.5 * s, -bodyH - roofH, 7 * s, roofH + bodyH - 3 * s);
         }
-        // Windschutzscheibe & Heckscheibe
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(-w / 2 + 5, -h / 2 + 14, w - 10, 14);
-        ctx.fillRect(-w / 2 + 6, h / 2 - 18, w - 12, 10);
+
+        // Sport-Heckspoiler für Spieler-Auto oder Raser
+        if (isPlayer || stripeColor) {
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-w * 0.44, -bodyH - 3 * s, w * 0.88, 3.2 * s);
+        }
+
+        // Rücklichter (Mitfahrer/Spieler) ODER grelle Scheinwerfer (Gegenverkehr!)
+        if (dir === -1) {
+            // Gegenverkehr kommt frontal auf uns zu -> helle Xenon-Scheinwerfer + Kühlergrill!
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-w * 0.22, -14 * s, w * 0.44, 6 * s);
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(-w * 0.45, -15 * s, 11 * s, 6 * s);
+            ctx.fillRect(w * 0.45 - 11 * s, -15 * s, 11 * s, 6 * s);
+        } else {
+            const braking = isPlayer && trKeys['ArrowDown'];
+            ctx.fillStyle = braking ? '#ff1e1e' : '#dc2626';
+            ctx.fillRect(-w * 0.46, -15 * s, 12 * s, 6 * s);
+            ctx.fillRect(w * 0.46 - 12 * s, -15 * s, 12 * s, 6 * s);
+            if (braking) {
+                // Bremslicht-Leuchtschein
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.38)';
+                ctx.beginPath();
+                ctx.arc(-w * 0.38, -12 * s, 12 * s, 0, Math.PI * 2);
+                ctx.arc(w * 0.38, -12 * s, 12 * s, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Nummernschild in der Mitte
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(-7 * s, -13 * s, 14 * s, 4.5 * s);
+        }
     }
-
-    // Scheinwerfer vorn & Rücklichter hinten
-    ctx.fillStyle = '#fef08a';
-    ctx.fillRect(-w / 2 + 4, -h / 2, 7, 3);
-    ctx.fillRect(w / 2 - 11, -h / 2, 7, 3);
-
-    ctx.fillStyle = (isPlayer && trKeys['ArrowDown']) ? '#ff0000' : '#dc2626';
-    ctx.fillRect(-w / 2 + 4, h / 2 - 3, 8, 3);
-    ctx.fillRect(w / 2 - 12, h / 2 - 3, 8, 3);
 
     // Gelber Blinker beim Spurwechsel
     if (blinkerTicks > 0 && Math.floor(blinkerTicks / 4) % 2 === 0) {
         ctx.fillStyle = '#facc15';
-        const bx = blinker < 0 ? -w / 2 - 1 : w / 2 - 4;
-        ctx.fillRect(bx, -h / 2 + 2, 5, 5);
-        ctx.fillRect(bx, h / 2 - 7, 5, 5);
+        const bx = blinker < 0 ? -w * 0.52 : w * 0.52 - 6 * s;
+        ctx.fillRect(bx, -14 * s, 6 * s, 6 * s);
     }
 
     // Polizei-Blaulichtbalken auf dem Dach
     if (isPolice) {
-        const flashBlue = (trTick % 12) < 6;
+        const flashBlue = (trTick % 10) < 5;
+        const barY = -39 * s;
         ctx.fillStyle = flashBlue ? '#3b82f6' : '#ef4444';
-        ctx.fillRect(-10, -4, 10, 5);
+        ctx.fillRect(-12 * s, barY, 12 * s, 5 * s);
         ctx.fillStyle = flashBlue ? '#ef4444' : '#3b82f6';
-        ctx.fillRect(0, -4, 10, 5);
+        ctx.fillRect(0, barY, 12 * s, 5 * s);
     }
 
     ctx.restore();
@@ -12423,133 +12735,274 @@ function trDraw() {
     const cvs = document.getElementById('trCanvas');
     if (!cvs) return;
     const ctx = cvs.getContext('2d');
+    const W = cvs.width;
+    const H = cvs.height;
+    const horizonY = 124;
 
-    // 1. Umgebungs-Rand (Wüste, Nacht oder Regen)
+    // 1. 3D-Himmel, Sonne/Mond & Horizont-Skyline mit Parallax-Verschiebung
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
     if (trEnv === 'desert') {
-        ctx.fillStyle = '#d97706';
+        skyGrad.addColorStop(0, '#7c2d12');
+        skyGrad.addColorStop(0.6, '#ea580c');
+        skyGrad.addColorStop(1, '#fde047');
     } else if (trEnv === 'rain') {
-        ctx.fillStyle = '#1e293b';
+        skyGrad.addColorStop(0, '#090d16');
+        skyGrad.addColorStop(0.6, '#1e293b');
+        skyGrad.addColorStop(1, '#475569');
     } else {
-        ctx.fillStyle = '#090d16';
+        skyGrad.addColorStop(0, '#020617');
+        skyGrad.addColorStop(0.65, '#1e1b4b');
+        skyGrad.addColorStop(1, '#4c1d95');
     }
-    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, horizonY);
 
-    // 2. 4-spurige Asphalt-Fahrbahn (x = 70 .. 390)
-    ctx.fillStyle = trEnv === 'rain' ? '#1e293b' : '#18181b';
-    ctx.fillRect(70, 0, 320, cvs.height);
+    const parallaxX = (trPlayer.x - 230) * 0.35;
 
-    // Rot-weiße Randcurbs / Leitplanken
-    for (let y = -60 + trRoadOffset; y < cvs.height; y += 30) {
-        ctx.fillStyle = Math.floor((y - trRoadOffset) / 30) % 2 === 0 ? '#ef4444' : '#f8fafc';
-        ctx.fillRect(62, y, 8, 30);
-        ctx.fillRect(390, y, 8, 30);
+    // Sterne oder Synthwave-Sonne/Mond am Horizont
+    if (trEnv === 'night') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        for (let i = 0; i < 24; i++) {
+            const sx = ((i * 83 - parallaxX * 0.3) % W + W) % W;
+            const sy = (i * 29) % (horizonY - 28);
+            ctx.fillRect(sx, sy, 2, 2);
+        }
+        // Leuchtender Synthwave-Mond am Horizont
+        const moonGrad = ctx.createLinearGradient(0, 42, 0, horizonY);
+        moonGrad.addColorStop(0, '#f43f5e');
+        moonGrad.addColorStop(1, '#fde047');
+        ctx.fillStyle = moonGrad;
+        ctx.beginPath();
+        ctx.arc(W / 2 - parallaxX * 0.4, horizonY - 12, 38, Math.PI, 0);
+        ctx.fill();
+    } else if (trEnv === 'desert') {
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.88)';
+        ctx.beginPath();
+        ctx.arc(W / 2 - parallaxX * 0.4, horizonY - 18, 34, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    // Spur-Markierungen (bei Gegenverkehr ist die Mittellinie bei x=230 doppelt durchgezogen gelb!)
-    for (let laneIdx = 1; laneIdx <= 3; laneIdx++) {
-        const lx = 70 + laneIdx * 80;
-        if (laneIdx === 2 && trMode === 'twoway') {
-            ctx.fillStyle = '#facc15';
-            ctx.fillRect(lx - 4, 0, 2.5, cvs.height);
-            ctx.fillRect(lx + 1.5, 0, 2.5, cvs.height);
+    // Skyline / Berge am Horizont
+    ctx.fillStyle = trEnv === 'desert' ? '#9a3412' : '#0f172a';
+    for (let i = -2; i < 16; i++) {
+        const bx = i * 44 - (parallaxX * 0.7);
+        const bh = 16 + ((i * 37) % 38);
+        ctx.fillRect(bx, horizonY - bh, 40, bh);
+        if (trEnv === 'night' && bh > 26) {
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.45)';
+            ctx.fillRect(bx + 6, horizonY - bh + 6, 4, 4);
+            ctx.fillRect(bx + 16, horizonY - bh + 12, 4, 4);
+            ctx.fillStyle = '#0f172a';
+        }
+    }
+
+    // 2. Boden links & rechts neben der Autobahn (in Tiefen-Streifen wie bei OutRun)
+    const numSlices = 28;
+    for (let s = 0; s < numSlices; s++) {
+        const wy1 = (s / numSlices) * 540;
+        const wy2 = ((s + 1) / numSlices) * 540;
+        const pL1 = trProject(70, wy1);
+        const pR1 = trProject(390, wy1);
+        const pL2 = trProject(70, wy2);
+        const pR2 = trProject(390, wy2);
+
+        const stripePhase = Math.floor((wy1 - trRoadOffset * 2.2) / 36);
+        const isAlt = (stripePhase % 2) === 0;
+
+        // Seitenstreifen / Gelände
+        if (trEnv === 'desert') {
+            ctx.fillStyle = isAlt ? '#d97706' : '#b45309';
+        } else if (trEnv === 'rain') {
+            ctx.fillStyle = isAlt ? '#0f172a' : '#1e293b';
         } else {
-            ctx.fillStyle = 'rgba(248, 250, 252, 0.65)';
-            for (let y = -60 + trRoadOffset; y < cvs.height; y += 60) {
-                ctx.fillRect(lx - 1.5, y, 3, 32);
+            ctx.fillStyle = isAlt ? '#090d16' : '#111827';
+        }
+        ctx.fillRect(0, pL1.y, W, pL2.y - pL1.y + 1);
+
+        // Trapez-Asphalt-Segment der 4-spurigen Autobahn
+        ctx.fillStyle = trEnv === 'rain'
+            ? (isAlt ? '#1e293b' : '#263346')
+            : (isAlt ? '#18181b' : '#222227');
+        ctx.beginPath();
+        ctx.moveTo(pL1.x, pL1.y);
+        ctx.lineTo(pR1.x, pR1.y);
+        ctx.lineTo(pR2.x, pR2.y);
+        ctx.lineTo(pL2.x, pL2.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Rot-weiße 3D-Randcurbs links und rechts
+        const curbW1 = Math.max(2, 10 * pL1.scale);
+        const curbW2 = Math.max(2, 10 * pL2.scale);
+        ctx.fillStyle = isAlt ? '#ef4444' : '#f8fafc';
+        // Links
+        ctx.beginPath();
+        ctx.moveTo(pL1.x - curbW1, pL1.y);
+        ctx.lineTo(pL1.x, pL1.y);
+        ctx.lineTo(pL2.x, pL2.y);
+        ctx.lineTo(pL2.x - curbW2, pL2.y);
+        ctx.closePath();
+        ctx.fill();
+        // Rechts
+        ctx.beginPath();
+        ctx.moveTo(pR1.x, pR1.y);
+        ctx.lineTo(pR1.x + curbW1, pR1.y);
+        ctx.lineTo(pR2.x + curbW2, pR2.y);
+        ctx.lineTo(pR2.x, pR2.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Perspektivische Spur-Markierungen für die 4 Spuren
+        for (let laneIdx = 1; laneIdx <= 3; laneIdx++) {
+            const laneWorldX = 70 + laneIdx * 80;
+            const m1 = trProject(laneWorldX, wy1);
+            const m2 = trProject(laneWorldX, wy2);
+            const lineW = Math.max(1, 3.2 * m1.scale);
+
+            if (laneIdx === 2 && trMode === 'twoway') {
+                // Doppelt durchgezogene gelbe Mittellinie bei Gegenverkehr
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = lineW;
+                ctx.beginPath();
+                ctx.moveTo(m1.x - 2.5 * m1.scale, m1.y);
+                ctx.lineTo(m2.x - 2.5 * m2.scale, m2.y);
+                ctx.moveTo(m1.x + 2.5 * m1.scale, m1.y);
+                ctx.lineTo(m2.x + 2.5 * m2.scale, m2.y);
+                ctx.stroke();
+            } else if (isAlt) {
+                // Gestrichelte weiße Fahrbahnmarkierung
+                ctx.strokeStyle = 'rgba(248, 250, 252, 0.78)';
+                ctx.lineWidth = lineW;
+                ctx.beginPath();
+                ctx.moveTo(m1.x, m1.y);
+                ctx.lineTo(m2.x, m2.y);
+                ctx.stroke();
             }
         }
     }
 
-    // Straßenrand-Dekoration (Palmen/Kakteen/Laternen)
-    for (const sc of trScenery) {
-        const sx = sc.side < 0 ? 32 : 428;
+    // 3. Straßenlaternen & Bäume/Kakteen perspektivisch von hinten nach vorn zeichnen
+    const sortedScenery = [...trScenery].sort((a, b) => a.y - b.y);
+    for (const sc of sortedScenery) {
+        const worldX = sc.side < 0 ? 42 : 418;
+        const p = trProject(worldX, sc.y);
+        const s = p.scale;
+        if (p.y < horizonY) continue;
+
         if (sc.type === 'lamp') {
-            ctx.fillStyle = '#94a3b8';
-            ctx.fillRect(sx - 3, sc.y - 3, 6, 6);
+            const poleH = 68 * s;
+            const armW  = 24 * s * (sc.side < 0 ? 1 : -1);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = Math.max(1.5, 3.5 * s);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x, p.y - poleH);
+            ctx.lineTo(p.x + armW, p.y - poleH - 4 * s);
+            ctx.stroke();
+
+            // Leuchtender Lampenkopf
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.arc(p.x + armW, p.y - poleH - 3 * s, Math.max(2, 5 * s), 0, Math.PI * 2);
+            ctx.fill();
+
             if (trEnv === 'night') {
-                ctx.fillStyle = 'rgba(254, 240, 138, 0.16)';
+                ctx.fillStyle = 'rgba(254, 240, 138, 0.12)';
                 ctx.beginPath();
-                ctx.arc(sc.side < 0 ? 68 : 392, sc.y, 28, 0, Math.PI * 2);
+                ctx.arc(p.x + armW, p.y - 4 * s, 26 * s, 0, Math.PI * 2);
                 ctx.fill();
             }
         } else {
+            // 3D-Baum oder Wüsten-Kaktus am Straßenrand
+            const trunkH = 18 * s;
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(p.x - 3 * s, p.y - trunkH, 6 * s, trunkH);
             ctx.fillStyle = trEnv === 'desert' ? '#15803d' : '#065f46';
             ctx.beginPath();
-            ctx.arc(sx, sc.y, 12, 0, Math.PI * 2);
+            ctx.arc(p.x, p.y - trunkH - 10 * s, 14 * s, 0, Math.PI * 2);
             ctx.fill();
         }
     }
 
-    // 3. Scheinwerfer-Lichtkegel bei Nacht oder Lichthupe
+    // 4. Scheinwerfer-Lichtkegel des Spieler-Autos (in 3D-Trapezform nach vorn)
     if (trEnv === 'night' || trHornFlash > 0) {
-        const beamGrad = ctx.createLinearGradient(trPlayer.x, trPlayer.y - 30, trPlayer.x, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
-        beamGrad.addColorStop(0, trHornFlash > 0 ? 'rgba(254, 249, 195, 0.55)' : 'rgba(254, 240, 138, 0.30)');
+        const pNear = trProject(trPlayer.x, trPlayer.y - 25);
+        const pFar  = trProject(trPlayer.x, trPlayer.y - (trHornFlash > 0 ? 310 : 210));
+        const beamGrad = ctx.createLinearGradient(pNear.x, pNear.y, pFar.x, pFar.y);
+        beamGrad.addColorStop(0, trHornFlash > 0 ? 'rgba(254, 249, 195, 0.62)' : 'rgba(254, 240, 138, 0.34)');
         beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
         ctx.fillStyle = beamGrad;
         ctx.beginPath();
-        ctx.moveTo(trPlayer.x - 14, trPlayer.y - 32);
-        ctx.lineTo(trPlayer.x - 52, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
-        ctx.lineTo(trPlayer.x + 52, trPlayer.y - (trHornFlash > 0 ? 290 : 190));
-        ctx.lineTo(trPlayer.x + 14, trPlayer.y - 32);
+        ctx.moveTo(pNear.x - 18, pNear.y);
+        ctx.lineTo(pFar.x - 45, pFar.y);
+        ctx.lineTo(pFar.x + 45, pFar.y);
+        ctx.lineTo(pNear.x + 18, pNear.y);
         ctx.closePath();
         ctx.fill();
     }
 
-    // 4. KI-Verkehr zeichnen
-    for (const v of trTraffic) {
-        trDrawVehicle(
-            ctx,
-            v.x,
-            v.y,
-            v.w,
-            v.h,
-            v.color,
-            v.isSuspect ? '#fde047' : null,
-            v.dir,
-            v.type === 'truck',
-            v.blinker,
-            v.blinkerTicks,
-            false,
-            false,
-            0
-        );
-        if (v.isSuspect) {
-            ctx.fillStyle = '#fde047';
-            ctx.font = 'bold 10px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('🎯 RASER (' + Math.ceil(v.hp) + '%)', v.x, v.y - v.h / 2 - 8);
+    // 5. KI-Verkehr + Spieler-Auto nach Tiefe sortiert zeichnen (Painter's Algorithmus)
+    const myCar = trGetCurrentCarStats();
+    const renderList = trTraffic.map((v) => ({ isPlayer: false, y: v.y, v: v }));
+    renderList.push({ isPlayer: true, y: trPlayer.y });
+    renderList.sort((a, b) => a.y - b.y);
+
+    for (const item of renderList) {
+        if (item.isPlayer) {
+            trDrawVehicle3D(
+                ctx,
+                trPlayer.x,
+                trPlayer.y,
+                trPlayer.w,
+                trPlayer.h,
+                myCar.color,
+                myCar.stripe,
+                1,
+                false,
+                0,
+                0,
+                !!myCar.isPolice || trMode === 'police',
+                true,
+                trPlayer.tilt
+            );
+        } else {
+            const v = item.v;
+            trDrawVehicle3D(
+                ctx,
+                v.x,
+                v.y,
+                v.w,
+                v.h,
+                v.color,
+                v.isSuspect ? '#fde047' : null,
+                v.dir,
+                v.type === 'truck',
+                v.blinker,
+                v.blinkerTicks,
+                false,
+                false,
+                0
+            );
+            if (v.isSuspect) {
+                const vp = trProject(v.x, v.y);
+                ctx.fillStyle = '#fde047';
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('🎯 RASER (' + Math.ceil(v.hp) + '%)', vp.x, vp.y - 42 * vp.scale);
+            }
         }
     }
 
-    // 5. Eigenes Fahrzeug zeichnen
-    const myCar = trGetCurrentCarStats();
-    trDrawVehicle(
-        ctx,
-        trPlayer.x,
-        trPlayer.y,
-        trPlayer.w,
-        trPlayer.h,
-        myCar.color,
-        myCar.stripe,
-        1,
-        false,
-        0,
-        0,
-        !!myCar.isPolice || trMode === 'police',
-        true,
-        trPlayer.tilt
-    );
-
     // 6. Regentropfen bei Regen-Autobahn
     if (trEnv === 'rain') {
-        ctx.strokeStyle = 'rgba(186, 230, 253, 0.40)';
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.42)';
         ctx.lineWidth = 1.5;
-        for (let i = 0; i < 32; i++) {
-            const rx = (i * 73 + trTick * 9) % cvs.width;
-            const ry = (i * 97 + trTick * 17) % cvs.height;
+        for (let i = 0; i < 36; i++) {
+            const rx = (i * 73 + trTick * 9) % W;
+            const ry = (i * 97 + trTick * 17) % H;
             ctx.beginPath();
             ctx.moveTo(rx, ry);
-            ctx.lineTo(rx - 3, ry + 14);
+            ctx.lineTo(rx - 4, ry + 15);
             ctx.stroke();
         }
     }
@@ -12558,43 +13011,67 @@ function trDraw() {
     for (let i = trPopups.length - 1; i >= 0; i--) {
         const p = trPopups[i];
         ctx.fillStyle = p.color;
-        ctx.font = 'bold 13px monospace';
+        ctx.font = 'extrabold 14px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(p.text, p.x, p.y);
-        p.y -= 0.8;
+        p.y -= 0.9;
         p.life--;
         if (p.life <= 0) trPopups.splice(i, 1);
     }
 
-    // 8. Digital-Tacho oben links im Canvas (ab 100 km/h leuchtet "100+ BONUS AKTIV")
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-    ctx.fillRect(12, 12, 148, 42);
+    // 8. Cockpit-Tacho, Drehzahlmesser (RPM) & Gang-Anzeige oben links
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    ctx.beginPath();
+    ctx.roundRect(12, 12, 184, 54, 10);
+    ctx.fill();
+    ctx.strokeStyle = trPlayer.kmh >= 100 ? '#fb923c' : '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
     ctx.fillStyle = trPlayer.kmh >= 100 ? '#fb923c' : '#34d399';
-    ctx.font = 'bold 18px monospace';
+    ctx.font = 'extrabold 19px monospace';
     ctx.textAlign = 'left';
     ctx.fillText(Math.round(trPlayer.kmh) + ' KM/H', 20, 34);
-    ctx.fillStyle = '#e2e8f0';
+
+    // Gang-Badge rechts im Cockpit-Kasten
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(148, 17, 40, 22);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('G' + trCurrentGear, 168, 32);
+
+    // Drehzahl-Balken (RPM)
+    const rpmPct = Math.max(0.1, Math.min(1, (trCurrentRpm - 1200) / 5800));
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(20, 42, 166, 6);
+    ctx.fillStyle = rpmPct > 0.82 ? '#ef4444' : (trPlayer.kmh >= 100 ? '#fb923c' : '#22c55e');
+    ctx.fillRect(20, 42, 166 * rpmPct, 6);
+
+    ctx.fillStyle = '#cbd5e1';
     ctx.font = 'bold 9px monospace';
-    ctx.fillText(trPlayer.kmh >= 100 ? '⚡ OVERTAKE-BONUS AKTIV' : 'AB 100 KM/H: BONUS!', 20, 48);
+    ctx.textAlign = 'left';
+    ctx.fillText(trPlayer.kmh >= 100 ? '⚡ 100+ OVERTAKE-BONUS AKTIV' : 'AB 100 KM/H: OVERTAKE-BONUS', 20, 60);
 
     // 9. Start- / Crash-Banner
     if (!trRunning) {
-        ctx.fillStyle = 'rgba(2, 6, 23, 0.82)';
-        ctx.fillRect(0, cvs.height / 2 - 52, cvs.width, 104);
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.84)';
+        ctx.fillRect(0, H / 2 - 54, W, 108);
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fb923c';
         ctx.font = 'bold 18px monospace';
-        ctx.fillText(trBannerText || '🚘 CLOUD-TRAFFIC-RACER', cvs.width / 2, cvs.height / 2 - 14);
+        ctx.fillText(trBannerText || '🚘 CLOUD-TRAFFIC-RACER 3D', W / 2, H / 2 - 14);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '12px sans-serif';
-        ctx.fillText('Knappe Überholmanöver ab 100 km/h bringen Kombo-Punkte & 💰 Credits!', cvs.width / 2, cvs.height / 2 + 10);
+        ctx.fillText('2.5D-Perspektive + Motorsound • Knappe Überholmanöver ab 100 km/h bringen Kombo-Punkte!', W / 2, H / 2 + 10);
         ctx.fillStyle = '#34d399';
-        ctx.fillText('Klicke auf „▶️ Auf die Autobahn!“ oder drücke Taste H / Pfeiltasten', cvs.width / 2, cvs.height / 2 + 32);
+        ctx.fillText('Klicke auf „▶️ Auf die Autobahn!“ oder drücke Taste H / Pfeiltasten', W / 2, H / 2 + 32);
     }
 }
 
 function trLoop() {
     if (!trRunning) {
+        trStopEngineSound();
         trDraw();
         return;
     }
