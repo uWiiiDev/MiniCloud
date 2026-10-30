@@ -135,6 +135,7 @@ $thumbDir = UPLOAD_DIR . '.thumbs/';
 if (!is_dir($thumbDir)) {
     @mkdir($thumbDir, 0750, true);
     @file_put_contents($thumbDir . '.htaccess', "Order deny,allow\nDeny from all\n");
+    @file_put_contents($thumbDir . 'index.php', "<?php http_response_code(403); exit;\n");
 }
 
 $supportsWebp = function_exists('imagewebp');

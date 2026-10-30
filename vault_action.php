@@ -103,8 +103,9 @@ if ($action === 'encrypt_file') {
 
     clearstatcache(true, $filePath);
     $newSize = (int)(@filesize($filePath) ?: $file['file_size']);
+    cleanupFileThumbnails($fileId);
 
-    $stmtUpd = $pdo->prepare('UPDATE files SET is_encrypted = 1, file_size = :sz WHERE id = :id');
+    $stmtUpd = $pdo->prepare('UPDATE files SET is_encrypted = 1, file_size = :sz, file_hash = NULL WHERE id = :id');
     $stmtUpd->execute([
         ':sz' => $newSize,
         ':id' => $fileId,
@@ -156,10 +157,12 @@ if ($action === 'decrypt_file') {
     unset($_SESSION[$attemptKey]);
     clearstatcache(true, $filePath);
     $newSize = (int)(@filesize($filePath) ?: $file['file_size']);
+    $restoredHash = ($newSize > 0 && $newSize <= 250 * 1048576) ? (@hash_file('sha256', $filePath) ?: null) : null;
 
-    $stmtUpd = $pdo->prepare('UPDATE files SET is_encrypted = 0, file_size = :sz WHERE id = :id');
+    $stmtUpd = $pdo->prepare('UPDATE files SET is_encrypted = 0, file_size = :sz, file_hash = :fh WHERE id = :id');
     $stmtUpd->execute([
         ':sz' => $newSize,
+        ':fh' => $restoredHash,
         ':id' => $fileId,
     ]);
 

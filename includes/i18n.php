@@ -3791,6 +3791,133 @@ function getTranslationDictionary(): array
             'nl' => 'Filmreeksen & Bioscooptickets',
             'it' => 'Serie di film e Biglietti Cinema',
         ],
+        // --- KI-Dokumenten-Chat, Duplikat-Prüfung, Lightbox, Papierkorb & Seitenblätterung ---
+        '⚠️ Duplikat' => [
+            'en' => '⚠️ Duplicate',
+            'fr' => '⚠️ Doublon',
+            'es' => '⚠️ Duplicado',
+            'nl' => '⚠️ Duplicaat',
+            'it' => '⚠️ Duplicato',
+        ],
+        '← Vorherige Seite' => [
+            'en' => '← Previous Page',
+            'fr' => '← Page précédente',
+            'es' => '← Página anterior',
+            'nl' => '← Vorige pagina',
+            'it' => '← Pagina precedente',
+        ],
+        'Nächste Seite →' => [
+            'en' => 'Next Page →',
+            'fr' => 'Page suivante →',
+            'es' => 'Página siguiente →',
+            'nl' => 'Volgende pagina →',
+            'it' => 'Pagina successiva →',
+        ],
+        '🎨 Zuschneiden / Bild-Studio' => [
+            'en' => '🎨 Crop / Image Studio',
+            'fr' => '🎨 Recadrer / Studio Image',
+            'es' => '🎨 Recortar / Estudio de Imagen',
+            'nl' => '🎨 Bijsnijden / Fotostudio',
+            'it' => '🎨 Ritaglia / Studio Immagini',
+        ],
+        '📝 In Office Light bearbeiten' => [
+            'en' => '📝 Edit in Office Light',
+            'fr' => '📝 Modifier dans Office Light',
+            'es' => '📝 Editar en Office Light',
+            'nl' => '📝 Bewerken in Office Light',
+            'it' => '📝 Modifica in Office Light',
+        ],
+        '🔎 OCR / PDF-Werkzeuge' => [
+            'en' => '🔎 OCR / PDF Tools',
+            'fr' => '🔎 OCR / Outils PDF',
+            'es' => '🔎 OCR / Herramientas PDF',
+            'nl' => '🔎 OCR / PDF-gereedschap',
+            'it' => '🔎 OCR / Strumenti PDF',
+        ],
+        '🤖 KI-Zusammenfassung' => [
+            'en' => '🤖 AI Summary',
+            'fr' => '🤖 Résumé IA',
+            'es' => '🤖 Resumen IA',
+            'nl' => '🤖 AI-samenvatting',
+            'it' => '🤖 Riassunto IA',
+        ],
+        'KI-Zusammenfassung' => [
+            'en' => 'AI Summary',
+            'fr' => 'Résumé IA',
+            'es' => 'Resumen IA',
+            'nl' => 'AI-samenvatting',
+            'it' => 'Riassunto IA',
+        ],
+        '📄 Geöffnetes Dokument aktiv' => [
+            'en' => '📄 Active Open Document',
+            'fr' => '📄 Document ouvert actif',
+            'es' => '📄 Documento abierto activo',
+            'nl' => '📄 Geopend document actief',
+            'it' => '📄 Documento aperto attivo',
+        ],
+        '📄 Frag deine Datei:' => [
+            'en' => '📄 Ask Your File:',
+            'fr' => '📄 Interroger votre fichier :',
+            'es' => '📄 Pregunta a tu archivo:',
+            'nl' => '📄 Vraag je bestand:',
+            'it' => '📄 Chiedi al tuo file:',
+        ],
+        '— Keine Datei ausgewählt (Allgemeiner Cloud- & KI-Chat) —' => [
+            'en' => '— No file selected (General Cloud & AI Chat) —',
+            'fr' => '— Aucun fichier sélectionné (Chat Cloud & IA général) —',
+            'es' => '— Ningún archivo seleccionado (Chat general de Nube e IA) —',
+            'nl' => '— Geen bestand geselecteerd (Algemene Cloud- & AI-chat) —',
+            'it' => '— Nessun file selezionato (Chat generale Cloud & IA) —',
+        ],
+        '📋 Zusammenfassen' => [
+            'en' => '📋 Summarize',
+            'fr' => '📋 Résumer',
+            'es' => '📋 Resumir',
+            'nl' => '📋 Samenvatten',
+            'it' => '📋 Riassumi',
+        ],
+        '🔑 Kernpunkte' => [
+            'en' => '🔑 Key Points',
+            'fr' => '🔑 Points clés',
+            'es' => '🔑 Puntos clave',
+            'nl' => '🔑 Kernpunten',
+            'it' => '🔑 Punti chiave',
+        ],
+        '🔑 Wichtigste Punkte' => [
+            'en' => '🔑 Key Points',
+            'fr' => '🔑 Points importants',
+            'es' => '🔑 Puntos importantes',
+            'nl' => '🔑 Belangrijkste punten',
+            'it' => '🔑 Punti principali',
+        ],
+        '🌐 Auf Englisch' => [
+            'en' => '🌐 In English',
+            'fr' => '🌐 En anglais',
+            'es' => '🌐 En inglés',
+            'nl' => '🌐 In het Engels',
+            'it' => '🌐 In inglese',
+        ],
+        'Dauerhaft im Papierkorb' => [
+            'en' => 'Kept indefinitely in trash',
+            'fr' => 'Conservé indéfiniment dans la corbeille',
+            'es' => 'Conservado indefinidamente en la papelera',
+            'nl' => 'Permanent bewaard in prullenbak',
+            'it' => 'Conservato a tempo indeterminato nel cestino',
+        ],
+        'Dateien im Papierkorb werden dauerhaft aufbewahrt, bis Sie diese manuell löschen.' => [
+            'en' => 'Files in the trash are kept indefinitely until you delete them manually.',
+            'fr' => 'Les fichiers dans la corbeille sont conservés jusqu’à leur suppression manuelle.',
+            'es' => 'Los archivos en la papelera se conservan hasta que los elimine manualmente.',
+            'nl' => 'Bestanden in de prullenbak worden bewaard totdat u ze handmatig verwijdert.',
+            'it' => 'I file nel cestino vengono conservati finché non li elimini manualmente.',
+        ],
+        'Papierkorb-Aufbewahrungsfrist (Automatische Endgültig-Löschung)' => [
+            'en' => 'Trash Retention Period (Automatic Permanent Deletion)',
+            'fr' => 'Durée de conservation de la corbeille (Suppression définitive auto)',
+            'es' => 'Periodo de retención de la papelera (Eliminación definitiva automática)',
+            'nl' => 'Bewaartermijn prullenbak (Automatische definitieve verwijdering)',
+            'it' => 'Periodo di conservazione cestino (Eliminazione definitiva automatica)',
+        ],
     ];
 
     return $dict;
@@ -3899,6 +4026,17 @@ function getExtraEuropeanDictionary(): array
         'Weiterschauen' => ['pl' => 'Oglądaj dalej', 'pt' => 'Continuar a ver', 'cs' => 'Pokračovat ve sledování', 'tr' => 'İzlemeye devam et', 'uk' => 'Дивитися далі'],
         'Meine Watchlist' => ['pl' => 'Moja lista do obejrzenia', 'pt' => 'A minha lista', 'cs' => 'Můj seznam ke zhlédnutí', 'tr' => 'İzleme listem', 'uk' => 'Мій список перегляду'],
         'Saallicht dimmen' => ['pl' => 'Przyciemnij salę', 'pt' => 'Escurecer sala', 'cs' => 'Ztlumit sál', 'tr' => 'Salonu karart', 'uk' => 'Приглушити світло'],
+        '⚠️ Duplikat' => ['pl' => '⚠️ Duplikat', 'pt' => '⚠️ Duplicado', 'cs' => '⚠️ Duplikát', 'tr' => '⚠️ Kopya', 'uk' => '⚠️ Дублікат'],
+        '← Vorherige Seite' => ['pl' => '← Poprzednia strona', 'pt' => '← Página anterior', 'cs' => '← Předchozí stránka', 'tr' => '← Önceki sayfa', 'uk' => '← Попередня сторінка'],
+        'Nächste Seite →' => ['pl' => 'Następna strona →', 'pt' => 'Página seguinte →', 'cs' => 'Další stránka →', 'tr' => 'Sonraki sayfa →', 'uk' => 'Наступна сторінка →'],
+        '🤖 KI-Zusammenfassung' => ['pl' => '🤖 Podsumowanie AI', 'pt' => '🤖 Resumo IA', 'cs' => '🤖 AI Shrnutí', 'tr' => '🤖 YZ Özeti', 'uk' => '🤖 ШІ-резюме'],
+        'KI-Zusammenfassung' => ['pl' => 'Podsumowanie AI', 'pt' => 'Resumo IA', 'cs' => 'AI Shrnutí', 'tr' => 'YZ Özeti', 'uk' => 'ШІ-резюме'],
+        '📄 Geöffnetes Dokument aktiv' => ['pl' => '📄 Aktywny otwarty dokument', 'pt' => '📄 Documento aberto ativo', 'cs' => '📄 Aktivní otevřený dokument', 'tr' => '📄 Açık belge etkin', 'uk' => '📄 Активний відкритий документ'],
+        '📄 Frag deine Datei:' => ['pl' => '📄 Zapytaj swój plik:', 'pt' => '📄 Pergunte ao ficheiro:', 'cs' => '📄 Zeptej se souboru:', 'tr' => '📄 Dosyana sor:', 'uk' => '📄 Запитай свій файл:'],
+        '📋 Zusammenfassen' => ['pl' => '📋 Podsumuj', 'pt' => '📋 Resumir', 'cs' => '📋 Shrnout', 'tr' => '📋 Özetle', 'uk' => '📋 Підсумувати'],
+        '🔑 Kernpunkte' => ['pl' => '🔑 Kluczowe punkty', 'pt' => '🔑 Pontos-chave', 'cs' => '🔑 Klíčové body', 'tr' => '🔑 Ana noktalar', 'uk' => '🔑 Ключові моменти'],
+        '🔑 Wichtigste Punkte' => ['pl' => '🔑 Najważniejsze punkty', 'pt' => '🔑 Pontos principais', 'cs' => '🔑 Hlavní body', 'tr' => '🔑 Önemli noktalar', 'uk' => '🔑 Головні тези'],
+        '🌐 Auf Englisch' => ['pl' => '🌐 Po angielsku', 'pt' => '🌐 Em inglês', 'cs' => '🌐 Anglicky', 'tr' => '🌐 İngilizceye çevir', 'uk' => '🌐 Англійською'],
     ];
 
     return $extra;
@@ -4157,6 +4295,30 @@ function translateTextSegment(string $text, string $lang): string
             'es' => '$1 segundos',
             'nl' => '$1 seconden',
             'it' => '$1 secondi',
+        ],
+        // "Zeige 1–200 von 450 Dateien (Seite 1 / 3)"
+        '/^Zeige (\d+)–(\d+) von (\d+) Dateien \(Seite (\d+) \/ (\d+)\)$/u' => [
+            'en' => 'Showing $1–$2 of $3 files (Page $4 / $5)',
+            'fr' => 'Affichage de $1–$2 sur $3 fichiers (Page $4 / $5)',
+            'es' => 'Mostrando $1–$2 de $3 archivos (Página $4 / $5)',
+            'nl' => 'Toont $1–$2 van $3 bestanden (Pagina $4 / $5)',
+            'it' => 'Visualizzazione $1–$2 di $3 file (Pagina $4 / $5)',
+        ],
+        // "Top 100 größte Dateien (von insgesamt 500)"
+        '/^Top 100 größte Dateien \(von insgesamt (\d+)\)$/u' => [
+            'en' => 'Top 100 largest files (out of $1 total)',
+            'fr' => 'Top 100 des plus gros fichiers (sur $1 au total)',
+            'es' => 'Top 100 archivos más grandes (de $1 en total)',
+            'nl' => 'Top 100 grootste bestanden (van $1 in totaal)',
+            'it' => 'Top 100 file più grandi (su $1 totali)',
+        ],
+        // "Inhaltsgleiche Datei existiert bereits: ..."
+        '/^Inhaltsgleiche Datei existiert bereits: (.+)$/u' => [
+            'en' => 'Identical file already exists: $1',
+            'fr' => 'Un fichier identique existe déjà : $1',
+            'es' => 'Ya existe un archivo con idéntico contenido: $1',
+            'nl' => 'Bestand met identieke inhoud bestaat al: $1',
+            'it' => 'Esiste già un file con contenuto identico: $1',
         ],
     ];
 

@@ -86,6 +86,9 @@ function streamZipArchive(array $folderFiles, string $archiveBaseName): never
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();
     }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     if (ob_get_level()) {
         ob_end_clean();
     }
@@ -261,6 +264,9 @@ if (isset($_GET['version_id']) && (int)$_GET['version_id'] > 0) {
     $tsStr = date('Y-m-d_Hi', strtotime((string)$verRow['created_at']) ?: time());
     $dlName = $base . '_v' . $verId . '_' . $tsStr . ($ext !== '' ? '.' . $ext : '');
 
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     if (ob_get_level()) {
         ob_end_clean();
     }

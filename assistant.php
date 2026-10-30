@@ -1275,7 +1275,8 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 . "- **📐 Visio Light (`.drawio` Diagramme & Organigramme):** Flussdiagramme, Prozesspläne und Vereins-/Team-Organigramme mit 6 Formen, intelligenten Verbindungspfeilen, Auto-Layout und SVG-Vektor-Export.\n"
                 . "- **🧠 Integrierter Mind-Map-Editor:** Direkt in der Office-Zentrale unter dem Reiter **🧠 Mind-Maps** erreichbar.\n"
                 . "- **🎨 Integriertes Foto- & Bild-Studio (`.jpg`, `.png`, `.webp`, `.gif`, `.bmp`):** Fotos direkt zuschneiden, drehen, verkleinern/komprimieren (mit Live-Dateigrößen-Vorschau), mit Filtern optimieren oder per **🔲 DSGVO-Verpixelung** anonymisieren.\n"
-                . "- **🟢 Live-Team-Zusammenarbeit:** Wenn mehrere Personen dasselbe Dokument öffnen, seht ihr oben live, wer gerade mitschreibt, und Änderungen werden automatisch synchronisiert!",
+                . "- **🟢 Live-Team-Zusammenarbeit:** Wenn mehrere Personen dasselbe Dokument öffnen, seht ihr oben live, wer gerade mitschreibt, und Änderungen werden automatisch synchronisiert!\n"
+                . "- **🤖 KI-Zusammenfassung & „📄 Frag deine Datei“:** Klicke in Office Light oben auf **„🤖 KI-Zusammenfassung“** oder in der Dateivorschau auf **„📋 Zusammenfassen“ / „🔑 Kernpunkte“**, um dir lange Word-, Excel-, PowerPoint- oder Textdokumente sofort zusammenfassen zu lassen oder gezielte Fragen an den Dateiinhalt zu stellen.",
             'actions'  => [
                 ['label' => $pack['act_office'], 'url' => 'office.php'],
             ],
@@ -1699,8 +1700,9 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 'trash', 'recycle bin', 'restore', 'deleted', 'corbeille', 'papelera', 'cestino', 'prullenbak', 'kosz', 'reciclagem', 'kos', 'cop kutusu', 'кошик', 'відновити',
             ],
             'answer'   => "Keine Sorge bei versehentlich gelöschten oder überschriebenen Dateien:\n\n"
-                . "- **🗑️ Papierkorb (`trash.php`):** Gelöschte Dateien landen zuerst für **30 Tage** im Papierkorb und können dort jederzeit mit einem Klick an ihren ursprünglichen Ort wiederhergestellt werden.\n"
-                . "- **🕒 Datei-Versionierung:** Wenn du eine gleichnamige Datei erneut hochlädst oder in *Office Light* überschreibst, hebt die Cloud ältere Stände automatisch in der Versionshistorie auf.",
+                . "- **🗑️ Papierkorb (`trash.php`):** Gelöschte Dateien landen zuerst im Papierkorb (Standard: **30 Tage**, im Admin-Menü zwischen **7, 14, 30, 60 und 90 Tagen** einstellbar) und können dort jederzeit mit einem Klick an ihren ursprünglichen Ort wiederhergestellt werden.\n"
+                . "- **🕒 Datei-Versionierung:** Wenn du eine gleichnamige Datei erneut hochlädst oder in *Office Light* überschreibst, hebt die Cloud bis zu 5 ältere Stände automatisch in der Versionshistorie auf.\n"
+                . "- **⚠️ Duplikat-Erkennung (`SHA-256`):** Identische Dateien werden in der Dateiliste automatisch mit **„⚠️ Duplikat“** markiert, damit du doppelte Speicherfresser sofort erkennst.",
             'actions'  => [
                 ['label' => $pack['act_trash'], 'url' => 'trash.php'],
                 ['label' => $pack['act_files'], 'url' => 'index.php'],

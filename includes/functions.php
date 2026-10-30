@@ -2150,7 +2150,27 @@ function createFileVersionSnapshot(PDO $pdo, array $fileRow, string $versionNote
         }
     }
 
+    cleanupFileThumbnails($fileId);
     return true;
+}
+
+/**
+ * Löscht gecachte Vorschaubilder (uploads/.thumbs/thumb_{fileId}_*) einer Datei,
+ * z. B. beim Verschlüsseln im Tresor, Überschreiben oder endgültigen Löschen.
+ */
+function cleanupFileThumbnails(int $fileId): void
+{
+    if ($fileId <= 0) {
+        return;
+    }
+    $thumbDir = UPLOAD_DIR . '.thumbs/';
+    if (is_dir($thumbDir)) {
+        foreach (glob($thumbDir . 'thumb_' . $fileId . '_*') ?: [] as $tFile) {
+            if (is_file($tFile)) {
+                @unlink($tFile);
+            }
+        }
+    }
 }
 
 /**
@@ -2161,6 +2181,7 @@ function deletePhysicalFileVersions(PDO $pdo, int $fileId): void
     if ($fileId <= 0) {
         return;
     }
+    cleanupFileThumbnails($fileId);
     try {
         $stmt = $pdo->prepare('SELECT stored_filename FROM file_versions WHERE file_id = :fid');
         $stmt->execute([':fid' => $fileId]);

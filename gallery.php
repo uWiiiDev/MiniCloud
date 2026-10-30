@@ -193,19 +193,101 @@ function canViewGalleryImage(PDO $pdo, array $fileRow, int $userId, string $albu
 // 1. Bild-Streaming-Endpunkt (für schnelle Vorschau, Lightbox & Gast-Alben)
 if (isset($_GET['stream_file'])) {
     $streamId = (int)$_GET['stream_file'];
-    $stmtFile = $pdo->prepare('SELECT * FROM files WHERE id = :id LIMIT 1');
+    $stmtFile = $pdo->prepare('SELECT * FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
     $stmtFile->execute([':id' => $streamId]);
     $fileRow = $stmtFile->fetch();
 
-    if (!$fileRow || !canViewGalleryImage($pdo, $fileRow, $userId, $albumToken)) {
+    if (!$fileRow || (int)($fileRow['is_encrypted'] ?? 0) === 1 || !canViewGalleryImage($pdo, $fileRow, $userId, $albumToken)) {
         http_response_code(403);
         exit('Kein Zugriff auf dieses Bild.');
+    }
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
     }
 
     $physicalPath = UPLOAD_DIR . basename((string)$fileRow['filename']);
     if (!is_file($physicalPath)) {
         http_response_code(404);
         exit('Bilddatei nicht gefunden.');
+    }
+
+    // Falls als Kachel-Thumbnail angefordert (?thumb=1), komprimiertes WebP/JPEG aus uploads/.thumbs/ ausliefern
+    if (isset($_GET['thumb']) && $_GET['thumb'] === '1' && !isset($_GET['download'])) {
+        $mtime = (int)(@filemtime($physicalPath) ?: 0);
+        $maxDim = 360;
+        $etag = sprintf('"mc-thumb-%d-%d-%d"', $streamId, $mtime, $maxDim);
+        header('ETag: ' . $etag);
+        header('Cache-Control: private, max-age=2592000, immutable');
+        header('X-Content-Type-Options: nosniff');
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim((string)$_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+            http_response_code(304);
+            exit;
+        }
+        $thumbDir = UPLOAD_DIR . '.thumbs/';
+        if (!is_dir($thumbDir)) {
+            @mkdir($thumbDir, 0750, true);
+            @file_put_contents($thumbDir . '.htaccess', "Order deny,allow\nDeny from all\n");
+            @file_put_contents($thumbDir . 'index.php', "<?php http_response_code(403); exit;\n");
+        }
+        $supportsWebp = function_exists('imagewebp');
+        $thumbExt  = $supportsWebp ? 'webp' : 'jpg';
+        $thumbMime = $supportsWebp ? 'image/webp' : 'image/jpeg';
+        $thumbPath = sprintf('%sthumb_%d_%d_%d.%s', $thumbDir, $streamId, $mtime, $maxDim, $thumbExt);
+        if (is_file($thumbPath) && is_readable($thumbPath)) {
+            header('Content-Type: ' . $thumbMime);
+            header('Content-Length: ' . (string)filesize($thumbPath));
+            readfile($thumbPath);
+            exit;
+        }
+        $fileSize = (int)filesize($physicalPath);
+        if (extension_loaded('gd') && function_exists('imagecreatetruecolor') && $fileSize > 0 && $fileSize <= 35 * 1048576) {
+            $imgInfo = @getimagesize($physicalPath);
+            if (is_array($imgInfo) && isset($imgInfo[0], $imgInfo[1], $imgInfo[2])) {
+                $srcW = (int)$imgInfo[0];
+                $srcH = (int)$imgInfo[1];
+                $type = (int)$imgInfo[2];
+                if ($srcW > 0 && $srcH > 0 && ($srcW * $srcH) <= 36000000) {
+                    $srcImg = match ($type) {
+                        IMAGETYPE_JPEG => function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($physicalPath) : false,
+                        IMAGETYPE_PNG  => function_exists('imagecreatefrompng')  ? @imagecreatefrompng($physicalPath)  : false,
+                        IMAGETYPE_GIF  => function_exists('imagecreatefromgif')  ? @imagecreatefromgif($physicalPath)  : false,
+                        IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($physicalPath) : false,
+                        IMAGETYPE_BMP  => function_exists('imagecreatefrombmp')  ? @imagecreatefrombmp($physicalPath)  : false,
+                        default        => false,
+                    };
+                    if ($srcImg !== false) {
+                        $scale = min(1.0, $maxDim / max($srcW, $srcH));
+                        $dstW  = max(1, (int)round($srcW * $scale));
+                        $dstH  = max(1, (int)round($srcH * $scale));
+                        $dstImg = imagecreatetruecolor($dstW, $dstH);
+                        if ($dstImg !== false) {
+                            imagealphablending($dstImg, false);
+                            imagesavealpha($dstImg, true);
+                            $transparent = imagecolorallocatealpha($dstImg, 255, 255, 255, 127);
+                            imagefilledrectangle($dstImg, 0, 0, $dstW, $dstH, (int)$transparent);
+                            if (imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $dstW, $dstH, $srcW, $srcH)) {
+                                $saved = $supportsWebp ? @imagewebp($dstImg, $thumbPath, 82) : @imagejpeg($dstImg, $thumbPath, 84);
+                                imagedestroy($dstImg);
+                                imagedestroy($srcImg);
+                                if ($saved && is_file($thumbPath)) {
+                                    @chmod($thumbPath, 0640);
+                                    header('Content-Type: ' . $thumbMime);
+                                    header('Content-Length: ' . (string)filesize($thumbPath));
+                                    readfile($thumbPath);
+                                    exit;
+                                }
+                            } else {
+                                imagedestroy($dstImg);
+                                imagedestroy($srcImg);
+                            }
+                        } else {
+                            imagedestroy($srcImg);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     $ext = strtolower(pathinfo((string)$fileRow['original_name'], PATHINFO_EXTENSION));
@@ -969,7 +1051,7 @@ require_once __DIR__ . '/includes/header.php';
                                class="mc-card group overflow-hidden flex flex-col hover:border-brand-400 dark:hover:border-brand-500 transition">
                                 <div class="relative aspect-16/10 bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
                                     <?php if ($coverId > 0): ?>
-                                        <img src="gallery.php?stream_file=<?= $coverId ?>"
+                                        <img src="gallery.php?stream_file=<?= $coverId ?>&amp;thumb=1"
                                              alt="<?= e($alb['title']) ?>"
                                              loading="lazy"
                                              class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
@@ -1065,7 +1147,7 @@ require_once __DIR__ . '/includes/header.php';
                         $fid = (int)$photo['id'];
                         $caption = trim((string)($photo['caption'] ?? ''));
                         $displayTitle = $caption !== '' ? $caption : (string)$photo['original_name'];
-                        $streamUrl = 'gallery.php?stream_file=' . $fid . ($albumToken !== '' ? '&album_token=' . urlencode($albumToken) : '');
+                        $streamUrl = 'gallery.php?stream_file=' . $fid . '&thumb=1' . ($albumToken !== '' ? '&album_token=' . urlencode($albumToken) : '');
                     ?>
                         <div class="mc-card group relative overflow-hidden flex flex-col">
                             <button type="button"

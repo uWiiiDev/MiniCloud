@@ -1,7 +1,7 @@
 # Datenverzeichnis (Data Dictionary & Bestandsverzeichnis) – MiniCloud
 
-**Dokumentversion:** 2.0  
-**Stand:** 27.10.2026  
+**Dokumentversion:** 2.2  
+**Stand:** 30.10.2026  
 **System:** MiniCloud (Relationale Datenbank MySQL / MariaDB, Zeichensatz `utf8mb4_unicode_ci`, sowie Dateisystemspeicher)
 
 ---
@@ -58,12 +58,13 @@ Speichert die Metadaten aller hochgeladenen Dateien.
 | `folder_path` | `VARCHAR(500)` | Nein | `''` | Index | Relativer Ordnerpfad (z. B. `Projekte/2026`, `''` = Hauptverzeichnis) |
 | `file_size` | `BIGINT UNSIGNED` | Nein | `0` | – | Dateigröße in Bytes |
 | `mime_type` | `VARCHAR(128)` | Nein | `'application/octet-stream'` | – | Serverseitig per `finfo` ermittelter MIME-Typ |
+| `file_hash` | `CHAR(64)` | Ja | `NULL` | Index (`idx_files_user_hash`) | Kryptografischer `SHA-256`-Prüfsummen-Hash zur automatischen Duplikat-Erkennung beim Upload (`⚠️ Duplikat`); wird bei Verschlüsselung im Zero-Knowledge-Tresor automatisch auf `NULL` gesetzt |
 | `is_encrypted` | `TINYINT(1)` | Nein | `0` | – | Tresor-Status (`1` = mit AES-256-GCM Zero-Knowledge verschlüsselt, `0` = unverschlüsselt) |
 | `is_favorite` | `TINYINT(1)` | Nein | `0` | – | Favoriten-Markierung (`1` = als Favorit ⭐ angeheftet, `0` = normal) |
 | `upload_date` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Zeitpunkt des Uploads |
 | `deleted_at` | `DATETIME` | Ja | `NULL` | Index (`idx_files_deleted_at`) | Löschzeitpunkt im Papierkorb (`NULL` = aktive Datei) |
 
-- **Löschfrist:** Aktive Dateien (`deleted_at IS NULL`) bleiben bis zur Löschung durch den Nutzer erhalten. Gelöschte Dateien (`deleted_at IS NOT NULL`) werden nach **30 Tagen** automatisch endgültig gelöscht (`purgeExpiredTrashFiles()`) oder sofort bei manueller Leerung des Papierkorbs.
+- **Löschfrist:** Aktive Dateien (`deleted_at IS NULL`) bleiben bis zur Löschung durch den Nutzer erhalten. Gelöschte Dateien (`deleted_at IS NOT NULL`) werden nach Ablauf der im Admin-Bereich eingestellten Aufbewahrungsfrist (**`trash_retention_days`**: **7, 14, 30, 60 oder 90 Tage**, Standard: 30 Tage) automatisch endgültig gelöscht (`purgeExpiredTrashFiles()`) oder sofort bei manueller Leerung des Papierkorbs.
 
 ---
 
@@ -201,7 +202,7 @@ Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Spalte | Datentyp | Null | Standardwert | Schlüssel / Index | Beschreibung |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`, `enable_calendar`, `enable_chat`, `enable_tasks`, `enable_notes`, `enable_contacts`, `enable_webdav`, `enable_dashboard`, `enable_polls`, `enable_menti`, `enable_passwords`, `enable_pdf_tools`, `allow_registration`, `registration_code`, `registration_default_quota_mb`, `installed_commit_sha`, `installed_commit_date`, `mail_from`, `mail_transport`, `smtp_host`, `smtp_port`, `smtp_encryption`, `smtp_user`, `smtp_pass`) |
+| `setting_key` | `VARCHAR(64)` | Nein | – | `PRIMARY KEY` | Schlüssel (`app_title`, `app_subtitle`, `logo_data_uri`, `imprint_text`, `enable_calendar`, `enable_chat`, `enable_tasks`, `enable_notes`, `enable_contacts`, `enable_webdav`, `enable_dashboard`, `enable_polls`, `enable_menti`, `enable_passwords`, `enable_pdf_tools`, `allow_registration`, `registration_code`, `registration_default_quota_mb`, `trash_retention_days`, `schema_version`, `assistant_ollama_enabled`, `assistant_ollama_model`, `installed_commit_sha`, `installed_commit_date`, `mail_from`, `mail_transport`, `smtp_host`, `smtp_port`, `smtp_encryption`, `smtp_user`, `smtp_pass`) |
 | `setting_value` | `MEDIUMTEXT` | Ja | `NULL` | – | Zugehöriger Konfigurationswert |
 | `updated_at` | `TIMESTAMP` | Nein | `CURRENT_TIMESTAMP` | – | Letzte Änderung |
 
@@ -211,7 +212,8 @@ Speichert globale Konfigurationseinstellungen als Schlüssel-Wert-Paare.
 
 | Speicherort / Name | Art der Daten | Schutzmaßnahme | Aufbewahrungsdauer |
 | :--- | :--- | :--- | :--- |
-| `uploads/mc_<uniqid>_<hex16>.bin` | Physische Binärdateien hochgeladener Nutzerdateien (inkl. Office-Light-Dokumente `.docx`/`.xlsx`) | Pseudonymisierter Dateiname, Dateimodus `0640`, `.htaccess`-Zugriffssperre, optional AES-256-GCM verschlüsselt | Bis zur endgültigen Löschung aus dem Papierkorb (max. 30 Tage nach Soft-Delete) oder Kontolöschung |
+| `uploads/mc_<uniqid>_<hex16>.bin` | Physische Binärdateien hochgeladener Nutzerdateien (inkl. Office-Light-Dokumente `.docx`/`.xlsx`) | Pseudonymisierter Dateiname, Dateimodus `0640`, `.htaccess`-Zugriffssperre, optional AES-256-GCM verschlüsselt | Bis zur endgültigen Löschung aus dem Papierkorb (`trash_retention_days`: 7/14/30/60/90 Tage nach Soft-Delete) oder Kontolöschung |
+| `uploads/.thumbs/thumb_<fileId>_<mtime>_<w>.webp/.jpg` | Serverseitig generierte `240×240 px` Vorschaubilder (Thumbnails) für unverschlüsselte Bilddateien in der Dateiliste und Foto-Galerie | Eigene `.htaccess`-Zugriffssperre (`Require all denied`) + `index.php` (`HTTP 403`), Auslieferung ausschließlich über `thumbnail.php` / `gallery.php` nach Berechtigungsprüfung | Automatische Invalidierung/Löschung (`cleanupFileThumbnails()`) bei Dateiänderung, Verschlüsselung im Tresor (`vault_action.php`) oder Endlöschung |
 | `uploads/.system_backups/snapshot_*.zip` | Lokale Programm-Sicherungspunkte (Snapshots vor Updates für 1-Klick-Rollback, ohne Nutzerdateien und ohne `config/database.php`) | Eigene `.htaccess`-Zugriffssperre (`Require all denied`), Dateimodus `0640`, Zugriff nur für Administratoren über `admin.php` | Automatische Rotation: Es werden maximal die 8 neuesten Sicherungspunkte aufbewahrt (jederzeit manuell löschbar) |
 | `/tmp/mc_zip_*` / `/tmp/mc_upd_*` / `/tmp/mc_office_*` / `/tmp/mc_pdf_*` | Temporäre ZIP-/OpenXML-/PDF-Arbeitsdateien (Ordner-Download, GitHub-Update, Office Light, PDF-Merge/Split/Kompression) | Zufälliger Dateiname über `tempnam()`, Auslieferung nur an autorisierte Nutzer | Sofortige Löschung (`unlink`) unmittelbar nach Abschluss der Operation (in `finally`-Blöcken) |
 | PHP-Session (`PHPSESSID`) | `user_id`, `username`, `is_admin`, `theme`, `session_timeout`, `flash_duration`, `chat_notify_mode`, `csrf_token` | Serverseitige Ablage, Cookie mit `HttpOnly`, `SameSite=Lax`, `Secure` (bei HTTPS) | Bis zum Logout (`logout.php`), Ablauf des Inaktivitäts-Timeouts oder Schließen des Browsers |
