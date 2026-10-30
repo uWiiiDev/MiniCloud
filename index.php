@@ -3207,10 +3207,16 @@ async function renderPreviewItem(index) {
         `;
     } else if (isVideoPreviewable(item)) {
         previewStage.innerHTML = `
-            <video controls autoplay class="max-h-[70vh] max-w-full rounded-xl shadow-md bg-black">
-                <source src="${item.inlineUrl}">
-                Ihr Browser unterstützt dieses Videoformat nicht.
-            </video>
+            <div class="flex flex-col items-center gap-3 w-full">
+                <video controls autoplay class="max-h-[64vh] max-w-full rounded-xl shadow-md bg-black">
+                    <source src="${item.inlineUrl}">
+                    Ihr Browser unterstützt dieses Videoformat nicht.
+                </video>
+                <a href="video_studio.php?id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                    <span>🎬</span>
+                    <span>Im Video-Studio schneiden &amp; bearbeiten</span>
+                </a>
+            </div>
         `;
     } else if (isAudioPreviewable(item)) {
         previewStage.innerHTML = `

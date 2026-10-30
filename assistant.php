@@ -1351,6 +1351,29 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             ],
         ],
         [
+            'id'       => 'video_studio_editor',
+            'title'    => 'Video-Studio & Schnittplatz (Videos kürzen, drehen, Bauchbinden & Musik)',
+            'icon'     => '🎬',
+            'keywords' => [
+                'video', 'videos', 'videoschnitt', 'video studio', 'schneiden', 'kürzen', 'trimmen', 'drehen', 'hochkant', 'bauchbinde', 'untertitel', 'standbild', 'screencast', 'bildschirmaufnahme', 'webcam', 'mp4', 'webm', 'hintergrundmusik',
+                'video editor', 'cut video', 'trim video', 'montage video', 'editor de video', 'montaggio video', 'videobewerking', 'edycja wideo', 'vídeo', 'střih videa', 'video düzenleme', 'відеомонтаж',
+            ],
+            'answer'   => "Mit dem **🎬 Video-Studio & Schnittplatz** (`video_studio.php`) schneidest und bearbeitest du Videos direkt im Browser (100 % lokal ohne Server-Überlastung, auch auf STRATO):\n\n"
+                . "- **🎞️ Filmstreifen-Timeline & Trimmen (`[In]` / `[Out]`):** Kürze Anfang und Ende deiner Videos sekundengenau anhand einer echten Vorschaubild-Zeitleiste.\n"
+                . "- **🔄 Drehen, Spiegeln & Formatwechsel:** Drehe falsch herum gefilmte Handyvideos um `90°`/`180°` oder wandle sie ins `16:9`-, `9:16`-(Reels) oder `1:1`-Format mit automatischem **✨ Kino-Unschärferand (Blur-Background)** um.\n"
+                . "- **🔤 Bauchbinden, Titel & 🎨 8 Kino-Farbfilter:** Blende zweizeilige Bauchbinden (Lower Thirds, auch zeitgesteuert von Sekunde X bis Y), Wasserzeichen sowie Farbkorrekturen (*Kino, Sommer, Nordisch, Vintage, S/W, VHS*) ein.\n"
+                . "- **🔊 Tonspur-Mixer & Cloud-Hintergrundmusik:** Schalte den Originalton stumm (z. B. bei Windgeräuschen), lege eine MP3-Datei direkt aus deiner MiniCloud als Hintergrundmusik darunter, nutze Ein-/Ausblenden oder Zeitlupe (`0.5×`) / Zeitraffer (`2.0×`).\n"
+                . "- **📸 Standbild-Schnappschuss & 📹 Webcam-/Screencast-Aufnahme:** Speichere jedes Einzelbild per Klick als `.jpg`-Foto in deiner Cloud oder nimm direkt im Studio Kamera- bzw. Bildschirmvideos auf!",
+            'actions'  => [
+                ['label' => '🎬 Video-Studio öffnen', 'url' => 'video_studio.php'],
+                ['label' => '📁 Meine Dateien', 'url' => 'index.php'],
+            ],
+            'followups' => [
+                $pack['q_storage'],
+                $pack['q_files'] ?? $pack['q_events'],
+            ],
+        ],
+        [
             'id'       => 'online_forms_registration',
             'title'    => 'Online-Formulare, Event-Anmeldung, Helferlisten & Mitgliedsanträge',
             'icon'     => '📝',

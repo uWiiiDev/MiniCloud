@@ -1418,9 +1418,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableGallery    = isset($_POST['enable_gallery']) && $_POST['enable_gallery'] === '1' ? '1' : '0';
         $enableForms      = isset($_POST['enable_forms']) && $_POST['enable_forms'] === '1' ? '1' : '0';
         $enableMusic      = isset($_POST['enable_music']) && $_POST['enable_music'] === '1' ? '1' : '0';
-        $enableCalculator = isset($_POST['enable_calculator']) && $_POST['enable_calculator'] === '1' ? '1' : '0';
-        $enableToolbox    = isset($_POST['enable_toolbox']) && $_POST['enable_toolbox'] === '1' ? '1' : '0';
-        $useOllama        = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
+        $enableCalculator  = isset($_POST['enable_calculator']) && $_POST['enable_calculator'] === '1' ? '1' : '0';
+        $enableToolbox     = isset($_POST['enable_toolbox']) && $_POST['enable_toolbox'] === '1' ? '1' : '0';
+        $enableVideoStudio = isset($_POST['enable_video_studio']) && $_POST['enable_video_studio'] === '1' ? '1' : '0';
+        $useOllama         = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
         $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
         $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'gemma2:2b';
 
@@ -1450,6 +1451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_music', $enableMusic);
         saveAppSetting($pdo, 'enable_calculator', $enableCalculator);
         saveAppSetting($pdo, 'enable_toolbox', $enableToolbox);
+        saveAppSetting($pdo, 'enable_video_studio', $enableVideoStudio);
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -3570,6 +3572,42 @@ foreach ($modList as $mItem) {
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="toolbox.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🧰 Toolbox öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 25: Video-Studio & Schnittplatz -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🎬 Video-Studio &amp; Schnittplatz
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_video_studio'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_video_studio'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_video_studio"
+                                value="1"
+                                <?= ($currentSettings['enable_video_studio'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Video-Studio &amp; Schnittplatz (<code>video_studio.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Browser-Videoschnittplatz (100 % STRATO-tauglich): Filmstreifen-Timeline mit Trimmen (In/Out), 90°/180°-Drehung, 16:9-/9:16-Formatwechsel mit Kino-Unschärferand, Text-Bauchbinden, 8 Farbfilter, Hintergrundmusik-Mischer, Standbild-Export &amp; Webcam-/Screencast-Aufnahme.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <?php if (($currentSettings['enable_video_studio'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="video_studio.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🎬 Video-Studio öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

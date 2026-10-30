@@ -80,6 +80,15 @@
 - **🔖 Audiobook Position Memory, Sleep Timer & Lock-Screen MediaSession:** Automatically remembers your playback position (`last_position_sec`) for long tracks, offers `-15s`/`+15s` skip buttons, variable speed (`0.75×`–`2.0×`), a Sleep Timer (`🌙 15/30/45/60 min`), and smartphone lock-screen / Bluetooth car audio integration (`navigator.mediaSession`).
 - **📋 Shareable Playlists:** Create custom playlists, upload new audio files directly into `Musik/` (or a custom audiobook subfolder like `Musik/Krimi`), and share playlists with other Cloud users or externally via public link and local SVG QR code.
 
+### 13b. 🎬 Video Studio & Browser Video Editor (`video_studio.php`)
+- **100% Client-Side HTML5 Canvas + WebAudio + MediaRecorder Engine (Zero Server Load & STRATO-Compatible):**
+  - **🎞️ Visual Filmstrip Timeline & Precision Trim (`[In]` / `[Out]`):** Automatic 10-frame filmstrip thumbnail generator, single-frame stepping (`-1F` / `+1F`), and loop preview.
+  - **📐 Rotate, Flip, Aspect Ratio & Cinema Blur Background:** Rotate sideways smartphone clips (`90°`/`180°`/`270°`), flip horizontally/vertically, and switch between `Original`, `16:9`, `9:16 (Reels/Shorts)`, `1:1`, and `4:3` with automatic **blurred cinema background** or crop/zoom.
+  - **🔤 Lower Thirds, Titles & Watermarks:** Two-line titles with 4 banner styles (*Glass*, *Broadcast*, *Cinema Outline*, *Pill*), custom colors, timed appearance (*from second X to Y*), and corner watermarks.
+  - **🎨 Live Color Grading & 8 Presets:** Brightness, contrast, saturation, sepia/warmth, vignette, plus 1-click presets (*Cinema*, *Summer*, *Nordic*, *Vintage*, *B&W*, *Vivid*, *Retro VHS*).
+  - **🔊 Audio Mixer, Cloud Background Music & Speed (`0.5×–2.0×`):** Mute or adjust original video audio, mix in any `.mp3`/`.wav`/`.m4a` track directly from your MiniCloud, apply fade-in/out, and save rendered videos or **📸 full-resolution frame snapshots** directly back to your Cloud via resilient **2 MB chunked uploads**.
+  - **📹 Built-In Webcam & 🖥️ Screen Recorder:** Record camera clips or desktop screencasts directly inside the studio and edit them immediately.
+
 ### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 20 ad-free HTML5 games with fullscreen mode, cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
   - **Racing, Sports & RPG:** *Gummigeruch Kart-Cup (6 tracks, selectable 3/5/8/11 laps & Ghost Duels)*, *Cloud-Traffic-Racer*, *Cloud-Darts (Master Arena)*, and *Heroes of MiniCloud (Co-Op RPG)*.

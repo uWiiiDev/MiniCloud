@@ -695,6 +695,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_music'                  => '1',
         'enable_calculator'             => '1',
         'enable_toolbox'                => '1',
+        'enable_video_studio'           => '1',
         'enable_dashboard'              => '1',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
@@ -3139,6 +3140,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_toolbox',
             'color'       => 'bg-amber-600',
         ],
+        'video_studio' => [
+            'icon'        => '🎬',
+            'label'       => 'Video-Studio & Schnittplatz',
+            'url'         => 'video_studio.php',
+            'setting_key' => 'enable_video_studio',
+            'color'       => 'bg-violet-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3185,8 +3193,9 @@ function detectCurrentModuleKeyForStats(): ?string
         'gallery.php'   => 'gallery',
         'forms.php'      => 'forms',
         'music.php'      => 'music',
-        'calculator.php' => 'calculator',
-        'toolbox.php'    => 'toolbox',
+        'calculator.php'   => 'calculator',
+        'toolbox.php'      => 'toolbox',
+        'video_studio.php' => 'video_studio',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3324,6 +3333,13 @@ function getModuleInventorySummary(PDO $pdo): array
     $summary['club'] = $clubMemberCount . ' ' . ($clubMemberCount === 1 ? 'Mitglied' : 'Mitglieder');
 
     $summary['calculator'] = 'Rechenstreifen, MwSt., Einheiten & Zins';
+
+    $videoCount = $safeCount(
+        "SELECT COUNT(*) FROM `files`
+         WHERE `deleted_at` IS NULL
+           AND (`mime_type` LIKE 'video/%' OR LOWER(SUBSTRING_INDEX(`original_name`, '.', -1)) IN ('mp4','webm','mov','m4v','ogv','mkv'))"
+    );
+    $summary['video_studio'] = $videoCount . ' Video-' . ($videoCount === 1 ? 'Clip' : 'Clips');
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');

@@ -455,9 +455,17 @@ if ($isInline) {
         'video/mp4',
         'video/webm',
         'video/ogg',
+        'video/quicktime',
+        'video/x-m4v',
+        'video/x-matroska',
         'audio/mpeg',
         'audio/mp3',
+        'audio/mp4',
+        'audio/x-m4a',
+        'audio/aac',
+        'audio/flac',
         'audio/ogg',
+        'audio/opus',
         'audio/wav',
         'audio/webm',
     ];
@@ -472,8 +480,16 @@ if ($isInline) {
         'avif' => 'image/avif',
         'pdf'  => 'application/pdf',
         'mp4'  => 'video/mp4',
+        'm4v'  => 'video/mp4',
+        'mov'  => 'video/quicktime',
         'webm' => 'video/webm',
+        'ogv'  => 'video/ogg',
+        'mkv'  => 'video/x-matroska',
         'mp3'  => 'audio/mpeg',
+        'm4a'  => 'audio/mp4',
+        'aac'  => 'audio/aac',
+        'flac' => 'audio/flac',
+        'opus' => 'audio/opus',
         'wav'  => 'audio/wav',
         'ogg'  => 'audio/ogg',
     ];
@@ -484,12 +500,57 @@ if ($isInline) {
 
     header('Content-Type: ' . $contentType);
     header('Content-Disposition: inline; filename="' . addslashes($originalName) . '"; filename*=UTF-8\'\'' . rawurlencode($originalName));
-    header('Content-Length: ' . (string)$fileSize);
+    header('Accept-Ranges: bytes');
     header('X-Content-Type-Options: nosniff');
     header('Content-Security-Policy: default-src \'self\'; img-src \'self\' data:; media-src \'self\'; object-src \'self\'; style-src \'unsafe-inline\'');
     header('Cache-Control: private, no-transform, no-store, must-revalidate');
     header('Pragma: no-cache');
 
+    // HTTP 206 Partial Content Range-Support für flüssiges Vor-/Zurückspulen in Videos & Audios
+    $rangeHeader = isset($_SERVER['HTTP_RANGE']) ? trim((string)$_SERVER['HTTP_RANGE']) : '';
+    if ($rangeHeader !== '' && $fileSize > 0 && preg_match('/bytes=(\d*)-(\d*)/i', $rangeHeader, $matches)) {
+        $start = $matches[1] !== '' ? (int)$matches[1] : 0;
+        $end   = $matches[2] !== '' ? (int)$matches[2] : ($fileSize - 1);
+        if ($matches[1] === '' && $matches[2] !== '') {
+            $start = max(0, $fileSize - (int)$matches[2]);
+            $end   = $fileSize - 1;
+        }
+        $end = min($end, $fileSize - 1);
+
+        if ($start > $end || $start >= $fileSize) {
+            http_response_code(416);
+            header('Content-Range: bytes */' . $fileSize);
+            exit;
+        }
+
+        $length = $end - $start + 1;
+        http_response_code(206);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $fileSize);
+        header('Content-Length: ' . (string)$length);
+
+        $fp = fopen($filePath, 'rb');
+        if ($fp !== false) {
+            if ($start > 0) {
+                fseek($fp, $start);
+            }
+            $remaining = $length;
+            while ($remaining > 0 && !feof($fp)) {
+                $chunk = fread($fp, min(65536, $remaining));
+                if ($chunk === false || $chunk === '') {
+                    break;
+                }
+                echo $chunk;
+                $remaining -= strlen($chunk);
+                if (connection_aborted()) {
+                    break;
+                }
+            }
+            fclose($fp);
+        }
+        exit;
+    }
+
+    header('Content-Length: ' . (string)$fileSize);
     readfile($filePath);
     exit;
 }

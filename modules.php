@@ -289,6 +289,18 @@ $allModules = [
         'badgeCls' => 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300',
     ],
     [
+        'key'      => 'video_studio',
+        'enabled'  => ($appSettings['enable_video_studio'] ?? '1') === '1',
+        'title'    => 'Video-Studio & Schnittplatz',
+        'icon'     => '🎬',
+        'url'      => 'video_studio.php',
+        'category' => 'files_office',
+        'catLabel' => 'Dateien & Büro',
+        'desc'     => 'Videos direkt im Browser sekundengenau kürzen (Trim), um 90°/180° drehen, auf 16:9 / 9:16 mit Kino-Unschärferand anpassen, Bauchbinden & Farbfilter einblenden, Hintergrundmusik darunterlegen oder Standbilder als Foto speichern.',
+        'badge'    => 'Neu',
+        'badgeCls' => 'bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300',
+    ],
+    [
         'key'      => 'calculator',
         'enabled'  => ($appSettings['enable_calculator'] ?? '1') === '1',
         'title'    => 'Taschenrechner & Rechen-Studio',
