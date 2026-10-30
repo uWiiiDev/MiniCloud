@@ -449,7 +449,7 @@ function extractTrackAndDiscFromFilename(string $originalName, string $folderPat
     }
 
     // 5. Zahl ganz am Ende des Dateinamens (z. B. "Hörbuch Name 04")
-    if (preg_match('/(?:[\s._-#]+|^)0*(\d{1,4})\s*$/', $base, $mTail)) {
+    if (preg_match('/(?:[\s._#-]+|^)0*(\d{1,4})\s*$/', $base, $mTail)) {
         $cand = (int)$mTail[1];
         if ($cand > 0 && ($cand < 1900 || $cand > 2099)) {
             $trackNo = $cand;

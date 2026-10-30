@@ -809,7 +809,8 @@ if (!preg_match('/^(\d{4})-(\d{2})$/', $ymParam, $mYm)) {
     $ymParam = sprintf('%04d-%02d', $year, $month);
 }
 
-$viewMode = in_array($_GET['view'] ?? 'month', ['month', 'list'], true) ? (string)$_GET['view'] : 'month';
+$rawViewMode = (string)($_GET['view'] ?? 'month');
+$viewMode    = in_array($rawViewMode, ['month', 'list'], true) ? $rawViewMode : 'month';
 $calFilter = (string)($_GET['filter'] ?? 'all'); // 'all', 'mine', 'groups', 'shared'
 
 $firstDayOfMonthTs = mktime(0, 0, 0, $month, 1, $year);

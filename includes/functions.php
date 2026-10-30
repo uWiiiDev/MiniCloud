@@ -1996,6 +1996,82 @@ function logAuditEvent(
 }
 
 /**
+ * Ermittelt die datenschutzfreundlich anonymisierte Client-IP für Rate-Limiting & Brute-Force-Schutz.
+ */
+function getClientIpForRateLimit(): string
+{
+    $rawIp = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+        $parts = explode('.', $rawIp);
+        $parts[3] = 'x';
+        return implode('.', $parts);
+    }
+    if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+        $parts = explode(':', $rawIp);
+        return implode(':', array_slice($parts, 0, 3)) . '::x';
+    }
+    return 'lokal';
+}
+
+/**
+ * Prüft anhand der Session sowie der Tabelle audit_logs, ob zu viele fehlgeschlagene Anmeldeversuche vorliegen.
+ */
+function isLoginIpRateLimited(PDO $pdo, string $clientIp = ''): bool
+{
+    $lockoutWindow = 300;
+    $maxSessionAttempts = 5;
+    if (isset($_SESSION['login_attempts']) && is_array($_SESSION['login_attempts'])) {
+        $recent = array_values(array_filter(
+            $_SESSION['login_attempts'],
+            static fn($ts): bool => is_int($ts) && $ts > (time() - $lockoutWindow)
+        ));
+        $_SESSION['login_attempts'] = $recent;
+        if (count($recent) >= $maxSessionAttempts) {
+            return true;
+        }
+    }
+
+    if ($clientIp === '') {
+        $clientIp = getClientIpForRateLimit();
+    }
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM `audit_logs`
+             WHERE `event_type` = 'login_failed'
+               AND `ip_address` = :ip
+               AND `created_at` >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)"
+        );
+        $stmt->execute([':ip' => $clientIp]);
+        return (int)$stmt->fetchColumn() >= 10;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Protokolliert einen fehlgeschlagenen Login-/Passkey-Versuch für das Rate-Limit.
+ */
+function recordFailedLoginAttempt(PDO $pdo, string $clientIp = '', string $username = ''): void
+{
+    $_SESSION['login_attempts'][] = time();
+    logAuditEvent(
+        $pdo,
+        'login_failed',
+        'Fehlgeschlagener Anmelde-/Passkey-Versuch' . ($username !== '' ? ' für „' . mb_substr($username, 0, 50) . '“' : ''),
+        null,
+        $username !== '' ? $username : 'Gast'
+    );
+}
+
+/**
+ * Setzt den lokalen Fehlversuchs-Zähler nach erfolgreicher Anmeldung zurück.
+ */
+function clearFailedLoginAttempts(PDO $pdo, string $clientIp = ''): void
+{
+    unset($_SESSION['login_attempts']);
+}
+
+/**
  * Erstellt vor dem Überschreiben/Speichern einer Datei automatisch einen Sicherungsstand in file_versions
  * (und behält pro Datei maximal die 5 jüngsten Vorgängerversionen).
  *
