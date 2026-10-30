@@ -1221,6 +1221,64 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         } catch (e) {}
                     }
 
+                    function escapeGsHtml(str) {
+                        return String(str ?? '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;');
+                    }
+
+                    window.openGsResultItem = function(idx, ev) {
+                        const item = gsResults[idx];
+                        if (!item) return;
+                        if (ev && ev.target && ev.target.closest('[data-gs-subaction]')) {
+                            return;
+                        }
+                        if (ev) ev.preventDefault();
+
+                        // Wenn es eine Datei ist und die Datei bereits auf der aktuellen index.php-Seite geladen ist -> sofort Vorschau öffnen!
+                        if (item.file_id && typeof window.openPreviewModal === 'function' && typeof previewItems !== 'undefined' && Array.isArray(previewItems)) {
+                            const fIdx = previewItems.findIndex(p => Number(p.id) === Number(item.file_id));
+                            if (fIdx !== -1) {
+                                closeGlobalSearchModal();
+                                window.openPreviewModal(fIdx);
+                                return;
+                            }
+                        }
+
+                        if (item.url) {
+                            closeGlobalSearchModal();
+                            window.location.href = item.url;
+                        }
+                    };
+
+                    function updateGsSelectionHighlight() {
+                        const box = document.getElementById('globalSearchResultsList');
+                        if (!box) return;
+                        box.querySelectorAll('[data-gs-row]').forEach((row) => {
+                            const idx = Number(row.getAttribute('data-gs-row'));
+                            const active = idx === gsSelectedIndex;
+                            row.className = 'flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer ' + (
+                                active
+                                    ? 'bg-brand-600 text-white shadow-xs'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'
+                            );
+                            const subEl = row.querySelector('[data-gs-sub]');
+                            if (subEl) {
+                                subEl.className = 'text-[11px] truncate ' + (active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400');
+                            }
+                            const catEl = row.querySelector('[data-gs-cat]');
+                            if (catEl) {
+                                catEl.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ' + (
+                                    active
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                );
+                            }
+                        });
+                    }
+
                     function renderGlobalSearchResults() {
                         const box = document.getElementById('globalSearchResultsList');
                         if (!box) return;
@@ -1230,26 +1288,59 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         }
                         box.innerHTML = gsResults.map((item, idx) => {
                             const active = idx === gsSelectedIndex;
-                            return `
-                                <a href="${item.url}"
-                                   onmouseenter="window.setGsIndex(${idx})"
-                                   class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl transition-colors ${active ? 'bg-brand-600 text-white shadow-xs' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'}">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <span class="text-xl shrink-0">${item.icon || '🔎'}</span>
-                                        <div class="min-w-0">
-                                            <div class="text-xs sm:text-sm font-bold truncate">${item.title}</div>
-                                            <div class="text-[11px] truncate ${active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400'}">${item.sub || ''}</div>
-                                        </div>
+                            let actionsHtml = '';
+                            if (item.cat === 'Datei') {
+                                actionsHtml = `
+                                    <div class="flex items-center gap-1 shrink-0" data-gs-subaction="1">
+                                        <button type="button"
+                                                onclick="window.openGsResultItem(${idx}, null)"
+                                                title="Datei direkt in der Vorschau öffnen"
+                                                class="px-2 py-1 rounded-lg text-[11px] font-bold bg-violet-600 hover:bg-violet-500 text-white shadow-2xs transition-colors cursor-pointer">
+                                            👁️ Öffnen
+                                        </button>
+                                        ${item.office_url ? `
+                                            <a href="${escapeGsHtml(item.office_url)}"
+                                               title="Direkt in Office Light / Bild-Studio bearbeiten"
+                                               class="px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-2xs transition-colors">
+                                                ✏️ Office
+                                            </a>
+                                        ` : ''}
+                                        ${item.folder_url ? `
+                                            <a href="${escapeGsHtml(item.folder_url)}"
+                                               title="Speicherort / Ordner im Dateimanager anzeigen"
+                                               class="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 transition-colors">
+                                                📁 Ordner
+                                            </a>
+                                        ` : ''}
                                     </div>
-                                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${active ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}">${item.cat || 'Treffer'}</span>
-                                </a>
+                                `;
+                            } else {
+                                actionsHtml = `<span data-gs-cat="1" class="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${active ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}">${escapeGsHtml(item.cat || 'Treffer')}</span>`;
+                            }
+                            return `
+                                <div data-gs-row="${idx}"
+                                     onclick="window.openGsResultItem(${idx}, event)"
+                                     onmouseenter="window.setGsIndex(${idx})"
+                                     class="flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer ${active ? 'bg-brand-600 text-white shadow-xs' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'}">
+                                    <a href="${escapeGsHtml(item.url || '#')}"
+                                       onclick="window.openGsResultItem(${idx}, event)"
+                                       class="flex items-center gap-3 min-w-0 flex-1">
+                                        <span class="text-xl shrink-0">${escapeGsHtml(item.icon || '🔎')}</span>
+                                        <div class="min-w-0">
+                                            <div class="text-xs sm:text-sm font-bold truncate">${escapeGsHtml(item.title)}</div>
+                                            <div data-gs-sub="1" class="text-[11px] truncate ${active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400'}">${escapeGsHtml(item.sub || '')}</div>
+                                        </div>
+                                    </a>
+                                    ${actionsHtml}
+                                </div>
                             `;
                         }).join('');
                     }
 
                     window.setGsIndex = function(idx) {
+                        if (gsSelectedIndex === idx) return;
                         gsSelectedIndex = idx;
-                        renderGlobalSearchResults();
+                        updateGsSelectionHighlight();
                     };
 
                     window.addEventListener('keydown', function(e) {
@@ -1274,18 +1365,18 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             e.preventDefault();
                             if (gsResults.length > 0) {
                                 gsSelectedIndex = (gsSelectedIndex + 1) % gsResults.length;
-                                renderGlobalSearchResults();
+                                updateGsSelectionHighlight();
                             }
                         } else if (e.key === 'ArrowUp') {
                             e.preventDefault();
                             if (gsResults.length > 0) {
                                 gsSelectedIndex = (gsSelectedIndex - 1 + gsResults.length) % gsResults.length;
-                                renderGlobalSearchResults();
+                                updateGsSelectionHighlight();
                             }
                         } else if (e.key === 'Enter') {
-                            if (gsResults[gsSelectedIndex] && gsResults[gsSelectedIndex].url) {
+                            if (gsResults[gsSelectedIndex]) {
                                 e.preventDefault();
-                                window.location.href = gsResults[gsSelectedIndex].url;
+                                window.openGsResultItem(gsSelectedIndex, null);
                             }
                         }
                     });

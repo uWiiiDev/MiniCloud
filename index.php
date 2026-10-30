@@ -5292,6 +5292,34 @@ async function deleteFileVersion(versionId) {
     await fetch('folder_action.php', { method: 'POST', body: fd });
     await loadFileMetaData(currentMetaFileId);
 }
+
+// Auto-Open Vorschau / Auto-Highlight Datei-Zeile (z. B. aus Strg+K Spotlight-Suche)
+(() => {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const previewId = parseInt(params.get('preview_id') || '0', 10);
+        const highlightId = parseInt(params.get('highlight_id') || '0', 10) || previewId;
+
+        if (highlightId > 0) {
+            const rowEl = document.querySelector(`[data-file-row-id="${highlightId}"]`);
+            if (rowEl) {
+                rowEl.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50/70', 'dark:bg-brand-950/40');
+                setTimeout(() => {
+                    rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 80);
+            }
+        }
+
+        if (previewId > 0 && Array.isArray(previewItems)) {
+            const idx = previewItems.findIndex(it => Number(it.id) === previewId);
+            if (idx !== -1) {
+                setTimeout(() => {
+                    openPreviewModal(idx);
+                }, 60);
+            }
+        }
+    } catch (e) {}
+})();
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

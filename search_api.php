@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/office_functions.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -114,7 +115,7 @@ foreach ($catalog as $mod) {
 if ($qLow === '') {
     try {
         $stmtRec = $pdo->prepare(
-            "SELECT `id`, `original_name`, `file_size`, `folder_path`, `group_folder_id`
+            "SELECT `id`, `original_name`, `file_size`, `folder_path`, `group_folder_id`, `is_encrypted`
              FROM `files`
              WHERE `user_id` = :uid AND `deleted_at` IS NULL
              ORDER BY `upload_date` DESC
@@ -122,22 +123,42 @@ if ($qLow === '') {
         );
         $stmtRec->execute([':uid' => $userId]);
         foreach ($stmtRec->fetchAll() as $f) {
+            $fId  = (int)$f['id'];
+            $name = (string)$f['original_name'];
             $fp   = trim((string)($f['folder_path'] ?? ''));
             $gfId = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
-            $qUrl = [];
+            $isEnc = ((int)($f['is_encrypted'] ?? 0) === 1);
+
+            $folderParams = [];
             if ($gfId > 0) {
-                $qUrl['group_folder'] = $gfId;
+                $folderParams['group_folder'] = $gfId;
             }
             if ($fp !== '') {
-                $qUrl['folder'] = $fp;
+                $folderParams['folder'] = $fp;
             }
+            $folderParams['highlight_id'] = $fId;
+            $folderUrl = 'index.php?' . http_build_query($folderParams);
+
+            $openParams = $folderParams;
+            unset($openParams['highlight_id']);
+            $openParams['preview_id'] = $fId;
+            $openUrl = 'index.php?' . http_build_query($openParams);
+
+            $officeType = !$isEnc ? getOfficeEditorType($name) : null;
+            $officeUrl  = $officeType !== null ? ('office.php?id=' . $fId) : '';
+
             $locLabel = $fp !== '' ? (' · 📁 ' . $fp) : ' · 🏠 Hauptverzeichnis';
             $items[] = [
-                'icon'  => '📄',
-                'title' => (string)$f['original_name'],
-                'sub'   => 'Zuletzt hochgeladen · ' . formatBytes((int)$f['file_size']) . $locLabel,
-                'cat'   => 'Datei',
-                'url'   => 'index.php' . (!empty($qUrl) ? '?' . http_build_query($qUrl) : ''),
+                'icon'         => $isEnc ? '🔒' : '📄',
+                'title'        => $name,
+                'sub'          => 'Zuletzt hochgeladen · ' . formatBytes((int)$f['file_size']) . $locLabel,
+                'cat'          => 'Datei',
+                'file_id'      => $fId,
+                'url'          => $openUrl,
+                'open_url'     => $openUrl,
+                'folder_url'   => $folderUrl,
+                'office_url'   => $officeUrl,
+                'download_url' => !$isEnc ? ('download.php?id=' . $fId) : '',
             ];
         }
     } catch (Throwable) {
@@ -208,13 +229,20 @@ try {
 } catch (Throwable) {
 }
 
-// 3. Dateien durchsuchen
+// 3. Dateien durchsuchen (eigene Dateien + zugängliche Gruppenordner)
 try {
+    $accGfs = getAccessibleGroupFolders($pdo, $userId, isAdmin());
+    $gfIds  = array_map(static fn(array $g): int => (int)$g['id'], $accGfs);
+    $gfCond = '';
+    if (!empty($gfIds)) {
+        $gfCond = ' OR f.`group_folder_id` IN (' . implode(',', $gfIds) . ')';
+    }
+
     $stmtFil = $pdo->prepare(
-        "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`
+        "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`
          FROM `files` f
          WHERE f.`deleted_at` IS NULL
-           AND f.`user_id` = :uid1
+           AND (f.`user_id` = :uid1{$gfCond})
            AND (f.`original_name` LIKE :q1 OR f.`folder_path` LIKE :q2)
          ORDER BY f.`upload_date` DESC
          LIMIT 12"
@@ -225,23 +253,43 @@ try {
         ':q2'   => $like,
     ]);
     foreach ($stmtFil->fetchAll() as $f) {
-        $fp   = trim((string)($f['folder_path'] ?? ''));
-        $gfId = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
-        $qUrl = [];
+        $fId   = (int)$f['id'];
+        $name  = (string)$f['original_name'];
+        $fp    = trim((string)($f['folder_path'] ?? ''));
+        $gfId  = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
+        $isEnc = ((int)($f['is_encrypted'] ?? 0) === 1);
+
+        $folderParams = [];
         if ($gfId > 0) {
-            $qUrl['group_folder'] = $gfId;
+            $folderParams['group_folder'] = $gfId;
         }
         if ($fp !== '') {
-            $qUrl['folder'] = $fp;
+            $folderParams['folder'] = $fp;
         }
-        $qUrl['q'] = (string)$f['original_name'];
-        $locLabel  = $fp !== '' ? ('📁 ' . $fp) : '🏠 Hauptverzeichnis';
+        $folderParams['highlight_id'] = $fId;
+        $folderUrl = 'index.php?' . http_build_query($folderParams);
+
+        $openParams = $folderParams;
+        unset($openParams['highlight_id']);
+        $openParams['q']          = $name;
+        $openParams['preview_id'] = $fId;
+        $openUrl = 'index.php?' . http_build_query($openParams);
+
+        $officeType = !$isEnc ? getOfficeEditorType($name) : null;
+        $officeUrl  = $officeType !== null ? ('office.php?id=' . $fId) : '';
+
+        $locLabel = $fp !== '' ? ('📁 ' . $fp) : '🏠 Hauptverzeichnis';
         $items[] = [
-            'icon'  => '📄',
-            'title' => (string)$f['original_name'],
-            'sub'   => formatBytes((int)$f['file_size']) . ' · ' . $locLabel,
-            'cat'   => 'Datei',
-            'url'   => 'index.php?' . http_build_query($qUrl),
+            'icon'         => $isEnc ? '🔒' : '📄',
+            'title'        => $name,
+            'sub'          => formatBytes((int)$f['file_size']) . ' · ' . $locLabel,
+            'cat'          => 'Datei',
+            'file_id'      => $fId,
+            'url'          => $openUrl,
+            'open_url'     => $openUrl,
+            'folder_url'   => $folderUrl,
+            'office_url'   => $officeUrl,
+            'download_url' => !$isEnc ? ('download.php?id=' . $fId) : '',
         ];
     }
 } catch (Throwable) {
