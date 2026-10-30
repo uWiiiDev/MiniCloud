@@ -319,81 +319,10 @@ if ($activeGroupFolder === null && !empty($userFolders)) {
     }
 }
 
-// Dateien für die Haupttabelle abrufen (entweder aktiver Gruppenordner, aktiver freigegebener Ordner ODER eigene Dateien)
-$params = [];
-if ($activeGroupFolder !== null) {
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
-                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
-                 WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
-    $params[':gf_id'] = (int)$activeGroupFolder['id'];
-} elseif ($activeSharedFolder !== null) {
-    $sharedFp = (string)$activeSharedFolder['folder_path'];
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name, 0 AS link_share_count, 0 AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
-                 WHERE f.user_id = :owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
-                   AND (f.folder_path = :sf_exact OR f.folder_path LIKE :sf_prefix)';
-    $params[':owner_id']  = (int)$activeSharedFolder['owner_id'];
-    $params[':sf_exact']  = $sharedFp;
-    $params[':sf_prefix'] = $sharedFp . '/%';
-} else {
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
-                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
-                 WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
-    $params[':user_id'] = $userId;
-}
-
-if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders && !$onlyFavorites) {
-    if ($currentFolder !== '') {
-        // Nur Dateien im ausgewählten Ordner anzeigen
-        $sqlFiles .= ' AND f.folder_path = :folder_exact';
-        $params[':folder_exact'] = $currentFolder;
-    } else {
-        // Nur Dateien direkt im Hauptverzeichnis anzeigen (nicht aus Unterordnern)
-        $sqlFiles .= " AND f.folder_path = ''";
-    }
-}
-
-if ($onlyFavorites) {
-    $sqlFiles .= ' AND f.is_favorite = 1';
-}
-
-if ($minSizeMb > 0) {
-    $sqlFiles .= ' AND f.file_size >= :min_size_bytes';
-    $params[':min_size_bytes'] = $minSizeMb * 1048576;
-}
-
-if ($searchQuery !== '') {
-    $sqlFiles .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
-    $params[':search_name']   = '%' . $searchQuery . '%';
-    $params[':search_folder'] = '%' . $searchQuery . '%';
-}
-
-$orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
-if ($largeFilesMode && $sortBy === 'size') {
-    $sqlFiles .= sprintf(' ORDER BY %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
-} else {
-    $sqlFiles .= sprintf(' ORDER BY f.is_favorite DESC, %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
-}
-
-$stmtFiles = $pdo->prepare($sqlFiles);
-$stmtFiles->execute($params);
-$files = $stmtFiles->fetchAll();
-
-// Im Modus "📊 Große Dateien & Speicher-Analyse": Kategorie-Verteilung, Größenklassen & Duplikate berechnen
+// Im Modus "📊 Große Dateien & Speicher-Analyse": Kategorie-Verteilung, Größenklassen & Duplikate vorab berechnen,
+// damit die Hauptabfrage direkt per SQL LIMIT 100 nur die Top-100-Dateien laden muss.
 $storageAnalysis = null;
+$duplicateIds    = [];
 if ($largeFilesMode) {
     $stmtAllScope = $pdo->prepare(
         $activeGroupFolder !== null
@@ -460,17 +389,12 @@ if ($largeFilesMode) {
         }
     }
 
-    $duplicateIds = [];
     foreach ($sigMap as $ids) {
         if (count($ids) > 1) {
             foreach ($ids as $dId) {
                 $duplicateIds[$dId] = true;
             }
         }
-    }
-
-    if ($onlyDuplicates) {
-        $files = array_values(array_filter($files, static fn(array $row): bool => isset($duplicateIds[(int)$row['id']])));
     }
 
     $topFolders = $userFolders;
@@ -488,6 +412,92 @@ if ($largeFilesMode) {
         'top_folders'   => $topFolders,
     ];
 }
+
+// Dateien für die Haupttabelle abrufen (entweder aktiver Gruppenordner, aktiver freigegebener Ordner ODER eigene Dateien)
+$params = [];
+if ($activeGroupFolder !== null) {
+    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
+                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
+                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
+                 FROM files f
+                 INNER JOIN users u ON u.id = f.user_id
+                 WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
+    $params[':gf_id'] = (int)$activeGroupFolder['id'];
+} elseif ($activeSharedFolder !== null) {
+    $sharedFp = (string)$activeSharedFolder['folder_path'];
+    $sqlFiles = 'SELECT f.*, u.username AS uploader_name, 0 AS link_share_count, 0 AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
+                 FROM files f
+                 INNER JOIN users u ON u.id = f.user_id
+                 WHERE f.user_id = :owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
+                   AND (f.folder_path = :sf_exact OR f.folder_path LIKE :sf_prefix)';
+    $params[':owner_id']  = (int)$activeSharedFolder['owner_id'];
+    $params[':sf_exact']  = $sharedFp;
+    $params[':sf_prefix'] = $sharedFp . '/%';
+} else {
+    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
+                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
+                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
+                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
+                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
+                 FROM files f
+                 INNER JOIN users u ON u.id = f.user_id
+                 WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
+    $params[':user_id'] = $userId;
+}
+
+if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders && !$onlyFavorites) {
+    if ($currentFolder !== '') {
+        // Nur Dateien im ausgewählten Ordner anzeigen
+        $sqlFiles .= ' AND f.folder_path = :folder_exact';
+        $params[':folder_exact'] = $currentFolder;
+    } else {
+        // Nur Dateien direkt im Hauptverzeichnis anzeigen (nicht aus Unterordnern)
+        $sqlFiles .= " AND f.folder_path = ''";
+    }
+}
+
+if ($onlyFavorites) {
+    $sqlFiles .= ' AND f.is_favorite = 1';
+}
+
+if ($minSizeMb > 0) {
+    $sqlFiles .= ' AND f.file_size >= :min_size_bytes';
+    $params[':min_size_bytes'] = $minSizeMb * 1048576;
+}
+
+if ($largeFilesMode && $onlyDuplicates) {
+    if (empty($duplicateIds)) {
+        $sqlFiles .= ' AND 1 = 0';
+    } else {
+        $dupIntIds = array_map('intval', array_keys($duplicateIds));
+        $sqlFiles .= ' AND f.id IN (' . implode(',', $dupIntIds) . ')';
+    }
+}
+
+if ($searchQuery !== '') {
+    $sqlFiles .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
+    $params[':search_name']   = '%' . $searchQuery . '%';
+    $params[':search_folder'] = '%' . $searchQuery . '%';
+}
+
+$orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
+if ($largeFilesMode && $sortBy === 'size') {
+    $sqlFiles .= sprintf(' ORDER BY %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+} else {
+    $sqlFiles .= sprintf(' ORDER BY f.is_favorite DESC, %s %s, f.id DESC', $orderByColumn, $sqlSortDir);
+}
+
+if ($largeFilesMode) {
+    $sqlFiles .= ' LIMIT 100';
+}
+
+$stmtFiles = $pdo->prepare($sqlFiles);
+$stmtFiles->execute($params);
+$files = $stmtFiles->fetchAll();
 
 // Direkte Unterordner des aktuell geöffneten Ordners ermitteln (oder bei globaler Suche alle passenden Ordner)
 $directSubfolders = [];
@@ -1163,9 +1173,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         <!-- Dezent eingeblendeter Speicher-Röntgenblick (nur sichtbar wenn "📊 Große Dateien" aktiv ist) -->
         <div class="px-4 sm:px-6 py-4 bg-violet-50/60 dark:bg-slate-800/70 border-b border-violet-200/80 dark:border-slate-700/80 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <span class="text-xs font-extrabold text-violet-950 dark:text-violet-200">
                         📊 Speicher-Röntgenblick (<?= (int)$storageAnalysis['total_files'] ?> Dateien · <?= e(formatBytes((int)$storageAnalysis['total_bytes'])) ?> gesamt)
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/80 text-violet-800 dark:text-violet-300 border border-violet-300/70 dark:border-violet-700/70 text-[11px] font-bold">
+                        ⚡ Top <?= count($files) ?> <?= $onlyDuplicates ? 'Duplikate' : 'größte Dateien' ?> (max. 100)
                     </span>
                 </div>
                 <a href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
