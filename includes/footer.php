@@ -936,6 +936,10 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
 
 <?php
 $currentScriptForAssistant = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
+$activeAssistantFileId = 0;
+if (in_array($currentScriptForAssistant, ['office.php', 'ebooks.php', 'pdf_tools.php'], true)) {
+    $activeAssistantFileId = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_GET['file_id']) ? (int)$_GET['file_id'] : 0);
+}
 if (
     isLoggedIn()
     && (($footerSettings['enable_assistant'] ?? '1') === '1')
@@ -962,7 +966,7 @@ if (
 <div id="mcQuickAssistantContainer" class="fixed bottom-4 right-4 z-40 flex flex-col items-end">
     <!-- Aufklappbares Chat-Fenster -->
     <div id="mcQuickAssistantPanel"
-         class="hidden mb-3 w-[calc(100vw-2rem)] sm:w-96 max-h-[520px] flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+         class="hidden mb-3 w-[calc(100vw-2rem)] sm:w-96 max-h-[540px] flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
         <!-- Kopfleiste -->
         <div class="px-4 py-3 bg-gradient-to-r from-brand-600 to-indigo-600 text-white flex items-center justify-between gap-2">
             <div class="flex items-center gap-2 min-w-0">
@@ -973,7 +977,7 @@ if (
                 </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
-                <a href="assistant.php"
+                <a href="assistant.php<?= $activeAssistantFileId > 0 ? '?file_id=' . (int)$activeAssistantFileId : '' ?>"
                    class="px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-semibold text-white transition-colors"
                    title="Große Assistenten-Ansicht öffnen">
                     Vollbild ↗
@@ -985,6 +989,23 @@ if (
                 </button>
             </div>
         </div>
+
+        <?php if ($activeAssistantFileId > 0): ?>
+        <!-- Aktives Dokument erkannt (z. B. in Office Light) -->
+        <div class="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/50 border-b border-emerald-200/80 dark:border-emerald-800/60 flex flex-wrap items-center justify-between gap-1.5">
+            <span class="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 truncate">📄 Geöffnetes Dokument aktiv</span>
+            <div class="flex items-center gap-1">
+                <button type="button" onclick="askMcQuickChip('Fasse den Inhalt dieser Datei übersichtlich zusammen.')"
+                        class="px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold cursor-pointer">
+                    📋 Zusammenfassen
+                </button>
+                <button type="button" onclick="askMcQuickChip('Welche wichtigen Punkte, Zahlen oder Termine stehen in dieser Datei?')"
+                        class="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-slate-700 border border-emerald-300 dark:border-emerald-700 text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 cursor-pointer">
+                    🔑 Kernpunkte
+                </button>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Nachrichtenbereich -->
         <div id="mcQuickAssistantMessages" class="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-[260px] max-h-[360px] bg-slate-50/60 dark:bg-slate-950/40"></div>
@@ -1017,6 +1038,10 @@ if (
     const uiLang = <?= json_encode(function_exists('getCurrentLang') ? getCurrentLang() : 'de') ?>;
     const storeKey = 'mc_assistant_chat_v2_' + <?= json_encode((int)$_SESSION['user_id']) ?> + '_' + uiLang;
     const userName = <?= json_encode((string)($_SESSION['username'] ?? 'Benutzer')) ?>;
+    const activePageFileId = <?= json_encode((int)$activeAssistantFileId) ?>;
+    let quickPageUnloading = false;
+    window.addEventListener('beforeunload', () => { quickPageUnloading = true; });
+    window.addEventListener('pagehide', () => { quickPageUnloading = true; });
 
     const quickGreets = {
         de: {
@@ -1078,7 +1103,15 @@ if (
             const r = sessionStorage.getItem(storeKey);
             if (r) {
                 const p = JSON.parse(r);
-                if (Array.isArray(p) && p.length) return p;
+                if (Array.isArray(p) && p.length) {
+                    const cleaned = p.filter((m) => !(m.role === 'assistant' && typeof m.reply === 'string' && m.reply.startsWith('⚠️ Verbindungsfehler')));
+                    if (cleaned.length) {
+                        if (cleaned.length !== p.length) {
+                            sessionStorage.setItem(storeKey, JSON.stringify(cleaned));
+                        }
+                        return cleaned;
+                    }
+                }
             }
         } catch (e) {}
         const pack = quickGreets[uiLang] || quickGreets.de;
@@ -1148,6 +1181,30 @@ if (
         await sendQuickMsg(q);
     };
 
+    window.summarizeCurrentOfficeDocWithAi = async () => {
+        window.toggleMcQuickAssistant(true);
+        await sendQuickMsg('Fasse den Inhalt dieser Datei übersichtlich zusammen.');
+    };
+
+    const extractLiveOfficeContext = () => {
+        let liveText = '';
+        let liveName = '';
+        try {
+            const titleEl = document.getElementById('officeDocTitleInput');
+            if (titleEl && titleEl.value) {
+                liveName = titleEl.value.trim();
+            }
+            const wordEl = document.getElementById('wordEditorSurface');
+            const plainEl = document.getElementById('plainTextEditor');
+            if (wordEl) {
+                liveText = (wordEl.innerText || wordEl.textContent || '').trim();
+            } else if (plainEl && typeof plainEl.value === 'string') {
+                liveText = plainEl.value.trim();
+            }
+        } catch (e) {}
+        return { liveText: liveText.slice(0, 6000), liveName };
+    };
+
     window.submitMcQuickAssistant = async (ev) => {
         ev.preventDefault();
         const inp = document.getElementById('mcQuickAssistantInput');
@@ -1192,6 +1249,16 @@ if (
             fd.append('ajax', '1');
             fd.append('csrf_token', csrf);
             fd.append('message', txt);
+            if (activePageFileId > 0) {
+                fd.append('file_id', String(activePageFileId));
+            }
+            const liveCtx = extractLiveOfficeContext();
+            if (liveCtx.liveText !== '') {
+                fd.append('doc_live_text', liveCtx.liveText);
+                if (liveCtx.liveName !== '') {
+                    fd.append('doc_live_name', liveCtx.liveName);
+                }
+            }
             const r = await fetch('assistant.php', { method: 'POST', body: fd });
             const d = await r.json();
             if (d && d.ok) {
@@ -1205,14 +1272,19 @@ if (
                 hist.push({ role: 'assistant', reply: '⚠️ ' + (d?.error || 'Fehler'), actions: [], followups: [] });
             }
         } catch (e) {
+            if (quickPageUnloading || (e && e.name === 'AbortError')) {
+                return;
+            }
             hist.push({ role: 'assistant', reply: '⚠️ Verbindungsfehler.', actions: [], followups: [] });
         } finally {
             if (typingEl && typingEl.parentNode) {
                 typingEl.parentNode.removeChild(typingEl);
             }
             if (btn) btn.disabled = false;
-            saveHist(hist);
-            renderQuick();
+            if (!quickPageUnloading) {
+                saveHist(hist);
+                renderQuick();
+            }
         }
     };
 })();

@@ -2276,8 +2276,9 @@ function queryLocalOllamaAssistant(
         'keep_alive' => '30m',
         'options'    => [
             'temperature' => $isGeneralQuestion ? 0.3 : 0.2,
+            'num_ctx'     => 2048,
             'num_predict' => 180,
-            'num_thread'  => 3,
+            'num_thread'  => 4,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -2676,6 +2677,25 @@ function extractAssistantDocumentText(PDO $pdo, int $userId, int $fileId, bool $
             $prepped = preg_replace('/<\s*\/?(p|div|br|tr|li|h[1-6])\b[^>]*>/i', "\n", $bytes) ?? $bytes;
             $rawText = html_entity_decode(strip_tags($prepped), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
+    } elseif (in_array($ext, ['xlsx'], true) && function_exists('readSpreadsheetData')) {
+        $sheets = readSpreadsheetData($physPath, $origName);
+        $linesOut = [];
+        foreach ($sheets as $sh) {
+            foreach (($sh['rows'] ?? []) as $r) {
+                $nonEmpty = array_filter(array_map('trim', $r), static fn(string $c): bool => $c !== '');
+                if (!empty($nonEmpty)) {
+                    $linesOut[] = implode(' | ', $nonEmpty);
+                }
+            }
+        }
+        $rawText = implode("\n", $linesOut);
+    } elseif (in_array($ext, ['pptx'], true) && function_exists('readPptxData')) {
+        $deck = readPptxData($physPath);
+        $linesOut = [];
+        foreach (($deck['slides'] ?? []) as $idx => $sl) {
+            $linesOut[] = 'Folie ' . ($idx + 1) . ': ' . trim(($sl['title'] ?? '') . ' - ' . ($sl['subtitle'] ?? '') . "\n" . ($sl['body'] ?? ''));
+        }
+        $rawText = implode("\n\n", $linesOut);
     } elseif (in_array($ext, ['txt', 'md', 'csv', 'tsv', 'json', 'xml', 'log', 'ini', 'yaml', 'yml', 'sql', 'ics', 'vcf'], true)) {
         $rawText = (string)@file_get_contents($physPath, false, null, 0, 262144);
     } else {
@@ -2709,7 +2729,7 @@ function extractAssistantDocumentText(PDO $pdo, int $userId, int $fileId, bool $
  */
 function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, string $question, string $lang): array
 {
-    $docSnippet = mb_substr($docInfo['text'], 0, 3600, 'UTF-8');
+    $docSnippet = mb_substr($docInfo['text'], 0, 2500, 'UTF-8');
     $qEffective = trim($question) !== '' ? trim($question) : 'Fasse den Inhalt dieser Datei übersichtlich zusammen.';
 
     $langNames = [
@@ -2727,9 +2747,9 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
             if (session_status() === PHP_SESSION_ACTIVE) {
                 session_write_close();
             }
-            $sysPrompt = "Du bist ein präziser Dokumenten-Assistent. Der Benutzer hat die Datei \"{$docInfo['name']}\" ({$docInfo['words']} Wörter, {$docInfo['lines']} Zeilen) geöffnet. "
-                . "Beantworte die Frage des Benutzers auf {$targetLangName} kompakt und strukturiert (mit **Fettdruck** und Stichpunkten) ausschließlich anhand des folgenden Dateiinhalts:\n\n"
-                . "--- DATEIINHALT START ---\n{$docSnippet}\n--- DATEIINHALT ENDE ---";
+            $sysPrompt = "Du bist ein präziser Dokumenten-Assistent. Datei: \"{$docInfo['name']}\" ({$docInfo['words']} Wörter).\n"
+                . "Beantworte die Frage auf {$targetLangName} kompakt und strukturiert (mit **Fettdruck** und Stichpunkten) anhand des folgenden Dateiinhalts:\n\n"
+                . "{$docSnippet}";
 
             $payload = json_encode([
                 'model'      => $status['active_model'],
@@ -2741,8 +2761,9 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
                 'keep_alive' => '30m',
                 'options'    => [
                     'temperature' => 0.2,
-                    'num_predict' => 260,
-                    'num_thread'  => 3,
+                    'num_ctx'     => 2048,
+                    'num_predict' => 210,
+                    'num_thread'  => 4,
                 ],
             ], JSON_UNESCAPED_UNICODE);
 
@@ -2752,7 +2773,7 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
                         'method'        => 'POST',
                         'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
                         'content'       => $payload,
-                        'timeout'       => 45.0,
+                        'timeout'       => 55.0,
                         'ignore_errors' => true,
                     ],
                 ]);
@@ -2820,7 +2841,7 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
  *   lang: string
  * }
  */
-function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool $isAdmin, array $appSettings, string $rawQuestion, string $preferredLang = 'auto', int $contextFileId = 0): array
+function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool $isAdmin, array $appSettings, string $rawQuestion, string $preferredLang = 'auto', int $contextFileId = 0, string $liveDocText = '', string $liveDocName = ''): array
 {
     $appTitle = (string)($appSettings['app_title'] ?? 'MiniCloud');
     $uiLang   = getCurrentLang();
@@ -2836,9 +2857,25 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
 
     $pack = getAssistantLangPack($lang, $username, $appTitle);
 
-    // Falls eine konkrete Datei für den Dokumenten-Chat ("Frag deine Datei") ausgewählt wurde:
-    if ($contextFileId > 0) {
-        $docInfo = extractAssistantDocumentText($pdo, $userId, $contextFileId, $isAdmin);
+    // Falls eine konkrete Datei (oder ein geöffneter Live-Text aus Office Light) für den Dokumenten-Chat ausgewählt wurde:
+    if ($contextFileId > 0 || trim($liveDocText) !== '') {
+        $docInfo = $contextFileId > 0 ? extractAssistantDocumentText($pdo, $userId, $contextFileId, $isAdmin) : null;
+        if (trim($liveDocText) !== '') {
+            $cleanLive = trim(preg_replace("/\n{3,}/u", "\n\n", str_replace("\r\n", "\n", $liveDocText)) ?? '');
+            if ($cleanLive !== '') {
+                $lines = substr_count($cleanLive, "\n") + 1;
+                $words = count(preg_split('/\s+/u', $cleanLive, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+                $docInfo = [
+                    'id'    => $contextFileId,
+                    'name'  => $liveDocName !== '' ? $liveDocName : ($docInfo['name'] ?? 'Geöffnetes Office-Dokument'),
+                    'size'  => $docInfo['size'] ?? formatBytes(strlen($cleanLive)),
+                    'ext'   => $docInfo['ext'] ?? 'docx',
+                    'text'  => mb_substr($cleanLive, 0, 6000, 'UTF-8'),
+                    'lines' => $lines,
+                    'words' => $words,
+                ];
+            }
+        }
         if ($docInfo !== null) {
             return answerDocumentQuestion($pdo, $appSettings, $docInfo, $question, $lang);
         }
@@ -4122,6 +4159,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
 // schwebende Schnell-Chat-Widget in includes/footer.php)
 // =============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
+    @set_time_limit(90);
     header('Content-Type: application/json; charset=UTF-8');
 
     $csrf = (string)($_POST['csrf_token'] ?? '');
@@ -4142,7 +4180,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
     $message       = trim((string)($_POST['message'] ?? ''));
     $preferredLang = trim((string)($_POST['lang'] ?? 'auto'));
     $contextFileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
-    $result        = generateAssistantResponse($pdo, $userId, $username, $isAdmin, $appSettings, $message, $preferredLang, $contextFileId);
+    $liveDocText   = isset($_POST['doc_live_text']) ? trim((string)$_POST['doc_live_text']) : '';
+    $liveDocName   = isset($_POST['doc_live_name']) ? trim((string)$_POST['doc_live_name']) : '';
+    $result        = generateAssistantResponse($pdo, $userId, $username, $isAdmin, $appSettings, $message, $preferredLang, $contextFileId, $liveDocText, $liveDocName);
 
     echo json_encode([
         'ok'        => true,
@@ -4466,13 +4506,23 @@ function formatAssistantMarkdown(text) {
     return safe;
 }
 
+let assistantPageUnloading = false;
+window.addEventListener('beforeunload', () => { assistantPageUnloading = true; });
+window.addEventListener('pagehide', () => { assistantPageUnloading = true; });
+
 function loadAssistantHistory() {
     try {
         const raw = sessionStorage.getItem(ASSISTANT_STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed;
+                const cleaned = parsed.filter((m) => !(m.role === 'assistant' && typeof m.reply === 'string' && m.reply.startsWith('⚠️ Verbindungsfehler')));
+                if (cleaned.length > 0) {
+                    if (cleaned.length !== parsed.length) {
+                        sessionStorage.setItem(ASSISTANT_STORAGE_KEY, JSON.stringify(cleaned));
+                    }
+                    return cleaned;
+                }
             }
         }
     } catch (e) {}
@@ -4640,6 +4690,9 @@ async function sendAssistantMessage(text) {
             });
         }
     } catch (err) {
+        if (assistantPageUnloading || (err && err.name === 'AbortError')) {
+            return;
+        }
         history.push({
             role: 'assistant',
             reply: '⚠️ Verbindungsfehler zum lokalen Assistenten.',
@@ -4651,8 +4704,10 @@ async function sendAssistantMessage(text) {
             typingEl.parentNode.removeChild(typingEl);
         }
         if (btn) btn.disabled = false;
-        saveAssistantHistory(history);
-        renderAssistantMessages();
+        if (!assistantPageUnloading) {
+            saveAssistantHistory(history);
+            renderAssistantMessages();
+        }
     }
 }
 

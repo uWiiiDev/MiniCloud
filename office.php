@@ -1554,6 +1554,18 @@ require_once __DIR__ . '/includes/header.php';
             <span class="hidden sm:inline">Herunterladen</span>
         </a>
 
+        <?php if (!$isVaultLocked && in_array($editorType, ['word', 'text', 'markdown', 'sheet', 'slides'], true)): ?>
+            <button
+                type="button"
+                onclick="if (typeof window.summarizeCurrentOfficeDocWithAi === 'function') { window.summarizeCurrentOfficeDocWithAi(); } else { window.location.href = 'assistant.php?file_id=<?= (int)$fileId ?>'; }"
+                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                title="Dieses Dokument direkt mit dem lokalen KI-Assistenten zusammenfassen oder analysieren"
+            >
+                <span>🤖</span>
+                <span class="hidden sm:inline">KI-Zusammenfassung</span>
+            </button>
+        <?php endif; ?>
+
         <?php if ($canShareFile && !$isVaultLocked): ?>
             <button
                 type="button"
