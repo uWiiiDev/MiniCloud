@@ -319,18 +319,41 @@ if ($activeGroupFolder === null && !empty($userFolders)) {
     }
 }
 
-// Im Modus "📊 Große Dateien & Speicher-Analyse": Kategorie-Verteilung, Größenklassen & Duplikate vorab berechnen,
+// Im Modus "📊 Große Dateien & Speicher-Analyse": Kategorie-Verteilung, Größenklassen & Duplikate (SHA-256 + Name/Größe) vorab berechnen,
 // damit die Hauptabfrage direkt per SQL LIMIT 100 nur die Top-100-Dateien laden muss.
-$storageAnalysis = null;
-$duplicateIds    = [];
+$storageAnalysis  = null;
+$duplicateIds     = [];
+$duplicateHashIds = [];
 if ($largeFilesMode) {
     $stmtAllScope = $pdo->prepare(
         $activeGroupFolder !== null
-            ? 'SELECT id, original_name, folder_path, file_size, mime_type FROM files WHERE group_folder_id = :sc_id AND deleted_at IS NULL'
-            : 'SELECT id, original_name, folder_path, file_size, mime_type FROM files WHERE user_id = :sc_id AND group_folder_id IS NULL AND deleted_at IS NULL'
+            ? 'SELECT id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted FROM files WHERE group_folder_id = :sc_id AND deleted_at IS NULL'
+            : 'SELECT id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted FROM files WHERE user_id = :sc_id AND group_folder_id IS NULL AND deleted_at IS NULL'
     );
     $stmtAllScope->execute([':sc_id' => $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : $userId]);
     $allScopeFiles = $stmtAllScope->fetchAll();
+
+    // Fehlende SHA-256-Hashes für Bestandsdateien schrittweise im Hintergrund nachberechnen (max. 25 pro Aufruf)
+    $hashedInThisRequest = 0;
+    $stmtUpdHash = $pdo->prepare('UPDATE files SET file_hash = :fh WHERE id = :id');
+    foreach ($allScopeFiles as &$sfRef) {
+        if ($hashedInThisRequest >= 25) {
+            break;
+        }
+        $szRef = (int)$sfRef['file_size'];
+        if (empty($sfRef['file_hash']) && (int)($sfRef['is_encrypted'] ?? 0) === 0 && $szRef > 0 && $szRef <= 150 * 1048576) {
+            $physPath = UPLOAD_DIR . basename((string)$sfRef['filename']);
+            if (is_file($physPath) && is_readable($physPath)) {
+                $calcHash = @hash_file('sha256', $physPath);
+                if (is_string($calcHash) && strlen($calcHash) === 64) {
+                    $sfRef['file_hash'] = $calcHash;
+                    $stmtUpdHash->execute([':fh' => $calcHash, ':id' => (int)$sfRef['id']]);
+                    $hashedInThisRequest++;
+                }
+            }
+        }
+    }
+    unset($sfRef);
 
     $catBuckets = [
         'video' => ['label' => '🎬 Videos',          'bytes' => 0, 'count' => 0, 'bar' => 'bg-violet-500'],
@@ -345,12 +368,14 @@ if ($largeFilesMode) {
     $cnt50Mb  = 0;
     $cnt100Mb = 0;
     $sigMap   = [];
+    $hashMap  = [];
 
     foreach ($allScopeFiles as $sf) {
         $sz   = (int)$sf['file_size'];
         $name = strtolower(trim((string)$sf['original_name']));
         $ext  = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
         $mime = strtolower((string)$sf['mime_type']);
+        $fHash = trim((string)($sf['file_hash'] ?? ''));
         $totalScopeBytes += $sz;
 
         if ($sz >= 10 * 1048576) {
@@ -364,6 +389,9 @@ if ($largeFilesMode) {
         }
 
         if ($sz > 0) {
+            if ($fHash !== '') {
+                $hashMap[$fHash][] = (int)$sf['id'];
+            }
             $sig = $name . '|' . $sz;
             $sigMap[$sig][] = (int)$sf['id'];
         }
@@ -389,6 +417,14 @@ if ($largeFilesMode) {
         }
     }
 
+    foreach ($hashMap as $ids) {
+        if (count($ids) > 1) {
+            foreach ($ids as $dId) {
+                $duplicateIds[$dId]     = true;
+                $duplicateHashIds[$dId] = true;
+            }
+        }
+    }
     foreach ($sigMap as $ids) {
         if (count($ids) > 1) {
             foreach ($ids as $dId) {
@@ -413,76 +449,77 @@ if ($largeFilesMode) {
     ];
 }
 
-// Dateien für die Haupttabelle abrufen (entweder aktiver Gruppenordner, aktiver freigegebener Ordner ODER eigene Dateien)
+// Dateien für die Haupttabelle abrufen (ohne teure korrelierte Subqueries pro Zeile; Zähler werden anschließend per Batch geladen)
 $params = [];
 if ($activeGroupFolder !== null) {
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
-                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
-                 WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
     $params[':gf_id'] = (int)$activeGroupFolder['id'];
 } elseif ($activeSharedFolder !== null) {
     $sharedFp = (string)$activeSharedFolder['folder_path'];
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name, 0 AS link_share_count, 0 AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id
                  WHERE f.user_id = :owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
                    AND (f.folder_path = :sf_exact OR f.folder_path LIKE :sf_prefix)';
     $params[':owner_id']  = (int)$activeSharedFolder['owner_id'];
     $params[':sf_exact']  = $sharedFp;
     $params[':sf_prefix'] = $sharedFp . '/%';
 } else {
-    $sqlFiles = 'SELECT f.*, u.username AS uploader_name,
-                        (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS link_share_count,
-                        (SELECT COUNT(*) FROM user_shares us WHERE us.file_id = f.id) AS user_share_count,
-                        (SELECT COUNT(*) FROM file_versions fv WHERE fv.file_id = f.id) AS version_count,
-                        (SELECT COUNT(*) FROM file_comments fc WHERE fc.file_id = f.id) AS comment_count
-                 FROM files f
-                 INNER JOIN users u ON u.id = f.user_id
-                 WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
     $params[':user_id'] = $userId;
 }
 
 if ($activeSharedFolder === null && $searchQuery === '' && !$showAllFolders && !$onlyFavorites) {
     if ($currentFolder !== '') {
         // Nur Dateien im ausgewählten Ordner anzeigen
-        $sqlFiles .= ' AND f.folder_path = :folder_exact';
+        $sqlWhere .= ' AND f.folder_path = :folder_exact';
         $params[':folder_exact'] = $currentFolder;
     } else {
         // Nur Dateien direkt im Hauptverzeichnis anzeigen (nicht aus Unterordnern)
-        $sqlFiles .= " AND f.folder_path = ''";
+        $sqlWhere .= " AND f.folder_path = ''";
     }
 }
 
 if ($onlyFavorites) {
-    $sqlFiles .= ' AND f.is_favorite = 1';
+    $sqlWhere .= ' AND f.is_favorite = 1';
 }
 
 if ($minSizeMb > 0) {
-    $sqlFiles .= ' AND f.file_size >= :min_size_bytes';
+    $sqlWhere .= ' AND f.file_size >= :min_size_bytes';
     $params[':min_size_bytes'] = $minSizeMb * 1048576;
 }
 
 if ($largeFilesMode && $onlyDuplicates) {
     if (empty($duplicateIds)) {
-        $sqlFiles .= ' AND 1 = 0';
+        $sqlWhere .= ' AND 1 = 0';
     } else {
         $dupIntIds = array_map('intval', array_keys($duplicateIds));
-        $sqlFiles .= ' AND f.id IN (' . implode(',', $dupIntIds) . ')';
+        $sqlWhere .= ' AND f.id IN (' . implode(',', $dupIntIds) . ')';
     }
 }
 
 if ($searchQuery !== '') {
-    $sqlFiles .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
+    $sqlWhere .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
     $params[':search_name']   = '%' . $searchQuery . '%';
     $params[':search_folder'] = '%' . $searchQuery . '%';
 }
+
+// Gesamtanzahl für Paginierung bestimmen (außer bei ?large=1, das fest auf Top 100 begrenzt ist)
+$perPage            = $largeFilesMode ? 100 : 200;
+$currentPage        = max(1, (int)($_GET['page'] ?? 1));
+$totalMatchingFiles = 0;
+$totalPages         = 1;
+
+if (!$largeFilesMode) {
+    $stmtCount = $pdo->prepare('SELECT COUNT(*) ' . $sqlWhere);
+    $stmtCount->execute($params);
+    $totalMatchingFiles = (int)$stmtCount->fetchColumn();
+    $totalPages         = max(1, (int)ceil($totalMatchingFiles / $perPage));
+    if ($currentPage > $totalPages) {
+        $currentPage = $totalPages;
+    }
+}
+
+$sqlFiles = 'SELECT f.*, u.username AS uploader_name,
+                    0 AS link_share_count, 0 AS user_share_count, 0 AS version_count, 0 AS comment_count ' . $sqlWhere;
 
 $orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
 if ($largeFilesMode && $sortBy === 'size') {
@@ -493,11 +530,47 @@ if ($largeFilesMode && $sortBy === 'size') {
 
 if ($largeFilesMode) {
     $sqlFiles .= ' LIMIT 100';
+} else {
+    $offset = ($currentPage - 1) * $perPage;
+    $sqlFiles .= sprintf(' LIMIT %d OFFSET %d', $perPage, $offset);
 }
 
 $stmtFiles = $pdo->prepare($sqlFiles);
 $stmtFiles->execute($params);
 $files = $stmtFiles->fetchAll();
+
+// Batch-Aggregation für Freigaben, Dateiversionen & Kommentare (nur für die tatsächlich angezeigten <= 200 Dateien)
+if (!empty($files)) {
+    $visibleIdsSql = implode(',', array_map(static fn(array $r): int => (int)$r['id'], $files));
+    $shareCntMap   = [];
+    $uShareCntMap  = [];
+    $verCntMap     = [];
+    $comCntMap     = [];
+
+    if ($activeSharedFolder === null) {
+        foreach ($pdo->query("SELECT file_id, COUNT(*) AS c FROM shares WHERE file_id IN ({$visibleIdsSql}) GROUP BY file_id")->fetchAll() as $cr) {
+            $shareCntMap[(int)$cr['file_id']] = (int)$cr['c'];
+        }
+        foreach ($pdo->query("SELECT file_id, COUNT(*) AS c FROM user_shares WHERE file_id IN ({$visibleIdsSql}) GROUP BY file_id")->fetchAll() as $cr) {
+            $uShareCntMap[(int)$cr['file_id']] = (int)$cr['c'];
+        }
+    }
+    foreach ($pdo->query("SELECT file_id, COUNT(*) AS c FROM file_versions WHERE file_id IN ({$visibleIdsSql}) GROUP BY file_id")->fetchAll() as $cr) {
+        $verCntMap[(int)$cr['file_id']] = (int)$cr['c'];
+    }
+    foreach ($pdo->query("SELECT file_id, COUNT(*) AS c FROM file_comments WHERE file_id IN ({$visibleIdsSql}) GROUP BY file_id")->fetchAll() as $cr) {
+        $comCntMap[(int)$cr['file_id']] = (int)$cr['c'];
+    }
+
+    foreach ($files as &$fRowRef) {
+        $fidKey = (int)$fRowRef['id'];
+        $fRowRef['link_share_count'] = $shareCntMap[$fidKey]  ?? 0;
+        $fRowRef['user_share_count'] = $uShareCntMap[$fidKey] ?? 0;
+        $fRowRef['version_count']    = $verCntMap[$fidKey]    ?? 0;
+        $fRowRef['comment_count']    = $comCntMap[$fidKey]    ?? 0;
+    }
+    unset($fRowRef);
+}
 
 // Direkte Unterordner des aktuell geöffneten Ordners ermitteln (oder bei globaler Suche alle passenden Ordner)
 $directSubfolders = [];
@@ -1731,6 +1804,17 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             >
                                                 <?= e($origName) ?>
                                             </button>
+                                            <?php if ($largeFilesMode && !empty($duplicateIds[$fId])): ?>
+                                                <?php if (!empty($duplicateHashIds[$fId])): ?>
+                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800/70" title="Exakt identischer Dateiinhalt (SHA-256 Hash-Übereinstimmung)">
+                                                        🧬 SHA-256 Duplikat
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Potenzielles Duplikat (gleicher Dateiname &amp; gleiche Dateigröße)">
+                                                        👯 Duplikat
+                                                    </span>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
                                             <?php if ($isEncrypted): ?>
                                                 <button
                                                     type="button"
@@ -2106,7 +2190,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     >
                         <?php if ($isImageThumb): ?>
                             <img
-                                src="download.php?id=<?= $fId ?>&amp;inline=1"
+                                src="thumbnail.php?id=<?= $fId ?>"
                                 alt="<?= e($origName) ?>"
                                 loading="lazy"
                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -2134,6 +2218,50 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 </div>
             <?php endforeach; ?>
         </div>
+
+        <?php if (!$largeFilesMode && $totalPages > 1): ?>
+            <?php
+            $buildPageUrl = static function (int $targetPage): string {
+                $qp = $_GET;
+                if ($targetPage <= 1) {
+                    unset($qp['page']);
+                } else {
+                    $qp['page'] = (string)$targetPage;
+                }
+                return 'index.php' . (!empty($qp) ? '?' . http_build_query($qp) : '');
+            };
+            ?>
+            <div class="px-4 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Seite <strong><?= $currentPage ?></strong> von <strong><?= $totalPages ?></strong>
+                    <span class="hidden sm:inline">(&bull; <?= $totalMatchingFiles ?> Dateien insgesamt, max. <?= $perPage ?> pro Seite)</span>
+                </p>
+                <div class="flex items-center gap-1.5">
+                    <?php if ($currentPage > 1): ?>
+                        <a href="<?= e($buildPageUrl($currentPage - 1)) ?>"
+                           class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors">
+                            &larr; Zurück
+                        </a>
+                    <?php endif; ?>
+                    <?php
+                    $startP = max(1, $currentPage - 2);
+                    $endP   = min($totalPages, $currentPage + 2);
+                    for ($p = $startP; $p <= $endP; $p++):
+                    ?>
+                        <a href="<?= e($buildPageUrl($p)) ?>"
+                           class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= $p === $currentPage ? 'bg-brand-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200' ?>">
+                            <?= $p ?>
+                        </a>
+                    <?php endfor; ?>
+                    <?php if ($currentPage < $totalPages): ?>
+                        <a href="<?= e($buildPageUrl($currentPage + 1)) ?>"
+                           class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors">
+                            Weiter &rarr;
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 </section>
 
@@ -3446,23 +3574,37 @@ async function renderPreviewItem(index) {
         `;
     } else if (isPdfPreviewable(item)) {
         previewStage.innerHTML = `
-            <iframe
-                src="${item.inlineUrl}"
-                title="${escapeHtml(item.name)}"
-                class="w-full h-[70vh] rounded-xl border border-slate-200 dark:border-slate-800 bg-white"
-            ></iframe>
+            <div class="flex flex-col items-center gap-3 w-full">
+                <iframe
+                    src="${item.inlineUrl}"
+                    title="${escapeHtml(item.name)}"
+                    class="w-full h-[64vh] rounded-xl border border-slate-200 dark:border-slate-800 bg-white"
+                ></iframe>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    <a href="pdf_tools.php?file_id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                        <span>✏️</span>
+                        <span>PDF ausfüllen, unterschreiben &amp; schwärzen</span>
+                    </a>
+                </div>
+            </div>
         `;
     } else if (isVideoPreviewable(item)) {
         previewStage.innerHTML = `
             <div class="flex flex-col items-center gap-3 w-full">
-                <video controls autoplay class="max-h-[64vh] max-w-full rounded-xl shadow-md bg-black">
+                <video controls autoplay class="max-h-[62vh] max-w-full rounded-xl shadow-md bg-black">
                     <source src="${item.inlineUrl}">
                     Ihr Browser unterstützt dieses Videoformat nicht.
                 </video>
-                <a href="video_studio.php?id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs transition-colors">
-                    <span>🎬</span>
-                    <span>Im Video-Studio schneiden &amp; bearbeiten</span>
-                </a>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    <a href="cinema.php?id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                        <span>🍿</span>
+                        <span>Im Heimkino (Ambilight) öffnen</span>
+                    </a>
+                    <a href="video_studio.php?id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                        <span>🎬</span>
+                        <span>Im Video-Studio schneiden &amp; bearbeiten</span>
+                    </a>
+                </div>
             </div>
         `;
     } else if (isAudioPreviewable(item)) {
@@ -3558,7 +3700,15 @@ async function renderPreviewItem(index) {
             const res = await fetch(item.textUrl);
             const text = await res.text();
             previewStage.innerHTML = `
-                <pre class="w-full h-[68vh] overflow-auto p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(text)}</pre>
+                <div class="w-full flex flex-col gap-3">
+                    <pre class="w-full h-[60vh] overflow-auto p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(text)}</pre>
+                    <div class="flex flex-wrap items-center justify-center gap-2">
+                        <a href="assistant.php?file_id=${Number(item.id)}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors">
+                            <span>🤖</span>
+                            <span>KI fragen: Datei zusammenfassen &amp; analysieren</span>
+                        </a>
+                    </div>
+                </div>
             `;
         } catch {
             previewStage.innerHTML = '<p class="text-xs text-red-500">Textvorschau konnte nicht geladen werden.</p>';
@@ -3574,7 +3724,7 @@ async function renderPreviewItem(index) {
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(item.size)} &bull; ${escapeHtml(item.mime)}</p>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400">
-                    ${item.officeUrl ? 'Dieses Office-Dokument kann direkt online in <strong>MiniCloud Office Light</strong> geöffnet und bearbeitet werden.' : 'Für diesen Dateityp ist keine direkte Browser-Vorschau verfügbar.'}
+                    ${item.officeUrl ? 'Dieses Office-Dokument kann direkt online in <strong>MiniCloud Office Light</strong> geöffnet oder vom KI-Assistenten analysiert werden.' : 'Für diesen Dateityp ist keine direkte Browser-Vorschau verfügbar.'}
                 </p>
                 <div class="flex flex-wrap items-center justify-center gap-2">
                     ${item.officeUrl ? `
@@ -3583,6 +3733,12 @@ async function renderPreviewItem(index) {
                             class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
                         >
                             <span>✏️ In Office Light öffnen</span>
+                        </a>
+                        <a
+                            href="assistant.php?file_id=${Number(item.id)}"
+                            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                        >
+                            <span>🤖 KI fragen</span>
                         </a>
                     ` : ''}
                     <a

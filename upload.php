@@ -164,8 +164,8 @@ $totalUploadedBytes = 0;
 $errorMessages = [];
 
 $stmtInsert = $pdo->prepare(
-    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
-     VALUES (:user_id, :group_folder_id, :filename, :original_name, :folder_path, :file_size, :mime_type, :is_encrypted)'
+    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+     VALUES (:user_id, :group_folder_id, :filename, :original_name, :folder_path, :file_size, :file_hash, :mime_type, :is_encrypted)'
 );
 
 foreach ($validCandidates as $fileItem) {
@@ -237,6 +237,7 @@ foreach ($validCandidates as $fileItem) {
     @chmod($destinationPath, 0640);
 
     $isEncryptedFlag = 0;
+    $fileHash = null;
     if ($uploadVaultPassword !== '') {
         if (!encryptFileInPlaceWithVault($destinationPath, $uploadVaultPassword)) {
             @unlink($destinationPath);
@@ -246,6 +247,11 @@ foreach ($validCandidates as $fileItem) {
         clearstatcache(true, $destinationPath);
         $actualSize = (int)(@filesize($destinationPath) ?: $actualSize);
         $isEncryptedFlag = 1;
+    } else {
+        $computedHash = @hash_file('sha256', $destinationPath);
+        if (is_string($computedHash) && strlen($computedHash) === 64) {
+            $fileHash = $computedHash;
+        }
     }
 
     try {
@@ -285,12 +291,13 @@ foreach ($validCandidates as $fileItem) {
             }
             $stmtUpdExisting = $pdo->prepare(
                 'UPDATE files
-                 SET filename = :filename, file_size = :file_size, mime_type = :mime_type, upload_date = CURRENT_TIMESTAMP
+                 SET filename = :filename, file_size = :file_size, file_hash = :file_hash, mime_type = :mime_type, upload_date = CURRENT_TIMESTAMP
                  WHERE id = :id'
             );
             $stmtUpdExisting->execute([
                 ':filename'  => $storedFilename,
                 ':file_size' => $actualSize,
+                ':file_hash' => $fileHash,
                 ':mime_type' => $mimeType,
                 ':id'        => (int)$existingFile['id'],
             ]);
@@ -302,6 +309,7 @@ foreach ($validCandidates as $fileItem) {
                 ':original_name'   => $originalName,
                 ':folder_path'     => $finalFolderPath,
                 ':file_size'       => $actualSize,
+                ':file_hash'       => $fileHash,
                 ':mime_type'       => $mimeType,
                 ':is_encrypted'    => $isEncryptedFlag,
             ]);

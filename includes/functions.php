@@ -699,6 +699,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_surflog'                => '1',
         'enable_cinema'                 => '1',
         'enable_dashboard'              => '1',
+        'trash_retention_days'          => '30',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
         'github_repo'                   => 'uWiiiDev/MiniCloud',

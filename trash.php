@@ -11,9 +11,13 @@ requireLogin();
 $userId  = (int)$_SESSION['user_id'];
 $isAdmin = isAdmin();
 $pdo     = getDB();
+$appSettings   = getAppSettings($pdo);
+$retentionDays = isset($appSettings['trash_retention_days']) && is_numeric($appSettings['trash_retention_days'])
+    ? max(0, min(3650, (int)$appSettings['trash_retention_days']))
+    : (int)TRASH_RETENTION_DAYS;
 
-// Abgelaufene Dateien (> 30 Tage) automatisch bereinigen
-purgeExpiredTrashFiles($pdo);
+// Abgelaufene Dateien automatisch bereinigen
+purgeExpiredTrashFiles($pdo, true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $csrfToken = $_POST['csrf_token'] ?? null;
@@ -121,7 +125,7 @@ $stmtTrash = $pdo->prepare(
      ORDER BY deleted_at DESC, id DESC'
 );
 $stmtTrash->execute([
-    ':retention_days' => TRASH_RETENTION_DAYS,
+    ':retention_days' => $retentionDays > 0 ? $retentionDays : 36500,
     ':user_id'        => $userId,
 ]);
 $trashFiles = $stmtTrash->fetchAll();
@@ -140,7 +144,11 @@ require_once __DIR__ . '/includes/header.php';
                 <span>Papierkorb (<?= count($trashFiles) ?>)</span>
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Gelöschte Dateien werden hier noch <strong><?= (int)TRASH_RETENTION_DAYS ?> Tage</strong> aufbewahrt, bevor sie automatisch endgültig entfernt werden.
+                <?php if ($retentionDays > 0): ?>
+                    Gelöschte Dateien werden hier noch <strong><?= $retentionDays ?> Tage</strong> aufbewahrt, bevor sie automatisch endgültig entfernt werden.
+                <?php else: ?>
+                    Gelöschte Dateien bleiben hier aufbewahrt, bis der Papierkorb manuell geleert wird.
+                <?php endif; ?>
             </p>
         </div>
     </div>

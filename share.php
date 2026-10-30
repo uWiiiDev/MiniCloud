@@ -144,9 +144,11 @@ $vaultPromptFile = null; // Falls eine Tresor-Datei in einem freigegebenen Ordne
  */
 function consumeShareDownloadSlot(PDO $pdo, array $shareRow): void
 {
-    $shareId = (int)$shareRow['share_id'];
-    $maxDl   = $shareRow['max_downloads'] !== null ? (int)$shareRow['max_downloads'] : null;
-    $newCnt  = (int)($shareRow['download_count'] ?? 0) + 1;
+    $shareId    = (int)$shareRow['share_id'];
+    $ownerId    = (int)$shareRow['user_id'];
+    $maxDl      = $shareRow['max_downloads'] !== null ? (int)$shareRow['max_downloads'] : null;
+    $newCnt     = (int)($shareRow['download_count'] ?? 0) + 1;
+    $targetName = (string)($shareRow['original_name'] ?? $shareRow['shared_folder_path'] ?? 'Freigabe');
 
     if ($maxDl !== null && $newCnt >= $maxDl) {
         $pdo->prepare('DELETE FROM shares WHERE id = :id')->execute([':id' => $shareId]);
@@ -158,14 +160,45 @@ function consumeShareDownloadSlot(PDO $pdo, array $shareRow): void
                 $shareId,
                 $newCnt,
                 $maxDl,
-                (string)($shareRow['original_name'] ?? $shareRow['shared_folder_path'] ?? 'Freigabe')
+                $targetName
             ),
-            (int)$shareRow['user_id'],
+            $ownerId,
             (string)$shareRow['owner_username']
         );
+        try {
+            $stmtNotify = $pdo->prepare(
+                'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, is_read)
+                 VALUES (:sid, :rid, 0, :txt, 0)'
+            );
+            $stmtNotify->execute([
+                ':sid' => $ownerId,
+                ':rid' => $ownerId,
+                ':txt' => sprintf(
+                    '🔥 Selbstzerstörender Freigabelink für „%s“ wurde %d/%d Mal heruntergeladen und soeben automatisch gelöscht.',
+                    $targetName,
+                    $newCnt,
+                    $maxDl
+                ),
+            ]);
+        } catch (Throwable) {
+        }
     } else {
-        $pdo->prepare('UPDATE shares SET download_count = download_count + 1 WHERE id = :id')
+        $pdo->prepare('UPDATE shares SET download_count = download_count + 1, last_downloaded_at = CURRENT_TIMESTAMP WHERE id = :id')
             ->execute([':id' => $shareId]);
+        if ($newCnt === 1) {
+            try {
+                $stmtNotify = $pdo->prepare(
+                    'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, is_read)
+                     VALUES (:sid, :rid, 0, :txt, 0)'
+                );
+                $stmtNotify->execute([
+                    ':sid' => $ownerId,
+                    ':rid' => $ownerId,
+                    ':txt' => sprintf('📥 Ihre öffentliche Freigabe „%s“ wurde soeben zum ersten Mal heruntergeladen.', $targetName),
+                ]);
+            } catch (Throwable) {
+            }
+        }
     }
 }
 
@@ -213,8 +246,8 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                 $finfo = class_exists('finfo') ? new finfo(FILEINFO_MIME_TYPE) : null;
 
                 $stmtInsFile = $pdo->prepare(
-                    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted)
-                     VALUES (:uid, NULL, :fn, :orig, :fp, :sz, :mime, 0)'
+                    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+                     VALUES (:uid, NULL, :fn, :orig, :fp, :sz, :fh, :mime, 0)'
                 );
 
                 foreach ($validIndices as $idx) {
@@ -231,12 +264,15 @@ if ($errorState === null && $share !== null && $isUnlocked) {
 
                     if (@move_uploaded_file($tmpPath, $destPath)) {
                         @chmod($destPath, 0640);
+                        $calcHash = @hash_file('sha256', $destPath);
+                        $fHash    = (is_string($calcHash) && strlen($calcHash) === 64) ? $calcHash : null;
                         $stmtInsFile->execute([
                             ':uid'  => $ownerId,
                             ':fn'   => $stored,
                             ':orig' => $cleanOrig,
                             ':fp'   => $folderPath,
                             ':sz'   => $fSize,
+                            ':fh'   => $fHash,
                             ':mime' => mb_substr($detected, 0, 128),
                         ]);
                         $dropUploadedNames[] = $cleanOrig;
@@ -256,6 +292,24 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                         $ownerId,
                         $senderTag !== '' ? ('Gast: ' . $senderTag) : 'Gast (Briefkasten)'
                     );
+                    try {
+                        $stmtDropMsg = $pdo->prepare(
+                            'INSERT INTO messages (sender_id, recipient_id, is_broadcast, message_text, is_read)
+                             VALUES (:sid, :rid, 0, :txt, 0)'
+                        );
+                        $stmtDropMsg->execute([
+                            ':sid' => $ownerId,
+                            ':rid' => $ownerId,
+                            ':txt' => sprintf(
+                                '📤 Briefkasten-Eingang in Ordner „%s“: %d Datei(en) von %s eingereicht (%s).',
+                                $folderPath,
+                                count($dropUploadedNames),
+                                $senderTag !== '' ? $senderTag : 'Gast',
+                                implode(', ', array_slice($dropUploadedNames, 0, 4))
+                            ),
+                        ]);
+                    } catch (Throwable) {
+                    }
                     $dropUploadSuccess = sprintf(
                         'Vielen Dank! %d %s erfolgreich in den Ordner hochgeladen.',
                         count($dropUploadedNames),

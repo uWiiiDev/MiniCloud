@@ -2615,6 +2615,202 @@ function createAssistantOfficeDocx(
 }
 
 /**
+ * Extrahiert lesbaren Klartext aus einer Cloud-Datei (.txt, .md, .csv, .json, .html, .doc, .docx, .odt)
+ * für den lokalen KI-Dokumenten-Chat ("Frag deine Datei").
+ *
+ * @return array{id: int, name: string, size: string, ext: string, text: string, lines: int, words: int}|null
+ */
+function extractAssistantDocumentText(PDO $pdo, int $userId, int $fileId, bool $isAdmin): ?array
+{
+    if ($fileId <= 0) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT * FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+    $stmt->execute([':id' => $fileId]);
+    $file = $stmt->fetch();
+    if (!$file || (int)($file['is_encrypted'] ?? 0) === 1) {
+        return null;
+    }
+
+    $hasAccess = false;
+    if ((int)$file['user_id'] === $userId && $file['group_folder_id'] === null) {
+        $hasAccess = true;
+    } elseif ($file['group_folder_id'] !== null && canUserAccessGroupFolder($pdo, $userId, (int)$file['group_folder_id'], false, $isAdmin)) {
+        $hasAccess = true;
+    } else {
+        $stmtUs = $pdo->prepare('SELECT id FROM user_shares WHERE file_id = :fid AND shared_with_user_id = :uid LIMIT 1');
+        $stmtUs->execute([':fid' => $fileId, ':uid' => $userId]);
+        if ($stmtUs->fetch()) {
+            $hasAccess = true;
+        }
+    }
+
+    if (!$hasAccess) {
+        return null;
+    }
+
+    $physPath = UPLOAD_DIR . basename((string)$file['filename']);
+    if (!is_file($physPath) || !is_readable($physPath)) {
+        return null;
+    }
+
+    $origName = (string)$file['original_name'];
+    $ext      = strtolower((string)pathinfo($origName, PATHINFO_EXTENSION));
+    $rawText  = '';
+
+    if (in_array($ext, ['docx', 'odt'], true) && class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($physPath) === true) {
+            $xmlEntry = $ext === 'docx' ? 'word/document.xml' : 'content.xml';
+            $xmlRaw   = $zip->getFromName($xmlEntry);
+            $zip->close();
+            if (is_string($xmlRaw) && $xmlRaw !== '') {
+                $xmlPrepped = str_replace(['</w:p>', '</text:p>', '<w:br/>', '<text:line-break/>', '</w:tr>'], "\n", $xmlRaw);
+                $rawText    = html_entity_decode(strip_tags($xmlPrepped), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
+        }
+    } elseif (in_array($ext, ['doc', 'html', 'htm', 'svg'], true)) {
+        $bytes = (string)@file_get_contents($physPath, false, null, 0, 262144);
+        if ($bytes !== '') {
+            $prepped = preg_replace('/<\s*\/?(p|div|br|tr|li|h[1-6])\b[^>]*>/i', "\n", $bytes) ?? $bytes;
+            $rawText = html_entity_decode(strip_tags($prepped), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+    } elseif (in_array($ext, ['txt', 'md', 'csv', 'tsv', 'json', 'xml', 'log', 'ini', 'yaml', 'yml', 'sql', 'ics', 'vcf'], true)) {
+        $rawText = (string)@file_get_contents($physPath, false, null, 0, 262144);
+    } else {
+        return null;
+    }
+
+    $cleanText = trim(preg_replace("/\n{3,}/u", "\n\n", str_replace("\r\n", "\n", $rawText)) ?? '');
+    if ($cleanText === '') {
+        return null;
+    }
+
+    $lines = substr_count($cleanText, "\n") + 1;
+    $words = count(preg_split('/\s+/u', $cleanText, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+
+    return [
+        'id'    => $fileId,
+        'name'  => $origName,
+        'size'  => formatBytes((int)$file['file_size']),
+        'ext'   => $ext,
+        'text'  => mb_substr($cleanText, 0, 6000, 'UTF-8'),
+        'lines' => $lines,
+        'words' => $words,
+    ];
+}
+
+/**
+ * Beantwortet eine Frage zu einer konkret ausgewählten Cloud-Datei (Stufe 2: lokales Ollama gemma2:2b + Stufe 1 Extraktions-Fallback).
+ *
+ * @param array{id: int, name: string, size: string, ext: string, text: string, lines: int, words: int} $docInfo
+ * @return array{reply: string, actions: array<int, array{label: string, url: string}>, followups: array<int, string>, lang: string}
+ */
+function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, string $question, string $lang): array
+{
+    $docSnippet = mb_substr($docInfo['text'], 0, 3600, 'UTF-8');
+    $qEffective = trim($question) !== '' ? trim($question) : 'Fasse den Inhalt dieser Datei übersichtlich zusammen.';
+
+    $langNames = [
+        'de' => 'Deutsch', 'en' => 'English', 'fr' => 'Français', 'es' => 'Español',
+        'it' => 'Italiano', 'nl' => 'Nederlands', 'pl' => 'Polski', 'pt' => 'Português',
+        'cs' => 'Čeština', 'tr' => 'Türkçe', 'uk' => 'Українська',
+    ];
+    $targetLangName = $langNames[$lang] ?? 'Deutsch';
+
+    // 1. Versuch: Lokales KI-Sprachmodell (Ollama gemma2:2b)
+    if (($appSettings['assistant_use_ollama'] ?? '1') === '1') {
+        $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+        $status = probeLocalOllamaStatus($preferredModel);
+        if ($status['available'] && $status['active_model'] !== '') {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            $sysPrompt = "Du bist ein präziser Dokumenten-Assistent. Der Benutzer hat die Datei \"{$docInfo['name']}\" ({$docInfo['words']} Wörter, {$docInfo['lines']} Zeilen) geöffnet. "
+                . "Beantworte die Frage des Benutzers auf {$targetLangName} kompakt und strukturiert (mit **Fettdruck** und Stichpunkten) ausschließlich anhand des folgenden Dateiinhalts:\n\n"
+                . "--- DATEIINHALT START ---\n{$docSnippet}\n--- DATEIINHALT ENDE ---";
+
+            $payload = json_encode([
+                'model'      => $status['active_model'],
+                'messages'   => [
+                    ['role' => 'system', 'content' => $sysPrompt],
+                    ['role' => 'user', 'content' => $qEffective],
+                ],
+                'stream'     => false,
+                'keep_alive' => '30m',
+                'options'    => [
+                    'temperature' => 0.2,
+                    'num_predict' => 260,
+                    'num_thread'  => 3,
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+
+            if (is_string($payload)) {
+                $ctx = stream_context_create([
+                    'http' => [
+                        'method'        => 'POST',
+                        'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
+                        'content'       => $payload,
+                        'timeout'       => 45.0,
+                        'ignore_errors' => true,
+                    ],
+                ]);
+                $rawResp = @file_get_contents('http://127.0.0.1:11434/api/chat', false, $ctx);
+                if (is_string($rawResp) && $rawResp !== '') {
+                    $decoded = json_decode($rawResp, true);
+                    $aiContent = trim((string)($decoded['message']['content'] ?? ''));
+                    if ($aiContent !== '') {
+                        $header = "📄 **KI-Dokumenten-Analyse: „" . htmlspecialchars($docInfo['name'], ENT_QUOTES, 'UTF-8') . "“** ({$docInfo['size']} · {$docInfo['words']} Wörter)\n\n";
+                        return [
+                            'reply'   => $header . $aiContent,
+                            'actions' => [
+                                ['label' => '📝 In Office Light öffnen', 'url' => 'office.php?id=' . $docInfo['id']],
+                                ['label' => '📥 Datei herunterladen', 'url' => 'download.php?id=' . $docInfo['id']],
+                            ],
+                            'followups' => [
+                                'Welche Zahlen, Daten oder Fristen stehen im Dokument?',
+                                'Erstelle 3 kurze To-Dos aus diesem Dokument',
+                                'Übersetze die Kernaussagen auf Englisch',
+                            ],
+                            'lang' => $lang,
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Stufe-1 Extraktions-Fallback (z.B. auf STRATO Shared Hosting ohne lokales Ollama)
+    $allLines = array_values(array_filter(
+        array_map('trim', explode("\n", $docInfo['text'])),
+        static fn(string $l): bool => $l !== ''
+    ));
+    $previewLines = array_slice($allLines, 0, 8);
+    $bulletText   = '';
+    foreach ($previewLines as $pl) {
+        $bulletText .= "- " . mb_substr($pl, 0, 140, 'UTF-8') . "\n";
+    }
+
+    $reply = "📄 **Dokumenten-Auszug: „" . htmlspecialchars($docInfo['name'], ENT_QUOTES, 'UTF-8') . "“**\n"
+        . "- **Umfang:** {$docInfo['size']} · **{$docInfo['words']} Wörter** · **{$docInfo['lines']} Zeilen**\n\n"
+        . "**Wichtigste Textzeilen / Auszug:**\n" . $bulletText;
+
+    return [
+        'reply'   => $reply,
+        'actions' => [
+            ['label' => '📝 In Office Light öffnen', 'url' => 'office.php?id=' . $docInfo['id']],
+            ['label' => '📥 Datei herunterladen', 'url' => 'download.php?id=' . $docInfo['id']],
+        ],
+        'followups' => [
+            'Welche Termine stehen bei mir an?',
+            'Wie viel Speicherplatz habe ich noch frei?',
+        ],
+        'lang' => $lang,
+    ];
+}
+
+/**
  * Beantwortet eine Frage des Benutzers mehrsprachig in allen 11 angebotenen Sprachen.
  *
  * @return array{
@@ -2624,7 +2820,7 @@ function createAssistantOfficeDocx(
  *   lang: string
  * }
  */
-function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool $isAdmin, array $appSettings, string $rawQuestion, string $preferredLang = 'auto'): array
+function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool $isAdmin, array $appSettings, string $rawQuestion, string $preferredLang = 'auto', int $contextFileId = 0): array
 {
     $appTitle = (string)($appSettings['app_title'] ?? 'MiniCloud');
     $uiLang   = getCurrentLang();
@@ -2639,6 +2835,14 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
     }
 
     $pack = getAssistantLangPack($lang, $username, $appTitle);
+
+    // Falls eine konkrete Datei für den Dokumenten-Chat ("Frag deine Datei") ausgewählt wurde:
+    if ($contextFileId > 0) {
+        $docInfo = extractAssistantDocumentText($pdo, $userId, $contextFileId, $isAdmin);
+        if ($docInfo !== null) {
+            return answerDocumentQuestion($pdo, $appSettings, $docInfo, $question, $lang);
+        }
+    }
 
     if ($question === '') {
         return [
@@ -3832,7 +4036,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
         $like = '%' . $searchCandidate . '%';
         try {
             $stmtFiles = $pdo->prepare(
-                "SELECT `id`, `original_name`, `stored_name`, `folder_path`, `file_size`
+                "SELECT `id`, `original_name`, `filename`, `folder_path`, `file_size`
                  FROM `files`
                  WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `original_name` LIKE :q
                  ORDER BY `upload_date` DESC, `id` DESC
@@ -3844,7 +4048,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             // Zusätzlich Volltextsuche in kleinen .txt / .md Cloud-Dokumenten des Nutzers
             $contentHits = [];
             $stmtTxt = $pdo->prepare(
-                "SELECT `id`, `original_name`, `stored_name`, `file_size`
+                "SELECT `id`, `original_name`, `filename`, `file_size`
                  FROM `files`
                  WHERE `user_id` = :uid AND `deleted_at` IS NULL
                    AND (`original_name` LIKE '%.txt' OR `original_name` LIKE '%.md')
@@ -3854,7 +4058,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             );
             $stmtTxt->execute([':uid' => $userId]);
             foreach ($stmtTxt->fetchAll() as $txtFile) {
-                $fullPath = UPLOAD_DIR . '/' . basename((string)$txtFile['stored_name']);
+                $fullPath = UPLOAD_DIR . '/' . basename((string)$txtFile['filename']);
                 if (is_file($fullPath) && is_readable($fullPath)) {
                     $rawContent = (string)@file_get_contents($fullPath, false, null, 0, 65536);
                     if ($rawContent !== '' && mb_stripos($rawContent, $searchCandidate, 0, 'UTF-8') !== false) {
@@ -3937,7 +4141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
 
     $message       = trim((string)($_POST['message'] ?? ''));
     $preferredLang = trim((string)($_POST['lang'] ?? 'auto'));
-    $result        = generateAssistantResponse($pdo, $userId, $username, $isAdmin, $appSettings, $message, $preferredLang);
+    $contextFileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $result        = generateAssistantResponse($pdo, $userId, $username, $isAdmin, $appSettings, $message, $preferredLang, $contextFileId);
 
     echo json_encode([
         'ok'        => true,
@@ -3947,6 +4152,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
         'lang'      => $result['lang'],
     ]);
     exit;
+}
+
+$preselectedFileId = isset($_GET['file_id']) ? (int)$_GET['file_id'] : 0;
+$userReadableDocs  = [];
+try {
+    $stmtDocs = $pdo->prepare(
+        "SELECT id, original_name, folder_path, file_size
+         FROM files
+         WHERE user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0
+           AND (
+               original_name LIKE '%.txt' OR original_name LIKE '%.md' OR original_name LIKE '%.csv'
+               OR original_name LIKE '%.docx' OR original_name LIKE '%.doc' OR original_name LIKE '%.odt'
+               OR original_name LIKE '%.json' OR original_name LIKE '%.html' OR original_name LIKE '%.xml'
+               OR original_name LIKE '%.log'
+           )
+         ORDER BY upload_date DESC, id DESC
+         LIMIT 50"
+    );
+    $stmtDocs->execute([':uid' => $userId]);
+    $userReadableDocs = $stmtDocs->fetchAll();
+
+    if ($preselectedFileId > 0) {
+        $foundPre = false;
+        foreach ($userReadableDocs as $rd) {
+            if ((int)$rd['id'] === $preselectedFileId) {
+                $foundPre = true;
+                break;
+            }
+        }
+        if (!$foundPre) {
+            $stmtSingleDoc = $pdo->prepare('SELECT id, original_name, folder_path, file_size FROM files WHERE id = :id AND deleted_at IS NULL AND is_encrypted = 0 LIMIT 1');
+            $stmtSingleDoc->execute([':id' => $preselectedFileId]);
+            $extraDoc = $stmtSingleDoc->fetch();
+            if ($extraDoc) {
+                array_unshift($userReadableDocs, $extraDoc);
+            }
+        }
+    }
+} catch (Throwable) {
 }
 
 $appTitle         = (string)($appSettings['app_title'] ?? 'MiniCloud');
@@ -4127,9 +4371,48 @@ $csrfToken = getCsrfToken();
         </div>
 
         <!-- RECHTE SPALTE: INTERAKTIVES CHAT-FENSTER -->
-        <div class="lg:col-span-8 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col h-[640px] overflow-hidden">
+        <div class="lg:col-span-8 mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col h-[680px] overflow-hidden">
             <!-- Chat-Verlauf -->
             <div id="assistantChatMessages" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"></div>
+
+            <!-- KI-Dokumenten-Chat ("Frag deine Datei") Auswahlleiste -->
+            <div class="px-3.5 sm:px-4 py-2.5 border-t border-slate-200/80 dark:border-slate-800 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+                    <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300 whitespace-nowrap">📄 Frag deine Datei:</span>
+                    <select
+                        id="assistantDocSelect"
+                        onchange="onAssistantDocChange()"
+                        class="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-emerald-300/80 dark:border-emerald-800/80 text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer truncate"
+                    >
+                        <option value="0">— Keine Datei ausgewählt (Allgemeiner Cloud- &amp; KI-Chat) —</option>
+                        <?php foreach ($userReadableDocs as $docRow): ?>
+                            <?php
+                            $dId   = (int)$docRow['id'];
+                            $dName = (string)$docRow['original_name'];
+                            $dFp   = (string)$docRow['folder_path'];
+                            $dSz   = formatBytes((int)$docRow['file_size']);
+                            ?>
+                            <option value="<?= $dId ?>" <?= $preselectedFileId === $dId ? 'selected' : '' ?>>
+                                📄 <?= e($dName) ?> (<?= e($dSz) ?><?= $dFp !== '' ? ' · 📁 ' . e($dFp) : '' ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div id="assistantDocQuickBtns" class="<?= $preselectedFileId > 0 ? 'flex' : 'hidden' ?> flex-wrap items-center gap-1.5">
+                    <button type="button" onclick="askAssistantQuick('Fasse den Inhalt dieser Datei übersichtlich zusammen.')"
+                            class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer">
+                        📋 Zusammenfassen
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Welche wichtigen Punkte, Zahlen oder Termine stehen in dieser Datei?')"
+                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 transition-colors cursor-pointer">
+                        🔑 Wichtigste Punkte
+                    </button>
+                    <button type="button" onclick="askAssistantQuick('Übersetze den Inhalt dieser Datei auf Englisch.')"
+                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 transition-colors cursor-pointer">
+                        🌐 Auf Englisch
+                    </button>
+                </div>
+            </div>
 
             <!-- Eingabezeile -->
             <form id="assistantChatForm" onsubmit="submitAssistantQuestion(event)" class="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 flex items-center gap-2.5">
@@ -4156,6 +4439,20 @@ $csrfToken = getCsrfToken();
 const ASSISTANT_CSRF = <?= json_encode($csrfToken) ?>;
 const ASSISTANT_UI_LANG = <?= json_encode($uiLang) ?>;
 const ASSISTANT_STORAGE_KEY = 'mc_assistant_chat_v2_' + <?= json_encode($userId) ?> + '_' + ASSISTANT_UI_LANG;
+const PRESELECTED_DOC_ID = <?= json_encode($preselectedFileId) ?>;
+
+function onAssistantDocChange() {
+    const sel = document.getElementById('assistantDocSelect');
+    const btns = document.getElementById('assistantDocQuickBtns');
+    if (!sel || !btns) return;
+    if (Number(sel.value) > 0) {
+        btns.classList.remove('hidden');
+        btns.classList.add('flex');
+    } else {
+        btns.classList.add('hidden');
+        btns.classList.remove('flex');
+    }
+}
 
 function formatAssistantMarkdown(text) {
     let safe = String(text || '')
@@ -4314,12 +4611,15 @@ async function sendAssistantMessage(text) {
     try {
         const langSelect = document.getElementById('assistantLangSelect');
         const selectedLang = langSelect ? langSelect.value : 'auto';
+        const docSelect = document.getElementById('assistantDocSelect');
+        const selectedFileId = docSelect ? String(docSelect.value || '0') : '0';
 
         const fd = new FormData();
         fd.append('ajax', '1');
         fd.append('csrf_token', ASSISTANT_CSRF);
         fd.append('message', text);
         fd.append('lang', selectedLang);
+        fd.append('file_id', selectedFileId);
 
         const res = await fetch('assistant.php', { method: 'POST', body: fd });
         const data = await res.json();
@@ -4356,7 +4656,12 @@ async function sendAssistantMessage(text) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', renderAssistantMessages);
+document.addEventListener('DOMContentLoaded', () => {
+    renderAssistantMessages();
+    if (PRESELECTED_DOC_ID > 0) {
+        askAssistantQuick('Fasse den Inhalt dieser Datei übersichtlich zusammen.');
+    }
+});
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

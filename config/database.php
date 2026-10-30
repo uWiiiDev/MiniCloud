@@ -143,6 +143,19 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     $checked = true;
 
+    $targetSchemaVersion = '2026.10.30.2';
+    try {
+        $stmtVer = $pdo->prepare("SELECT `setting_value` FROM `settings` WHERE `setting_key` = 'schema_version' LIMIT 1");
+        $stmtVer->execute();
+        $installedSchemaVer = (string)($stmtVer->fetchColumn() ?: '');
+        if ($installedSchemaVer === $targetSchemaVersion) {
+            purgeExpiredTrashFiles($pdo, false);
+            return;
+        }
+    } catch (Throwable) {
+        // Tabelle settings existiert noch nicht -> vollständiges Schema-Update ausführen
+    }
+
     // Basis-Tabellen anlegen, falls die Datenbank noch komplett leer ist (Zero-Click-Installation)
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `users` (
@@ -289,6 +302,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `original_name` VARCHAR(255) NOT NULL,
             `folder_path` VARCHAR(512) NOT NULL DEFAULT '',
             `file_size` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            `file_hash` VARCHAR(64) DEFAULT NULL,
             `mime_type` VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
             `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0,
             `is_favorite` TINYINT(1) NOT NULL DEFAULT 0,
@@ -299,17 +313,22 @@ function ensureSchemaUpdated(PDO $pdo): void
             KEY `idx_files_deleted_at` (`deleted_at`),
             KEY `idx_files_group_folder` (`group_folder_id`),
             KEY `idx_files_user_folder` (`user_id`, `folder_path`(191)),
+            KEY `idx_files_hash` (`file_hash`),
             CONSTRAINT `fk_files_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
             CONSTRAINT `fk_files_group_folder` FOREIGN KEY (`group_folder_id`) REFERENCES `group_folders` (`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    // Prüfen, ob Spalte group_folder_id, is_encrypted und deleted_at in files existieren
+    // Prüfen, ob Spalte group_folder_id, file_hash, is_encrypted und deleted_at in files existieren
     $colsFiles = $pdo->query("SHOW COLUMNS FROM `files`")->fetchAll(PDO::FETCH_COLUMN);
     if (!in_array('group_folder_id', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `group_folder_id` INT UNSIGNED DEFAULT NULL AFTER `user_id`");
         $pdo->exec("ALTER TABLE `files` ADD KEY `idx_files_group_folder` (`group_folder_id`)");
         $pdo->exec("ALTER TABLE `files` ADD CONSTRAINT `fk_files_group_folder` FOREIGN KEY (`group_folder_id`) REFERENCES `group_folders` (`id`) ON DELETE CASCADE");
+    }
+    if (!in_array('file_hash', $colsFiles, true)) {
+        $pdo->exec("ALTER TABLE `files` ADD COLUMN `file_hash` VARCHAR(64) DEFAULT NULL AFTER `file_size`");
+        $pdo->exec("ALTER TABLE `files` ADD KEY `idx_files_hash` (`file_hash`)");
     }
     if (!in_array('is_encrypted', $colsFiles, true)) {
         $pdo->exec("ALTER TABLE `files` ADD COLUMN `is_encrypted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `mime_type`");
@@ -334,6 +353,7 @@ function ensureSchemaUpdated(PDO $pdo): void
             `expires_at` DATETIME DEFAULT NULL,
             `max_downloads` INT UNSIGNED DEFAULT NULL,
             `download_count` INT UNSIGNED NOT NULL DEFAULT 0,
+            `last_downloaded_at` DATETIME DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             UNIQUE KEY `idx_shares_token` (`share_token`),
@@ -357,6 +377,9 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     if (!in_array('download_count', $colsShares, true)) {
         $pdo->exec("ALTER TABLE `shares` ADD COLUMN `download_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `max_downloads`");
+    }
+    if (!in_array('last_downloaded_at', $colsShares, true)) {
+        $pdo->exec("ALTER TABLE `shares` ADD COLUMN `last_downloaded_at` DATETIME DEFAULT NULL AFTER `download_count`");
     }
 
     $pdo->exec("
@@ -1073,16 +1096,50 @@ function ensureSchemaUpdated(PDO $pdo): void
         }
     }
 
-    // Automatische Bereinigung: Dateien aus dem Papierkorb endgültig löschen, die älter als 30 Tage sind
-    purgeExpiredTrashFiles($pdo);
+    try {
+        $stmtSaveVer = $pdo->prepare(
+            "INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES ('schema_version', :ver)
+             ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)"
+        );
+        $stmtSaveVer->execute([':ver' => $targetSchemaVersion]);
+    } catch (Throwable) {
+    }
+
+    // Automatische Bereinigung: Dateien aus dem Papierkorb nach Ablauf der Aufbewahrungsfrist endgültig löschen
+    purgeExpiredTrashFiles($pdo, false);
 }
 
 /**
- * Entfernt automatisch alle Dateien aus dem Mülleimer, deren Löschdatum länger als TRASH_RETENTION_DAYS (30 Tage) zurückliegt.
+ * Entfernt automatisch alle Dateien aus dem Mülleimer, deren Löschdatum länger als die konfigurierte
+ * Aufbewahrungsfrist (`trash_retention_days` in settings, Standard: 30 Tage; 0 = deaktiviert) zurückliegt.
  */
-function purgeExpiredTrashFiles(PDO $pdo): int
+function purgeExpiredTrashFiles(PDO $pdo, bool $force = false): int
 {
     $days = (int)TRASH_RETENTION_DAYS;
+    try {
+        $stmtCfg = $pdo->query(
+            "SELECT `setting_key`, `setting_value` FROM `settings`
+             WHERE `setting_key` IN ('trash_retention_days', 'last_trash_purge_ts')"
+        );
+        $cfgRows = $stmtCfg ? $stmtCfg->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        if (isset($cfgRows['trash_retention_days']) && is_numeric($cfgRows['trash_retention_days'])) {
+            $days = max(0, min(3650, (int)$cfgRows['trash_retention_days']));
+        }
+        if ($days === 0) {
+            return 0; // Automatische Papierkorb-Bereinigung durch Admin deaktiviert
+        }
+        $lastPurgeTs = isset($cfgRows['last_trash_purge_ts']) ? (int)$cfgRows['last_trash_purge_ts'] : 0;
+        if (!$force && $lastPurgeTs > 0 && (time() - $lastPurgeTs) < 3600) {
+            return 0; // Höchstens 1x pro Stunde automatisch prüfen
+        }
+        $stmtUpdTs = $pdo->prepare(
+            "INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES ('last_trash_purge_ts', :ts)
+             ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)"
+        );
+        $stmtUpdTs->execute([':ts' => (string)time()]);
+    } catch (Throwable) {
+    }
+
     $stmtExpired = $pdo->query(
         "SELECT id, filename FROM `files`
          WHERE `deleted_at` IS NOT NULL
@@ -1097,9 +1154,11 @@ function purgeExpiredTrashFiles(PDO $pdo): int
     $stmtVersions = $pdo->prepare("SELECT `stored_filename` FROM `file_versions` WHERE `file_id` = :fid");
     $stmtDelete = $pdo->prepare("DELETE FROM `files` WHERE `id` = :id");
     $purgedCount = 0;
+    $thumbDir = UPLOAD_DIR . '.thumbs/';
 
     foreach ($expiredRows as $row) {
-        $stmtVersions->execute([':fid' => (int)$row['id']]);
+        $fid = (int)$row['id'];
+        $stmtVersions->execute([':fid' => $fid]);
         foreach ($stmtVersions->fetchAll(PDO::FETCH_COLUMN) as $vFile) {
             $vPath = UPLOAD_DIR . basename((string)$vFile);
             if (is_file($vPath)) {
@@ -1110,7 +1169,14 @@ function purgeExpiredTrashFiles(PDO $pdo): int
         if (is_file($physicalPath)) {
             @unlink($physicalPath);
         }
-        $stmtDelete->execute([':id' => (int)$row['id']]);
+        if (is_dir($thumbDir)) {
+            foreach (glob($thumbDir . 'thumb_' . $fid . '_*') ?: [] as $tFile) {
+                if (is_file($tFile)) {
+                    @unlink($tFile);
+                }
+            }
+        }
+        $stmtDelete->execute([':id' => $fid]);
         $purgedCount++;
     }
 

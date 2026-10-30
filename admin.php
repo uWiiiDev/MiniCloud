@@ -1423,6 +1423,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableVideoStudio = isset($_POST['enable_video_studio']) && $_POST['enable_video_studio'] === '1' ? '1' : '0';
         $enableSurflog     = isset($_POST['enable_surflog']) && $_POST['enable_surflog'] === '1' ? '1' : '0';
         $enableCinema      = isset($_POST['enable_cinema']) && $_POST['enable_cinema'] === '1' ? '1' : '0';
+        $trashRetention    = isset($_POST['trash_retention_days']) ? max(0, min(3650, (int)$_POST['trash_retention_days'])) : 30;
         $useOllama         = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
         $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
         $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'gemma2:2b';
@@ -1456,6 +1457,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_video_studio', $enableVideoStudio);
         saveAppSetting($pdo, 'enable_surflog', $enableSurflog);
         saveAppSetting($pdo, 'enable_cinema', $enableCinema);
+        saveAppSetting($pdo, 'trash_retention_days', (string)$trashRetention);
+        if ($trashRetention > 0) {
+            purgeExpiredTrashFiles($pdo, true);
+        }
 
         setFlash('success', 'Alle Modul-Einstellungen wurden erfolgreich gespeichert.');
         header('Location: admin.php#tab-modules');
@@ -3687,6 +3692,43 @@ foreach ($modList as $mItem) {
                             </a>
                         </div>
                     <?php endif; ?>
+                </div>
+
+                <!-- Modul 28: Automatische Papierkorb-Bereinigung (Aufbewahrungsfrist) -->
+                <?php $curTrashDays = isset($currentSettings['trash_retention_days']) ? (int)$currentSettings['trash_retention_days'] : 30; ?>
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🗑️ Automatische Papierkorb-Bereinigung
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= $curTrashDays > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= $curTrashDays > 0 ? $curTrashDays . ' Tage' : 'Nie (Manuell)' ?>
+                            </span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label for="trash_retention_days" class="block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                Aufbewahrungsfrist für gelöschte Dateien (<code>deleted_at</code>):
+                            </label>
+                            <select
+                                id="trash_retention_days"
+                                name="trash_retention_days"
+                                class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                            >
+                                <?php foreach ([7 => '7 Tage', 14 => '14 Tage', 30 => '30 Tage (Standard)', 60 => '60 Tage', 90 => '90 Tage', 180 => '180 Tage', 365 => '365 Tage (1 Jahr)', 0 => 'Nie automatisch löschen (nur manuell)'] as $tVal => $tLabel): ?>
+                                    <option value="<?= $tVal ?>" <?= $curTrashDays === $tVal ? 'selected' : '' ?>><?= e($tLabel) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                                Dateien im Papierkorb inkl. Dateiversionen und Vorschaubilder (<code>.thumbs</code>) werden nach Ablauf dieser Frist automatisch endgültig vom Server gelöscht.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                        <a href="trash.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🗑️ Papierkorb öffnen &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
 
