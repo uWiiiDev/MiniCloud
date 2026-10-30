@@ -243,9 +243,14 @@ if ($ticketToken !== '') {
             exit('Videodatei nicht gefunden.');
         }
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $fileSize = (int)filesize($filePath);
         $mimeType = (string)($allowedFile['mime_type'] ?: 'video/mp4');
         $start = 0;
+        $maxChunk = 4 * 1024 * 1024;
         $end = $fileSize > 0 ? ($fileSize - 1) : 0;
         $isPartial = false;
 
@@ -257,7 +262,9 @@ if ($ticketToken !== '') {
             } elseif ($rStart !== null) {
                 $start = $rStart;
                 if ($rEnd !== null && $rEnd < $fileSize) {
-                    $end = $rEnd;
+                    $end = min($rEnd, $start + $maxChunk - 1);
+                } else {
+                    $end = min($fileSize - 1, $start + $maxChunk - 1);
                 }
             }
             if ($start > $end || $start >= $fileSize) {

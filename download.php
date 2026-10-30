@@ -83,6 +83,9 @@ function streamZipArchive(array $folderFiles, string $archiveBaseName): never
 
     $zipDownloadName = (preg_replace('/[^a-zA-Z0-9_.-]/', '_', basename($archiveBaseName)) ?: 'ordner') . '.zip';
 
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     if (ob_get_level()) {
         ob_end_clean();
     }
@@ -332,6 +335,9 @@ if ((int)($file['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($filePath)) 
             $vaultError = 'Das eingegebene Tresor-Passwort ist falsch.';
         } else {
             unset($_SESSION[$attemptKey]);
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
             if (ob_get_level()) {
                 ob_end_clean();
             }
@@ -416,6 +422,9 @@ if ((int)($file['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($filePath)) 
     exit;
 }
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 if (ob_get_level()) {
     ob_end_clean();
 }
@@ -508,12 +517,22 @@ if ($isInline) {
 
     // HTTP 206 Partial Content Range-Support für flüssiges Vor-/Zurückspulen in Videos & Audios
     $rangeHeader = isset($_SERVER['HTTP_RANGE']) ? trim((string)$_SERVER['HTTP_RANGE']) : '';
+    $isMediaStream = str_starts_with($contentType, 'video/') || str_starts_with($contentType, 'audio/');
+    $maxMediaRangeChunk = 4 * 1024 * 1024; // 4 MB pro Range-Antwort, damit kein php-fpm Worker durch pausierte Videos blockiert wird
+
     if ($rangeHeader !== '' && $fileSize > 0 && preg_match('/bytes=(\d*)-(\d*)/i', $rangeHeader, $matches)) {
         $start = $matches[1] !== '' ? (int)$matches[1] : 0;
-        $end   = $matches[2] !== '' ? (int)$matches[2] : ($fileSize - 1);
         if ($matches[1] === '' && $matches[2] !== '') {
             $start = max(0, $fileSize - (int)$matches[2]);
             $end   = $fileSize - 1;
+        } elseif ($matches[2] !== '') {
+            $end = (int)$matches[2];
+            if ($isMediaStream) {
+                $end = min($end, $start + $maxMediaRangeChunk - 1);
+            }
+        } else {
+            // Offener Range-Request ("bytes=0-"): bei Video/Audio auf 4-MB-Häppchen begrenzen, damit php-fpm sofort wieder frei ist
+            $end = $isMediaStream ? min($fileSize - 1, $start + $maxMediaRangeChunk - 1) : ($fileSize - 1);
         }
         $end = min($end, $fileSize - 1);
 
