@@ -138,6 +138,15 @@ function getGamesCatalog(): array
             'desc'     => 'Vollgas auf der 4-spurigen Autobahn: Knappe Überholmanöver (Close Overtake), Gegenverkehr, Lichthupe & 5 Tuning-Autos!',
             'color'    => 'from-orange-500 to-red-700',
         ],
+        'darts' => [
+            'key'      => 'darts',
+            'title'    => 'Cloud-Darts (Ally Pally)',
+            'icon'     => '🎯',
+            'category' => 'Darts & Turnier',
+            'group'    => 'action',
+            'desc'     => '501 Double-Out, 301, Around the Clock & Highscore-Shootout mit Checkout-Rechner, 2.5× Ziel-Lupe & „ONE HUNDRED AND EIGHTY!“-Caller!',
+            'color'    => 'from-emerald-600 to-red-700',
+        ],
         'lemmings' => [
             'key'      => 'lemmings',
             'title'    => 'Cloud-Lemmings (1991)',
@@ -1173,7 +1182,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🏎️ Rennspiel &amp; RPG (3)
+                        🏎️ Rennspiel, Sport &amp; RPG (4)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2657,6 +2666,116 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- =========================================================== -->
+            <!-- SPIEL 19: 🎯 CLOUD-DARTS (ALLY PALLY TURNIER-EDITION)       -->
+            <!-- =========================================================== -->
+            <div id="gamePanel-darts" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🎯</span>
+                            <span>Cloud-Darts (Ally Pally Edition)</span>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                501 Double-Out &middot; 301 &middot; Around the Clock &middot; 180-Caller
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Ziele mit Maus, Touchscreen oder Pfeiltasten (inkl. 2,5× Präzisions-Lupe) und wirf im richtigen Moment per Klick oder <strong>Leertaste</strong>!
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <select id="dartsModeSelect" onchange="dartsStartMatch()"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-100 cursor-pointer">
+                            <option value="501_do" selected>🏆 501 (Double-Out)</option>
+                            <option value="301_so">⚡ 301 (Straight-Out)</option>
+                            <option value="highscore">🔥 Highscore-Shootout (7 Runden)</option>
+                            <option value="clock">🕒 Around the Clock (1–20 + Bull)</option>
+                        </select>
+
+                        <select id="dartsOppSelect" onchange="dartsStartMatch()"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-100 cursor-pointer">
+                            <option value="bot_pub" selected>🍺 Gegen Kneipen-KI</option>
+                            <option value="bot_pro">👑 Gegen Ally-Pally-Profi</option>
+                            <option value="human_2p">👥 2 Spieler lokal</option>
+                        </select>
+
+                        <button type="button" onclick="dartsCallerSpeak('One hundred and eighty!')"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 font-bold cursor-pointer"
+                                title="180-Caller Probe hören">
+                            🎙️ „180!“
+                        </button>
+
+                        <button type="button" onclick="dartsStartMatch()"
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-xs cursor-pointer">
+                            🔄 Neues Match
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live TV-Scoreboard & Checkout-Berater -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    <div id="dartsP1Card" class="p-3 rounded-xl bg-emerald-950/90 border-2 border-emerald-500 text-white flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-emerald-300 truncate">🎯 <?= e($username) ?></span>
+                            <span id="dartsP1Avg" class="text-[11px] font-mono text-emerald-200">Ø 0.0</span>
+                        </div>
+                        <div id="dartsP1Score" class="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight mt-0.5">501</div>
+                    </div>
+
+                    <div id="dartsP2Card" class="p-3 rounded-xl bg-slate-900 border border-slate-700 text-white flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span id="dartsP2Name" class="font-bold text-amber-300 truncate">🍺 Kneipen-KI</span>
+                            <span id="dartsP2Avg" class="text-[11px] font-mono text-slate-400">Ø 0.0</span>
+                        </div>
+                        <div id="dartsP2Score" class="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight mt-0.5">501</div>
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex flex-col justify-between">
+                        <span class="text-slate-500 dark:text-slate-400 font-semibold">Aufnahme (3 Pfeile):</span>
+                        <div id="dartsTurnThrows" class="text-sm sm:text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1 truncate">
+                            🎯 — &middot; 🎯 — &middot; 🎯 —
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/70 flex flex-col justify-between">
+                        <span class="text-amber-800 dark:text-amber-300 font-semibold">💡 Checkout / Ziel-Tipp:</span>
+                        <div id="dartsCheckoutHint" class="text-sm sm:text-base font-extrabold font-mono text-amber-900 dark:text-amber-200 mt-1 truncate">
+                            T20 • T20 • T20 (180)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dartboard-Canvas + Wurf-Button für Smartphone -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="dartsCanvas" width="640" height="490"
+                            class="rounded-2xl bg-slate-950 border-2 border-emerald-700/80 shadow-xl max-w-full h-auto cursor-crosshair select-none"></canvas>
+
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button" onclick="dartsQuickAim(20, 3)"
+                                class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs cursor-pointer">
+                            🔥 Visier auf Triple-20
+                        </button>
+                        <button type="button" onclick="dartsQuickAim(19, 3)"
+                                class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold text-xs cursor-pointer">
+                            🎯 Triple-19
+                        </button>
+                        <button type="button" onclick="dartsQuickAim(25, 2)"
+                                class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs cursor-pointer">
+                            🐂 Bullseye (50)
+                        </button>
+                        <button type="button" onclick="dartsAimCheckoutDouble()"
+                                class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs cursor-pointer">
+                            💍 Passendes Checkout-Doppel anvisieren
+                        </button>
+                        <button type="button" onclick="dartsTriggerThrow()"
+                                class="px-6 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs sm:text-sm shadow-md cursor-pointer">
+                            🏹 PFEIL WERFEN (Klick / Leertaste)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2911,6 +3030,11 @@ function selectCloudGame(gameKey) {
             trInit();
         }
         trDraw();
+    } else if (gameKey === 'darts') {
+        if (!dartsInitialized) {
+            dartsInit();
+        }
+        dartsDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -13279,11 +13403,759 @@ function imLoop() {
     }
 }
 
+// =============================================================================
+// SPIEL 19: 🎯 CLOUD-DARTS (ALLY PALLY TURNIER-EDITION)
+// =============================================================================
+const DARTS_SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const DARTS_BOARD_CX = 355;
+const DARTS_BOARD_CY = 245;
+const DARTS_BOARD_R  = 175; // Außenradius Double-Ring
+
+//Proportionale Radien der Turnier-Dartscheibe
+const DARTS_R_BULL50 = 10;
+const DARTS_R_BULL25 = 24;
+const DARTS_R_TRIPLE_IN  = 96;
+const DARTS_R_TRIPLE_OUT = 110;
+const DARTS_R_DOUBLE_IN  = 161;
+const DARTS_R_DOUBLE_OUT = 175;
+
+let dartsInitialized = false;
+let dartsRafId       = null;
+let dartsMode        = '501_do';
+let dartsOpp         = 'bot_pub';
+let dartsStartMs     = 0;
+let dartsGameOver    = false;
+
+// Ziel-Visier & natürliches Hand-Schwanken
+let dartsBaseX = DARTS_BOARD_CX;
+let dartsBaseY = DARTS_BOARD_CY - 103; // Standardmäßig auf T20 gerichtet
+let dartsAimX  = DARTS_BOARD_CX;
+let dartsAimY  = DARTS_BOARD_CY - 103;
+let dartsSwayT = 0;
+let dartsPowerPhase = 0; // Präzisions-Pendel (0..2*PI)
+
+let dartsTurnPlayer  = 0; // 0 = Spieler 1, 1 = Gegner/Spieler 2
+let dartsTurnThrows  = []; // Array von { label, score, mult, base, x, y }
+let dartsTurnStartScore = 501;
+let dartsFlying      = null; // Aktive Fluganimation { startX, startY, targetX, targetY, t }
+let dartsBannerMsg   = '🎯 WILLKOMMEN IM ALLY PALLY! ZIELE & DRÜCKE LEERTASTE ODER KLICK!';
+let dartsCallerText  = '';
+let dartsCallerTimer = 0;
+
+let dartsPlayers = [
+    { name: CURRENT_USERNAME, score: 501, dartsThrown: 0, totalPoints: 0, clockTarget: 1, roundsDone: 0 },
+    { name: '🍺 Kneipen-KI',  score: 501, dartsThrown: 0, totalPoints: 0, clockTarget: 1, roundsDone: 0 }
+];
+
+function dartsCallerSpeak(text) {
+    dartsCallerText  = text.toUpperCase();
+    dartsCallerTimer = 140;
+    try {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang  = 'en-GB';
+            u.pitch = text.includes('eighty') ? 0.8 : 0.9;
+            u.rate  = 0.92;
+            window.speechSynthesis.speak(u);
+        }
+    } catch (e) {}
+}
+
+function dartsPlaySfx(type) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!window._dartsAudio) window._dartsAudio = new AudioCtx();
+        const actx = window._dartsAudio;
+        const osc  = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.connect(gain);
+        gain.connect(actx.destination);
+
+        if (type === 'thud') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(135, actx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(42, actx.currentTime + 0.09);
+            gain.gain.setValueAtTime(0.18, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.095);
+            osc.start();
+            osc.stop(actx.currentTime + 0.095);
+        } else if (type === '180') {
+            [523, 659, 784, 1046].forEach((f, idx) => {
+                const o = actx.createOscillator();
+                const g = actx.createGain();
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(f, actx.currentTime + idx * 0.09);
+                g.gain.setValueAtTime(0.08, actx.currentTime + idx * 0.09);
+                g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + idx * 0.09 + 0.2);
+                o.connect(g);
+                g.connect(actx.destination);
+                o.start(actx.currentTime + idx * 0.09);
+                o.stop(actx.currentTime + idx * 0.09 + 0.2);
+            });
+        }
+    } catch (e) {}
+}
+
+function dartsEvaluatePoint(px, py) {
+    const dx = px - DARTS_BOARD_CX;
+    const dy = py - DARTS_BOARD_CY;
+    const r  = Math.hypot(dx, dy);
+
+    if (r <= DARTS_R_BULL50) {
+        return { score: 50, base: 25, mult: 2, label: 'BULL (50)' };
+    }
+    if (r <= DARTS_R_BULL25) {
+        return { score: 25, base: 25, mult: 1, label: '25' };
+    }
+    if (r > DARTS_R_DOUBLE_OUT) {
+        return { score: 0, base: 0, mult: 0, label: 'MISS (0)' };
+    }
+
+    // Winkel berechnen (0 Grad = oben bei Sektor 20)
+    let deg = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    if (deg < 0) deg += 360;
+    const sectorIdx = Math.floor(((deg + 9) % 360) / 18);
+    const num = DARTS_SECTORS[sectorIdx] || 20;
+
+    if (r >= DARTS_R_DOUBLE_IN && r <= DARTS_R_DOUBLE_OUT) {
+        return { score: num * 2, base: num, mult: 2, label: 'D' + num };
+    }
+    if (r >= DARTS_R_TRIPLE_IN && r <= DARTS_R_TRIPLE_OUT) {
+        return { score: num * 3, base: num, mult: 3, label: 'T' + num };
+    }
+    return { score: num, base: num, mult: 1, label: String(num) };
+}
+
+function dartsGetSectorCoords(num, mult) {
+    if (num === 25) {
+        return { x: DARTS_BOARD_CX, y: DARTS_BOARD_CY + (mult === 2 ? 0 : -16) };
+    }
+    const idx = DARTS_SECTORS.indexOf(num);
+    if (idx === -1) return { x: DARTS_BOARD_CX, y: DARTS_BOARD_CY };
+    const angleRad = ((idx * 18 - 90) * Math.PI) / 180;
+    let radius = 62;
+    if (mult === 3) radius = (DARTS_R_TRIPLE_IN + DARTS_R_TRIPLE_OUT) / 2;
+    else if (mult === 2) radius = (DARTS_R_DOUBLE_IN + DARTS_R_DOUBLE_OUT) / 2;
+    return {
+        x: DARTS_BOARD_CX + Math.cos(angleRad) * radius,
+        y: DARTS_BOARD_CY + Math.sin(angleRad) * radius
+    };
+}
+
+function dartsQuickAim(num, mult) {
+    const pt = dartsGetSectorCoords(num, mult);
+    dartsBaseX = pt.x;
+    dartsBaseY = pt.y;
+}
+
+function dartsGetCheckoutSuggestion(rem, doubleOut = true) {
+    if (rem <= 1 || rem > 170) return 'T20 • T20 • T20 (Max 180)';
+    if (!doubleOut) {
+        if (rem <= 20) return `Single ${rem}`;
+        if (rem <= 60 && rem % 3 === 0) return `T${rem / 3}`;
+        return 'T20 anvisieren';
+    }
+    const bogey = [169, 168, 166, 165, 163, 162, 159];
+    if (bogey.includes(rem)) return 'Kein 3-Dart-Finish (Stellen!)';
+    if (rem === 170) return 'T20 • T20 • Bull (50)';
+    if (rem === 167) return 'T20 • T19 • Bull (50)';
+    if (rem === 164) return 'T20 • T18 • Bull (50)';
+    if (rem === 161) return 'T20 • T17 • Bull (50)';
+    if (rem === 160) return 'T20 • T20 • D20';
+    if (rem === 50)  return 'Bullseye (50)';
+    if (rem <= 40 && rem % 2 === 0) return `D${rem / 2} (${rem})`;
+    if (rem <= 40) {
+        const s = 1;
+        const d = (rem - 1) / 2;
+        return `${s} • D${d}`;
+    }
+    if (rem <= 100) {
+        const first = rem - 40 <= 20 ? (rem - 40) : 20;
+        const rest  = rem - first;
+        if (rest <= 40 && rest % 2 === 0) return `${first} • D${rest / 2}`;
+        return `T20 oder T19 zum Stellen`;
+    }
+    return `T20 • Rest auf D20/D16 stellen`;
+}
+
+function dartsAimCheckoutDouble() {
+    const p = dartsPlayers[dartsTurnPlayer];
+    if (dartsMode === 'clock') {
+        const t = p.clockTarget;
+        dartsQuickAim(t === 21 ? 25 : t, t === 21 ? 2 : 1);
+        return;
+    }
+    const rem = p.score;
+    if (rem === 50) {
+        dartsQuickAim(25, 2);
+    } else if (rem <= 40 && rem % 2 === 0) {
+        dartsQuickAim(rem / 2, 2);
+    } else if (rem <= 40 && rem > 1) {
+        dartsQuickAim(1, 1);
+    } else {
+        dartsQuickAim(20, 3);
+    }
+}
+
+function dartsInit() {
+    if (dartsInitialized) return;
+    dartsInitialized = true;
+
+    const cvs = document.getElementById('dartsCanvas');
+    if (cvs) {
+        const updateBaseFromEvent = (clientX, clientY) => {
+            if (dartsTurnPlayer === 1 && dartsOpp !== 'human_2p') return;
+            const rect = cvs.getBoundingClientRect();
+            const mx = (clientX - rect.left) * (cvs.width / rect.width);
+            const my = (clientY - rect.top) * (cvs.height / rect.height);
+            if (mx >= 140 && mx <= 575) {
+                dartsBaseX = mx;
+                dartsBaseY = my;
+            }
+        };
+
+        cvs.addEventListener('mousemove', (ev) => updateBaseFromEvent(ev.clientX, ev.clientY));
+        cvs.addEventListener('touchmove', (ev) => {
+            if (ev.touches && ev.touches[0]) {
+                ev.preventDefault();
+                updateBaseFromEvent(ev.touches[0].clientX, ev.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        cvs.addEventListener('click', () => {
+            dartsTriggerThrow();
+        });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'darts') return;
+        const step = 6;
+        if (e.key === 'ArrowLeft'  || e.key === 'a') { e.preventDefault(); dartsBaseX -= step; }
+        if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); dartsBaseX += step; }
+        if (e.key === 'ArrowUp'    || e.key === 'w') { e.preventDefault(); dartsBaseY -= step; }
+        if (e.key === 'ArrowDown'  || e.key === 's') { e.preventDefault(); dartsBaseY += step; }
+        if (e.key === ' ') {
+            e.preventDefault();
+            dartsTriggerThrow();
+        }
+    });
+
+    dartsStartMatch();
+}
+
+function dartsStartMatch() {
+    dartsMode     = document.getElementById('dartsModeSelect')?.value || '501_do';
+    dartsOpp      = document.getElementById('dartsOppSelect')?.value || 'bot_pub';
+    dartsStartMs  = performance.now();
+    dartsGameOver = false;
+    dartsFlying   = null;
+    dartsTurnPlayer = 0;
+    dartsTurnThrows = [];
+
+    const startPts = dartsMode === '501_do' ? 501 : (dartsMode === '301_so' ? 301 : 0);
+    const oppLabel = dartsOpp === 'bot_pub' ? '🍺 Kneipen-KI' : (dartsOpp === 'bot_pro' ? '👑 Ally-Pally-Profi' : '👤 Spieler 2');
+
+    dartsPlayers = [
+        { name: CURRENT_USERNAME, score: startPts, dartsThrown: 0, totalPoints: 0, clockTarget: 1, roundsDone: 0 },
+        { name: oppLabel,         score: startPts, dartsThrown: 0, totalPoints: 0, clockTarget: 1, roundsDone: 0 }
+    ];
+    dartsTurnStartScore = startPts;
+    dartsQuickAim(dartsMode === 'clock' ? 1 : 20, dartsMode === 'clock' ? 1 : 3);
+    dartsBannerMsg = `🎯 ${CURRENT_USERNAME} IST AM OCHE (WURFLINIE)!`;
+    dartsSyncHud();
+
+    if (dartsRafId) cancelAnimationFrame(dartsRafId);
+    dartsRafId = requestAnimationFrame(dartsLoop);
+}
+
+function dartsSyncHud() {
+    const p1 = dartsPlayers[0];
+    const p2 = dartsPlayers[1];
+    const p1Avg = p1.dartsThrown > 0 ? ((p1.totalPoints / p1.dartsThrown) * 3).toFixed(1) : '0.0';
+    const p2Avg = p2.dartsThrown > 0 ? ((p2.totalPoints / p2.dartsThrown) * 3).toFixed(1) : '0.0';
+
+    document.getElementById('dartsP1Score').textContent = dartsMode === 'clock'
+        ? (p1.clockTarget <= 20 ? `Ziel: ${p1.clockTarget}` : 'Ziel: BULL')
+        : String(p1.score);
+    document.getElementById('dartsP1Avg').textContent = `Ø ${p1Avg}`;
+
+    document.getElementById('dartsP2Name').textContent = p2.name;
+    document.getElementById('dartsP2Score').textContent = dartsMode === 'clock'
+        ? (p2.clockTarget <= 20 ? `Ziel: ${p2.clockTarget}` : 'Ziel: BULL')
+        : String(p2.score);
+    document.getElementById('dartsP2Avg').textContent = `Ø ${p2Avg}`;
+
+    const c1 = document.getElementById('dartsP1Card');
+    const c2 = document.getElementById('dartsP2Card');
+    if (c1 && c2) {
+        c1.className = dartsTurnPlayer === 0
+            ? 'p-3 rounded-xl bg-emerald-950/90 border-2 border-emerald-400 text-white flex flex-col justify-between shadow-md'
+            : 'p-3 rounded-xl bg-slate-900 border border-slate-700 text-white/75 flex flex-col justify-between';
+        c2.className = dartsTurnPlayer === 1
+            ? 'p-3 rounded-xl bg-amber-950/90 border-2 border-amber-400 text-white flex flex-col justify-between shadow-md'
+            : 'p-3 rounded-xl bg-slate-900 border border-slate-700 text-white/75 flex flex-col justify-between';
+    }
+
+    const throwsEl = document.getElementById('dartsTurnThrows');
+    if (throwsEl) {
+        const slots = [0, 1, 2].map(i => dartsTurnThrows[i] ? `🎯 ${dartsTurnThrows[i].label}` : '🎯 —');
+        throwsEl.textContent = slots.join(' · ');
+    }
+
+    const hintEl = document.getElementById('dartsCheckoutHint');
+    if (hintEl) {
+        const cur = dartsPlayers[dartsTurnPlayer];
+        if (dartsMode === 'clock') {
+            hintEl.textContent = cur.clockTarget <= 20 ? `Triff Sektor ${cur.clockTarget}!` : 'Triff das Bullseye (50)!';
+        } else if (dartsMode === 'highscore') {
+            hintEl.textContent = `Runde ${cur.roundsDone + 1} / 7 · Max Punkte sammeln!`;
+        } else {
+            hintEl.textContent = dartsGetCheckoutSuggestion(cur.score, dartsMode === '501_do');
+        }
+    }
+}
+
+function dartsTriggerThrow() {
+    if (dartsGameOver || dartsFlying) return;
+    if (dartsTurnPlayer === 1 && dartsOpp !== 'human_2p') return;
+    if (dartsTurnThrows.length >= 3) return;
+
+    // Präzisions-Abweichung abhängig vom Timing-Balken (sin(dartsPowerPhase) nahe 0 = perfekt!)
+    const timingErr = Math.sin(dartsPowerPhase) * 9;
+    const hitX = dartsAimX + (Math.random() - 0.5) * 3.5;
+    const hitY = dartsAimY + timingErr;
+
+    dartsFlying = {
+        startX: 355,
+        startY: 485,
+        targetX: hitX,
+        targetY: hitY,
+        t: 0
+    };
+}
+
+function dartsProcessLandedDart(hitX, hitY) {
+    const res = dartsEvaluatePoint(hitX, hitY);
+    res.x = hitX;
+    res.y = hitY;
+    dartsPlaySfx('thud');
+
+    const p = dartsPlayers[dartsTurnPlayer];
+    p.dartsThrown++;
+    dartsTurnThrows.push(res);
+
+    if (dartsMode === 'clock') {
+        const needed = p.clockTarget === 21 ? 25 : p.clockTarget;
+        if (res.base === needed && (p.clockTarget < 21 || res.mult === 2)) {
+            p.clockTarget++;
+            p.totalPoints += 50;
+            dartsBannerMsg = `✅ TREFFER AUF ${res.label}! NÄCHSTES ZIEL: ${p.clockTarget <= 20 ? p.clockTarget : 'BULLSEYE'}!`;
+            if (p.clockTarget > 21) {
+                dartsFinishMatch(dartsTurnPlayer);
+                return;
+            }
+        }
+    } else if (dartsMode === 'highscore') {
+        p.score += res.score;
+        p.totalPoints += res.score;
+    } else {
+        // 501 Double-Out oder 301 Straight-Out
+        const newRem = p.score - res.score;
+        const isDoubleOut = (dartsMode === '501_do');
+        const bust = (newRem < 0) || (isDoubleOut && newRem === 1) || (newRem === 0 && isDoubleOut && res.mult !== 2);
+
+        if (bust) {
+            p.score = dartsTurnStartScore;
+            dartsCallerSpeak('No score! Bust!');
+            dartsBannerMsg = `💥 ÜBERWORFEN (BUST)! PUNKTZAHL ZURÜCK AUF ${dartsTurnStartScore}!`;
+            dartsSyncHud();
+            setTimeout(dartsNextPlayerTurn, 1100);
+            return;
+        }
+
+        p.score = newRem;
+        p.totalPoints += res.score;
+
+        if (newRem === 0) {
+            dartsCallerSpeak('Game shot, and the match!');
+            dartsFinishMatch(dartsTurnPlayer);
+            return;
+        }
+    }
+
+    dartsSyncHud();
+
+    // Nach 3 geworfenen Pfeilen: Aufnahme auswerten & Spielerwechsel
+    if (dartsTurnThrows.length >= 3) {
+        const turnSum = dartsTurnThrows.reduce((s, d) => s + d.score, 0);
+        if (turnSum === 180) {
+            dartsPlaySfx('180');
+            dartsCallerSpeak('One hundred and eighty!');
+            dartsBannerMsg = '🔥🎙️ ONE HUNDRED AND EIGHTY (180)!!';
+        } else if (turnSum >= 140) {
+            dartsCallerSpeak(`${turnSum}!`);
+            dartsBannerMsg = `👏 STARKE AUFNAHME: ${turnSum} PUNKTE!`;
+        } else if (turnSum >= 100) {
+            dartsCallerSpeak(`${turnSum}!`);
+            dartsBannerMsg = `🎯 TONNE! ${turnSum} PUNKTE!`;
+        } else {
+            dartsBannerMsg = `Aufnahme beendet: ${turnSum} Punkte.`;
+        }
+        p.roundsDone++;
+
+        if (dartsMode === 'highscore' && dartsPlayers[0].roundsDone >= 7 && dartsPlayers[1].roundsDone >= 7) {
+            const winner = dartsPlayers[0].score >= dartsPlayers[1].score ? 0 : 1;
+            dartsFinishMatch(winner);
+            return;
+        }
+
+        setTimeout(dartsNextPlayerTurn, 1150);
+    } else if (dartsTurnPlayer === 1 && dartsOpp !== 'human_2p') {
+        setTimeout(dartsBotThrowNext, 650);
+    }
+}
+
+function dartsNextPlayerTurn() {
+    if (dartsGameOver) return;
+    dartsTurnPlayer     = 1 - dartsTurnPlayer;
+    dartsTurnThrows     = [];
+    dartsTurnStartScore = dartsPlayers[dartsTurnPlayer].score;
+    dartsBannerMsg      = `🎯 ${dartsPlayers[dartsTurnPlayer].name} IST AM WURF!`;
+    dartsSyncHud();
+
+    if (dartsTurnPlayer === 1 && dartsOpp !== 'human_2p') {
+        setTimeout(dartsBotThrowNext, 700);
+    }
+}
+
+function dartsBotThrowNext() {
+    if (dartsGameOver || dartsTurnPlayer !== 1 || dartsTurnThrows.length >= 3) return;
+    const bot = dartsPlayers[1];
+    const isPro = (dartsOpp === 'bot_pro');
+    const scatter = isPro ? 12 : 28;
+
+    let targetNum = 20, targetMult = 3;
+    if (dartsMode === 'clock') {
+        targetNum  = bot.clockTarget === 21 ? 25 : bot.clockTarget;
+        targetMult = bot.clockTarget === 21 ? 2 : 1;
+    } else if (dartsMode !== 'highscore') {
+        const rem = bot.score;
+        if (rem === 50) { targetNum = 25; targetMult = 2; }
+        else if (rem <= 40 && rem % 2 === 0) { targetNum = rem / 2; targetMult = 2; }
+        else if (rem <= 40 && rem > 1) { targetNum = 1; targetMult = 1; }
+        else if (rem <= 60 && dartsMode === '301_so' && rem <= 20) { targetNum = rem; targetMult = 1; }
+    }
+
+    const pt = dartsGetSectorCoords(targetNum, targetMult);
+    const hitX = pt.x + (Math.random() - 0.5) * scatter * 2;
+    const hitY = pt.y + (Math.random() - 0.5) * scatter * 2;
+
+    dartsFlying = {
+        startX: 355,
+        startY: 485,
+        targetX: hitX,
+        targetY: hitY,
+        t: 0
+    };
+}
+
+function dartsFinishMatch(winnerIdx) {
+    dartsGameOver = true;
+    const p1 = dartsPlayers[0];
+    const durSec = Math.max(1, Math.round((performance.now() - dartsStartMs) / 1000));
+    const avg = p1.dartsThrown > 0 ? (p1.totalPoints / p1.dartsThrown) * 3 : 0;
+
+    if (winnerIdx === 0) {
+        let cloudScore = Math.round(p1.totalPoints + avg * 18 + (dartsMode === '501_do' ? 1200 : 800));
+        if (dartsMode === 'highscore') cloudScore = p1.score;
+        dartsBannerMsg = `🏆 SIEG FÜR ${p1.name.toUpperCase()}! (Ø ${avg.toFixed(1)} · SCORE: ${cloudScore})`;
+        submitCloudScore('darts', cloudScore, durSec, `${dartsMode.toUpperCase()} · Ø ${avg.toFixed(1)} (${p1.dartsThrown} Darts)`);
+    } else {
+        dartsBannerMsg = `🏁 ${dartsPlayers[1].name} GEWINNT DAS LEG!`;
+        if (p1.totalPoints >= 100) {
+            submitCloudScore('darts', Math.round(p1.totalPoints), durSec, `Ø ${avg.toFixed(1)}`);
+        }
+    }
+    dartsSyncHud();
+}
+
+function dartsDrawBoardAt(ctx, cx, cy, scale = 1) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    // Schwarzer Außenring (Nummern-Ring)
+    ctx.beginPath();
+    ctx.arc(0, 0, DARTS_BOARD_R + 30, 0, Math.PI * 2);
+    ctx.fillStyle = '#090d16';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#334155';
+    ctx.stroke();
+
+    // 20 Sektoren zeichnen
+    for (let i = 0; i < 20; i++) {
+        const a1 = ((i * 18 - 99) * Math.PI) / 180;
+        const a2 = (((i + 1) * 18 - 99) * Math.PI) / 180;
+        const isDark = (i % 2 === 0);
+        const singleCol = isDark ? '#0f172a' : '#f8fafc';
+        const ringCol   = isDark ? '#dc2626' : '#16a34a';
+
+        // Äußeres Single + Double-Ring
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, DARTS_R_DOUBLE_OUT, a1, a2);
+        ctx.closePath();
+        ctx.fillStyle = ringCol;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, DARTS_R_DOUBLE_IN, a1, a2);
+        ctx.closePath();
+        ctx.fillStyle = singleCol;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, DARTS_R_TRIPLE_OUT, a1, a2);
+        ctx.closePath();
+        ctx.fillStyle = ringCol;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, DARTS_R_TRIPLE_IN, a1, a2);
+        ctx.closePath();
+        ctx.fillStyle = singleCol;
+        ctx.fill();
+
+        // Draht-Trennlinien (Spider)
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a1) * DARTS_R_DOUBLE_OUT, Math.sin(a1) * DARTS_R_DOUBLE_OUT);
+        ctx.stroke();
+
+        // Sektor-Zahlen außen
+        const midA = ((i * 18 - 90) * Math.PI) / 180;
+        const nx = Math.cos(midA) * (DARTS_BOARD_R + 16);
+        const ny = Math.sin(midA) * (DARTS_BOARD_R + 16);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(DARTS_SECTORS[i]), nx, ny);
+    }
+
+    // Drahtringe
+    [DARTS_R_DOUBLE_OUT, DARTS_R_DOUBLE_IN, DARTS_R_TRIPLE_OUT, DARTS_R_TRIPLE_IN].forEach(r => {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    });
+
+    // Outer Bull (25 - Grün)
+    ctx.beginPath();
+    ctx.arc(0, 0, DARTS_R_BULL25, 0, Math.PI * 2);
+    ctx.fillStyle = '#16a34a';
+    ctx.fill();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.stroke();
+
+    // Inner Bullseye (50 - Rot)
+    ctx.beginPath();
+    ctx.arc(0, 0, DARTS_R_BULL50, 0, Math.PI * 2);
+    ctx.fillStyle = '#dc2626';
+    ctx.fill();
+    ctx.strokeStyle = '#fde047';
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function dartsDraw() {
+    const cvs = document.getElementById('dartsCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    // 1. Haupt-Dartscheibe zeichnen
+    dartsDrawBoardAt(ctx, DARTS_BOARD_CX, DARTS_BOARD_CY, 1);
+
+    // 2. Bereits steckende Pfeile dieser Aufnahme zeichnen
+    dartsTurnThrows.forEach((d, idx) => {
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        // Schatten
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        ctx.arc(3, 4, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Stahlspitze & Barrel
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(10, 18);
+        ctx.stroke();
+        // Flight (Feder)
+        ctx.fillStyle = idx === 0 ? '#ef4444' : (idx === 1 ? '#3b82f6' : '#10b981');
+        ctx.beginPath();
+        ctx.moveTo(10, 18);
+        ctx.lineTo(18, 14);
+        ctx.lineTo(15, 24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // 3. Fliegender Pfeil in 3D-Perspektive
+    if (dartsFlying) {
+        const f = dartsFlying;
+        const px = f.startX + (f.targetX - f.startX) * f.t;
+        const py = f.startY + (f.targetY - f.startY) * f.t - Math.sin(f.t * Math.PI) * 55;
+        const scale = 1.9 - f.t * 0.9;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.lineTo(-8, 8);
+        ctx.lineTo(8, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 4. Fadenkreuz (wenn Spieler am Zug)
+    if (!dartsGameOver && !dartsFlying && (dartsTurnPlayer === 0 || dartsOpp === 'human_2p')) {
+        ctx.save();
+        ctx.translate(dartsAimX, dartsAimY);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 11, 0, Math.PI * 2);
+        ctx.moveTo(-16, 0); ctx.lineTo(16, 0);
+        ctx.moveTo(0, -16); ctx.lineTo(0, 16);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 5. Links oben: 2,5× Präzisions-Lupe (Zoom auf das aktuelle Zielgebiet)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(72, 82, 58, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(10, 20, 125, 125);
+    const zoom = 2.2;
+    const offX = 72 - (dartsAimX - DARTS_BOARD_CX) * zoom;
+    const offY = 82 - (dartsAimY - DARTS_BOARD_CY) * zoom;
+    dartsDrawBoardAt(ctx, offX, offY, zoom);
+    // Fadenkreuz in der Lupe
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(56, 82); ctx.lineTo(88, 82);
+    ctx.moveTo(72, 66); ctx.lineTo(72, 98);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(72, 82, 58, 0, Math.PI * 2);
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    const aimEval = dartsEvaluatePoint(dartsAimX, dartsAimY);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔍 ' + aimEval.label, 72, 155);
+
+    // 6. Rechts: Wurf-Timing- / Präzisions-Pendel
+    const barX = 595, barY = 95, barH = 260;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(barX, barY, 22, barH);
+    ctx.strokeStyle = '#475569';
+    ctx.strokeRect(barX, barY, 22, barH);
+
+    // Grüne Ideal-Zone in der Mitte
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(barX + 2, barY + barH / 2 - 16, 18, 32);
+
+    const markerY = barY + barH / 2 + Math.sin(dartsPowerPhase) * (barH / 2 - 8);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(barX - 4, markerY - 4, 30, 8);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('TIMING', barX + 11, barY - 10);
+
+    // 7. Unten: Status- & Caller-Banner
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.fillRect(12, 448, cvs.width - 24, 34);
+    ctx.strokeStyle = '#10b981';
+    ctx.strokeRect(12, 448, cvs.width - 24, 34);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(dartsBannerMsg, cvs.width / 2, 469);
+
+    // Großes Caller-Pop-Up (z.B. 180!)
+    if (dartsCallerTimer > 0) {
+        dartsCallerTimer--;
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.92)';
+        ctx.fillRect(145, 195, 420, 62);
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(145, 195, 420, 62);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'extrabold 24px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('🎙️ ' + dartsCallerText, 355, 233);
+    }
+}
+
+function dartsLoop() {
+    dartsSwayT      += 0.04;
+    dartsPowerPhase += 0.075;
+
+    // Sanftes Atmen/Puls-Schwanken des Visiers um den Zielpunkt
+    dartsAimX = dartsBaseX + Math.sin(dartsSwayT * 1.3) * 4.2 + Math.cos(dartsSwayT * 2.1) * 2.0;
+    dartsAimY = dartsBaseY + Math.cos(dartsSwayT * 1.7) * 4.2;
+
+    if (dartsFlying) {
+        dartsFlying.t += 0.12;
+        if (dartsFlying.t >= 1) {
+            const tx = dartsFlying.targetX;
+            const ty = dartsFlying.targetY;
+            dartsFlying = null;
+            dartsProcessLandedDart(tx, ty);
+        }
+    }
+
+    if (activeGameKey === 'darts') {
+        dartsDraw();
+    }
+    dartsRafId = requestAnimationFrame(dartsLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
     trInit();
+    dartsInit();
     imInit();
     lemInit();
     ninjaInit();
