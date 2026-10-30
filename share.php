@@ -320,6 +320,9 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                             $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
                         } else {
                             consumeShareDownloadSlot($pdo, $share);
+                            if (session_status() === PHP_SESSION_ACTIVE) {
+                                session_write_close();
+                            }
                             if (ob_get_level()) {
                                 ob_end_clean();
                             }
@@ -339,6 +342,9 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                     }
                 } else {
                     consumeShareDownloadSlot($pdo, $share);
+                    if (session_status() === PHP_SESSION_ACTIVE) {
+                        session_write_close();
+                    }
                     if (ob_get_level()) {
                         ob_end_clean();
                     }
@@ -395,6 +401,9 @@ if ($errorState === null && $share !== null && $isUnlocked) {
 
                 if ($addedFiles > 0 && is_file($tmpZip)) {
                     consumeShareDownloadSlot($pdo, $share);
+                    if (session_status() === PHP_SESSION_ACTIVE) {
+                        session_write_close();
+                    }
                     $zipDownloadName = (preg_replace('/[^a-zA-Z0-9_.-]/', '_', basename($folderPath)) ?: 'ordner') . '.zip';
                     if (ob_get_level()) {
                         ob_end_clean();
@@ -435,6 +444,9 @@ if ($errorState === null && $share !== null && $isUnlocked) {
                     $vaultShareError = 'Das eingegebene Tresor-Passwort ist falsch.';
                 } else {
                     consumeShareDownloadSlot($pdo, $share);
+                    if (session_status() === PHP_SESSION_ACTIVE) {
+                        session_write_close();
+                    }
                     if (ob_get_level()) {
                         ob_end_clean();
                     }
@@ -454,6 +466,9 @@ if ($errorState === null && $share !== null && $isUnlocked) {
             }
         } else {
             consumeShareDownloadSlot($pdo, $share);
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
             if (ob_get_level()) {
                 ob_end_clean();
             }

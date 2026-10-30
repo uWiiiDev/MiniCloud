@@ -33,7 +33,8 @@ if (($appSettings['enable_cinema'] ?? '1') !== '1') {
 function ensureCinemaSchema(PDO $pdo): void
 {
     static $ensured = false;
-    if ($ensured) {
+    if ($ensured || !empty($_SESSION['_mc_cinema_schema_ok'])) {
+        $ensured = true;
         return;
     }
     $ensured = true;
@@ -94,6 +95,10 @@ function ensureCinemaSchema(PDO $pdo): void
             KEY `idx_cinema_pl_sort` (`playlist_id`, `sort_order`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_mc_cinema_schema_ok'] = 1;
+    }
 }
 
 ensureCinemaSchema($pdo);
@@ -168,12 +173,21 @@ if ($ticketToken !== '') {
 
     if ($hasPassword && empty($_SESSION[$sessionAuthKey])) {
         $pwError = '';
+        $clientIp = getClientIp();
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ticket_password'])) {
-            $inputPw = (string)$_POST['ticket_password'];
-            if (password_verify($inputPw, (string)$ticketPlaylist['password_hash'])) {
-                $_SESSION[$sessionAuthKey] = true;
+            $csrf = (string)($_POST['csrf_token'] ?? '');
+            if (!verifyCsrfToken($csrf)) {
+                $pwError = 'Ungültiges Sicherheits-Token (CSRF). Bitte Seite neu laden.';
+            } elseif (isLoginRateLimited($pdo, $clientIp)) {
+                $pwError = 'Zu viele Fehlversuche. Bitte warte 5 Minuten.';
             } else {
-                $pwError = 'Das eingegebene Kino-Ticket-Passwort ist leider falsch.';
+                $inputPw = (string)$_POST['ticket_password'];
+                if (password_verify($inputPw, (string)$ticketPlaylist['password_hash'])) {
+                    $_SESSION[$sessionAuthKey] = true;
+                } else {
+                    recordLoginFailure($pdo, $clientIp, 'cinema_ticket_' . $ticketPlId);
+                    $pwError = 'Das eingegebene Kino-Ticket-Passwort ist leider falsch.';
+                }
             }
         }
 
@@ -193,6 +207,7 @@ if ($ticketToken !== '') {
                     </div>
                 <?php endif; ?>
                 <form method="post" class="space-y-3 text-left">
+                    <?= csrfField() ?>
                     <input type="hidden" name="ticket" value="<?= e($ticketToken) ?>">
                     <div>
                         <label class="block text-xs font-bold text-slate-300 mb-1">Ticket-Passwort eingeben</label>
@@ -428,6 +443,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax_actio
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => 'Ungültiges CSRF-Token.']);
         exit;
+    }
+
+    // Session-Sperre sofort nach CSRF-Prüfung freigeben, damit paralleles Video-Streaming niemals blockiert wird
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
     }
 
     $ajaxAction = (string)$_POST['ajax_action'];

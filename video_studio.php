@@ -171,6 +171,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax_actio
         }
 
         ensureUploadDirReady();
+        // Abgebrochene temporäre Chunk-Dateien (> 6 Stunden alt) automatisch bereinigen
+        foreach (glob(UPLOAD_DIR . 'mc_vidtmp_*.part') ?: [] as $stalePart) {
+            if (is_file($stalePart) && (time() - (int)@filemtime($stalePart)) > 21600) {
+                @unlink($stalePart);
+            }
+        }
         $uploadId = bin2hex(random_bytes(16));
         $tmpFile  = UPLOAD_DIR . 'mc_vidtmp_' . $userId . '_' . $uploadId . '.part';
         if (@file_put_contents($tmpFile, '') === false) {
@@ -221,12 +227,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['ajax_actio
             exit;
         }
 
+        $_SESSION['mc_video_uploads'][$uploadId]['received'] = $newReceived;
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         if (@file_put_contents((string)$meta['tmp_file'], $chunkBytes, FILE_APPEND) === false) {
             echo json_encode(['ok' => false, 'error' => 'Chunk konnte nicht geschrieben werden.']);
             exit;
         }
 
-        $_SESSION['mc_video_uploads'][$uploadId]['received'] = $newReceived;
         echo json_encode(['ok' => true, 'received' => $newReceived]);
         exit;
     }

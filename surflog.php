@@ -37,7 +37,8 @@ if (($appSettings['enable_surflog'] ?? '1') !== '1' && !$isAdmin) {
 function ensureSurflogSchema(PDO $pdo): void
 {
     static $ensured = false;
-    if ($ensured) {
+    if ($ensured || !empty($_SESSION['_mc_surflog_schema_ok'])) {
+        $ensured = true;
         return;
     }
     $ensured = true;
@@ -97,6 +98,10 @@ function ensureSurflogSchema(PDO $pdo): void
             INDEX `idx_surf_sess_user_date` (`user_id`, `session_date` DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_mc_surflog_schema_ok'] = 1;
+    }
 }
 
 ensureSurflogSchema($pdo);
@@ -382,39 +387,54 @@ if ($reqMethod === 'POST') {
             'Max-Speed (km/h)', 'Distanz (km)', 'Manöver/Highlights', 'Bewertung (1-5)', 'Notizen'
         ], ';');
 
+        $sanitizeCsvCell = static function (string $val): string {
+            $trimmed = ltrim($val);
+            if ($trimmed !== '' && in_array($trimmed[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+                return "'" . $val;
+            }
+            return $val;
+        };
+
         foreach ($rows as $r) {
             $spLabel = $sportCatalog[(string)$r['sport']]['label'] ?? (string)$r['sport'];
             fputcsv($fp, [
                 (string)$r['session_date'],
-                (string)$r['start_time'],
+                $sanitizeCsvCell((string)$r['start_time']),
                 (int)$r['duration_min'],
                 $spLabel,
-                (string)$r['spot_name'],
-                (string)$r['spot_region'],
+                $sanitizeCsvCell((string)$r['spot_name']),
+                $sanitizeCsvCell((string)$r['spot_region']),
                 $r['wind_knots_avg'] !== null ? str_replace('.', ',', (string)$r['wind_knots_avg']) : '',
                 $r['wind_knots_max'] !== null ? str_replace('.', ',', (string)$r['wind_knots_max']) : '',
                 $r['wind_bft'] !== null ? (string)$r['wind_bft'] : '',
-                (string)$r['wind_dir'],
-                (string)$r['wind_angle'],
+                $sanitizeCsvCell((string)$r['wind_dir']),
+                $sanitizeCsvCell((string)$r['wind_angle']),
                 $r['wave_height_m'] !== null ? str_replace('.', ',', (string)$r['wave_height_m']) : '',
-                (string)$r['water_condition'],
-                (string)$r['tide'],
+                $sanitizeCsvCell((string)$r['water_condition']),
+                $sanitizeCsvCell((string)$r['tide']),
                 $r['temp_air_c'] !== null ? (string)$r['temp_air_c'] : '',
                 $r['temp_water_c'] !== null ? (string)$r['temp_water_c'] : '',
-                (string)$r['board_text'],
-                (string)$r['rig_text'],
-                (string)$r['fin_foil_text'],
-                (string)$r['wetsuit_text'],
+                $sanitizeCsvCell((string)$r['board_text']),
+                $sanitizeCsvCell((string)$r['rig_text']),
+                $sanitizeCsvCell((string)$r['fin_foil_text']),
+                $sanitizeCsvCell((string)$r['wetsuit_text']),
                 $r['max_speed_kmh'] !== null ? str_replace('.', ',', (string)$r['max_speed_kmh']) : '',
                 $r['distance_km'] !== null ? str_replace('.', ',', (string)$r['distance_km']) : '',
-                (string)$r['maneuvers'],
+                $sanitizeCsvCell((string)$r['maneuvers']),
                 (int)$r['rating'],
-                (string)$r['notes'],
+                $sanitizeCsvCell((string)$r['notes']),
             ], ';');
         }
         rewind($fp);
         $csvBytes = (string)stream_get_contents($fp);
         fclose($fp);
+
+        $storage = getUserStorageStats($pdo, $userId);
+        if (strlen($csvBytes) > $storage['free']) {
+            setFlash('error', 'Nicht genügend freier Cloud-Speicherplatz für den CSV-Export.');
+            header('Location: surflog.php');
+            exit;
+        }
 
         ensureUploadDirReady();
         $storedName  = sprintf('mc_%s_%s.bin', uniqid('', true), bin2hex(random_bytes(8)));

@@ -3706,6 +3706,91 @@ function getTranslationDictionary(): array
             'nl' => '💾 Volledige database-back-up (.sql) downloaden',
             'it' => '💾 Scarica backup completo del database (.sql)',
         ],
+        // --- Heimkino, Video-Studio, Surftagebuch & Große Dateien ---
+        'Heimkino' => [
+            'en' => 'Home Cinema',
+            'fr' => 'Home Cinéma',
+            'es' => 'Cine en Casa',
+            'nl' => 'Thuisbioscoop',
+            'it' => 'Home Cinema',
+        ],
+        'Heimkino & Mediathek' => [
+            'en' => 'Home Cinema & Media Center',
+            'fr' => 'Home Cinéma & Médiathèque',
+            'es' => 'Cine en Casa y Mediateca',
+            'nl' => 'Thuisbioscoop & Mediatheek',
+            'it' => 'Home Cinema e Mediateca',
+        ],
+        'Video-Studio' => [
+            'en' => 'Video Studio',
+            'fr' => 'Studio Vidéo',
+            'es' => 'Estudio de Vídeo',
+            'nl' => 'Videostudio',
+            'it' => 'Studio Video',
+        ],
+        'Video-Studio & Schnittplatz' => [
+            'en' => 'Video Studio & Editor',
+            'fr' => 'Studio Vidéo & Montage',
+            'es' => 'Estudio y Editor de Vídeo',
+            'nl' => 'Videostudio & Montage',
+            'it' => 'Studio Video e Montaggio',
+        ],
+        'Surftagebuch' => [
+            'en' => 'Surf Logbook',
+            'fr' => 'Journal de Surf',
+            'es' => 'Diario de Surf',
+            'nl' => 'Surfdagboek',
+            'it' => 'Diario di Surf',
+        ],
+        'Surftagebuch & Quiver-Log' => [
+            'en' => 'Surf Logbook & Quiver',
+            'fr' => 'Journal de Surf & Quiver',
+            'es' => 'Diario de Surf y Quiver',
+            'nl' => 'Surfdagboek & Quiver',
+            'it' => 'Diario di Surf e Quiver',
+        ],
+        '📊 Große Dateien' => [
+            'en' => '📊 Large Files',
+            'fr' => '📊 Gros fichiers',
+            'es' => '📊 Archivos grandes',
+            'nl' => '📊 Grote bestanden',
+            'it' => '📊 File grandi',
+        ],
+        '📊 Große Dateien & Speicher-Analyse' => [
+            'en' => '📊 Large Files & Storage Analyzer',
+            'fr' => '📊 Gros fichiers & Analyse d’espace',
+            'es' => '📊 Archivos grandes y Análisis de espacio',
+            'nl' => '📊 Grote bestanden & Opslaganalyse',
+            'it' => '📊 File grandi e Analisi spazio',
+        ],
+        'Weiterschauen' => [
+            'en' => 'Continue Watching',
+            'fr' => 'Reprendre la lecture',
+            'es' => 'Seguir viendo',
+            'nl' => 'Verder kijken',
+            'it' => 'Continua a guardare',
+        ],
+        'Meine Watchlist' => [
+            'en' => 'My Watchlist',
+            'fr' => 'Ma liste à voir',
+            'es' => 'Mi lista de seguimiento',
+            'nl' => 'Mijn kijklijst',
+            'it' => 'La mia lista',
+        ],
+        'Saallicht dimmen' => [
+            'en' => 'Dim theater lights',
+            'fr' => 'Tamiser la salle',
+            'es' => 'Atenuar luces de sala',
+            'nl' => 'Zaallicht dimmen',
+            'it' => 'Abbassa luci sala',
+        ],
+        'Filmreihen & Kino-Tickets' => [
+            'en' => 'Movie Series & Cinema Tickets',
+            'fr' => 'Séries de films & Tickets Cinéma',
+            'es' => 'Series de películas y Entradas',
+            'nl' => 'Filmreeksen & Bioscooptickets',
+            'it' => 'Serie di film e Biglietti Cinema',
+        ],
     ];
 
     return $dict;
@@ -3804,6 +3889,16 @@ function getExtraEuropeanDictionary(): array
         'Herunterladen' => ['pl' => 'Pobierz', 'pt' => 'Transferir', 'cs' => 'Stáhnout', 'tr' => 'İndir', 'uk' => 'Завантажити'],
         'Erstellen' => ['pl' => 'Utwórz', 'pt' => 'Criar', 'cs' => 'Vytvořit', 'tr' => 'Oluştur', 'uk' => 'Створити'],
         '+ Erstellen' => ['pl' => '+ Utwórz', 'pt' => '+ Criar', 'cs' => '+ Vytvořit', 'tr' => '+ Oluştur', 'uk' => '+ Створити'],
+        'Heimkino' => ['pl' => 'Kino domowe', 'pt' => 'Cinema em Casa', 'cs' => 'Domácí kino', 'tr' => 'Ev Sineması', 'uk' => 'Домашній кінотеатр'],
+        'Heimkino & Mediathek' => ['pl' => 'Kino domowe i Mediateka', 'pt' => 'Cinema em Casa e Mediateca', 'cs' => 'Domácí kino a Mediatéka', 'tr' => 'Ev Sineması ve Medya', 'uk' => 'Кінотеатр і Медіатека'],
+        'Video-Studio' => ['pl' => 'Studio Wideo', 'pt' => 'Estúdio de Vídeo', 'cs' => 'Video Studio', 'tr' => 'Video Stüdyosu', 'uk' => 'Відеостудія'],
+        'Video-Studio & Schnittplatz' => ['pl' => 'Studio Wideo i Montaż', 'pt' => 'Estúdio e Edição de Vídeo', 'cs' => 'Video Studio a Střih', 'tr' => 'Video Stüdyosu ve Kurgu', 'uk' => 'Відеостудія та Монтаж'],
+        'Surftagebuch' => ['pl' => 'Dziennik Surfingu', 'pt' => 'Diário de Surf', 'cs' => 'Surfařský deník', 'tr' => 'Sörf Günlüğü', 'uk' => 'Щоденник серфінгу'],
+        'Surftagebuch & Quiver-Log' => ['pl' => 'Dziennik Surfingu i Quiver', 'pt' => 'Diário de Surf e Quiver', 'cs' => 'Surfařský deník a Quiver', 'tr' => 'Sörf Günlüğü ve Quiver', 'uk' => 'Щоденник серфінгу та Quiver'],
+        '📊 Große Dateien' => ['pl' => '📊 Duże pliki', 'pt' => '📊 Ficheiros grandes', 'cs' => '📊 Velké soubory', 'tr' => '📊 Büyük dosyalar', 'uk' => '📊 Великі файли'],
+        'Weiterschauen' => ['pl' => 'Oglądaj dalej', 'pt' => 'Continuar a ver', 'cs' => 'Pokračovat ve sledování', 'tr' => 'İzlemeye devam et', 'uk' => 'Дивитися далі'],
+        'Meine Watchlist' => ['pl' => 'Moja lista do obejrzenia', 'pt' => 'A minha lista', 'cs' => 'Můj seznam ke zhlédnutí', 'tr' => 'İzleme listem', 'uk' => 'Мій список перегляду'],
+        'Saallicht dimmen' => ['pl' => 'Przyciemnij salę', 'pt' => 'Escurecer sala', 'cs' => 'Ztlumit sál', 'tr' => 'Salonu karart', 'uk' => 'Приглушити світло'],
     ];
 
     return $extra;
