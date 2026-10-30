@@ -5,24 +5,27 @@ declare(strict_types=1);
  * MiniCloud – Browserspiele-Zentrale, Cloud-Bestenlisten & Mehrspieler-Duelle (games.php)
  * 100 % lokal, werbefrei, Strato-, Intranet- & DSGVO-tauglich (HTML5 / Canvas / PHP / MySQL).
  *
- * Enthaltene 17 Spiele:
+ * Enthaltene 20 Spiele (100 % markenfreie Eigenentwicklungen):
  * 1.  🏎️ Gummigeruch Kart-Cup (6 Strecken, KI-Fahrer & Ghost-Duelle)
  * 2.  🚘 Cloud-Traffic-Racer (Highway-Raser mit Gegenverkehr, Close-Overtake-Kombo, Lichthupe & 5 Tuning-Autos)
- * 3.  🐹 Cloud-Lemmings (1991 Klassiker: Zerstörbares Pixel-Gelände, 8 Fähigkeiten & 4 Kult-Level)
- * 4.  🥷 The Last Ninja (1987 C64-Klassiker: 6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kunitoki)
- * 5.  🏃‍♂️ Cloud-Canabalt (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
- * 6.  👾 Cloud-Invaders (1978 Arcade: 55 Pixel-Aliens, 4 Schutzbunker & Mystery-UFO)
- * 7.  🦍 Cloud-Kong (1981 Arcade: Stahlträger, Leitern, Fässer & Power-Hammer)
- * 8.  ✈️ VC-20 Blitz (1981 Retro-Klassiker: Hochhäuser per Bombe abtragen)
- * 9.  🟡 Cloud-PacMan (Arcade-Labyrinth mit 4 Geister-KIs & Power-Pillen)
- * 10. ⚔️ World of MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
- * 11. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
- * 12. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
- * 13. 🃏 Memory (4x4 & 6x4 Paar-Suche)
- * 14. 🧱 Block-Puzzle (Tetris-Klassiker mit Vorschau & Leveln)
- * 15. 🐍 Snake (Arcade-Klassiker mit 3 Tempostufen)
- * 16. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
- * 17. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
+ * 3.  🎯 Cloud-Darts (Meister-Arena: 501 Double-Out, 301, Around the Clock & 180-Caller)
+ * 4.  🐸 Teich-Hüpfer (5-spuriger Highway, Baumstämme, Tauch-Schildkröten & 5 Seerosen-Buchten)
+ * 5.  🕵️‍♂️ Geheimagent Zero (Bunker-Infiltration: Akrobatische Salti über Roboter, 9 Passwort-Lochkarten & Prof. Dr. Omega)
+ * 6.  🐹 Cloud-Wuseler (Zerstörbares Pixel-Gelände, 8 Fähigkeiten & 4 Rettungs-Level)
+ * 7.  🥷 Schatten-Shinobi (6 isometrische Tempel-Räume, Waffen, Rätsel & Shogun Kuroda)
+ * 8.  🏃‍♂️ Dach-Sprinter (Ein-Tasten-Parkour über einstürzende Dächer, Glasfenster & Taubenschwärme)
+ * 9.  👾 Galaxis-Abwehr (55 Pixel-Aliens, 4 Schutzbunker & Bonus-UFO)
+ * 10. 🦍 Fass-Kletterer (Stahlträger, Leitern, Fässer & Power-Hammer)
+ * 11. ✈️ Bomben-Flieger (8-Bit Retro-Flieger: Hochhäuser per Bombe abtragen)
+ * 12. 🟡 Pillen-Schnapper (Neon-Labyrinth mit 4 Geister-KIs & Power-Pillen)
+ * 13. ⚔️ Helden von MiniCloud (Co-Op Fantasy-Rollenspiel & Boss-Raids)
+ * 14. 🧠 Sudoku (3 Schwierigkeitsgrade, Notiz-Modus, Auto-Save & Timer)
+ * 15. 💣 Minesweeper (3 Feldgrößen, Touch-Flaggenmodus & Bestzeit)
+ * 16. 🃏 Memory (4x4 & 6x4 Paar-Suche)
+ * 17. 🧱 Block-Puzzle (Fallblock-Klassiker mit Vorschau & Leveln)
+ * 18. 🐍 Retro-Snake (Arcade-Klassiker mit 3 Tempostufen)
+ * 19. 🏓 Brick Breaker (Breakout mit Level-Fortschritt & Maus/Touch)
+ * 20. 🔴🟡 Vier Gewinnt & ❌⭕ Tic-Tac-Toe (gegen Computer-KI ODER live gegen andere Cloud-Benutzer!)
  */
 
 require_once __DIR__ . '/includes/auth.php';
@@ -140,7 +143,7 @@ function getGamesCatalog(): array
         ],
         'darts' => [
             'key'      => 'darts',
-            'title'    => 'Cloud-Darts (Ally Pally)',
+            'title'    => 'Cloud-Darts (Meister-Arena)',
             'icon'     => '🎯',
             'category' => 'Darts & Turnier',
             'group'    => 'action',
@@ -149,43 +152,43 @@ function getGamesCatalog(): array
         ],
         'lemmings' => [
             'key'      => 'lemmings',
-            'title'    => 'Cloud-Lemmings (1991)',
+            'title'    => 'Cloud-Wuseler',
             'icon'     => '🐹',
-            'category' => 'Strategie 1991',
+            'category' => 'Pixel-Strategie',
             'group'    => 'logic',
-            'desc'     => 'Rette die Kolonie mit Digger, Builder, Blocker, Basher, Floater & Bomber durch zerstörbares Pixel-Gelände!',
+            'desc'     => 'Rette die Kolonie mit Gräber, Treppenbauer, Stopper, Tunnelbohrer, Schirmchen & Sprenger durch zerstörbares Pixel-Gelände!',
             'color'    => 'from-lime-500 to-emerald-700',
         ],
         'impossible' => [
             'key'      => 'impossible',
-            'title'    => 'Impossible Mission (1984)',
+            'title'    => 'Geheimagent Zero',
             'icon'     => '🕵️‍♂️',
-            'category' => 'C64 Klassiker',
+            'category' => 'Agenten-Action',
             'group'    => 'arcade',
-            'desc'     => '„Stay a while… stay forever!“ – Akrobatische Salti über Killer-Roboter, Möbel nach Lochkarten durchsuchen & Elvin Atombender stoppen!',
+            'desc'     => '„Bleib eine Weile… bleib für immer!“ – Akrobatische Salti über Wach-Roboter, Terminals nach 9 Lochkarten durchsuchen & Prof. Dr. Omega stoppen!',
             'color'    => 'from-cyan-600 to-blue-900',
         ],
         'frogger' => [
             'key'      => 'frogger',
-            'title'    => 'Cloud-Frogger (1981)',
+            'title'    => 'Teich-Hüpfer',
             'icon'     => '🐸',
-            'category' => 'Arcade 1981',
+            'category' => 'Retro-Arcade',
             'group'    => 'arcade',
             'desc'     => 'Hüpfe über den 5-spurigen Highway, reite auf Baumstämmen & Tauch-Schildkröten über den reißenden Fluss in die 5 Seerosen-Häuser!',
             'color'    => 'from-green-500 to-emerald-800',
         ],
         'lastninja' => [
             'key'      => 'lastninja',
-            'title'    => 'The Last Ninja (1987)',
+            'title'    => 'Schatten-Shinobi',
             'icon'     => '🥷',
-            'category' => 'C64 Adventure',
+            'category' => 'Iso-Adventure',
             'group'    => 'arcade',
-            'desc'     => 'Das legendäre C64-Action-Adventure: 6 isometrische Räume, Katana, Shuriken, Fluss-Sprünge & Shogun Kunitoki!',
+            'desc'     => 'Isometrisches Action-Adventure: 6 Tempel-Räume, Ninjatō-Schwert, Wurfsterne, Fluss-Sprünge & Endkampf gegen Shogun Kuroda!',
             'color'    => 'from-amber-700 to-stone-900',
         ],
         'canabalt' => [
             'key'      => 'canabalt',
-            'title'    => 'Cloud-Canabalt',
+            'title'    => 'Dach-Sprinter',
             'icon'     => '🏃‍♂️',
             'category' => 'Parkour-Runner',
             'group'    => 'arcade',
@@ -194,47 +197,47 @@ function getGamesCatalog(): array
         ],
         'invaders' => [
             'key'      => 'invaders',
-            'title'    => 'Cloud-Invaders (1978)',
+            'title'    => 'Galaxis-Abwehr',
             'icon'     => '👾',
-            'category' => 'Arcade 1978',
+            'category' => 'Weltraum-Arcade',
             'group'    => 'arcade',
-            'desc'     => 'Verteidige die Erde hinter 4 Schutzbunkern gegen 55 marschierende Pixel-Aliens & das Mystery-UFO!',
+            'desc'     => 'Verteidige die Erde hinter 4 Schutzbunkern gegen 55 anrückende Pixel-Aliens & das Bonus-UFO!',
             'color'    => 'from-emerald-500 to-teal-700',
         ],
         'pacman' => [
             'key'      => 'pacman',
-            'title'    => 'Cloud-PacMan',
+            'title'    => 'Pillen-Schnapper',
             'icon'     => '🟡',
-            'category' => 'Arcade',
+            'category' => 'Labyrinth-Arcade',
             'group'    => 'arcade',
-            'desc'     => 'Neon-Labyrinth mit 4 schlauen Geistern (Blinky, Pinky, Inky, Clyde), Power-Pillen & Bonusfrüchten!',
+            'desc'     => 'Neon-Labyrinth mit 4 schlauen Geistern (Rudi, Trixi, Zack, Bumm), Power-Pillen & Bonusfrüchten!',
             'color'    => 'from-amber-400 to-yellow-600',
         ],
         'kong' => [
             'key'      => 'kong',
-            'title'    => 'Cloud-Kong (1981)',
+            'title'    => 'Fass-Kletterer',
             'icon'     => '🦍',
-            'category' => 'Arcade 1981',
+            'category' => 'Plattform-Arcade',
             'group'    => 'arcade',
             'desc'     => 'Weiche auf dem Stahlträger-Gerüst rollenden Fässern aus, schnapp dir den 🔨 Hammer & klettere nach ganz oben!',
             'color'    => 'from-red-600 to-rose-700',
         ],
         'blitz' => [
             'key'      => 'blitz',
-            'title'    => 'VC-20 Blitz',
+            'title'    => 'Bomben-Flieger',
             'icon'     => '✈️',
-            'category' => 'Retro 1981',
+            'category' => '8-Bit Klassiker',
             'group'    => 'arcade',
-            'desc'     => 'Der Commodore VC-20 Kult-Klassiker: Trage im Sinkflug alle Wolkenkratzer per Bombe ab, um sicher zu landen!',
+            'desc'     => '8-Bit Ein-Tasten-Klassiker: Trage im Sinkflug alle Wolkenkratzer per Bombe ab, um sicher auf der Rollbahn zu landen!',
             'color'    => 'from-cyan-500 to-blue-700',
         ],
         'wow' => [
             'key'      => 'wow',
-            'title'    => 'World of MiniCloud',
+            'title'    => 'Helden von MiniCloud',
             'icon'     => '⚔️',
-            'category' => 'MMO-RPG',
+            'category' => 'Fantasy-RPG',
             'group'    => 'action',
-            'desc'     => 'Fantasy-Rollenspiel im WoW-Stil: 3 Klassen, Quests, 4 Zonen, Raid-Bosse, Epischer Loot & Live-Mitspieler!',
+            'desc'     => 'Kooperatives Fantasy-Rollenspiel: 3 Heldenklassen, Quests, 4 Zonen, Raid-Bosse, Epischer Loot & Live-Mitspieler!',
             'color'    => 'from-amber-600 to-red-700',
         ],
         'tetris' => [
@@ -1555,11 +1558,11 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 6. SPIEL: BLOCK-PUZZLE (TETRIS-STIL) -->
+            <!-- 6. SPIEL: BLOCK-PUZZLE (FALLBLOCK-KLASSIKER) -->
             <div id="gamePanel-tetris" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
-                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">🧱 Block-Puzzle (Tetris)</h2>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">🧱 Block-Puzzle (Fallblöcke)</h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">Pfeiltasten `←/→` Bewegen &middot; `↑` Drehen &middot; `↓` Schneller &middot; `Leertaste` Sofort-Drop.</p>
                     </div>
                     <div class="flex items-center gap-2">
@@ -1741,12 +1744,12 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 10. SPIEL: WORLD OF MINICLOUD (FANTASY ACTION-RPG / MMORPG-LITE) -->
+            <!-- 10. SPIEL: HELDEN VON MINICLOUD (FANTASY ACTION-RPG) -->
             <div id="gamePanel-wow" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>⚔️ World of MiniCloud</span>
+                            <span>⚔️ Helden von MiniCloud</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
                                 💾 Charakter-Sync &amp; Live-Mitspieler
                             </span>
@@ -1767,10 +1770,10 @@ $csrfToken = getCsrfToken();
                         <!-- Zonen- / Dungeon-Flugmeister -->
                         <select id="wowZoneSelect" onchange="wowChangeZone(this.value)"
                                 class="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-xs font-bold text-amber-900 dark:text-amber-200 cursor-pointer">
-                            <option value="elwynn">🌲 Goldhain &amp; Elwynn (Stufe 1–5)</option>
-                            <option value="duskwood">🌙 Dämmerwald (Stufe 5–10)</option>
-                            <option value="moltencore">🔥 Geschmolzener Kern [Raid] (Stufe 10+)</option>
-                            <option value="icecrown">❄️ Eiskronenzitadelle [Raid] (Stufe 16+)</option>
+                            <option value="elwynn">🌲 Lichtwald &amp; Goldhain (Stufe 1–5)</option>
+                            <option value="duskwood">🌙 Rabenwald &amp; Katakomben (Stufe 5–10)</option>
+                            <option value="moltencore">🔥 Magmakern [Raid] (Stufe 10+)</option>
+                            <option value="icecrown">❄️ Frostzitadelle [Raid] (Stufe 16+)</option>
                         </select>
 
                         <button type="button" onclick="wowTeleportTown()"
@@ -1907,12 +1910,12 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 10. SPIEL: CLOUD-PACMAN (NEON-ARCADE) -->
+            <!-- 10. SPIEL: PILLEN-SCHNAPPER (NEON-LABYRINTH) -->
             <div id="gamePanel-pacman" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🟡 Cloud-PacMan</span>
+                            <span>🟡 Pillen-Schnapper</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
                                 👻 4 Geister-KIs &middot; Power-Pillen &middot; Warp-Tunnel
                             </span>
@@ -1955,10 +1958,10 @@ $csrfToken = getCsrfToken();
 
                 <!-- Geister-Legende -->
                 <div class="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> <strong>Blinky</strong> (Verfolger)</span>
-                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block"></span> <strong>Pinky</strong> (Hinterhalt)</span>
-                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> <strong>Inky</strong> (Flankierer)</span>
-                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"></span> <strong>Clyde</strong> (Streuner)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> <strong>Rudi</strong> (Verfolger)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-pink-400 inline-block"></span> <strong>Trixi</strong> (Hinterhalt)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> <strong>Zack</strong> (Flankierer)</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"></span> <strong>Bumm</strong> (Streuner)</span>
                     <span>&middot; ⚡ Power-Pille = <strong>+200 / +400 / +800 / +1600 Pkt.</strong></span>
                 </div>
 
@@ -1991,14 +1994,14 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 11. SPIEL: COMMODORE VC-20 BLITZ (1981 RETRO-KLASSIKER) -->
+            <!-- 11. SPIEL: BOMBEN-FLIEGER (8-BIT RETRO-KLASSIKER) -->
             <div id="gamePanel-blitz" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>✈️ Commodore VC-20 „Blitz“ (1981)</span>
+                            <span>✈️ Bomben-Flieger (8-Bit Skyline)</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300/70 dark:border-cyan-800">
-                                🏙️ 8-Bit Ein-Tasten-Kultklassiker
+                                🏙️ 8-Bit Ein-Tasten-Klassiker
                             </span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -2008,7 +2011,7 @@ $csrfToken = getCsrfToken();
                     <div class="flex flex-wrap items-center gap-2">
                         <button type="button" id="blitzThemeBtn" onclick="blitzToggleTheme()"
                                 class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
-                            🖥️ Optik: VC-20 Klassik
+                            🖥️ Optik: 8-Bit Klassik
                         </button>
                         <button type="button" onclick="blitzStartGame()"
                                 class="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 text-xs font-extrabold shadow-2xs cursor-pointer">
@@ -2051,12 +2054,12 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 12. SPIEL: CLOUD-KONG (1981 DONKEY-KONG ARCADE-KLASSIKER) -->
+            <!-- 12. SPIEL: FASS-KLETTERER (PLATTFORM-ARCADE) -->
             <div id="gamePanel-kong" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🦍 Cloud-Kong (1981 Arcade)</span>
+                            <span>🦍 Fass-Kletterer</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800">
                                 🛢️ Rollende Fässer &middot; 🔨 Power-Hammer &middot; 6 Etagen
                             </span>
@@ -2133,14 +2136,14 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 13. SPIEL: CLOUD-INVADERS (1978 SPACE-INVADERS ARCADE-KLASSIKER) -->
+            <!-- 13. SPIEL: GALAXIS-ABWEHR (WELTRAUM-ARCADE) -->
             <div id="gamePanel-invaders" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>👾 Cloud-Invaders (1978 Arcade)</span>
+                            <span>👾 Galaxis-Abwehr</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800">
-                                🛸 Mystery-UFO &middot; 🛡️ 4 Schutzbunker &middot; 55 Pixel-Aliens
+                                🛸 Bonus-UFO &middot; 🛡️ 4 Schutzbunker &middot; 55 Pixel-Aliens
                             </span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -2203,12 +2206,12 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 14. SPIEL: CLOUD-CANABALT (EIN-TASTEN ROOFTOP-RUNNER) -->
+            <!-- 14. SPIEL: DACH-SPRINTER (EIN-TASTEN ROOFTOP-RUNNER) -->
             <div id="gamePanel-canabalt" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🏃‍♂️ Cloud-Canabalt (2009 Parkour-Runner)</span>
+                            <span>🏃‍♂️ Dach-Sprinter (Parkour-Runner)</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/70 dark:border-slate-700">
                                 🏢 Einstürzende Dächer &middot; 🪟 Glasfenster &middot; 🕊️ Taubenschwärme
                             </span>
@@ -2263,14 +2266,14 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 15. SPIEL: THE LAST NINJA (1987 C64 ISOMETRISCHES ACTION-ADVENTURE) -->
+            <!-- 15. SPIEL: SCHATTEN-SHINOBI (ISOMETRISCHES ACTION-ADVENTURE) -->
             <div id="gamePanel-lastninja" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🥷 The Last Ninja (1987 C64-Edition)</span>
+                            <span>🥷 Schatten-Shinobi</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
-                                ⛩️ 6 Iso-Räume &middot; ⚔️ Katana &amp; Shuriken &middot; 🌊 Fluss-Sprünge &middot; 👹 Shogun Kunitoki
+                                ⛩️ 6 Iso-Räume &middot; ⚔️ Ninjatō &amp; Shuriken &middot; 🌊 Fluss-Sprünge &middot; 👹 Shogun Kuroda
                             </span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -2280,7 +2283,7 @@ $csrfToken = getCsrfToken();
                     <div class="flex flex-wrap items-center gap-2">
                         <button type="button" onclick="ninjaStartGame()"
                                 class="px-3.5 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
-                            ▶️ Mission auf Lin Fen starten
+                            ▶️ Mission auf Kuroshima starten
                         </button>
                     </div>
                 </div>
@@ -2356,27 +2359,27 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 16. SPIEL: CLOUD-LEMMINGS (1991 ZERSTÖRBARES PIXEL-GELÄNDE & 8 SKILLS) -->
+            <!-- 16. SPIEL: CLOUD-WUSELER (ZERSTÖRBARES PIXEL-GELÄNDE & 8 SKILLS) -->
             <div id="gamePanel-lemmings" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🐹 Cloud-Lemmings (1991 Klassiker)</span>
+                            <span>🐹 Cloud-Wuseler</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 border border-lime-300/70 dark:border-lime-800">
-                                ⛏️ Pixel-Tunnelbau &middot; 🪜 Treppenbauer &middot; 4 Kult-Level
+                                ⛏️ Pixel-Tunnelbau &middot; 🪜 Treppenbauer &middot; 4 Rettungs-Level
                             </span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
-                            Wähle unten eine <strong>Fähigkeit</strong> (z. B. <em>🕳️ Digger, 🪜 Builder, 🛑 Blocker, 🔨 Basher, ☂️ Floater</em>) und tippe/klicke auf einen laufenden Lemming!
+                            Wähle unten eine <strong>Fähigkeit</strong> (z. B. <em>🕳️ Digger, 🪜 Builder, 🛑 Blocker, 🔨 Basher, ☂️ Floater</em>) und tippe/klicke auf einen laufenden Wuseler!
                         </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <select id="lemLevelSelect" onchange="lemLoadLevel(parseInt(this.value,10))"
                                 class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer">
-                            <option value="0">Level 1: Just Dig! (Grabe einfach!)</option>
-                            <option value="1">Level 2: Only Floaters Survive (Klippensprung)</option>
-                            <option value="2">Level 3: Pillars of Hercules (Steinsäulen)</option>
-                            <option value="3">Level 4: Through the Mountain (Bergmassiv)</option>
+                            <option value="0">Level 1: Grabe einfach! (Erdschicht)</option>
+                            <option value="1">Level 2: Schirmchen-Sprung (Steilklippe)</option>
+                            <option value="2">Level 3: Die drei Steinsäulen</option>
+                            <option value="3">Level 4: Durch das Bergmassiv</option>
                         </select>
                         <button type="button" onclick="lemStartLevel()"
                                 class="px-3.5 py-1.5 rounded-xl bg-lime-600 hover:bg-lime-700 text-white text-xs font-extrabold shadow-2xs cursor-pointer">
@@ -2600,27 +2603,27 @@ $csrfToken = getCsrfToken();
             </div>
 
             <!-- =========================================================== -->
-            <!-- SPIEL 18: 🕵️‍♂️ IMPOSSIBLE MISSION (1984 C64-EDITION)          -->
+            <!-- SPIEL 18: 🕵️‍♂️ GEHEIMAGENT ZERO (BUNKER-INFILTRATION)         -->
             <!-- =========================================================== -->
             <div id="gamePanel-impossible" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                             <span>🕵️‍♂️</span>
-                            <span>Impossible Mission (1984 C64-Edition)</span>
+                            <span>Geheimagent Zero (Operation Bunker-Code)</span>
                             <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
-                                Epyx 1984 &middot; Agent 4125 vs. Prof. Elvin Atombender
+                                Agent Zero vs. Prof. Dr. Omega &middot; 9 Lochkarten
                             </span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
-                            <em>„Another visitor! Stay a while… stay FOREVER!“</em> – Springe per Vorwärts-Salto über Killer-Roboter, durchsuche Möbel nach den 9 Lochkarten-Passwortteilen und stürme Elvin Atombenders Kontrollraum, bevor die 6 Stunden ablaufen!
+                            <em>„Ein Eindringling! Bleib eine Weile… bleib FÜR IMMER!“</em> – Springe per Vorwärts-Salto über Wach-Roboter, durchsuche Terminals nach den 9 Lochkarten-Passwortteilen und stürme Dr. Omegas Kontrollraum, bevor die 6 Stunden ablaufen!
                         </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" onclick="imSpeak('Another visitor! Stay a while... stay forever!')"
+                        <button type="button" onclick="imSpeak('Intruder alert! Stay right there!')"
                                 class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold cursor-pointer"
-                                title="Legendäres C64-Sprachsample abspielen">
-                            🔊 „Stay a while…“
+                                title="Retro-Sprachsynthese abspielen">
+                            🔊 „Intruder alert!“
                         </button>
                         <button type="button" onclick="imToggleMap()"
                                 class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer">
@@ -2700,14 +2703,14 @@ $csrfToken = getCsrfToken();
             </div>
 
             <!-- =========================================================== -->
-            <!-- SPIEL 19: 🎯 CLOUD-DARTS (ALLY PALLY TURNIER-EDITION)       -->
+            <!-- SPIEL 19: 🎯 CLOUD-DARTS (MEISTER-ARENA TURNIER-EDITION)    -->
             <!-- =========================================================== -->
             <div id="gamePanel-darts" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                             <span>🎯</span>
-                            <span>Cloud-Darts (Ally Pally Edition)</span>
+                            <span>Cloud-Darts (Meister-Arena)</span>
                             <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                                 501 Double-Out &middot; 301 &middot; Around the Clock &middot; 180-Caller
                             </span>
@@ -2729,7 +2732,7 @@ $csrfToken = getCsrfToken();
                         <select id="dartsOppSelect" onchange="dartsStartMatch()"
                                 class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-100 cursor-pointer">
                             <option value="bot_pub" selected>🍺 Gegen Kneipen-KI</option>
-                            <option value="bot_pro">👑 Gegen Ally-Pally-Profi</option>
+                            <option value="bot_pro">👑 Gegen Turnier-Profi</option>
                             <option value="human_2p">👥 2 Spieler lokal</option>
                         </select>
 
@@ -2809,12 +2812,12 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
-            <!-- 20. SPIEL: CLOUD-FROGGER (1981 ARCADE-KLASSIKER) -->
+            <!-- 20. SPIEL: TEICH-HÜPFER (RETRO-ARCADE) -->
             <div id="gamePanel-frogger" class="game-panel hidden space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div>
                         <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>🐸 Cloud-Frogger (1981 Arcade)</span>
+                            <span>🐸 Teich-Hüpfer</span>
                             <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950/80 text-green-800 dark:text-green-300">🌊 Baumstämme • 🐢 Tauch-Schildkröten • 🪰 Bonus-Fliege</span>
                         </h2>
                         <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -4371,25 +4374,25 @@ const WOW_CLASSES = {
 const WOW_ZONES = {
     elwynn: {
         id: 'elwynn',
-        name: 'Goldhain & Wald von Elwynn',
+        name: 'Goldhain & Lichtwald',
         minLv: 1,
         bgTop: '#14331d',
         bgBot: '#1d4527',
         campColor: '#2e5938',
-        npcName: 'Marschall Dughan',
+        npcName: 'Marschall Vane',
         npcIcon: '💂',
-        questTitle: 'Kopfgeld: Die Gnoll-Plage von Elwynn',
+        questTitle: 'Kopfgeld: Die Gnoll-Plage im Lichtwald',
         questTargetKills: 6,
         questRewardXp: 140,
         questRewardGold: 65,
         mobs: [
             { name: 'Waldwolf', icon: '🐺', hp: 55, dmg: 7, xp: 24, gold: 8, lv: 1, speed: 1.05 },
-            { name: 'Kobold-Gräber', icon: '🕯️', hp: 70, dmg: 9, xp: 30, gold: 11, lv: 2, speed: 0.95 },
-            { name: 'Defias-Bandit', icon: '🗡️', hp: 90, dmg: 11, xp: 38, gold: 14, lv: 3, speed: 1.1 },
+            { name: 'Gruben-Kobold', icon: '🕯️', hp: 70, dmg: 9, xp: 30, gold: 11, lv: 2, speed: 0.95 },
+            { name: 'Rotmasken-Bandit', icon: '🗡️', hp: 90, dmg: 11, xp: 38, gold: 14, lv: 3, speed: 1.1 },
         ],
         boss: {
-            name: 'Hogger der Gnoll-Häuptling',
-            quote: 'Grrr! Keine Kerze für euch!',
+            name: 'Grollzahn der Gnoll-Häuptling',
+            quote: 'Grrr! Kein Gold für euch!',
             icon: '🐗',
             hp: 360,
             dmg: 22,
@@ -4400,25 +4403,25 @@ const WOW_ZONES = {
     },
     duskwood: {
         id: 'duskwood',
-        name: 'Dämmerwald & Rabenflucht',
+        name: 'Rabenwald & Katakomben',
         minLv: 5,
         bgTop: '#17162b',
         bgBot: '#231f3d',
         campColor: '#2d284d',
-        npcName: 'Kommandant Althea',
+        npcName: 'Kommandantin Althea',
         npcIcon: '🧙‍♀️',
-        questTitle: 'Säubert die Katakomben von Rabenflucht',
+        questTitle: 'Säubert die Katakomben im Rabenwald',
         questTargetKills: 7,
         questRewardXp: 320,
         questRewardGold: 130,
         mobs: [
             { name: 'Skelettkrieger', icon: '💀', hp: 160, dmg: 18, xp: 65, gold: 20, lv: 6, speed: 1.05 },
             { name: 'Nachtweber-Spinne', icon: '🕷️', hp: 195, dmg: 22, xp: 78, gold: 24, lv: 7, speed: 1.2 },
-            { name: 'Seuchen-Ghul', icon: '🧟', hp: 230, dmg: 25, xp: 92, gold: 28, lv: 8, speed: 1.0 },
+            { name: 'Gruft-Ghul', icon: '🧟', hp: 230, dmg: 25, xp: 92, gold: 28, lv: 8, speed: 1.0 },
         ],
         boss: {
-            name: 'Stitches die Monstrosität',
-            quote: 'Stitches will spielen!!',
+            name: 'Fleischkoloss Gorgor',
+            quote: 'Gorgor zermalmt alles!!',
             icon: '👹',
             hp: 920,
             dmg: 45,
@@ -4429,25 +4432,25 @@ const WOW_ZONES = {
     },
     moltencore: {
         id: 'moltencore',
-        name: 'Geschmolzener Kern [Raid]',
+        name: 'Magmakern [Raid]',
         minLv: 10,
         bgTop: '#2e0d08',
         bgBot: '#47150b',
         campColor: '#5c2012',
-        npcName: 'Herzog Hydraxis',
+        npcName: 'Fürst Hydrax',
         npcIcon: '🌊',
-        questTitle: 'Bezwingt die Diener des Feuerfürsten',
+        questTitle: 'Bezwingt die Diener des Pyrofürsten',
         questTargetKills: 8,
         questRewardXp: 700,
         questRewardGold: 260,
         mobs: [
             { name: 'Feuerelementar', icon: '🔥', hp: 380, dmg: 38, xp: 160, gold: 45, lv: 11, speed: 1.1 },
-            { name: 'Uralter Kernhund', icon: '🐕‍🦺', hp: 460, dmg: 44, xp: 195, gold: 55, lv: 13, speed: 1.2 },
-            { name: 'Flammenwaker-Wache', icon: '🐍', hp: 540, dmg: 50, xp: 230, gold: 65, lv: 14, speed: 1.05 },
+            { name: 'Uralter Magmahund', icon: '🐕‍🦺', hp: 460, dmg: 44, xp: 195, gold: 55, lv: 13, speed: 1.2 },
+            { name: 'Glutwächter-Schlange', icon: '🐍', hp: 540, dmg: 50, xp: 230, gold: 65, lv: 14, speed: 1.05 },
         ],
         boss: {
-            name: 'Ragnaros der Feuerfürst',
-            quote: 'ZU FRÜH! Ihr habt mich zu früh geweckt! SPÜRT DIE FLAMMEN VON SULFURON!',
+            name: 'Pyrofürst Ignis',
+            quote: 'ZU FRÜH! Ihr habt mich zu früh geweckt! SPÜRT DIE FLAMMEN DES KERNS!',
             icon: '🌋',
             hp: 2400,
             dmg: 85,
@@ -4458,25 +4461,25 @@ const WOW_ZONES = {
     },
     icecrown: {
         id: 'icecrown',
-        name: 'Eiskronenzitadelle [Raid]',
+        name: 'Frostzitadelle [Raid]',
         minLv: 16,
         bgTop: '#0b1e33',
         bgBot: '#122f4d',
         campColor: '#1b4269',
-        npcName: 'Hochlord Tirion',
+        npcName: 'Hochlord Valorian',
         npcIcon: '⚜️',
         questTitle: 'Sturm auf den Frostthron',
         questTargetKills: 8,
         questRewardXp: 1400,
         questRewardGold: 480,
         mobs: [
-            { name: 'Todesritter der Geißel', icon: '🗡️', hp: 820, dmg: 70, xp: 360, gold: 95, lv: 17, speed: 1.12 },
-            { name: 'Frostwyrm-Brut', icon: '🐉', hp: 980, dmg: 82, xp: 430, gold: 115, lv: 19, speed: 1.15 },
-            { name: 'Val\'kyr-Schattenwächter', icon: '🪽', hp: 1150, dmg: 92, xp: 510, gold: 135, lv: 20, speed: 1.2 },
+            { name: 'Schwarzer Frost-Ritter', icon: '🗡️', hp: 820, dmg: 70, xp: 360, gold: 95, lv: 17, speed: 1.12 },
+            { name: 'Eisdrachen-Brut', icon: '🐉', hp: 980, dmg: 82, xp: 430, gold: 115, lv: 19, speed: 1.15 },
+            { name: 'Schatten-Schwingenwächter', icon: '🪽', hp: 1150, dmg: 92, xp: 510, gold: 135, lv: 20, speed: 1.2 },
         ],
         boss: {
-            name: 'Der Lichkönig (Arthas)',
-            quote: 'Frostgram hungert… Eure Seelen gehören der Geißel!',
+            name: 'Der Frostkönig (Malakor)',
+            quote: 'Die Runenklinge hungert… Eure Seelen gehören dem Ewigen Eis!',
             icon: '👑',
             hp: 5200,
             dmg: 145,
@@ -4496,10 +4499,10 @@ const WOW_RARITIES = [
 ];
 
 const WOW_SLOTS = {
-    weapon:  { label: 'Waffe',      icon: '⚔️', names: ['Klinge des Kreuzfahrers', 'Zauberstab von Dalaran', 'Langbogen der Waldläufer', 'Aschenbringer', 'Sulfuras, Hand von Ragnaros', 'Frostgram-Runenklinge'] },
-    armor:   { label: 'Brustpanzer', icon: '🛡️', names: ['Plattenrüstung der Allianz', 'Roben des Erzmagiers', 'Drachenschuppen-Harnisch', 'T2-Rüstung des Richturteils', 'Eiskronen-Prunkharnisch'] },
-    ring:    { label: 'Ring',       icon: '💍', names: ['Siegelring von Sturmwind', 'Band des Kirin Tor', 'Feuerring des Kerns', 'Aschering des unendlichen Mutes'] },
-    trinket: { label: 'Amulett',    icon: '📿', names: ['Talisman des Lichts', 'Auge von Sulfuras', 'Drachenzahn-Talisman', 'Willensstärke des Todesbringers'] },
+    weapon:  { label: 'Waffe',      icon: '⚔️', names: ['Klinge des Kreuzfahrers', 'Arkaner Fokusstab', 'Langbogen der Waldläufer', 'Lichtbringer-Großschwert', 'Magmahammer von Ignis', 'Runenklinge des Nordens'] },
+    armor:   { label: 'Brustpanzer', icon: '🛡️', names: ['Plattenrüstung der Königswache', 'Roben des Erzmagiers', 'Drachenschuppen-Harnisch', 'Harnisch des Richturteils', 'Frostthron-Prunkharnisch'] },
+    ring:    { label: 'Ring',       icon: '💍', names: ['Siegelring der Hauptstadt', 'Band des Magierordens', 'Feuerring des Kerns', 'Runenring des unendlichen Mutes'] },
+    trinket: { label: 'Amulett',    icon: '📿', names: ['Talisman des Lichts', 'Herz des Magmakerns', 'Drachenzahn-Talisman', 'Amulett des Nordsturms'] },
 };
 
 let wowHero = {
@@ -4522,7 +4525,7 @@ let wowHero = {
     buffUntil: 0,
     speedUntil: 0,
     equipped: {
-        weapon:  { id: 'w0', slot: 'weapon',  name: 'Knappenschwert von Sturmwind', rarity: 'common', dmg: 5, hp: 10, crit: 2, gs: 12, price: 10 },
+        weapon:  { id: 'w0', slot: 'weapon',  name: 'Knappenschwert von Goldhain', rarity: 'common', dmg: 5, hp: 10, crit: 2, gs: 12, price: 10 },
         armor:   { id: 'a0', slot: 'armor',   name: 'Wams der Bürgerwehr',          rarity: 'common', dmg: 2, hp: 25, crit: 1, gs: 12, price: 10 },
         ring:    null,
         trinket: null,
@@ -7205,10 +7208,10 @@ function pacmanResetPositions() {
     pacmanPlayer.facingAngle = Math.PI;
 
     pacmanGhosts = [
-        { name: 'Blinky', color: '#ef4444', x: 9 * PACMAN_TILE,  y: 8 * PACMAN_TILE,  dx: -1, dy: 0, scatterX: 17, scatterY: 1,  eaten: false, releaseDelay: 0 },
-        { name: 'Pinky',  color: '#f472b6', x: 9 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 1,  eaten: false, releaseDelay: 35 },
-        { name: 'Inky',   color: '#38bdf8', x: 8 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 17, scatterY: 19, eaten: false, releaseDelay: 90 },
-        { name: 'Clyde',  color: '#fb923c', x: 10 * PACMAN_TILE, y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 19, eaten: false, releaseDelay: 150 }
+        { name: 'Rudi',  color: '#ef4444', x: 9 * PACMAN_TILE,  y: 8 * PACMAN_TILE,  dx: -1, dy: 0, scatterX: 17, scatterY: 1,  eaten: false, releaseDelay: 0 },
+        { name: 'Trixi', color: '#f472b6', x: 9 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 1,  eaten: false, releaseDelay: 35 },
+        { name: 'Zack',  color: '#38bdf8', x: 8 * PACMAN_TILE,  y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 17, scatterY: 19, eaten: false, releaseDelay: 90 },
+        { name: 'Bumm',  color: '#fb923c', x: 10 * PACMAN_TILE, y: 10 * PACMAN_TILE, dx: 0,  dy: -1, scatterX: 1,  scatterY: 19, eaten: false, releaseDelay: 150 }
     ];
 }
 
@@ -7759,7 +7762,7 @@ function pacmanDraw() {
             ctx.font = '12px sans-serif';
             ctx.fillText('Drücke eine Pfeiltaste oder „Neues Spiel starten“', cvs.width / 2, cvs.height / 2 + 20);
         } else {
-            ctx.fillText('🟡 CLOUD-PACMAN BEREIT!', cvs.width / 2, cvs.height / 2 - 4);
+            ctx.fillText('🟡 PILLEN-SCHNAPPER BEREIT!', cvs.width / 2, cvs.height / 2 - 4);
             ctx.fillStyle = '#cbd5e1';
             ctx.font = '12px sans-serif';
             ctx.fillText('Drücke eine Pfeiltaste / WASD oder „Neues Spiel starten“', cvs.width / 2, cvs.height / 2 + 20);
@@ -7863,7 +7866,7 @@ function blitzToggleTheme() {
     blitzClassicMode = !blitzClassicMode;
     const btn = document.getElementById('blitzThemeBtn');
     if (btn) {
-        btn.textContent = blitzClassicMode ? '🖥️ Optik: VC-20 Klassik' : '🌙 Optik: Nacht-Skyline';
+        btn.textContent = blitzClassicMode ? '🖥️ Optik: 8-Bit Klassik' : '🌙 Optik: Nacht-Skyline';
     }
     blitzDraw();
 }
@@ -8063,7 +8066,7 @@ function blitzDraw() {
     ctx.fillStyle = blitzClassicMode ? '#22d3ee' : '#94a3b8';
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('COMMODORE VIC-20 BLITZ', 12, 18);
+    ctx.fillText('8-BIT BOMBEN-FLIEGER', 12, 18);
     ctx.textAlign = 'right';
     ctx.fillText('CITY ' + blitzCityVal + '  SCORE ' + String(blitzScoreVal).padStart(5, '0'), cvs.width - 12, 18);
 
@@ -8159,7 +8162,7 @@ function blitzDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = blitzCrashed ? '#f87171' : '#22d3ee';
         ctx.font = 'bold 20px monospace';
-        ctx.fillText(blitzBannerText || '✈️ VC-20 BLITZ BEREIT', cvs.width / 2, cvs.height / 2 - 6);
+        ctx.fillText(blitzBannerText || '✈️ BOMBEN-FLIEGER BEREIT', cvs.width / 2, cvs.height / 2 - 6);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '13px sans-serif';
         ctx.fillText('Drücke die LEERTASTE oder klicke ins Bild, um zu starten & Bomben abzuwerfen!', cvs.width / 2, cvs.height / 2 + 20);
@@ -8306,7 +8309,7 @@ function kongInit() {
     kongLevelVal    = 1;
     kongLivesVal    = 3;
     kongResetRound(true);
-    kongBannerText  = '🦍 CLOUD-KONG BEREIT!';
+    kongBannerText  = '🦍 FASS-KLETTERER BEREIT!';
     kongUpdateHud();
     kongDraw();
 }
@@ -8694,7 +8697,7 @@ function kongDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fb7185';
         ctx.font = 'bold 21px monospace';
-        ctx.fillText(kongBannerText || '🦍 CLOUD-KONG BEREIT!', cvs.width / 2, cvs.height / 2 - 6);
+        ctx.fillText(kongBannerText || '🦍 FASS-KLETTERER BEREIT!', cvs.width / 2, cvs.height / 2 - 6);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '12px sans-serif';
         ctx.fillText('Drücke LEERTASTE oder „Neues Spiel starten“ zum Klettern & Springen!', cvs.width / 2, cvs.height / 2 + 20);
@@ -8929,7 +8932,7 @@ function invadersInit() {
 
     invadersBuildBunkers();
     invadersBuildWave(1);
-    invadersBannerText = '👾 CLOUD-INVADERS BEREIT!';
+    invadersBannerText = '👾 GALAXIS-ABWEHR BEREIT!';
     invadersDraw();
 }
 
@@ -9325,7 +9328,7 @@ function invadersDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#34d399';
         ctx.font = 'bold 21px monospace';
-        ctx.fillText(invadersBannerText || '👾 CLOUD-INVADERS (1978)', cvs.width / 2, cvs.height / 2 - 10);
+        ctx.fillText(invadersBannerText || '👾 GALAXIS-ABWEHR', cvs.width / 2, cvs.height / 2 - 10);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '12px sans-serif';
         ctx.fillText('🦑 = 30 Pkt.  |  🦀 = 20 Pkt.  |  🐙 = 10 Pkt.  |  🛸 = Mystery-Bonus', cvs.width / 2, cvs.height / 2 + 12);
@@ -9521,7 +9524,7 @@ function canabaltInit() {
 
     canabaltBuildParallax();
     canabaltResetState();
-    canabaltBannerText = '🏃‍♂️ CLOUD-CANABALT BEREIT!';
+    canabaltBannerText = '🏃‍♂️ DACH-SPRINTER BEREIT!';
     canabaltDraw();
 }
 
@@ -10039,7 +10042,7 @@ function canabaltDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#f8fafc';
         ctx.font = 'bold 21px monospace';
-        ctx.fillText(canabaltBannerText || '🏃‍♂️ CLOUD-CANABALT', cvs.width / 2, cvs.height / 2 - 10);
+        ctx.fillText(canabaltBannerText || '🏃‍♂️ DACH-SPRINTER', cvs.width / 2, cvs.height / 2 - 10);
         ctx.fillStyle = '#cbd5e1';
         ctx.font = '12px sans-serif';
         ctx.fillText('Ein-Tasten-Flucht: LEERTASTE oder Klick aufs Spielfeld (kurz = flach, halten = weit)', cvs.width / 2, cvs.height / 2 + 14);
@@ -10077,7 +10080,7 @@ let ninjaLives       = 3;
 let ninjaStage       = 1;
 let ninjaRoomIdx     = 0;
 let ninjaBannerText  = '';
-let ninjaStatusMsg   = 'ARMAKUNI BETRITT DIE INSEL LIN FEN...';
+let ninjaStatusMsg   = 'KENJI BETRITT DIE INSEL KUROSHIMA...';
 const ninjaKeys      = {};
 
 const NINJA_WEAPONS = [
@@ -10190,17 +10193,17 @@ function ninjaBuildRooms(stageNum) {
         },
         {
             id: 6,
-            title: '6/6 Thronsaal Kunitoki',
-            subtitle: 'SANCTUM OF SHOGUN KUNITOKI',
+            title: '6/6 Thronsaal Kuroda',
+            subtitle: 'SANCTUM OF SHOGUN KURODA',
             skyColor: '#450a0a',
             groundColor: '#1c1917',
             pathColor: '#b91c1c',
             hasRiver: false,
             hasDragon: false,
             lockedGate: false,
-            shrine: { s: 430, l: 0, itemKey: 'scroll', icon: '📜', label: 'Schriftrollen der Koga', collected: false },
+            shrine: { s: 430, l: 0, itemKey: 'scroll', icon: '📜', label: 'Geheime Schriftrollen', collected: false },
             enemies: [
-                { name: '👹 SHOGUN KUNITOKI', s: 335, l: 0, hp: Math.round(170 * hpScale), maxHp: Math.round(170 * hpScale), dmg: 20, color: '#fbbf24', hatColor: '#dc2626', attackCd: 0, alive: true, points: 1500, isBoss: true }
+                { name: '👹 SHOGUN KURODA', s: 335, l: 0, hp: Math.round(170 * hpScale), maxHp: Math.round(170 * hpScale), dmg: 20, color: '#fbbf24', hatColor: '#dc2626', attackCd: 0, alive: true, points: 1500, isBoss: true }
             ]
         }
     ];
@@ -10257,7 +10260,7 @@ function ninjaInit() {
     });
 
     ninjaResetState();
-    ninjaBannerText = '🥷 THE LAST NINJA (1987)';
+    ninjaBannerText = '🥷 SCHATTEN-SHINOBI';
     ninjaDraw();
 }
 
@@ -10337,7 +10340,7 @@ function ninjaTriggerLeap() {
     if (ninjaPlayer.z > 0) return;
     ninjaPlayer.vz = 6.2;
     ninjaPlayer.leapVx = 3.2 * ninjaPlayer.facing;
-    ninjaStatusMsg = 'ARMAKUNI SPRINGT IM SALTO!';
+    ninjaStatusMsg = 'KENJI SPRINGT IM SALTO!';
 }
 
 function ninjaTriggerPickup() {
@@ -10356,10 +10359,10 @@ function ninjaTriggerPickup() {
         return;
     }
 
-    // Im Thronsaal muss zuerst Shogun Kunitoki besiegt werden
+    // Im Thronsaal muss zuerst Shogun Kuroda besiegt werden
     const aliveBoss = room.enemies.some((e) => e.alive && e.isBoss);
     if (sh.itemKey === 'scroll' && aliveBoss) {
-        ninjaStatusMsg = 'BESIEGE ZUERST SHOGUN KUNITOKI!';
+        ninjaStatusMsg = 'BESIEGE ZUERST SHOGUN KURODA!';
         return;
     }
 
@@ -10459,7 +10462,7 @@ function ninjaLoseLife(reason) {
     ninjaUpdateHud();
     if (ninjaLives <= 0) {
         ninjaRunning = false;
-        ninjaBannerText = '💀 ARMAKUNI IST GEFALLEN!';
+        ninjaBannerText = '💀 KENJI IST GEFALLEN!';
         const durSec = Math.max(1, Math.round((Date.now() - ninjaStartAt) / 1000));
         submitCloudScore('lastninja', ninjaScore, durSec, 'Raum ' + (ninjaRoomIdx + 1) + '/6');
     } else {
@@ -11020,12 +11023,12 @@ function ninjaDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fbbf24';
         ctx.font = 'bold 22px monospace';
-        ctx.fillText(ninjaBannerText || '🥷 THE LAST NINJA (1987)', 286, 152);
+        ctx.fillText(ninjaBannerText || '🥷 SCHATTEN-SHINOBI', 286, 152);
         ctx.fillStyle = '#e7e5e4';
         ctx.font = '12px sans-serif';
-        ctx.fillText('Finde Waffen & Artefakte in 6 isometrischen Räumen und besiege Shogun Kunitoki!', 286, 180);
+        ctx.fillText('Finde Waffen & Artefakte in 6 isometrischen Räumen und besiege Shogun Kuroda!', 286, 180);
         ctx.fillStyle = '#34d399';
-        ctx.fillText('Klicke auf „Mission auf Lin Fen starten“ oder drücke LEERTASTE!', 286, 206);
+        ctx.fillText('Klicke auf „Mission auf Kuroshima starten“ oder drücke LEERTASTE!', 286, 206);
     }
 }
 
@@ -11073,7 +11076,7 @@ let lemSkillsLeft  = {};
 
 const LEM_LEVELS = [
     {
-        name: 'Level 1: Just Dig! (Grabe einfach!)',
+        name: 'Level 1: Grabe einfach! (Erdschicht)',
         total: 16,
         requiredPct: 50,
         timeSec: 180,
@@ -11093,7 +11096,7 @@ const LEM_LEVELS = [
         }
     },
     {
-        name: 'Level 2: Only Floaters Survive (Klippensprung)',
+        name: 'Level 2: Schirmchen-Sprung (Steilklippe)',
         total: 16,
         requiredPct: 50,
         timeSec: 180,
@@ -11112,7 +11115,7 @@ const LEM_LEVELS = [
         }
     },
     {
-        name: 'Level 3: Pillars of Hercules (Steinsäulen)',
+        name: 'Level 3: Die drei Steinsäulen',
         total: 18,
         requiredPct: 60,
         timeSec: 200,
@@ -11130,7 +11133,7 @@ const LEM_LEVELS = [
         }
     },
     {
-        name: 'Level 4: Through the Mountain (Bergmassiv)',
+        name: 'Level 4: Durch das Bergmassiv',
         total: 20,
         requiredPct: 65,
         timeSec: 220,
@@ -11718,7 +11721,7 @@ function lemFinishCheck() {
                 lemStartLevel();
             }, 1900);
         } else {
-            lemBannerText = '🏆 ALLE 4 LEMMINGS-LEVEL GEMEISTERT! (' + pct + '%)';
+            lemBannerText = '🏆 ALLE 4 WUSELER-LEVEL GEMEISTERT! (' + pct + '%)';
         }
     } else {
         lemBannerText = '💥 NUR ' + pct + '% GERETTET (ZIEL: ' + lemRequiredPct + '%) – NOCHMAL!';
@@ -11879,10 +11882,10 @@ function lemDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#84cc16';
         ctx.font = 'bold 19px monospace';
-        ctx.fillText(lemBannerText || '🐹 CLOUD-LEMMINGS (1991)', LEM_W / 2, LEM_H / 2 - 8);
+        ctx.fillText(lemBannerText || '🐹 CLOUD-WUSELER', LEM_W / 2, LEM_H / 2 - 8);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '12px sans-serif';
-        ctx.fillText('Klicke ins Spielfeld oder auf „▶️ Level neu starten“ – Let’s go!', LEM_W / 2, LEM_H / 2 + 18);
+        ctx.fillText('Klicke ins Spielfeld oder auf „▶️ Level neu starten“ – Los geht’s!', LEM_W / 2, LEM_H / 2 + 18);
     }
 }
 
@@ -13136,11 +13139,11 @@ let imPiecesFound = 0;
 let imSnoozeCount = 2;
 let imLiftCount   = 2;
 let imSnoozeTimer = 0;
-let imBannerMsg   = 'ANOTHER VISITOR! STAY A WHILE… STAY FOREVER!';
+let imBannerMsg   = 'EIN EINDRINGLING! BLEIB EINE WEILE… BLEIB FÜR IMMER!';
 let imSpeechText  = '';
 let imSpeechTimer = 0;
 let imDeathTimer  = 0;
-let imPassword    = ['A','T','O','M','B','E','N','D','R'];
+let imPassword    = ['O','M','E','G','A','C','O','D','E'];
 let imFoundMask   = [false,false,false,false,false,false,false,false,false];
 
 const IM_ROOM_THEMES = [
@@ -13272,7 +13275,7 @@ function imBuildBunkerRooms() {
         ];
 
         const furnitureTypes = [
-            { kind: 'terminal', label: 'C64-Mainframe',  w: 34, h: 42, color: '#38bdf8' },
+            { kind: 'terminal', label: 'Bunker-Mainframe',   w: 34, h: 42, color: '#38bdf8' },
             { kind: 'tapedrive',label: 'Magnetband-Schrank', w: 32, h: 48, color: '#a855f7' },
             { kind: 'desk',     label: 'Chefschreibtisch',   w: 44, h: 32, color: '#f59e0b' },
             { kind: 'vending',  label: 'Getränkeautomat',    w: 30, h: 48, color: '#ef4444' }
@@ -13387,7 +13390,7 @@ function imStartGame() {
     imFoundMask   = [false,false,false,false,false,false,false,false,false];
 
     imEnterRoom(0, 'left');
-    imSpeak('Another visitor! Stay a while... stay forever!');
+    imSpeak('Intruder alert! Stay right there!');
     imSyncHud();
 
     if (imRafId) cancelAnimationFrame(imRafId);
@@ -13494,8 +13497,8 @@ function imTryEnterControlRoom() {
     const bonus = Math.floor(imTimeLeftSec * 0.5);
     imScore += 5000 + bonus;
     const durSec = Math.max(1, Math.round((performance.now() - imStartMs) / 1000));
-    imBannerMsg = `🏆 MISSION ERFÜLLT! ELVIN ATOMBENDER GESTOPPT! SCORE: ${imScore}`;
-    imSpeak('Impossible! You have defeated Elvin Atombender!');
+    imBannerMsg = `🏆 MISSION ERFÜLLT! PROF. DR. OMEGA GESTOPPT! SCORE: ${imScore}`;
+    imSpeak('Impossible! You have stopped the Omega protocol!');
     submitCloudScore('impossible', imScore, durSec, `Passwort komplett · ${imFormatClock(imTimeLeftSec)} Restzeit`);
     imDraw();
 }
@@ -13506,8 +13509,8 @@ function imStep() {
     if (imTimeLeftSec <= 0) {
         imTimeLeftSec = 0;
         imRunning = false;
-        imBannerMsg = '💥 ZEIT ABGELAUFEN! ELVIN ATOMBENDERS RAKETEN SIND GESTARTET!';
-        imSpeak('Destroy him, my robots!');
+        imBannerMsg = '💥 ZEIT ABGELAUFEN! PROF. DR. OMEGAS RAKETEN SIND GESTARTET!';
+        imSpeak('Security alert! Stop the agent!');
         if (imScore > 0) {
             const durSec = Math.max(1, Math.round((performance.now() - imStartMs) / 1000));
             submitCloudScore('impossible', imScore, durSec, `${imPiecesFound}/9 Lochkarten`);
@@ -13771,7 +13774,7 @@ function imDraw() {
             ctx.fillText('Klicken oder Pfeil L/R zum Betreten', bx + 10, by + 61);
         }
 
-        // Unten: Elvin Atombenders Kontrollraum
+        // Unten: Prof. Dr. Omegas Kontrollraum
         const unlocked = imPiecesFound >= 9;
         ctx.fillStyle = unlocked ? '#065f46' : '#450a0a';
         ctx.fillRect(250, 316, 260, 42);
@@ -13780,7 +13783,7 @@ function imDraw() {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 12px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(unlocked ? '🔓 KONTROLLRAUM OFFEN (HIER KLICKEN!)' : `🔒 ELVIN ATOMBENDER (${imPiecesFound}/9 LOCHKARTEN)`, 380, 341);
+        ctx.fillText(unlocked ? '🔓 KONTROLLRAUM OFFEN (HIER KLICKEN!)' : `🔒 PROF. DR. OMEGA (${imPiecesFound}/9 LOCHKARTEN)`, 380, 341);
 
         // Aufzugkabine mit Agent 4125
         const cabY = imElevatorY < 3 ? (52 + imElevatorY * 92) : 292;
@@ -13926,7 +13929,7 @@ function imDraw() {
     ctx.fillStyle = '#94a3b8';
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('📟 C64 POCKET COMPUTER – MASTER-PASSWORT LOCHKARTEN:', 18, 388);
+    ctx.fillText('📟 AGENTEN POCKET-COMPUTER – MASTER-PASSWORT LOCHKARTEN:', 18, 388);
 
     for (let i = 0; i < 9; i++) {
         const sx = 18 + i * 52;
@@ -13975,7 +13978,7 @@ function imDraw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#22d3ee';
         ctx.font = 'bold 20px monospace';
-        ctx.fillText('🕵️‍♂️ IMPOSSIBLE MISSION (1984 C64)', cvs.width / 2, 148);
+        ctx.fillText('🕵️‍♂️ GEHEIMAGENT ZERO (OPERATION BUNKER-CODE)', cvs.width / 2, 148);
         ctx.fillStyle = '#fde047';
         ctx.font = 'bold 13px monospace';
         ctx.fillText(imBannerMsg, cvs.width / 2, 176);
@@ -14034,7 +14037,7 @@ let dartsTurnPlayer  = 0; // 0 = Spieler 1, 1 = Gegner/Spieler 2
 let dartsTurnThrows  = []; // Array von { label, score, mult, base, x, y }
 let dartsTurnStartScore = 501;
 let dartsFlying      = null; // Aktive Fluganimation { startX, startY, targetX, targetY, t }
-let dartsBannerMsg   = '🎯 WILLKOMMEN IM ALLY PALLY! ZIELE & DRÜCKE LEERTASTE ODER KLICK!';
+let dartsBannerMsg   = '🎯 WILLKOMMEN IN DER MEISTER-ARENA! ZIELE & DRÜCKE LEERTASTE ODER KLICK!';
 let dartsCallerText  = '';
 let dartsCallerTimer = 0;
 
@@ -14250,7 +14253,7 @@ function dartsStartMatch() {
     dartsTurnThrows = [];
 
     const startPts = dartsMode === '501_do' ? 501 : (dartsMode === '301_so' ? 301 : 0);
-    const oppLabel = dartsOpp === 'bot_pub' ? '🍺 Kneipen-KI' : (dartsOpp === 'bot_pro' ? '👑 Ally-Pally-Profi' : '👤 Spieler 2');
+    const oppLabel = dartsOpp === 'bot_pub' ? '🍺 Kneipen-KI' : (dartsOpp === 'bot_pro' ? '👑 Turnier-Profi' : '👤 Spieler 2');
 
     dartsPlayers = [
         { name: CURRENT_USERNAME, score: startPts, dartsThrown: 0, totalPoints: 0, clockTarget: 1, roundsDone: 0 },

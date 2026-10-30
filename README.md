@@ -81,9 +81,10 @@
 - **📋 Shareable Playlists:** Create custom playlists, upload new audio files directly into `Musik/` (or a custom audiobook subfolder like `Musik/Krimi`), and share playlists with other Cloud users or externally via public link and local SVG QR code.
 
 ### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
-- 100% offline-capable HTML5 games with cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
-  - **Solo Classics:** *2048 Cloud*, *Sudoku (4 difficulty levels + pencil notes)*, *Memory*, *Snake Retro*, *Block Fall (Tetris)*, *Minesweeper*, and *Solitaire (Klondike)*.
-  - **👥 Live Multiplayer & AI Duels:** *Chess (with full move validation & AI)*, *Connect Four*, *Battleship*, and *Tic-Tac-Toe*.
+- 20 ad-free HTML5 games with fullscreen mode, cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
+  - **Racing, Sports & RPG:** *Gummigeruch Kart-Cup (6 tracks, selectable 3/5/8/11 laps & Ghost Duels)*, *Cloud-Traffic-Racer*, *Cloud-Darts (Master Arena)*, and *Heroes of MiniCloud (Co-Op RPG)*.
+  - **Retro & Arcade Classics:** *Pond-Hopper*, *Secret Agent Zero*, *Cloud-Scramblers*, *Shadow Shinobi*, *Rooftop Sprinter*, *Galaxy Defense*, *Barrel Climber*, *Bomb Flyer*, *Pill Muncher*, *Block Puzzle (Falling Blocks)*, *Retro Snake*, and *Brick Breaker*.
+  - **Logic & Live Multiplayer Duels:** *Cloud-Sudoku*, *Minesweeper*, *Memory*, plus **Connect Four** and **Tic-Tac-Toe** against AI or live cloud opponents.
 
 ### 15. 🧮 Calculator & Calculation Studio (`calculator.php`), 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes & Voice Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
 - **🧮 Calculator & Calculation Studio (`calculator.php`):** 4-in-1 calculation suite featuring a **Standard & Scientific Calculator** (`sin`, `cos`, `tan`, `DEG/RAD`, roots, powers, logarithms, `n!`, memory `MC`/`MR`/`M+`/`M-`, full Numpad/keyboard support), an **interactive Paper-Tape / Receipt Calculator** with editable line labels, automatic **Total ($\Sigma$)**, and **1-click Cloud export** as a sticky note (`notes.php`) or `.txt`/`.csv` file into `Rechnungen/`, a **VAT (19%/7%/custom), Discount & Bill-Splitting Calculator**, a **Universal Unit Converter** (length, weight, area, volume, temperature, data storage, speed), and a **Compound Interest, Savings Plan & Loan Calculator**.
