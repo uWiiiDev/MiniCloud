@@ -443,7 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 // ============================================================================
 $videoExtsSql = "('mp4','webm','mov','m4v','ogv','mkv')";
 $stmtVideos = $pdo->prepare(
-    "SELECT id, original_name, folder_path, file_size, uploaded_at, filename
+    "SELECT id, original_name, folder_path, file_size, upload_date, filename
      FROM files
      WHERE user_id = :uid
        AND deleted_at IS NULL
@@ -451,7 +451,7 @@ $stmtVideos = $pdo->prepare(
            mime_type LIKE 'video/%'
            OR LOWER(SUBSTRING_INDEX(original_name, '.', -1)) IN $videoExtsSql
        )
-     ORDER BY uploaded_at DESC
+     ORDER BY upload_date DESC
      LIMIT 150"
 );
 $stmtVideos->execute([':uid' => $userId]);
@@ -467,7 +467,7 @@ foreach ($stmtVideos->fetchAll() as $row) {
         'folder'     => (string)($row['folder_path'] ?? ''),
         'size'       => (int)$row['file_size'],
         'size_human' => formatBytes((int)$row['file_size']),
-        'date'       => date('d.m.Y H:i', strtotime((string)$row['uploaded_at'])),
+        'date'       => date('d.m.Y H:i', strtotime((string)$row['upload_date'])),
         'inline_url' => 'download.php?id=' . (int)$row['id'] . '&inline=1',
     ];
 }
