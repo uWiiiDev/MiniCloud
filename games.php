@@ -147,6 +147,15 @@ function getGamesCatalog(): array
             'desc'     => 'Rette die Kolonie mit Digger, Builder, Blocker, Basher, Floater & Bomber durch zerstörbares Pixel-Gelände!',
             'color'    => 'from-lime-500 to-emerald-700',
         ],
+        'impossible' => [
+            'key'      => 'impossible',
+            'title'    => 'Impossible Mission (1984)',
+            'icon'     => '🕵️‍♂️',
+            'category' => 'C64 Klassiker',
+            'group'    => 'arcade',
+            'desc'     => '„Stay a while… stay forever!“ – Akrobatische Salti über Killer-Roboter, Möbel nach Lochkarten durchsuchen & Elvin Atombender stoppen!',
+            'color'    => 'from-cyan-600 to-blue-900',
+        ],
         'lastninja' => [
             'key'      => 'lastninja',
             'title'    => 'The Last Ninja (1987)',
@@ -1160,7 +1169,7 @@ $csrfToken = getCsrfToken();
                     </button>
                     <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (9)
+                        🕹️ Retro &amp; Arcade (10)
                     </button>
                     <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
                             class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
@@ -2548,6 +2557,106 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- =========================================================== -->
+            <!-- SPIEL 18: 🕵️‍♂️ IMPOSSIBLE MISSION (1984 C64-EDITION)          -->
+            <!-- =========================================================== -->
+            <div id="gamePanel-impossible" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🕵️‍♂️</span>
+                            <span>Impossible Mission (1984 C64-Edition)</span>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                                Epyx 1984 &middot; Agent 4125 vs. Prof. Elvin Atombender
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            <em>„Another visitor! Stay a while… stay FOREVER!“</em> – Springe per Vorwärts-Salto über Killer-Roboter, durchsuche Möbel nach den 9 Lochkarten-Passwortteilen und stürme Elvin Atombenders Kontrollraum, bevor die 6 Stunden ablaufen!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="imSpeak('Another visitor! Stay a while... stay forever!')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold cursor-pointer"
+                                title="Legendäres C64-Sprachsample abspielen">
+                            🔊 „Stay a while…“
+                        </button>
+                        <button type="button" onclick="imToggleMap()"
+                                class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer">
+                            🛗 Aufzug / Bunker-Karte (M)
+                        </button>
+                        <button type="button" onclick="imStartGame()"
+                                class="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-extrabold shadow-xs cursor-pointer">
+                            ▶️ Neue Mission starten
+                        </button>
+                    </div>
+                </div>
+
+                <!-- C64 Pocket Computer & Missions-HUD -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                    <div class="px-3 py-2 rounded-xl bg-slate-900 border border-cyan-800/80 text-cyan-300 font-mono flex items-center justify-between">
+                        <span>⏰ RESTZEIT:</span>
+                        <strong id="imTimeHud" class="text-amber-400 font-extrabold">06:00:00</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-900 border border-cyan-800/80 text-cyan-300 font-mono flex items-center justify-between">
+                        <span>💳 PUZZLE:</span>
+                        <strong id="imPiecesHud" class="text-emerald-400 font-extrabold">0 / 9</strong>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-slate-900 border border-cyan-800/80 text-cyan-300 font-mono flex items-center justify-between">
+                        <span>📍 SEKTOR:</span>
+                        <strong id="imRoomHud" class="text-white font-extrabold truncate">Aufzug-Schacht</strong>
+                    </div>
+                    <button type="button" onclick="imUseSnooze()"
+                            class="px-3 py-2 rounded-xl bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600 text-emerald-300 font-mono font-bold flex items-center justify-between cursor-pointer">
+                        <span>💤 SNOOZE (S):</span>
+                        <strong id="imSnoozeHud" class="text-white">1</strong>
+                    </button>
+                    <button type="button" onclick="imUseLiftInit()"
+                            class="px-3 py-2 rounded-xl bg-amber-950/90 hover:bg-amber-900 border border-amber-600 text-amber-300 font-mono font-bold flex items-center justify-between cursor-pointer">
+                        <span>🛗 LIFT-INIT (L):</span>
+                        <strong id="imLiftHud" class="text-white">1</strong>
+                    </button>
+                </div>
+
+                <!-- Haupt-Canvas (C64 Bunker & Pocket Computer) -->
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="imCanvas" width="760" height="470"
+                            class="rounded-2xl bg-slate-950 border-2 border-cyan-700/80 shadow-xl max-w-full h-auto select-none"></canvas>
+
+                    <!-- Touch- & Schnellsteuerungs-Leiste -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="imKeys['ArrowLeft']=true" onmouseup="imKeys['ArrowLeft']=false" onmouseleave="imKeys['ArrowLeft']=false"
+                                ontouchstart="event.preventDefault(); imKeys['ArrowLeft']=true" ontouchend="imKeys['ArrowLeft']=false"
+                                class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-cyan-600 active:text-white font-extrabold text-xs sm:text-sm cursor-pointer">
+                            ⬅️ Links
+                        </button>
+                        <button type="button"
+                                onmousedown="imKeys['ArrowRight']=true" onmouseup="imKeys['ArrowRight']=false" onmouseleave="imKeys['ArrowRight']=false"
+                                ontouchstart="event.preventDefault(); imKeys['ArrowRight']=true" ontouchend="imKeys['ArrowRight']=false"
+                                class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-cyan-600 active:text-white font-extrabold text-xs sm:text-sm cursor-pointer">
+                            ➡️ Rechts
+                        </button>
+                        <button type="button"
+                                onclick="imTriggerJump()"
+                                class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs sm:text-sm shadow-xs cursor-pointer">
+                            🤸 SALTO-SPRUNG (Leertaste)
+                        </button>
+                        <button type="button"
+                                onmousedown="imKeys['ArrowUp']=true" onmouseup="imKeys['ArrowUp']=false" onmouseleave="imKeys['ArrowUp']=false"
+                                ontouchstart="event.preventDefault(); imKeys['ArrowUp']=true" ontouchend="imKeys['ArrowUp']=false"
+                                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs cursor-pointer">
+                            🔍 DURCHSUCHEN / ⬆️ LIFT HOCH
+                        </button>
+                        <button type="button"
+                                onmousedown="imKeys['ArrowDown']=true" onmouseup="imKeys['ArrowDown']=false" onmouseleave="imKeys['ArrowDown']=false"
+                                ontouchstart="event.preventDefault(); imKeys['ArrowDown']=true" ontouchend="imKeys['ArrowDown']=false"
+                                class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs sm:text-sm shadow-xs cursor-pointer">
+                            ⬇️ LIFT RUNTER
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -2822,6 +2931,11 @@ function selectCloudGame(gameKey) {
             ninjaInit();
         }
         ninjaDraw();
+    } else if (gameKey === 'impossible') {
+        if (!imInitialized) {
+            imInit();
+        }
+        imDraw();
     } else if (gameKey === 'lemmings') {
         if (!lemInitialized) {
             lemInit();
@@ -12285,11 +12399,892 @@ function trLoop() {
     }
 }
 
+// =============================================================================
+// SPIEL 18: 🕵️‍♂️ IMPOSSIBLE MISSION (1984 C64-EDITION)
+// =============================================================================
+let imInitialized = false;
+let imRunning     = false;
+let imRafId       = null;
+let imKeys        = {};
+let imInElevator  = false;
+let imRoomIdx     = 0;
+let imElevatorY   = 0; // 0, 1, 2 (Ebenen) oder 3 (Kontrollraum unten)
+let imTimeLeftSec = 6 * 3600; // 06:00:00 in Bunker-Sekunden (1 Echtzeit-Sek = 18 Bunker-Sek => 20 Min Echtzeit)
+let imStartMs     = 0;
+let imScore       = 0;
+let imPiecesFound = 0;
+let imSnoozeCount = 2;
+let imLiftCount   = 2;
+let imSnoozeTimer = 0;
+let imBannerMsg   = 'ANOTHER VISITOR! STAY A WHILE… STAY FOREVER!';
+let imSpeechText  = '';
+let imSpeechTimer = 0;
+let imDeathTimer  = 0;
+let imPassword    = ['A','T','O','M','B','E','N','D','R'];
+let imFoundMask   = [false,false,false,false,false,false,false,false,false];
+
+const IM_ROOM_THEMES = [
+    { name: 'Sektor 1: Cyan-Labor',         wall: '#0e7490', bg: '#082f49', plat: '#22d3ee', accent: '#67e8f9' },
+    { name: 'Sektor 2: Violett-Serverhalle',wall: '#6d28d9', bg: '#2e1065', plat: '#c084fc', accent: '#e9d5ff' },
+    { name: 'Sektor 3: Bernstein-Generator',wall: '#b45309', bg: '#451a03', plat: '#fbbf24', accent: '#fde68a' },
+    { name: 'Sektor 4: Smaragd-Bio-Dom',    wall: '#047857', bg: '#022c22', plat: '#34d399', accent: '#a7f3d0' },
+    { name: 'Sektor 5: Karmin-Reaktor',     wall: '#be123c', bg: '#4c0519', plat: '#fb7185', accent: '#fecdd3' },
+    { name: 'Sektor 6: Kobalt-Tresor',      wall: '#1d4ed8', bg: '#172554', plat: '#60a5fa', accent: '#bfdbfe' }
+];
+
+let imRooms = [];
+let imAgent = {
+    x: 60, y: 290, vx: 0, vy: 0, dir: 1,
+    onGround: true, jumping: false, somersaultAngle: 0,
+    runFrame: 0, searchingObj: null, searchProgress: 0
+};
+
+function imSpeak(text) {
+    imSpeechText  = text.toUpperCase();
+    imSpeechTimer = 180;
+    try {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang  = 'en-US';
+            u.pitch = 0.45;
+            u.rate  = 0.82;
+            window.speechSynthesis.speak(u);
+        }
+    } catch (e) {}
+    // C64 SID Roboter-Stimmen-Synthese als authentischer Begleitklang
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!window._imAudio) window._imAudio = new AudioCtx();
+        const actx = window._imAudio;
+        const notes = [110, 98, 123, 87, 110, 73, 65];
+        notes.forEach((f, idx) => {
+            const osc = actx.createOscillator();
+            const g   = actx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(f, actx.currentTime + idx * 0.11);
+            g.gain.setValueAtTime(0.05, actx.currentTime + idx * 0.11);
+            g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + idx * 0.11 + 0.1);
+            osc.connect(g);
+            g.connect(actx.destination);
+            osc.start(actx.currentTime + idx * 0.11);
+            osc.stop(actx.currentTime + idx * 0.11 + 0.1);
+        });
+    } catch (e) {}
+}
+
+function imPlaySfx(type) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!window._imAudio) window._imAudio = new AudioCtx();
+        const actx = window._imAudio;
+        const osc  = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.connect(gain);
+        gain.connect(actx.destination);
+
+        if (type === 'jump') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(220, actx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(520, actx.currentTime + 0.16);
+            gain.gain.setValueAtTime(0.07, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.17);
+            osc.start();
+            osc.stop(actx.currentTime + 0.17);
+        } else if (type === 'zap') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(160, actx.currentTime);
+            osc.frequency.linearRampToValueAtTime(55, actx.currentTime + 0.35);
+            gain.gain.setValueAtTime(0.12, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.36);
+            osc.start();
+            osc.stop(actx.currentTime + 0.36);
+        } else if (type === 'scream') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(620, actx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(110, actx.currentTime + 0.65);
+            gain.gain.setValueAtTime(0.1, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.66);
+            osc.start();
+            osc.stop(actx.currentTime + 0.66);
+        } else if (type === 'found') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(523, actx.currentTime);
+            osc.frequency.setValueAtTime(659, actx.currentTime + 0.08);
+            osc.frequency.setValueAtTime(784, actx.currentTime + 0.16);
+            gain.gain.setValueAtTime(0.08, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.28);
+            osc.start();
+            osc.stop(actx.currentTime + 0.28);
+        }
+    } catch (e) {}
+}
+
+function imBuildBunkerRooms() {
+    // 24 Möbelstücke über 6 Räume verteilt: 9 Lochkarten-Teile, 5 Snooze, 4 Lift-Init, 6 Nieten
+    const lootPool = [
+        'piece_0','piece_1','piece_2','piece_3','piece_4','piece_5','piece_6','piece_7','piece_8',
+        'snooze','snooze','snooze','snooze','snooze',
+        'lift','lift','lift','lift',
+        'empty','empty','empty','empty','empty','empty'
+    ];
+    for (let i = lootPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [lootPool[i], lootPool[j]] = [lootPool[j], lootPool[i]];
+    }
+    let lootCursor = 0;
+
+    imRooms = IM_ROOM_THEMES.map((theme, idx) => {
+        const platforms = [
+            // Untere Hauptebene mit Abgrund-Lücke
+            { x: 0,   y: 320, w: 250, isLift: false },
+            { x: 330, y: 320, w: 180, isLift: false },
+            { x: 580, y: 320, w: 180, isLift: false },
+            // Mittlere Ebene
+            { x: 70,  y: 225, w: 180, isLift: false },
+            { x: 460, y: 225, w: 220, isLift: false },
+            // Obere Ebene
+            { x: 110, y: 130, w: 230, isLift: false },
+            { x: 440, y: 130, w: 230, isLift: false },
+            // 2 Vertikale Lift-Plattformen im Raum
+            { x: 255, y: 225, w: 70, isLift: true, initialY: 225, stops: [130, 225, 320] },
+            { x: 375, y: 130, w: 65, isLift: true, initialY: 130, stops: [130, 225, 320] }
+        ];
+
+        const furnitureTypes = [
+            { kind: 'terminal', label: 'C64-Mainframe',  w: 34, h: 42, color: '#38bdf8' },
+            { kind: 'tapedrive',label: 'Magnetband-Schrank', w: 32, h: 48, color: '#a855f7' },
+            { kind: 'desk',     label: 'Chefschreibtisch',   w: 44, h: 32, color: '#f59e0b' },
+            { kind: 'vending',  label: 'Getränkeautomat',    w: 30, h: 48, color: '#ef4444' }
+        ];
+
+        const furnPositions = [
+            { x: 135, y: 225 },
+            { x: 545, y: 225 },
+            { x: 185, y: 130 },
+            { x: 530, y: 130 }
+        ];
+
+        const furniture = furnPositions.map((pos, fIdx) => {
+            const ft = furnitureTypes[(idx + fIdx) % furnitureTypes.length];
+            return {
+                x: pos.x,
+                y: pos.y - ft.h,
+                w: ft.w,
+                h: ft.h,
+                kind: ft.kind,
+                label: ft.label,
+                color: ft.color,
+                loot: lootPool[lootCursor++],
+                searched: false
+            };
+        });
+
+        const robots = [
+            { x: 380, y: 320, minX: 340, maxX: 490, vx: 1.35 + idx * 0.1, dir: 1, beamTimer: 40 },
+            { x: 500, y: 225, minX: 470, maxX: 655, vx: 1.5  + idx * 0.1, dir: -1, beamTimer: 95 },
+            { x: 150, y: 130, minX: 120, maxX: 315, vx: 1.45 + idx * 0.1, dir: 1, beamTimer: 70 }
+        ];
+
+        const orb = {
+            x: 380, y: 180,
+            vx: (idx % 2 === 0 ? 1.2 : -1.2),
+            vy: 0.85
+        };
+
+        return { idx, theme, platforms, furniture, robots, orb };
+    });
+}
+
+function imInit() {
+    if (imInitialized) return;
+    imInitialized = true;
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'impossible') return;
+        if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) {
+            e.preventDefault();
+        }
+        imKeys[e.key] = true;
+        if (e.key === ' ') imTriggerJump();
+        if (e.key.toLowerCase() === 's') imUseSnooze();
+        if (e.key.toLowerCase() === 'l') imUseLiftInit();
+        if (e.key.toLowerCase() === 'm') imToggleMap();
+    });
+
+    window.addEventListener('keyup', (e) => {
+        imKeys[e.key] = false;
+    });
+
+    const cvs = document.getElementById('imCanvas');
+    if (cvs) {
+        cvs.addEventListener('click', (ev) => {
+            if (!imRunning) {
+                imStartGame();
+                return;
+            }
+            if (imInElevator) {
+                const rect = cvs.getBoundingClientRect();
+                const mx = (ev.clientX - rect.left) * (cvs.width / rect.width);
+                const my = (ev.clientY - rect.top) * (cvs.height / rect.height);
+                // Klick auf einen der 6 Raum-Zugänge im Aufzugschacht
+                for (let r = 0; r < 6; r++) {
+                    const floor = Math.floor(r / 2);
+                    const isRight = (r % 2 === 1);
+                    const bx = isRight ? 470 : 70;
+                    const by = 45 + floor * 92;
+                    if (mx >= bx && mx <= bx + 220 && my >= by && my <= by + 72) {
+                        imEnterRoom(r, isRight ? 'left' : 'right');
+                        return;
+                    }
+                }
+                // Klick unten auf den Master-Kontrollraum
+                if (my >= 315 && my <= 365 && mx >= 250 && mx <= 510) {
+                    imTryEnterControlRoom();
+                }
+            }
+        });
+    }
+
+    imBuildBunkerRooms();
+    imDraw();
+}
+
+function imStartGame() {
+    imBuildBunkerRooms();
+    imRunning     = true;
+    imInElevator  = false;
+    imRoomIdx     = 0;
+    imElevatorY   = 0;
+    imTimeLeftSec = 6 * 3600;
+    imStartMs     = performance.now();
+    imScore       = 0;
+    imPiecesFound = 0;
+    imSnoozeCount = 2;
+    imLiftCount   = 2;
+    imSnoozeTimer = 0;
+    imDeathTimer  = 0;
+    imFoundMask   = [false,false,false,false,false,false,false,false,false];
+
+    imEnterRoom(0, 'left');
+    imSpeak('Another visitor! Stay a while... stay forever!');
+    imSyncHud();
+
+    if (imRafId) cancelAnimationFrame(imRafId);
+    imRafId = requestAnimationFrame(imLoop);
+}
+
+function imEnterRoom(idx, side = 'left') {
+    imRoomIdx    = idx;
+    imInElevator = false;
+    imElevatorY  = Math.floor(idx / 2);
+    imAgent.x    = side === 'left' ? 42 : 700;
+    imAgent.y    = 320;
+    imAgent.vx   = 0;
+    imAgent.vy   = 0;
+    imAgent.jumping = false;
+    imAgent.onGround = true;
+    imAgent.searchingObj = null;
+    imAgent.searchProgress = 0;
+    imSyncHud();
+}
+
+function imToggleMap() {
+    if (!imRunning) return;
+    imInElevator = !imInElevator;
+    imSyncHud();
+}
+
+function imUseSnooze() {
+    if (!imRunning || imInElevator || imSnoozeCount <= 0) return;
+    imSnoozeCount--;
+    imSnoozeTimer = 480; // 8 Sekunden bei 60 FPS
+    imBannerMsg   = '💤 SNOOZE AKTIV: ALLE ROBOTER FÜR 8 SEK. DEAKTIVIERT!';
+    imPlaySfx('found');
+    imSyncHud();
+}
+
+function imUseLiftInit() {
+    if (!imRunning || imInElevator || imLiftCount <= 0) return;
+    imLiftCount--;
+    const room = imRooms[imRoomIdx];
+    room.platforms.forEach(p => {
+        if (p.isLift) p.y = p.initialY;
+    });
+    imBannerMsg = '🛗 LIFT-INIT: PLATTFORMEN ZURÜCKGESETZT!';
+    imPlaySfx('found');
+    imSyncHud();
+}
+
+function imTriggerJump() {
+    if (!imRunning || imInElevator || imDeathTimer > 0) return;
+    if (imAgent.onGround) {
+        imAgent.vy = -8.6;
+        imAgent.vx = imAgent.dir * 4.5;
+        imAgent.onGround = false;
+        imAgent.jumping  = true;
+        imAgent.somersaultAngle = 0;
+        imPlaySfx('jump');
+    }
+}
+
+function imFormatClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function imSyncHud() {
+    const tEl = document.getElementById('imTimeHud');
+    const pEl = document.getElementById('imPiecesHud');
+    const rEl = document.getElementById('imRoomHud');
+    const sEl = document.getElementById('imSnoozeHud');
+    const lEl = document.getElementById('imLiftHud');
+    if (tEl) tEl.textContent = imFormatClock(imTimeLeftSec);
+    if (pEl) pEl.textContent = `${imPiecesFound} / 9`;
+    if (rEl) rEl.textContent = imInElevator ? '🛗 Haupt-Aufzug' : IM_ROOM_THEMES[imRoomIdx].name;
+    if (sEl) sEl.textContent = String(imSnoozeCount);
+    if (lEl) lEl.textContent = String(imLiftCount);
+}
+
+function imKillAgent(reason) {
+    if (imDeathTimer > 0) return;
+    imDeathTimer  = 55;
+    imTimeLeftSec = Math.max(0, imTimeLeftSec - 600); // -10 Minuten Zeitstrafe
+    imBannerMsg   = `⚡ ${reason} (-10 MINUTEN ZEITSTRAFE!)`;
+    if (reason.includes('ABGRUND')) {
+        imPlaySfx('scream');
+    } else {
+        imPlaySfx('zap');
+        imSpeak('Destroy him, my robots!');
+    }
+    imSyncHud();
+}
+
+function imTryEnterControlRoom() {
+    if (imPiecesFound < 9) {
+        imBannerMsg = `🔒 KONTROLLRAUM GESPERRT! DU BRAUCHST ALLE 9 LOCHKARTEN (${imPiecesFound}/9).`;
+        imPlaySfx('zap');
+        return;
+    }
+    // Mission erfolgreich!
+    imRunning = false;
+    const bonus = Math.floor(imTimeLeftSec * 0.5);
+    imScore += 5000 + bonus;
+    const durSec = Math.max(1, Math.round((performance.now() - imStartMs) / 1000));
+    imBannerMsg = `🏆 MISSION ERFÜLLT! ELVIN ATOMBENDER GESTOPPT! SCORE: ${imScore}`;
+    imSpeak('Impossible! You have defeated Elvin Atombender!');
+    submitCloudScore('impossible', imScore, durSec, `Passwort komplett · ${imFormatClock(imTimeLeftSec)} Restzeit`);
+    imDraw();
+}
+
+function imStep() {
+    // Zeit läuft ab (ca. 18 Bunker-Sekunden pro Echtzeit-Sekunde => 0,3 pro Frame)
+    imTimeLeftSec -= 0.3;
+    if (imTimeLeftSec <= 0) {
+        imTimeLeftSec = 0;
+        imRunning = false;
+        imBannerMsg = '💥 ZEIT ABGELAUFEN! ELVIN ATOMBENDERS RAKETEN SIND GESTARTET!';
+        imSpeak('Destroy him, my robots!');
+        if (imScore > 0) {
+            const durSec = Math.max(1, Math.round((performance.now() - imStartMs) / 1000));
+            submitCloudScore('impossible', imScore, durSec, `${imPiecesFound}/9 Lochkarten`);
+        }
+        imSyncHud();
+        return;
+    }
+
+    if (imSpeechTimer > 0) imSpeechTimer--;
+    if (imSnoozeTimer > 0) imSnoozeTimer--;
+
+    if (imDeathTimer > 0) {
+        imDeathTimer--;
+        if (imDeathTimer === 0) {
+            imAgent.x = 42;
+            imAgent.y = 320;
+            imAgent.vx = 0;
+            imAgent.vy = 0;
+            imAgent.jumping = false;
+            imAgent.onGround = true;
+        }
+        return;
+    }
+
+    // Modus A: Im Aufzugschacht
+    if (imInElevator) {
+        if (imKeys['ArrowUp'] || imKeys['w'] || imKeys['W']) {
+            imKeys['ArrowUp'] = false;
+            imElevatorY = Math.max(0, imElevatorY - 1);
+        } else if (imKeys['ArrowDown'] || imKeys['s'] || imKeys['S']) {
+            imKeys['ArrowDown'] = false;
+            imElevatorY = Math.min(3, imElevatorY + 1);
+        } else if (imKeys['ArrowLeft'] || imKeys['a'] || imKeys['A']) {
+            imKeys['ArrowLeft'] = false;
+            if (imElevatorY < 3) imEnterRoom(imElevatorY * 2, 'right');
+        } else if (imKeys['ArrowRight'] || imKeys['d'] || imKeys['D']) {
+            imKeys['ArrowRight'] = false;
+            if (imElevatorY < 3) imEnterRoom(imElevatorY * 2 + 1, 'left');
+        } else if (imKeys['Enter'] || imKeys[' ']) {
+            imKeys['Enter'] = false;
+            if (imElevatorY === 3) imTryEnterControlRoom();
+        }
+        return;
+    }
+
+    const room = imRooms[imRoomIdx];
+
+    // 1. Agenten-Bewegung
+    const moveLeft  = imKeys['ArrowLeft']  || imKeys['a'] || imKeys['A'];
+    const moveRight = imKeys['ArrowRight'] || imKeys['d'] || imKeys['D'];
+    const holdUp    = imKeys['ArrowUp']    || imKeys['w'] || imKeys['W'] || imKeys['e'] || imKeys['E'];
+    const holdDown  = imKeys['ArrowDown'];
+
+    if (imAgent.onGround) {
+        if (moveLeft) {
+            imAgent.vx = -3.4;
+            imAgent.dir = -1;
+            imAgent.runFrame += 0.25;
+        } else if (moveRight) {
+            imAgent.vx = 3.4;
+            imAgent.dir = 1;
+            imAgent.runFrame += 0.25;
+        } else {
+            imAgent.vx = 0;
+        }
+    } else {
+        imAgent.somersaultAngle += 0.23 * imAgent.dir;
+    }
+
+    const prevY = imAgent.y;
+    imAgent.x  += imAgent.vx;
+    imAgent.vy += 0.42; // Gravitation
+    imAgent.y  += imAgent.vy;
+
+    // Raum-Ausgang links oder rechts -> zurück in den Aufzugschacht!
+    if (imAgent.x < 10) {
+        imInElevator = true;
+        imSyncHud();
+        return;
+    }
+    if (imAgent.x > 750) {
+        imInElevator = true;
+        imSyncHud();
+        return;
+    }
+
+    // Plattform-Kollision
+    imAgent.onGround = false;
+    let standingLift = null;
+    if (imAgent.vy >= 0) {
+        for (const p of room.platforms) {
+            if (imAgent.x >= p.x + 6 && imAgent.x <= p.x + p.w - 6) {
+                if (prevY <= p.y + 4 && imAgent.y >= p.y) {
+                    imAgent.y = p.y;
+                    imAgent.vy = 0;
+                    imAgent.onGround = true;
+                    imAgent.jumping  = false;
+                    imAgent.somersaultAngle = 0;
+                    if (p.isLift) standingLift = p;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Auf einer Lift-Plattform nach oben/unten fahren
+    if (standingLift && imAgent.vx === 0) {
+        if (holdUp && standingLift.y > standingLift.stops[0]) {
+            standingLift.y -= 2.0;
+            imAgent.y = standingLift.y;
+        } else if (holdDown && standingLift.y < standingLift.stops[standingLift.stops.length - 1]) {
+            standingLift.y += 2.0;
+            imAgent.y = standingLift.y;
+        }
+    }
+
+    // Sturz in den Abgrund
+    if (imAgent.y > 368) {
+        imKillAgent('STURZ IN DEN ABGRUND!');
+        return;
+    }
+
+    // 2. Möbelstücke durchsuchen (SEARCHING...)
+    let nearFurn = null;
+    for (const f of room.furniture) {
+        if (!f.searched && Math.abs(imAgent.x - (f.x + f.w / 2)) < 26 && Math.abs(imAgent.y - (f.y + f.h)) < 14) {
+            nearFurn = f;
+            break;
+        }
+    }
+
+    if (nearFurn && holdUp && imAgent.onGround && imAgent.vx === 0) {
+        imAgent.searchingObj = nearFurn;
+        imAgent.searchProgress += 1.8;
+        if (imAgent.searchProgress >= 100) {
+            nearFurn.searched = true;
+            imAgent.searchProgress = 0;
+            imAgent.searchingObj = null;
+            imPlaySfx('found');
+
+            if (nearFurn.loot.startsWith('piece_')) {
+                const pIdx = parseInt(nearFurn.loot.split('_')[1], 10);
+                if (!imFoundMask[pIdx]) {
+                    imFoundMask[pIdx] = true;
+                    imPiecesFound++;
+                }
+                imScore += 500;
+                imBannerMsg = `💳 LOCHKARTE GEFUNDEN! BUCHSTABE „${imPassword[pIdx]}“ (${imPiecesFound}/9)`;
+                if (imPiecesFound === 9) {
+                    imBannerMsg = '🔓 ALLE 9 LOCHKARTEN KOMPLETT! GEHE ZUM AUFZUG -> KONTROLLRAUM UNTEN!';
+                    imSpeak('Access granted!');
+                }
+            } else if (nearFurn.loot === 'snooze') {
+                imSnoozeCount++;
+                imScore += 200;
+                imBannerMsg = '💤 SNOOZE-CODE GEFUNDEN! (DRÜCKE S ZUM EINFRIEREN DER ROBOTER)';
+            } else if (nearFurn.loot === 'lift') {
+                imLiftCount++;
+                imScore += 150;
+                imBannerMsg = '🛗 LIFT-INIT GEFUNDEN! (DRÜCKE L ZUM PLATTFORM-RESET)';
+            } else {
+                imScore += 50;
+                imBannerMsg = `🔍 ${nearFurn.label.toUpperCase()} DURCHSUCHT: NICHTS GEFUNDEN.`;
+            }
+            imSyncHud();
+        }
+    } else {
+        imAgent.searchingObj   = null;
+        imAgent.searchProgress = 0;
+    }
+
+    // 3. Sicherheits-Roboter & Plasma-Kugel bewegen (sofern nicht im Snooze-Modus)
+    if (imSnoozeTimer <= 0) {
+        for (const r of room.robots) {
+            r.x += r.vx * r.dir;
+            if (r.x <= r.minX) { r.x = r.minX; r.dir = 1; }
+            if (r.x >= r.maxX) { r.x = r.maxX; r.dir = -1; }
+            r.beamTimer = (r.beamTimer + 1) % 150;
+            const firing = r.beamTimer > 105;
+
+            // Kollision mit Roboter-Körper
+            if (Math.abs(imAgent.x - r.x) < 18 && Math.abs((imAgent.y - 18) - (r.y - 18)) < 20) {
+                imKillAgent('KOLLISION MIT KILLER-ROBOTER!');
+                return;
+            }
+            // Kollision mit Hochspannungs-Elektrostrahl
+            if (firing) {
+                const beamX1 = r.dir > 0 ? r.x + 12 : r.x - 58;
+                const beamX2 = r.dir > 0 ? r.x + 58 : r.x - 12;
+                if (imAgent.x >= beamX1 && imAgent.x <= beamX2 && Math.abs(imAgent.y - r.y) < 22) {
+                    imKillAgent('VOM ELEKTRO-LASER GETROFFEN!');
+                    return;
+                }
+            }
+        }
+
+        // Schwebende Plasma-Kugel
+        const orb = room.orb;
+        orb.x += orb.vx;
+        orb.y += orb.vy;
+        if (orb.x < 45 || orb.x > 715) orb.vx *= -1;
+        if (orb.y < 55 || orb.y > 305) orb.vy *= -1;
+
+        if (Math.hypot(imAgent.x - orb.x, (imAgent.y - 18) - orb.y) < 20) {
+            imKillAgent('VON SCHWARZER PLASMA-KUGEL ERFASST!');
+            return;
+        }
+    }
+
+    if (Math.random() < 0.05) imSyncHud();
+}
+
+function imDraw() {
+    const cvs = document.getElementById('imCanvas');
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+
+    // 1. Oberes Spielfeld (y = 0..365)
+    if (imInElevator) {
+        // AUFZUGSCHACHT & BUNKER-KARTE
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, cvs.width, 365);
+
+        // Zentraler Aufzugsschacht
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(330, 15, 100, 345);
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(330, 15, 100, 345);
+
+        // 6 Räume links & rechts (3 Etagen)
+        for (let r = 0; r < 6; r++) {
+            const floor   = Math.floor(r / 2);
+            const isRight = (r % 2 === 1);
+            const bx = isRight ? 470 : 70;
+            const by = 40 + floor * 92;
+            const rm = imRooms[r];
+            const remainingLoot = rm ? rm.furniture.filter(f => !f.searched).length : 0;
+
+            // Korridor zum Schacht
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(isRight ? 430 : 290, by + 26, 40, 26);
+
+            // Raum-Kachel
+            ctx.fillStyle = rm.theme.bg;
+            ctx.fillRect(bx, by, 220, 70);
+            ctx.strokeStyle = rm.theme.plat;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bx, by, 220, 70);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(rm.theme.name, bx + 10, by + 24);
+
+            ctx.fillStyle = remainingLoot > 0 ? '#fde047' : '#34d399';
+            ctx.font = '11px monospace';
+            ctx.fillText(remainingLoot > 0 ? `🔍 Noch ${remainingLoot} Objekte offen` : '✓ Komplett durchsucht', bx + 10, by + 45);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('Klicken oder Pfeil L/R zum Betreten', bx + 10, by + 61);
+        }
+
+        // Unten: Elvin Atombenders Kontrollraum
+        const unlocked = imPiecesFound >= 9;
+        ctx.fillStyle = unlocked ? '#065f46' : '#450a0a';
+        ctx.fillRect(250, 316, 260, 42);
+        ctx.strokeStyle = unlocked ? '#34d399' : '#f87171';
+        ctx.strokeRect(250, 316, 260, 42);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(unlocked ? '🔓 KONTROLLRAUM OFFEN (HIER KLICKEN!)' : `🔒 ELVIN ATOMBENDER (${imPiecesFound}/9 LOCHKARTEN)`, 380, 341);
+
+        // Aufzugkabine mit Agent 4125
+        const cabY = imElevatorY < 3 ? (52 + imElevatorY * 92) : 292;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(342, cabY, 76, 44);
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(374, cabY + 12, 12, 28);
+    } else {
+        // RAUM-ANSICHT (C64 Bunker-Raum)
+        const room = imRooms[imRoomIdx];
+        ctx.fillStyle = room.theme.bg;
+        ctx.fillRect(0, 0, cvs.width, 365);
+
+        // C64 Seitenwände & Tür-Öffnungen
+        ctx.fillStyle = room.theme.wall;
+        ctx.fillRect(0, 0, 18, 265);
+        ctx.fillRect(742, 0, 18, 265);
+        ctx.fillRect(0, 0, cvs.width, 16);
+
+        // Plattformen & Lifts
+        room.platforms.forEach(p => {
+            ctx.fillStyle = p.isLift ? '#f59e0b' : room.theme.plat;
+            ctx.fillRect(p.x, p.y, p.w, 10);
+            ctx.fillStyle = '#0f172a';
+            for (let gx = p.x + 6; gx < p.x + p.w - 6; gx += 12) {
+                ctx.fillRect(gx, p.y + 3, 6, 4);
+            }
+        });
+
+        // Möbelstücke zum Durchsuchen
+        room.furniture.forEach(f => {
+            ctx.fillStyle = f.searched ? '#334155' : f.color;
+            ctx.fillRect(f.x, f.y, f.w, f.h);
+            ctx.strokeStyle = f.searched ? '#475569' : '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(f.x, f.y, f.w, f.h);
+
+            // Blinkendes Terminal-Display bei noch nicht durchsuchten Objekten
+            if (!f.searched) {
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(f.x + 6, f.y + 6, f.w - 12, 10);
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('🔍', f.x + f.w / 2, f.y - 4);
+            }
+        });
+
+        // Dalek-artige C64 Killer-Roboter
+        room.robots.forEach(r => {
+            ctx.save();
+            ctx.translate(r.x, r.y);
+            // Metallischer Kegel-Körper
+            ctx.fillStyle = imSnoozeTimer > 0 ? '#64748b' : '#cbd5e1';
+            ctx.beginPath();
+            ctx.moveTo(-14, 0);
+            ctx.lineTo(-9, -34);
+            ctx.lineTo(9, -34);
+            ctx.lineTo(14, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Leuchtendes Sensor-Auge
+            ctx.fillStyle = imSnoozeTimer > 0 ? '#38bdf8' : '#ef4444';
+            ctx.fillRect(r.dir > 0 ? 2 : -10, -29, 8, 5);
+
+            // Ringe am Roboter
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-11, -18, 22, 3);
+            ctx.fillRect(-12, -9, 24, 3);
+
+            // Hochspannungs-Elektroblitz beim Feuern
+            if (imSnoozeTimer <= 0 && r.beamTimer > 105) {
+                ctx.strokeStyle = (r.beamTimer % 4 < 2) ? '#fde047' : '#22d3ee';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                const startX = r.dir > 0 ? 12 : -12;
+                const endX   = r.dir > 0 ? 58 : -58;
+                ctx.moveTo(startX, -20);
+                for (let s = 1; s <= 4; s++) {
+                    const bx = startX + ((endX - startX) * s) / 4;
+                    const by = -20 + (Math.random() * 14 - 7);
+                    ctx.lineTo(bx, by);
+                }
+                ctx.stroke();
+            }
+            ctx.restore();
+        });
+
+        // Schwarze Plasma-Energiekugel
+        const orb = room.orb;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, 12, 0, Math.PI * 2);
+        ctx.fillStyle = '#020617';
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = imSnoozeTimer > 0 ? '#38bdf8' : '#f43f5e';
+        ctx.stroke();
+        ctx.restore();
+
+        // Agent 4125 zeichnen (inkl. Salto-Rotation im Sprung!)
+        ctx.save();
+        ctx.translate(imAgent.x, imAgent.y - 18);
+        if (imAgent.jumping) {
+            ctx.rotate(imAgent.somersaultAngle);
+        }
+        // Kopf & Agenten-Anzug
+        ctx.fillStyle = '#fde68a';
+        ctx.fillRect(-5, -16, 10, 9);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-6, -7, 12, 14);
+        // Beine (animiert beim Laufen)
+        const legSwing = Math.sin(imAgent.runFrame) * 6;
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(-5 + legSwing * 0.4, 7, 4, 11);
+        ctx.fillRect(1 - legSwing * 0.4, 7, 4, 11);
+        ctx.restore();
+
+        // SEARCHING... Fortschrittsbalken
+        if (imAgent.searchingObj) {
+            const f = imAgent.searchingObj;
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.9)';
+            ctx.fillRect(f.x - 28, f.y - 34, 96, 24);
+            ctx.strokeStyle = '#fde047';
+            ctx.strokeRect(f.x - 28, f.y - 34, 96, 24);
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 9px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('SEARCHING...', f.x + 20, f.y - 23);
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(f.x - 24, f.y - 18, (88 * imAgent.searchProgress) / 100, 5);
+        }
+    }
+
+    // 2. Unteres C64 Pocket-Computer-Cockpit (y = 365..470)
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 365, cvs.width, 105);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(2, 367, cvs.width - 4, 101);
+
+    // 9 Lochkarten-Slots (Passwort-Puzzle)
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('📟 C64 POCKET COMPUTER – MASTER-PASSWORT LOCHKARTEN:', 18, 388);
+
+    for (let i = 0; i < 9; i++) {
+        const sx = 18 + i * 52;
+        const sy = 398;
+        const found = imFoundMask[i];
+        ctx.fillStyle = found ? '#065f46' : '#0f172a';
+        ctx.fillRect(sx, sy, 44, 42);
+        ctx.strokeStyle = found ? '#34d399' : '#475569';
+        ctx.strokeRect(sx, sy, 44, 42);
+
+        if (found) {
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 20px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(imPassword[i], sx + 22, sy + 28);
+        } else {
+            ctx.fillStyle = '#475569';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('?', sx + 22, sy + 26);
+        }
+    }
+
+    // Status-Meldung & Sprach-Untertitel rechts im Pocket-Computer
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(495, 380, 250, 62);
+    ctx.strokeStyle = '#475569';
+    ctx.strokeRect(495, 380, 250, 62);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(imSpeechTimer > 0 ? '🎙️ "' + imSpeechText.slice(0, 30) + '"' : '📡 MISSIONS-LOG:', 505, 398);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(imBannerMsg.slice(0, 34), 505, 416);
+    if (imBannerMsg.length > 34) {
+        ctx.fillText(imBannerMsg.slice(34, 68), 505, 431);
+    }
+
+    // Start-Overlay wenn noch nicht gestartet
+    if (!imRunning) {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.82)';
+        ctx.fillRect(0, 110, cvs.width, 145);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#22d3ee';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('🕵️‍♂️ IMPOSSIBLE MISSION (1984 C64)', cvs.width / 2, 148);
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(imBannerMsg, cvs.width / 2, 176);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Leertaste = Vorwärts-Salto über Roboter · Pfeil Hoch (E) vor Möbeln = Durchsuchen · M = Aufzugschacht', cvs.width / 2, 204);
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('Klicke ins Spielfeld oder auf „▶️ Neue Mission starten“', cvs.width / 2, 232);
+    }
+}
+
+function imLoop() {
+    if (!imRunning) {
+        imDraw();
+        return;
+    }
+    imStep();
+    imDraw();
+    if (imRunning) {
+        imRafId = requestAnimationFrame(imLoop);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
     gummiInit();
     trInit();
+    imInit();
     lemInit();
     ninjaInit();
     canabaltInit();

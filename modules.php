@@ -320,8 +320,8 @@ $allModules = [
         'url'      => 'games.php',
         'category' => 'extra',
         'catLabel' => 'Sicherheit, KI & Freizeit',
-        'desc'     => '17 werbefreie Browserspiele im Vollbildmodus (Gummigeruch Kart-Cup, Cloud-Traffic-Racer, Cloud-Lemmings, The Last Ninja, Cloud-Canabalt, Cloud-Invaders, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Tetris, Snake, Breakout & Live-Duelle) mit Cloud-Highscores.',
-        'badge'    => '17 Spiele',
+        'desc'     => '18 werbefreie Browserspiele im Vollbildmodus (Gummigeruch Kart-Cup, Cloud-Traffic-Racer, Impossible Mission, Cloud-Lemmings, The Last Ninja, Cloud-Canabalt, Cloud-Invaders, Cloud-Kong, VC-20 Blitz, Cloud-PacMan, World of MiniCloud RPG, Sudoku, Minesweeper, Memory, Tetris, Snake, Breakout & Live-Duelle) mit Cloud-Highscores.',
+        'badge'    => '18 Spiele',
         'badgeCls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300',
     ],
     [
