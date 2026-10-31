@@ -162,6 +162,7 @@ function splitTextIntoTranslationChunks(string $text, int $maxChunkChars = 1600)
  */
 function performTranslationHttpRequest(string $url, ?string $postBody = null, array $headers = [], int $timeoutSec = 15): array
 {
+    $ua = 'GoogleTranslate/6.29.59279 (Linux; U; Android 11; Pixel 5)';
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         if ($ch !== false) {
@@ -171,7 +172,7 @@ function performTranslationHttpRequest(string $url, ?string $postBody = null, ar
                 CURLOPT_MAXREDIRS      => 3,
                 CURLOPT_TIMEOUT        => $timeoutSec,
                 CURLOPT_CONNECTTIMEOUT => 6,
-                CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; MiniCloud-Translator/1.0)',
+                CURLOPT_USERAGENT      => $ua,
                 CURLOPT_SSL_VERIFYPEER => true,
             ]);
             if ($postBody !== null) {
@@ -195,7 +196,7 @@ function performTranslationHttpRequest(string $url, ?string $postBody = null, ar
         'method'        => $postBody !== null ? 'POST' : 'GET',
         'timeout'       => $timeoutSec,
         'ignore_errors' => true,
-        'header'        => implode("\r\n", array_merge(['User-Agent: Mozilla/5.0 (compatible; MiniCloud-Translator/1.0)'], $headers)),
+        'header'        => implode("\r\n", array_merge(['User-Agent: ' . $ua], $headers)),
     ];
     if ($postBody !== null) {
         $httpOpts['content'] = $postBody;
@@ -301,37 +302,52 @@ function translateViaDeepL(string $text, string $sourceLang, string $targetLang,
  */
 function translateViaStandardNmt(string $text, string $sourceLang, string $targetLang): array
 {
-    $chunks = splitTextIntoTranslationChunks($text, 1600);
+    $chunks = splitTextIntoTranslationChunks($text, 1800);
     $translatedParts = [];
     $detected = $sourceLang !== 'auto' ? $sourceLang : '';
     $usedEngine = 'Neuronale Direkt-Übersetzung (NMT)';
 
     foreach ($chunks as $chunk) {
         $sl = $sourceLang === 'auto' ? 'auto' : $sourceLang;
-        $url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl='
-            . rawurlencode($sl)
-            . '&tl=' . rawurlencode($targetLang)
-            . '&dt=t&q=' . rawurlencode($chunk);
-
-        $res = performTranslationHttpRequest($url, null, [], 12);
         $chunkTranslated = '';
+
+        // 1. Primärer Neuronaler Endpunkt (translate.google.de client=at per POST)
+        $primaryUrl = 'https://translate.google.de/translate_a/single?client=at&dt=t&dj=1&sl='
+            . rawurlencode($sl)
+            . '&tl=' . rawurlencode($targetLang);
+        $res = performTranslationHttpRequest(
+            $primaryUrl,
+            http_build_query(['q' => $chunk]),
+            ['Content-Type: application/x-www-form-urlencoded;charset=UTF-8'],
+            12
+        );
 
         if ($res['ok'] && $res['body'] !== '') {
             $data = json_decode($res['body'], true);
-            if (is_array($data) && isset($data[0]) && is_array($data[0])) {
-                foreach ($data[0] as $segment) {
-                    if (is_array($segment) && isset($segment[0]) && is_string($segment[0])) {
-                        $chunkTranslated .= $segment[0];
+            if (is_array($data)) {
+                if (isset($data['sentences']) && is_array($data['sentences'])) {
+                    foreach ($data['sentences'] as $sentObj) {
+                        if (is_array($sentObj) && isset($sentObj['trans']) && is_string($sentObj['trans'])) {
+                            $chunkTranslated .= $sentObj['trans'];
+                        }
                     }
-                }
-                if ($detected === '' && isset($data[2]) && is_string($data[2]) && $data[2] !== '') {
-                    $detShort = strtolower(substr($data[2], 0, 2));
-                    $detected = $detShort;
+                    if ($detected === '' && !empty($data['src']) && is_string($data['src'])) {
+                        $detected = strtolower(substr($data['src'], 0, 2));
+                    }
+                } elseif (isset($data[0]) && is_array($data[0])) {
+                    foreach ($data[0] as $segment) {
+                        if (is_array($segment) && isset($segment[0]) && is_string($segment[0])) {
+                            $chunkTranslated .= $segment[0];
+                        }
+                    }
+                    if ($detected === '' && isset($data[2]) && is_string($data[2]) && $data[2] !== '') {
+                        $detected = strtolower(substr($data[2], 0, 2));
+                    }
                 }
             }
         }
 
-        // Fallback auf MyMemory NMT falls Google-Endpunkt blockiert oder nicht erreichbar sein sollte
+        // 2. Fallback auf MyMemory NMT falls der primäre Endpunkt gedrosselt oder nicht erreichbar sein sollte
         if (trim($chunkTranslated) === '') {
             $mmSource = ($sourceLang === 'auto' || $sourceLang === '') ? ($targetLang === 'de' ? 'en' : 'de') : $sourceLang;
             $mmUrl = 'https://api.mymemory.translated.net/get?q='
