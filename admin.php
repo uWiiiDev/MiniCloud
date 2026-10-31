@@ -160,33 +160,244 @@ function getServerDashboardMetrics(PDO $pdo): array
 
     $dbVersion = (string)($pdo->query('SELECT VERSION()')->fetchColumn() ?: 'MySQL/MariaDB');
 
+    // 6. MariaDB / MySQL Monitoring-Kennzahlen (Status, Variablen & Tabellen-Speicher)
+    $dbStatus = [];
+    $dbVars   = [];
+    try {
+        $stmtSt = $pdo->query(
+            "SHOW GLOBAL STATUS WHERE Variable_name IN (
+                'Uptime', 'Questions', 'Queries', 'Slow_queries',
+                'Threads_connected', 'Threads_running', 'Max_used_connections',
+                'Aborted_connects', 'Aborted_clients',
+                'Bytes_received', 'Bytes_sent',
+                'Com_select', 'Com_insert', 'Com_update', 'Com_delete',
+                'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
+                'Innodb_buffer_pool_bytes_data', 'Innodb_buffer_pool_pages_total',
+                'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_free',
+                'Innodb_page_size', 'Open_tables', 'Opened_tables'
+            )"
+        );
+        if ($stmtSt) {
+            foreach ($stmtSt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $k = (string)($r['Variable_name'] ?? '');
+                if ($k !== '') {
+                    $dbStatus[$k] = (string)($r['Value'] ?? '0');
+                }
+            }
+        }
+    } catch (Throwable) {
+        // Fallback auf eingeschränkten Shared-Hosts
+    }
+
+    try {
+        $stmtVar = $pdo->query(
+            "SHOW GLOBAL VARIABLES WHERE Variable_name IN (
+                'max_connections', 'innodb_buffer_pool_size', 'long_query_time',
+                'character_set_server', 'collation_server', 'version_comment'
+            )"
+        );
+        if ($stmtVar) {
+            foreach ($stmtVar->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $k = (string)($r['Variable_name'] ?? '');
+                if ($k !== '') {
+                    $dbVars[$k] = (string)($r['Value'] ?? '');
+                }
+            }
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    }
+
+    // DB-Uptime formatieren
+    $dbUptimeSecs = max(1, (int)($dbStatus['Uptime'] ?? 0));
+    $dbDays       = intdiv($dbUptimeSecs, 86400);
+    $dbHours      = intdiv($dbUptimeSecs % 86400, 3600);
+    $dbMins       = intdiv($dbUptimeSecs % 3600, 60);
+    $dbUptimeFmt  = $dbDays > 0
+        ? sprintf('%dd %dh %dm', $dbDays, $dbHours, $dbMins)
+        : sprintf('%dh %dm', $dbHours, $dbMins);
+
+    // Fragen / Queries & QPS (Live-Intervall + Durchschnitt seit Start)
+    $dbQuestions = (int)($dbStatus['Queries'] ?? ($dbStatus['Questions'] ?? 0));
+    $dbAvgQps    = round($dbQuestions / $dbUptimeSecs, 2);
+    $dbLiveQps   = $dbAvgQps;
+    $prevDb      = $_SESSION['admin_db_prev'] ?? null;
+    if (is_array($prevDb) && isset($prevDb['ts'], $prevDb['q'])) {
+        $dtDb = $nowMicro - (float)$prevDb['ts'];
+        if ($dtDb >= 0.3 && $dbQuestions >= (int)$prevDb['q']) {
+            $dbLiveQps = round(($dbQuestions - (int)$prevDb['q']) / $dtDb, 2);
+        }
+    }
+    $_SESSION['admin_db_prev'] = [
+        'ts' => $nowMicro,
+        'q'  => $dbQuestions,
+    ];
+
+    $dbSlowQueries = (int)($dbStatus['Slow_queries'] ?? 0);
+    $comSelect     = (int)($dbStatus['Com_select'] ?? 0);
+    $comWrite      = (int)($dbStatus['Com_insert'] ?? 0) + (int)($dbStatus['Com_update'] ?? 0) + (int)($dbStatus['Com_delete'] ?? 0);
+    $comTotalRw    = max(1, $comSelect + $comWrite);
+    $dbReadPct     = round(($comSelect / $comTotalRw) * 100, 1);
+    $dbWritePct    = round(($comWrite / $comTotalRw) * 100, 1);
+
+    // Verbindungen & Thread-Pool
+    $dbThreadsConn  = (int)($dbStatus['Threads_connected'] ?? 1);
+    $dbThreadsRun   = (int)($dbStatus['Threads_running'] ?? 1);
+    $dbMaxUsedConn  = (int)($dbStatus['Max_used_connections'] ?? $dbThreadsConn);
+    $dbMaxConnLimit = max(1, (int)($dbVars['max_connections'] ?? 151));
+    $dbConnPct      = min(100.0, round(($dbThreadsConn / $dbMaxConnLimit) * 100, 1));
+    $dbPeakConnPct  = min(100.0, round(($dbMaxUsedConn / $dbMaxConnLimit) * 100, 1));
+    $dbAbortedConn  = (int)($dbStatus['Aborted_connects'] ?? 0);
+
+    // InnoDB Buffer Pool & Cache-Hit-Rate
+    $innoReadReq   = (int)($dbStatus['Innodb_buffer_pool_read_requests'] ?? 0);
+    $innoDiskReads = (int)($dbStatus['Innodb_buffer_pool_reads'] ?? 0);
+    $innoHitRate   = $innoReadReq > 0
+        ? max(0.0, min(100.0, round((1.0 - ($innoDiskReads / $innoReadReq)) * 100, 2)))
+        : 100.0;
+
+    $innoPageSize  = max(1024, (int)($dbStatus['Innodb_page_size'] ?? 16384));
+    $innoPoolTotal = (int)($dbVars['innodb_buffer_pool_size'] ?? 0);
+    if ($innoPoolTotal <= 0 && isset($dbStatus['Innodb_buffer_pool_pages_total'])) {
+        $innoPoolTotal = (int)$dbStatus['Innodb_buffer_pool_pages_total'] * $innoPageSize;
+    }
+    $innoPoolData = (int)($dbStatus['Innodb_buffer_pool_bytes_data'] ?? 0);
+    if ($innoPoolData <= 0 && isset($dbStatus['Innodb_buffer_pool_pages_data'])) {
+        $innoPoolData = (int)$dbStatus['Innodb_buffer_pool_pages_data'] * $innoPageSize;
+    }
+    $innoPoolPct = $innoPoolTotal > 0 ? min(100.0, round(($innoPoolData / $innoPoolTotal) * 100, 1)) : 0.0;
+
+    // DB-Netzwerk-Traffic
+    $dbBytesRx = (int)($dbStatus['Bytes_received'] ?? 0);
+    $dbBytesTx = (int)($dbStatus['Bytes_sent'] ?? 0);
+
+    // Datenbank-Tabellen & Speicherbelegung (SHOW TABLE STATUS)
+    $dbDataBytes  = 0;
+    $dbIndexBytes = 0;
+    $dbFreeBytes  = 0;
+    $dbTotalRows  = 0;
+    $dbTableCount = 0;
+    $dbTablesList = [];
+
+    $tableLabels = [
+        'file_search_index'        => '🔍 Volltext-Suchindex',
+        'files'                    => '📄 Dateien',
+        'file_versions'            => '🕓 Dateiversionen',
+        'folders'                  => '📁 Ordner',
+        'users'                    => '👥 Benutzerkonten',
+        'audit_logs'               => '📜 Audit-Protokoll',
+        'messages'                 => '💬 Chat-Nachrichten',
+        'calendar_events'          => '📅 Kalender-Termine',
+        'contacts'                 => '📇 Kontakte',
+        'shares'                   => '🔗 Öffentliche Links',
+        'user_shares'              => '🤝 Interne Freigaben',
+        'file_comments'            => '💭 Datei-Kommentare',
+        'office_collab_deltas'     => '⚡ Live-Co-Authoring Deltas',
+        'office_collab_presence'   => '🟢 Live-Co-Authoring Präsenz',
+        'groups'                   => '🏢 Benutzergruppen',
+        'group_members'            => '👤 Gruppenmitglieder',
+        'group_folders'            => '🗂️ Gruppenordner',
+        'group_folder_permissions' => '🔑 Gruppenordner-Rechte',
+        'settings'                 => '⚙️ Systemeinstellungen',
+        'rate_limits'              => '🛡️ Rate-Limiting',
+    ];
+
+    try {
+        $stmtTbl = $pdo->query('SHOW TABLE STATUS');
+        if ($stmtTbl) {
+            foreach ($stmtTbl->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                $tName = (string)($t['Name'] ?? '');
+                if ($tName === '') {
+                    continue;
+                }
+                $dLen  = (int)($t['Data_length'] ?? 0);
+                $iLen  = (int)($t['Index_length'] ?? 0);
+                $fLen  = (int)($t['Data_free'] ?? 0);
+                $tRows = (int)($t['Rows'] ?? 0);
+                $tot   = $dLen + $iLen;
+
+                $dbDataBytes  += $dLen;
+                $dbIndexBytes += $iLen;
+                $dbFreeBytes  += $fLen;
+                $dbTotalRows  += $tRows;
+                $dbTableCount++;
+
+                $dbTablesList[] = [
+                    'name'       => $tName,
+                    'label'      => $tableLabels[$tName] ?? $tName,
+                    'engine'     => (string)($t['Engine'] ?? 'InnoDB'),
+                    'rows'       => $tRows,
+                    'data_fmt'   => formatBytes($dLen),
+                    'index_fmt'  => formatBytes($iLen),
+                    'free_fmt'   => formatBytes($fLen),
+                    'total_bytes'=> $tot,
+                    'total_fmt'  => formatBytes($tot),
+                ];
+            }
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    }
+
+    usort($dbTablesList, static fn(array $a, array $b): int => $b['total_bytes'] <=> $a['total_bytes']);
+    $dbTotalBytes = $dbDataBytes + $dbIndexBytes;
+    $dbIndexPct   = $dbTotalBytes > 0 ? round(($dbIndexBytes / $dbTotalBytes) * 100, 1) : 0.0;
+
     return [
-        'disk_total_fmt'  => formatBytes($diskTotal),
-        'disk_used_fmt'   => formatBytes($diskUsed),
-        'disk_free_fmt'   => formatBytes($diskFree),
-        'disk_pct'        => $diskPct,
-        'cloud_bytes_fmt' => formatBytes($cloudBytes),
-        'cloud_files'     => $cloudFiles,
-        'ram_total_fmt'   => formatBytes($ramTotal),
-        'ram_used_fmt'    => formatBytes($ramUsed),
-        'ram_free_fmt'    => formatBytes($ramAvail),
-        'ram_pct'         => $ramPct,
-        'cpu_pct'         => $cpuPct,
-        'cpu_cores'       => $cpuCores,
-        'cpu_model'       => $cpuModel,
-        'load_1'          => number_format($load1, 2, ',', '.'),
-        'load_5'          => numberformat_de($load5),
-        'load_15'         => numberformat_de($load15),
-        'net_iface'       => $ifaceName,
-        'net_rx_total'    => formatBytes($rxBytes),
-        'net_tx_total'    => formatBytes($txBytes),
-        'net_rx_rate'     => formatBytes($rxRateBps) . '/s',
-        'net_tx_rate'     => formatBytes($txRateBps) . '/s',
-        'hostname'        => (string)(gethostname() ?: 'localhost'),
-        'uptime'          => $uptimeFormatted,
-        'php_version'     => PHP_VERSION,
-        'db_version'      => $dbVersion,
-        'timestamp'       => date('H:i:s'),
+        'disk_total_fmt'      => formatBytes($diskTotal),
+        'disk_used_fmt'       => formatBytes($diskUsed),
+        'disk_free_fmt'       => formatBytes($diskFree),
+        'disk_pct'            => $diskPct,
+        'cloud_bytes_fmt'     => formatBytes($cloudBytes),
+        'cloud_files'         => $cloudFiles,
+        'ram_total_fmt'       => formatBytes($ramTotal),
+        'ram_used_fmt'        => formatBytes($ramUsed),
+        'ram_free_fmt'        => formatBytes($ramAvail),
+        'ram_pct'             => $ramPct,
+        'cpu_pct'             => $cpuPct,
+        'cpu_cores'           => $cpuCores,
+        'cpu_model'           => $cpuModel,
+        'load_1'              => number_format($load1, 2, ',', '.'),
+        'load_5'              => numberformat_de($load5),
+        'load_15'             => numberformat_de($load15),
+        'net_iface'           => $ifaceName,
+        'net_rx_total'        => formatBytes($rxBytes),
+        'net_tx_total'        => formatBytes($txBytes),
+        'net_rx_rate'         => formatBytes($rxRateBps) . '/s',
+        'net_tx_rate'         => formatBytes($txRateBps) . '/s',
+        'hostname'            => (string)(gethostname() ?: 'localhost'),
+        'uptime'              => $uptimeFormatted,
+        'php_version'         => PHP_VERSION,
+        'db_version'          => $dbVersion,
+        'db_uptime'           => $dbUptimeFmt,
+        'db_total_fmt'        => formatBytes($dbTotalBytes),
+        'db_data_fmt'         => formatBytes($dbDataBytes),
+        'db_index_fmt'        => formatBytes($dbIndexBytes),
+        'db_free_fmt'         => formatBytes($dbFreeBytes),
+        'db_index_pct'        => $dbIndexPct,
+        'db_tables_count'     => $dbTableCount,
+        'db_total_rows'       => number_format($dbTotalRows, 0, ',', '.'),
+        'db_questions_fmt'    => number_format($dbQuestions, 0, ',', '.'),
+        'db_qps_live'         => numberformat_de($dbLiveQps),
+        'db_qps_avg'          => numberformat_de($dbAvgQps),
+        'db_slow_queries'     => $dbSlowQueries,
+        'db_read_pct'         => number_format($dbReadPct, 1, ',', '.'),
+        'db_write_pct'        => number_format($dbWritePct, 1, ',', '.'),
+        'db_threads_conn'     => $dbThreadsConn,
+        'db_threads_run'      => $dbThreadsRun,
+        'db_max_used_conn'    => $dbMaxUsedConn,
+        'db_max_conn_limit'   => $dbMaxConnLimit,
+        'db_conn_pct'         => $dbConnPct,
+        'db_peak_conn_pct'    => $dbPeakConnPct,
+        'db_aborted_conn'     => $dbAbortedConn,
+        'db_inno_hit_rate'    => number_format($innoHitRate, 2, ',', '.'),
+        'db_inno_pool_used'   => formatBytes($innoPoolData),
+        'db_inno_pool_total'  => formatBytes($innoPoolTotal),
+        'db_inno_pool_pct'    => $innoPoolPct,
+        'db_bytes_rx_fmt'     => formatBytes($dbBytesRx),
+        'db_bytes_tx_fmt'     => formatBytes($dbBytesTx),
+        'db_tables'           => $dbTablesList,
+        'timestamp'           => date('H:i:s'),
     ];
 }
 
@@ -947,6 +1158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'update_mail_settings'            => 'mail',
         'send_test_email'                 => 'mail',
         'download_db_backup'              => 'system',
+        'optimize_db_tables'              => 'system',
         'clear_audit_log'                 => 'system',
         'run_github_update'               => 'system',
         'create_local_snapshot'           => 'system',
@@ -974,6 +1186,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
         echo $sqlDump;
+        exit;
+    }
+
+    // --- 0f-2. MariaDB-Tabellen optimieren & defragmentieren (OPTIMIZE TABLE) ---
+    if ($action === 'optimize_db_tables') {
+        $optimizedCount = 0;
+        try {
+            $stmtTables = $pdo->query('SHOW TABLES');
+            $tables = $stmtTables ? $stmtTables->fetchAll(PDO::FETCH_COLUMN) : [];
+            foreach ($tables as $tbl) {
+                $tName = (string)$tbl;
+                if ($tName !== '' && preg_match('/^[a-zA-Z0-9_]+$/', $tName)) {
+                    $stmtOpt = $pdo->query('OPTIMIZE TABLE `' . $tName . '`');
+                    if ($stmtOpt) {
+                        $stmtOpt->fetchAll();
+                        $optimizedCount++;
+                    }
+                }
+            }
+            logAuditEvent($pdo, 'db_optimize', sprintf('MariaDB-Tabellen optimiert & defragmentiert (%d Tabellen)', $optimizedCount));
+            setFlash('success', sprintf('Alle %d MariaDB-Tabellen (inkl. Volltext-Suchindex) wurden erfolgreich optimiert und defragmentiert.', $optimizedCount));
+        } catch (Throwable $e) {
+            setFlash('error', 'Tabellen-Optimierung konnte nicht vollständig ausgeführt werden: ' . $e->getMessage());
+        }
+        header('Location: admin.php#tab-system');
         exit;
     }
 
@@ -4557,6 +4794,204 @@ foreach ($modList as $mItem) {
                 </p>
             </div>
         </div>
+
+        <!-- 5b-2. MARIADB / MYSQL DATENBANK-MONITORING (Live-Kennzahlen & Tabellen-Analyse) -->
+        <div class="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-sm">
+                        🗄️
+                    </span>
+                    <div>
+                        <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                            <span>MariaDB Datenbank-Monitor</span>
+                            <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                                <?= e($serverStats['db_version']) ?>
+                            </span>
+                        </h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                            DB-Uptime: <strong id="srvDbUptime" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_uptime']) ?></strong>
+                            &bull; DB-Traffic: ↓ <strong id="srvDbBytesRx" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_bytes_rx_fmt']) ?></strong>
+                            / ↑ <strong id="srvDbBytesTx" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_bytes_tx_fmt']) ?></strong>
+                        </p>
+                    </div>
+                </div>
+
+                <form
+                    action="admin.php"
+                    method="post"
+                    class="inline"
+                    onsubmit="return confirm('Möchten Sie jetzt alle MariaDB-Tabellen (inkl. Volltext-Suchindex) optimieren und defragmentieren (OPTIMIZE TABLE)?');"
+                >
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="optimize_db_tables">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-600 hover:text-white text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/70 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Führt OPTIMIZE TABLE auf allen MiniCloud-Tabellen aus, gibt Überhang-Speicher frei und aktualisiert die Index-Statistiken"
+                    >
+                        <span>⚡</span>
+                        <span>Tabellen optimieren (<code class="font-mono text-[11px]">OPTIMIZE</code>)</span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- DB-Karte 1: Datenbank-Speicher & Index-Aufschlüsselung -->
+                <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                            <span>🗄️ DB-Größe &amp; Index</span>
+                            <span id="srvDbTablesBadge" class="font-bold text-slate-900 dark:text-white"><?= (int)$serverStats['db_tables_count'] ?> Tab.</span>
+                        </div>
+                        <p id="srvDbTotalMain" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                            <?= e($serverStats['db_total_fmt']) ?> <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(<span id="srvDbRowsTotal"><?= e($serverStats['db_total_rows']) ?></span> Zeilen)</span>
+                        </p>
+                        <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5" title="Verhältnis: Index-Speicher zu Nutzdaten">
+                            <div
+                                id="srvDbIndexBar"
+                                class="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                                style="width: <?= e((string)$serverStats['db_index_pct']) ?>%"
+                            ></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Daten: <strong id="srvDbDataFmt" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_data_fmt']) ?></strong></span>
+                        <span>Index: <strong id="srvDbIndexFmt" class="text-indigo-600 dark:text-indigo-400"><?= e($serverStats['db_index_fmt']) ?></strong></span>
+                    </p>
+                </div>
+
+                <!-- DB-Karte 2: InnoDB Buffer Pool & RAM-Cache-Hit-Rate -->
+                <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                            <span>🚀 InnoDB RAM-Cache</span>
+                            <span id="srvDbHitRate" class="font-bold text-emerald-600 dark:text-emerald-400" title="InnoDB Buffer-Pool Cache-Hit-Rate (Lesezugriffe direkt aus dem RAM)"><?= e($serverStats['db_inno_hit_rate']) ?>% Hit</span>
+                        </div>
+                        <p class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                            <span id="srvDbPoolUsed"><?= e($serverStats['db_inno_pool_used']) ?></span>
+                            <span class="text-xs font-normal text-slate-500 dark:text-slate-400">von <span id="srvDbPoolTotal"><?= e($serverStats['db_inno_pool_total']) ?></span></span>
+                        </p>
+                        <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5">
+                            <div
+                                id="srvDbPoolBar"
+                                class="h-full <?= $serverStats['db_inno_pool_pct'] >= 92 ? 'bg-amber-500' : 'bg-emerald-600' ?> rounded-full transition-all duration-300"
+                                style="width: <?= e((string)$serverStats['db_inno_pool_pct']) ?>%"
+                            ></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Pool-Belegung: <strong id="srvDbPoolPct" class="text-slate-700 dark:text-slate-200"><?= e(number_format((float)$serverStats['db_inno_pool_pct'], 1, ',', '.')) ?>%</strong></span>
+                        <span>Überhang: <strong id="srvDbFreeFmt" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_free_fmt']) ?></strong></span>
+                    </p>
+                </div>
+
+                <!-- DB-Karte 3: Abfrage-Durchsatz (QPS) & Lese/Schreib-Verhältnis -->
+                <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                            <span>⚡ SQL-Durchsatz (QPS)</span>
+                            <span class="text-[11px] font-semibold text-brand-600 dark:text-brand-400">Ø <span id="srvDbQpsAvg"><?= e($serverStats['db_qps_avg']) ?></span>/s</span>
+                        </div>
+                        <p class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                            <span id="srvDbQpsLive"><?= e($serverStats['db_qps_live']) ?></span> Queries/s
+                            <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(<span id="srvDbQuestions"><?= e($serverStats['db_questions_fmt']) ?></span> ges.)</span>
+                        </p>
+                        <div class="w-full h-2 bg-amber-500/80 rounded-full overflow-hidden my-2.5" title="Verhältnis: Lesezugriffe (SELECT) vs. Schreibzugriffe (INSERT/UPDATE/DELETE)">
+                            <div
+                                id="srvDbReadBar"
+                                class="h-full bg-brand-600 rounded-l-full transition-all duration-300"
+                                style="width: <?= e(str_replace(',', '.', (string)$serverStats['db_read_pct'])) ?>%"
+                            ></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Lesen/Schr.: <strong id="srvDbRwRatio" class="text-slate-700 dark:text-slate-200"><?= e($serverStats['db_read_pct']) ?>% / <?= e($serverStats['db_write_pct']) ?>%</strong></span>
+                        <span>Slow: <strong id="srvDbSlow" class="<?= (int)$serverStats['db_slow_queries'] > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400' ?>"><?= (int)$serverStats['db_slow_queries'] ?></strong></span>
+                    </p>
+                </div>
+
+                <!-- DB-Karte 4: Verbindungen & Thread-Pool -->
+                <div class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                            <span>🔌 DB-Verbindungen</span>
+                            <span id="srvDbConnPctLabel" class="font-bold text-slate-900 dark:text-white">Peak: <?= e(number_format((float)$serverStats['db_peak_conn_pct'], 1, ',', '.')) ?>%</span>
+                        </div>
+                        <p class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                            <span id="srvDbThreadsConn"><?= (int)$serverStats['db_threads_conn'] ?></span> aktiv
+                            <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(<span id="srvDbThreadsRun"><?= (int)$serverStats['db_threads_run'] ?></span> laufend / max. <?= (int)$serverStats['db_max_conn_limit'] ?>)</span>
+                        </p>
+                        <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden my-2.5" title="Spitzen-Verbindungsauslastung (Max_used_connections im Verhältnis zu max_connections)">
+                            <div
+                                id="srvDbPeakConnBar"
+                                class="h-full <?= $serverStats['db_peak_conn_pct'] >= 80 ? 'bg-red-600' : ($serverStats['db_peak_conn_pct'] >= 50 ? 'bg-amber-500' : 'bg-emerald-600') ?> rounded-full transition-all duration-300"
+                                style="width: <?= e((string)$serverStats['db_peak_conn_pct']) ?>%"
+                            ></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Spitzenwert: <strong id="srvDbMaxUsedConn" class="text-slate-700 dark:text-slate-200"><?= (int)$serverStats['db_max_used_conn'] ?></strong> / <?= (int)$serverStats['db_max_conn_limit'] ?></span>
+                        <span>Abgebr.: <strong id="srvDbAbortedConn" class="text-slate-700 dark:text-slate-200"><?= (int)$serverStats['db_aborted_conn'] ?></strong></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Aufklappbare Detail-Tabelle aller MariaDB-Tabellen nach Speicherverbrauch -->
+            <?php if (!empty($serverStats['db_tables'])): ?>
+                <details class="mt-3.5 group rounded-xl bg-slate-50/60 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-700/80 overflow-hidden">
+                    <summary class="px-4 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer select-none flex items-center justify-between hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors">
+                        <span class="flex items-center gap-2">
+                            <span>📋</span>
+                            <span>Tabellen-Aufschlüsselung nach Speicherverbrauch anzeigen (<?= count($serverStats['db_tables']) ?> Tabellen, inkl. Volltext-Suchindex)</span>
+                        </span>
+                        <span class="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                    </summary>
+                    <div class="border-t border-slate-200/80 dark:border-slate-700/80 overflow-x-auto max-h-80 overflow-y-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 sticky top-0">
+                                <tr>
+                                    <th class="py-2 px-3 font-semibold">Tabelle / Modul</th>
+                                    <th class="py-2 px-3 font-semibold">SQL-Name</th>
+                                    <th class="py-2 px-3 font-semibold text-right">Einträge (ca.)</th>
+                                    <th class="py-2 px-3 font-semibold text-right">Nutzdaten</th>
+                                    <th class="py-2 px-3 font-semibold text-right">Index-Größe</th>
+                                    <th class="py-2 px-3 font-semibold text-right">Überhang</th>
+                                    <th class="py-2 px-3 font-semibold text-right">Gesamt</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800">
+                                <?php foreach ($serverStats['db_tables'] as $tbl): ?>
+                                    <tr class="hover:bg-white/80 dark:hover:bg-slate-800/60">
+                                        <td class="py-1.5 px-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                            <?= e((string)$tbl['label']) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                            <?= e((string)$tbl['name']) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                            <?= e(number_format((int)$tbl['rows'], 0, ',', '.')) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono text-right text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                            <?= e((string)$tbl['data_fmt']) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono text-right text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                                            <?= e((string)$tbl['index_fmt']) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono text-right text-slate-400 whitespace-nowrap">
+                                            <?= e((string)$tbl['free_fmt']) ?>
+                                        </td>
+                                        <td class="py-1.5 px-3 font-mono font-bold text-right text-slate-900 dark:text-white whitespace-nowrap">
+                                            <?= e((string)$tbl['total_fmt']) ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            <?php endif; ?>
+        </div>
     </section>
 
     <!-- 5c. SICHERHEITS- & AKTIVITÄTSPROTOKOLL (AUDIT-LOG) -->
@@ -4618,6 +5053,7 @@ foreach ($modList as $mItem) {
                 'file_drop'          => ['label' => '📥 Gast-Upload',     'cls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300'],
                 'zip_extract'        => ['label' => '📦 ZIP entpackt',    'cls' => 'bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300'],
                 'db_backup'          => ['label' => '💾 SQL-Backup',      'cls' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'],
+                'db_optimize'        => ['label' => '⚡ DB optimiert',    'cls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300'],
                 'user_create'        => ['label' => '👤 Konto angelegt',  'cls' => 'bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300'],
                 'user_delete'        => ['label' => '🚫 Konto gelöscht',  'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
                 'user_lock'          => ['label' => '🔒 Konto gesperrt',  'cls' => 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'],
@@ -4809,6 +5245,40 @@ async function refreshServerDashboard() {
         setTxt('srvNetTxRate', d.net_tx_rate);
         setTxt('srvNetRxTotal', d.net_rx_total);
         setTxt('srvNetTxTotal', d.net_tx_total);
+
+        if (d.db_uptime !== undefined) {
+            setTxt('srvDbUptime', d.db_uptime);
+            setTxt('srvDbBytesRx', d.db_bytes_rx_fmt);
+            setTxt('srvDbBytesTx', d.db_bytes_tx_fmt);
+            setTxt('srvDbDataFmt', d.db_data_fmt);
+            setTxt('srvDbIndexFmt', d.db_index_fmt);
+            setTxt('srvDbFreeFmt', d.db_free_fmt);
+            const dbIndexBar = document.getElementById('srvDbIndexBar');
+            if (dbIndexBar) dbIndexBar.style.width = d.db_index_pct + '%';
+
+            setTxt('srvDbHitRate', d.db_inno_hit_rate + '% Hit');
+            setTxt('srvDbPoolUsed', d.db_inno_pool_used);
+            setTxt('srvDbPoolTotal', d.db_inno_pool_total);
+            setTxt('srvDbPoolPct', String(d.db_inno_pool_pct).replace('.', ',') + '%');
+            const dbPoolBar = document.getElementById('srvDbPoolBar');
+            if (dbPoolBar) dbPoolBar.style.width = d.db_inno_pool_pct + '%';
+
+            setTxt('srvDbQpsLive', d.db_qps_live);
+            setTxt('srvDbQpsAvg', d.db_qps_avg);
+            setTxt('srvDbQuestions', d.db_questions_fmt);
+            setTxt('srvDbRwRatio', d.db_read_pct + '% / ' + d.db_write_pct + '%');
+            setTxt('srvDbSlow', d.db_slow_queries);
+            const dbReadBar = document.getElementById('srvDbReadBar');
+            if (dbReadBar) dbReadBar.style.width = String(d.db_read_pct).replace(',', '.') + '%';
+
+            setTxt('srvDbConnPctLabel', 'Peak: ' + String(d.db_peak_conn_pct).replace('.', ',') + '%');
+            setTxt('srvDbThreadsConn', d.db_threads_conn);
+            setTxt('srvDbThreadsRun', d.db_threads_run);
+            setTxt('srvDbMaxUsedConn', d.db_max_used_conn);
+            setTxt('srvDbAbortedConn', d.db_aborted_conn);
+            const dbPeakBar = document.getElementById('srvDbPeakConnBar');
+            if (dbPeakBar) dbPeakBar.style.width = d.db_peak_conn_pct + '%';
+        }
     } catch {
         // Ignorieren bei kurzem Verbindungsabbruch
     }
