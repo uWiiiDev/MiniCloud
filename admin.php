@@ -1666,6 +1666,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableTranslator  = isset($_POST['enable_translator']) && $_POST['enable_translator'] === '1' ? '1' : '0';
         $enableBundesliga  = isset($_POST['enable_bundesliga']) && $_POST['enable_bundesliga'] === '1' ? '1' : '0';
         $enableTvRadio     = isset($_POST['enable_tv_radio']) && $_POST['enable_tv_radio'] === '1' ? '1' : '0';
+        $enableRadio       = isset($_POST['enable_radio']) && $_POST['enable_radio'] === '1' ? '1' : '0';
+        $enableNews        = isset($_POST['enable_news']) && $_POST['enable_news'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
         $libreUrl          = '';
@@ -1731,6 +1733,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_translator', $enableTranslator);
         saveAppSetting($pdo, 'enable_bundesliga', $enableBundesliga);
         saveAppSetting($pdo, 'enable_tv_radio', $enableTvRadio);
+        saveAppSetting($pdo, 'enable_radio', $enableRadio);
+        saveAppSetting($pdo, 'enable_news', $enableNews);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
         saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
@@ -4240,7 +4244,7 @@ foreach ($modList as $mItem) {
                     </div>
                 </div>
 
-                <!-- Modul 27d: TV-Programm & Live-Webradio -->
+                <!-- Modul 27d: Fernsehprogramm -->
                 <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
                     <label class="flex items-start gap-3 cursor-pointer">
                         <input
@@ -4252,19 +4256,77 @@ foreach ($modList as $mItem) {
                         >
                         <div>
                             <p class="text-sm font-bold text-slate-900 dark:text-white">
-                                📺📻 TV-Programm &amp; Live-Webradio (<code class="text-xs font-mono">tv_radio.php</code>)
+                                📺 Fernsehprogramm &amp; Live-EPG (<code class="text-xs font-mono">tv_radio.php</code>)
                             </p>
                             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Aktuelles Fernsehprogramm (Jetzt, 20:15 Uhr, 22:00 Uhr, Spielfilme) mit Mediathek-Livestreams, Lieblingssendern &amp; Kalender-Erinnerung sowie Live-Webradio-Player mit ICY-Titelanzeige und Sendersuche.
+                                Aktuelles Fernsehprogramm (Jetzt, 20:15 Uhr, 22:00 Uhr, Spielfilme) mit Folgesendung, Mediathek-Livestreams, Lieblingssendern &amp; Kalender-Erinnerung.
                             </p>
                         </div>
                     </label>
                     <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
                         <a href="tv_radio.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                            📺 TV &amp; Webradio öffnen &rarr;
+                            📺 Fernsehprogramm öffnen &rarr;
                         </a>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_tv_radio'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                             <?= ($currentSettings['enable_tv_radio'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27e: Live-Webradio -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_radio"
+                            value="1"
+                            <?= ($currentSettings['enable_radio'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📻 Live-Webradio &amp; Sendersuche (<code class="text-xs font-mono">radio.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Internetradio-Player mit Live-ICY-Titelanzeige, 22 deutschen Top-Sendern, eigenen Favoriten, Sleep-Timer &amp; weltweiter Sendersuche (&gt; 30.000 Sender).
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="radio.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            📻 Live-Webradio öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_radio'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_radio'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27f: Welt-Nachrichten & News-Ticker -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_news"
+                            value="1"
+                            <?= ($currentSettings['enable_news'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                📰 Welt-Nachrichten &amp; News-Ticker (<code class="text-xs font-mono">news.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Aktuelle Schlagzeilen aus Deutschland, NRW und aller Welt (Tagesschau, ZDF, Spiegel, WDR, BBC, NYT, Heise) mit 1-Klick-Übersetzung, KI-Kurzfassung, Merkliste &amp; Vorlese-Funktion.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="news.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            📰 Nachrichten öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_news'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_news'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
                         </span>
                     </div>
                 </div>

@@ -776,10 +776,36 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             data-nav-item="tv_radio"
                             style="display:none;"
                             class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="TV-Programm &amp; Live-Webradio"
+                            title="Fernsehprogramm &amp; Live-EPG"
                         >
                             <span>📺</span>
-                            <span class="hidden md:inline">TV &amp; Radio</span>
+                            <span class="hidden md:inline">TV-Programm</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_radio'] ?? '1') === '1'): ?>
+                        <a
+                            href="radio.php"
+                            data-nav-item="radio"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Live-Webradio &amp; Weltweite Sendersuche"
+                        >
+                            <span>📻</span>
+                            <span class="hidden md:inline">Webradio</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_news'] ?? '1') === '1'): ?>
+                        <a
+                            href="news.php"
+                            data-nav-item="news"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Welt-Nachrichten &amp; News-Ticker"
+                        >
+                            <span>📰</span>
+                            <span class="hidden md:inline">Nachrichten</span>
                         </a>
                     <?php endif; ?>
 
@@ -1085,7 +1111,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'polls', 'menti', 'forms', 'budget', 'split', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'assistant', 'passwords', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
+                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'polls', 'menti', 'forms', 'budget', 'split', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'news', 'assistant', 'passwords', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
 
                     function getPinnedNav() {
                         try {

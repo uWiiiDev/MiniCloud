@@ -702,6 +702,8 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_translator'             => '1',
         'enable_bundesliga'             => '1',
         'enable_tv_radio'               => '1',
+        'enable_radio'                  => '1',
+        'enable_news'                   => '1',
         'translator_deepl_api_key'      => '',
         'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
@@ -3219,10 +3221,24 @@ function getModuleStatsCatalog(): array
         ],
         'tv_radio' => [
             'icon'        => '📺',
-            'label'       => 'TV-Programm & Live-Webradio',
+            'label'       => 'Fernsehprogramm & Live-EPG',
             'url'         => 'tv_radio.php',
             'setting_key' => 'enable_tv_radio',
             'color'       => 'bg-rose-600',
+        ],
+        'radio' => [
+            'icon'        => '📻',
+            'label'       => 'Live-Webradio & Sendersuche',
+            'url'         => 'radio.php',
+            'setting_key' => 'enable_radio',
+            'color'       => 'bg-indigo-600',
+        ],
+        'news' => [
+            'icon'        => '📰',
+            'label'       => 'Welt-Nachrichten & News-Ticker',
+            'url'         => 'news.php',
+            'setting_key' => 'enable_news',
+            'color'       => 'bg-sky-600',
         ],
         'webdav' => [
             'icon'        => '📡',
@@ -3243,7 +3259,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing'], true)) {
         return null;
     }
 
@@ -3279,6 +3295,8 @@ function detectCurrentModuleKeyForStats(): ?string
         'split.php'        => 'split',
         'bundesliga.php'   => 'bundesliga',
         'tv_radio.php'     => 'tv_radio',
+        'radio.php'        => 'radio',
+        'news.php'         => 'news',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
