@@ -701,6 +701,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_cinema'                 => '1',
         'enable_translator'             => '1',
         'enable_bundesliga'             => '1',
+        'enable_tv_radio'               => '1',
         'translator_deepl_api_key'      => '',
         'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
@@ -3216,6 +3217,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_bundesliga',
             'color'       => 'bg-green-600',
         ],
+        'tv_radio' => [
+            'icon'        => '📺',
+            'label'       => 'TV-Programm & Live-Webradio',
+            'url'         => 'tv_radio.php',
+            'setting_key' => 'enable_tv_radio',
+            'color'       => 'bg-rose-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3235,7 +3243,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search'], true)) {
         return null;
     }
 
@@ -3270,6 +3278,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'translate.php'    => 'translator',
         'split.php'        => 'split',
         'bundesliga.php'   => 'bundesliga',
+        'tv_radio.php'     => 'tv_radio',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };

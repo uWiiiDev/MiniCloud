@@ -371,6 +371,18 @@ $allModules = [
         'badge'    => '',
         'badgeCls' => '',
     ],
+    [
+        'key'      => 'tv_radio',
+        'enabled'  => ($appSettings['enable_tv_radio'] ?? '1') === '1',
+        'title'    => 'TV-Programm & Webradio',
+        'shortSub' => 'Jetzt im TV, 20:15 Uhr & Live-Radio',
+        'icon'     => '📺',
+        'url'      => 'tv_radio.php',
+        'category' => 'media',
+        'desc'     => 'Aktuelles Fernsehprogramm (Jetzt, 20:15 Uhr, 22:00 Uhr, Spielfilme inkl. Live-Streams & Kalender-Merker) sowie weltweites Live-Webradio mit Song-Anzeige.',
+        'badge'    => '',
+        'badgeCls' => '',
+    ],
 
     // --- 5. KI, Schutz & Freizeit ---
     [
