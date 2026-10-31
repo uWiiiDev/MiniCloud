@@ -935,6 +935,439 @@ $footerMobileClass = !empty($hideFooterOnMobile) ? 'hidden lg:block' : '';
 </script>
 
 <?php
+$footerFolderPaths = [];
+if (isLoggedIn() && function_exists('getMergedFoldersList')) {
+    try {
+        $footerDb = isset($pdo) && $pdo instanceof PDO ? $pdo : getDB();
+        $footerUid = (int)currentUserId();
+        if ($footerUid > 0) {
+            foreach (getMergedFoldersList($footerDb, $footerUid, null) as $ffRow) {
+                $ffp = trim((string)($ffRow['folder_path'] ?? ''));
+                if ($ffp !== '') {
+                    $footerFolderPaths[] = $ffp;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // Ignorieren falls DB nicht bereit
+    }
+}
+?>
+<script>
+// 3. Aufklappbarer Ordnerbaum (Collapsible Folder Tree) für alle Zielordner-Auswahlmenüs & Eingabefelder
+(function () {
+    const defaultFolderPaths = <?= json_encode(array_values(array_unique($footerFolderPaths)), JSON_UNESCAPED_UNICODE) ?>;
+
+    const buildHierarchy = (paths) => {
+        const root = { children: new Map() };
+        (paths || []).forEach((raw) => {
+            const clean = String(raw || '').trim().replace(/^\/+|\/+$/g, '');
+            if (!clean) return;
+            const parts = clean.split('/').filter(Boolean);
+            let curr = root;
+            let acc = '';
+            parts.forEach((part) => {
+                acc = acc ? (acc + '/' + part) : part;
+                if (!curr.children.has(part)) {
+                    curr.children.set(part, { name: part, path: acc, children: new Map() });
+                }
+                curr = curr.children.get(part);
+            });
+        });
+        return root;
+    };
+
+    let activePopoverCleanup = null;
+
+    const openFloatingFolderTreePopover = ({ anchorEl, folderPaths, getCurrentValue, onSelectValue, rootLabel }) => {
+        if (activePopoverCleanup) {
+            activePopoverCleanup();
+            activePopoverCleanup = null;
+        }
+
+        const expandedSet = new Set();
+        // Aktuell ausgewählten Pfad (falls in Unterordner) automatisch bis zum Elternordner aufklappen
+        const initVal = String(getCurrentValue() || '').trim();
+        if (initVal.includes('/')) {
+            const parts = initVal.split('/').filter(Boolean);
+            let acc = '';
+            for (let i = 0; i < parts.length - 1; i++) {
+                acc = acc ? (acc + '/' + parts[i]) : parts[i];
+                expandedSet.add(acc);
+            }
+        }
+
+        const treeRoot = buildHierarchy(folderPaths);
+
+        const popover = document.createElement('div');
+        popover.className = 'fixed z-[9999] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-2.5 flex flex-col gap-2 text-xs select-none';
+        popover.style.minWidth = '260px';
+        popover.style.maxWidth = '92vw';
+
+        // Kopfzeile mit Schnellsuche & Alle auf-/zuklappen
+        const topBar = document.createElement('div');
+        topBar.className = 'flex items-center gap-1.5';
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'relative flex-1';
+        const searchIcon = document.createElement('span');
+        searchIcon.className = 'absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 pointer-events-none';
+        searchIcon.textContent = '🔍';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'search';
+        searchInput.autocomplete = 'off';
+        searchInput.placeholder = 'Ordner im Baum suchen…';
+        searchInput.className = 'w-full pl-7 pr-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500';
+        searchWrap.appendChild(searchIcon);
+        searchWrap.appendChild(searchInput);
+        topBar.appendChild(searchWrap);
+
+        const collectExpandable = (m, out = []) => {
+            m.forEach((n) => {
+                if (n.children.size > 0) {
+                    out.push(n.path);
+                    collectExpandable(n.children, out);
+                }
+            });
+            return out;
+        };
+        const allExpandable = collectExpandable(treeRoot.children);
+
+        const toggleAllBtn = document.createElement('button');
+        toggleAllBtn.type = 'button';
+        toggleAllBtn.className = `px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[11px] font-semibold text-slate-600 dark:text-slate-300 shrink-0 cursor-pointer ${allExpandable.length === 0 ? 'hidden' : ''}`;
+        const updateToggleBtnLabel = () => {
+            const allOpen = allExpandable.length > 0 && allExpandable.every((k) => expandedSet.has(k));
+            toggleAllBtn.textContent = allOpen ? 'Zuklappen' : 'Aufklappen';
+        };
+        updateToggleBtnLabel();
+
+        toggleAllBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const allOpen = allExpandable.length > 0 && allExpandable.every((k) => expandedSet.has(k));
+            if (allOpen) {
+                expandedSet.clear();
+            } else {
+                allExpandable.forEach((k) => expandedSet.add(k));
+            }
+            updateToggleBtnLabel();
+            renderTree();
+        });
+        topBar.appendChild(toggleAllBtn);
+        popover.appendChild(topBar);
+
+        const viewport = document.createElement('div');
+        viewport.className = 'max-h-60 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-1.5 space-y-0.5';
+        popover.appendChild(viewport);
+
+        const closePopover = () => {
+            if (popover.parentNode) {
+                popover.parentNode.removeChild(popover);
+            }
+            document.removeEventListener('mousedown', onDocMouseDown, true);
+            window.removeEventListener('resize', positionPopover);
+            window.removeEventListener('scroll', positionPopover, true);
+            activePopoverCleanup = null;
+        };
+
+        const onDocMouseDown = (ev) => {
+            if (!popover.contains(ev.target) && !anchorEl.contains(ev.target)) {
+                closePopover();
+            }
+        };
+
+        const positionPopover = () => {
+            const rect = anchorEl.getBoundingClientRect();
+            const width = Math.max(rect.width, 280);
+            popover.style.width = `${Math.min(width, window.innerWidth - 16)}px`;
+            let left = rect.left;
+            if (left + width > window.innerWidth - 8) {
+                left = Math.max(8, window.innerWidth - width - 8);
+            }
+            popover.style.left = `${left}px`;
+
+            const popHeight = popover.offsetHeight || 280;
+            const spaceBelow = window.innerHeight - rect.bottom - 10;
+            if (spaceBelow < popHeight && rect.top > spaceBelow) {
+                popover.style.top = `${Math.max(8, rect.top - popHeight - 6)}px`;
+            } else {
+                popover.style.top = `${rect.bottom + 6}px`;
+            }
+        };
+
+        const renderTree = () => {
+            viewport.innerHTML = '';
+            const q = (searchInput.value || '').trim().toLowerCase();
+            const curVal = String(getCurrentValue() || '').trim();
+
+            const makeRow = ({ pathVal, label, icon, depth, hasChildren, isExpanded, subCount, onToggle }) => {
+                const isSelected = curVal === pathVal;
+                const row = document.createElement('div');
+                row.className = `flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs transition-colors cursor-pointer ${
+                    isSelected
+                        ? 'bg-brand-600 text-white font-bold shadow-2xs'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700/60'
+                }`;
+                row.style.paddingLeft = `${Math.max(4, depth * 15 + 4)}px`;
+
+                if (hasChildren) {
+                    const expBtn = document.createElement('button');
+                    expBtn.type = 'button';
+                    expBtn.title = isExpanded ? 'Unterordner zuklappen' : 'Unterordner öffnen';
+                    expBtn.className = `w-5 h-5 rounded flex items-center justify-center shrink-0 cursor-pointer ${
+                        isSelected
+                            ? 'text-white hover:bg-white/20'
+                            : 'text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-300/60 dark:hover:bg-slate-600/60'
+                    }`;
+                    expBtn.innerHTML = `<svg class="w-3.5 h-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`;
+                    expBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        onToggle();
+                    });
+                    row.appendChild(expBtn);
+                } else {
+                    const sp = document.createElement('span');
+                    sp.className = 'w-5 h-5 shrink-0 inline-block';
+                    row.appendChild(sp);
+                }
+
+                const content = document.createElement('div');
+                content.className = 'flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-1';
+
+                const left = document.createElement('div');
+                left.className = 'flex items-center gap-1.5 min-w-0';
+                const ic = document.createElement('span');
+                ic.className = 'shrink-0 text-sm leading-none';
+                ic.textContent = icon;
+                const tx = document.createElement('span');
+                tx.className = 'truncate';
+                tx.textContent = label;
+                left.appendChild(ic);
+                left.appendChild(tx);
+                content.appendChild(left);
+
+                const right = document.createElement('div');
+                right.className = 'flex items-center gap-1 shrink-0';
+                if (hasChildren) {
+                    const b = document.createElement('span');
+                    b.className = `text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300'
+                    }`;
+                    b.textContent = String(subCount);
+                    right.appendChild(b);
+                }
+                if (isSelected) {
+                    const chk = document.createElement('span');
+                    chk.className = 'text-xs font-bold pl-0.5';
+                    chk.textContent = '✓';
+                    right.appendChild(chk);
+                }
+                content.appendChild(right);
+                row.appendChild(content);
+
+                row.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    onSelectValue(pathVal);
+                    if (hasChildren && !expandedSet.has(pathVal)) {
+                        expandedSet.add(pathVal);
+                        updateToggleBtnLabel();
+                        renderTree();
+                    } else {
+                        closePopover();
+                    }
+                });
+
+                return row;
+            };
+
+            // Hauptverzeichnis (Root)
+            viewport.appendChild(makeRow({
+                pathVal: '',
+                label: rootLabel || 'Hauptverzeichnis',
+                icon: '🏠',
+                depth: 0,
+                hasChildren: false,
+                isExpanded: false,
+                subCount: 0,
+                onToggle: () => {}
+            }));
+
+            const matchesQuery = (n) => {
+                if (!q) return true;
+                if (n.name.toLowerCase().includes(q) || n.path.toLowerCase().includes(q)) return true;
+                for (const c of n.children.values()) {
+                    if (matchesQuery(c)) return true;
+                }
+                return false;
+            };
+
+            const walkNodes = (map, depth) => {
+                map.forEach((n) => {
+                    if (!matchesQuery(n)) return;
+                    const hasC = n.children.size > 0;
+                    const isExp = q !== '' ? true : expandedSet.has(n.path);
+                    viewport.appendChild(makeRow({
+                        pathVal: n.path,
+                        label: n.name,
+                        icon: isExp && hasC ? '📂' : '📁',
+                        depth,
+                        hasChildren: hasC,
+                        isExpanded: isExp,
+                        subCount: n.children.size,
+                        onToggle: () => {
+                            if (expandedSet.has(n.path)) {
+                                expandedSet.delete(n.path);
+                            } else {
+                                expandedSet.add(n.path);
+                            }
+                            updateToggleBtnLabel();
+                            renderTree();
+                        }
+                    }));
+                    if (hasC && isExp) {
+                        walkNodes(n.children, depth + 1);
+                    }
+                });
+            };
+
+            walkNodes(treeRoot.children, 0);
+        };
+
+        searchInput.addEventListener('input', renderTree);
+        searchInput.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape') {
+                closePopover();
+            }
+        });
+
+        document.body.appendChild(popover);
+        renderTree();
+        positionPopover();
+        setTimeout(() => searchInput.focus(), 20);
+
+        document.addEventListener('mousedown', onDocMouseDown, true);
+        window.addEventListener('resize', positionPopover);
+        window.addEventListener('scroll', positionPopover, true);
+        activePopoverCleanup = closePopover;
+    };
+
+    // A) Ordner-<select>-Menüs (z. B. in split.php, translate.php) mit aufklappbarem Ordnerbaum ausstatten
+    const folderSelectSelector = 'select[name="target_folder"]:not(#transferTargetSelect), #saveTransFolder, select[data-folder-tree="1"]';
+    document.querySelectorAll(folderSelectSelector).forEach((selectEl) => {
+        if (selectEl.dataset.mcFolderTreeEnhanced === '1') return;
+        selectEl.dataset.mcFolderTreeEnhanced = '1';
+
+        const pathsSet = new Set(defaultFolderPaths);
+        let rootLabel = 'Hauptverzeichnis';
+        Array.from(selectEl.options).forEach((opt) => {
+            const v = String(opt.value || '').trim();
+            if (v === '') {
+                const rawLbl = (opt.textContent || '').replace(/^[📁🏠\s]+/u, '').trim();
+                if (rawLbl) rootLabel = rawLbl;
+            } else {
+                pathsSet.add(v);
+            }
+        });
+
+        const triggerBtn = document.createElement('button');
+        triggerBtn.type = 'button';
+        triggerBtn.className = (selectEl.className || 'w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm')
+            + ' flex items-center justify-between gap-2 text-left cursor-pointer';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'truncate flex items-center gap-1.5';
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'text-slate-400 text-xs shrink-0';
+        arrowSpan.textContent = '▾';
+        triggerBtn.appendChild(labelSpan);
+        triggerBtn.appendChild(arrowSpan);
+
+        const updateTriggerText = () => {
+            const val = String(selectEl.value || '').trim();
+            labelSpan.textContent = val === '' ? `🏠 ${rootLabel}` : `📁 ${val}`;
+        };
+        updateTriggerText();
+
+        selectEl.classList.add('hidden');
+        selectEl.parentNode.insertBefore(triggerBtn, selectEl);
+
+        triggerBtn.addEventListener('click', () => {
+            openFloatingFolderTreePopover({
+                anchorEl: triggerBtn,
+                folderPaths: Array.from(pathsSet),
+                getCurrentValue: () => selectEl.value,
+                onSelectValue: (newVal) => {
+                    // Falls Option noch nicht im Select existiert, ergänzen
+                    if (!Array.from(selectEl.options).some((o) => o.value === newVal)) {
+                        const o = document.createElement('option');
+                        o.value = newVal;
+                        o.textContent = newVal;
+                        selectEl.appendChild(o);
+                    }
+                    selectEl.value = newVal;
+                    updateTriggerText();
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                },
+                rootLabel
+            });
+        });
+    });
+
+    // B) Ordner-Texteingabefelder (z. B. in office.php, video_studio.php, pdf_tools.php) mit Ordnerbaum-Button ausstatten
+    const folderInputSelector = 'input[name="folder_path"][list], #vsExportFolder, input[name="target_folder"][type="text"], input[data-folder-tree="1"]';
+    document.querySelectorAll(folderInputSelector).forEach((inputEl) => {
+        if (inputEl.dataset.mcFolderTreeEnhanced === '1') return;
+        inputEl.dataset.mcFolderTreeEnhanced = '1';
+
+        const pathsSet = new Set(defaultFolderPaths);
+        const listId = inputEl.getAttribute('list');
+        if (listId) {
+            const dl = document.getElementById(listId);
+            if (dl) {
+                Array.from(dl.querySelectorAll('option')).forEach((opt) => {
+                    const v = String(opt.value || '').trim();
+                    if (v) pathsSet.add(v);
+                });
+            }
+            inputEl.removeAttribute('list');
+        }
+
+        const wrap = document.createElement('div');
+        wrap.className = 'relative flex items-center w-full';
+        inputEl.parentNode.insertBefore(wrap, inputEl);
+        wrap.appendChild(inputEl);
+        inputEl.classList.add('pr-9');
+
+        const treeBtn = document.createElement('button');
+        treeBtn.type = 'button';
+        treeBtn.title = 'Zielordner im aufklappbaren Ordnerbaum wählen';
+        treeBtn.className = 'absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-1 rounded-lg text-xs text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer';
+        treeBtn.textContent = '📁▾';
+        wrap.appendChild(treeBtn);
+
+        const openForInput = () => {
+            openFloatingFolderTreePopover({
+                anchorEl: wrap,
+                folderPaths: Array.from(pathsSet),
+                getCurrentValue: () => inputEl.value,
+                onSelectValue: (newVal) => {
+                    inputEl.value = newVal;
+                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+                },
+                rootLabel: 'Hauptverzeichnis'
+            });
+        };
+
+        treeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openForInput();
+        });
+    });
+})();
+</script>
+
+<?php
 $currentScriptForAssistant = strtolower(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
 $activeAssistantFileId = 0;
 if (in_array($currentScriptForAssistant, ['office.php', 'ebooks.php', 'pdf_tools.php'], true)) {

@@ -3067,15 +3067,86 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
             <?php endif; ?>
 
-            <div>
-                <label for="transferTargetSelect" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Aktion &amp; Zielordner auswählen
-                </label>
+            <div class="space-y-3">
+                <!-- 1. Aktion wählen (Verschieben vs. Kopieren) -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                        1. Gewünschte Aktion
+                    </label>
+                    <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+                        <button
+                            type="button"
+                            id="btnTransferModeMove"
+                            onclick="setTransferTreeMode('move')"
+                            class="px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-2xs"
+                        >
+                            <span>⇄</span>
+                            <span>Verschieben</span>
+                        </button>
+                        <button
+                            type="button"
+                            id="btnTransferModeCopy"
+                            onclick="setTransferTreeMode('copy')"
+                            class="px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                        >
+                            <span>📋</span>
+                            <span>Kopieren</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Aufklappbarer Zielordner-Baum -->
+                <div>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <label for="transferTreeSearchInput" class="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                            2. Zielordner wählen <span class="font-normal text-slate-400 dark:text-slate-500">(▶ öffnet Unterordner)</span>
+                        </label>
+                        <button
+                            type="button"
+                            id="transferTreeToggleAllBtn"
+                            onclick="toggleAllTransferTreeNodes()"
+                            class="text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                        >
+                            Alle aufklappen
+                        </button>
+                    </div>
+
+                    <!-- Schnellfilter für den Ordnerbaum -->
+                    <div class="relative mb-2">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">🔍</span>
+                        <input
+                            type="search"
+                            id="transferTreeSearchInput"
+                            autocomplete="off"
+                            placeholder="Zielordner schnell filtern…"
+                            oninput="renderTransferFolderTree()"
+                            class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+
+                    <!-- Scrollbarer Ordnerbaum -->
+                    <div
+                        id="transferTreeViewport"
+                        class="max-h-64 sm:max-h-72 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-2 space-y-1 select-none"
+                    ></div>
+
+                    <!-- Statusanzeige des gewählten Zielordners -->
+                    <div
+                        id="transferSelectedSummary"
+                        class="mt-2 px-3 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/70 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2"
+                    >
+                        <span class="truncate">Bitte oben einen Zielordner anklicken…</span>
+                    </div>
+                </div>
+
+                <!-- Verstecktes Original-Select für 100 % Formular-Kompatibilität -->
                 <select
                     id="transferTargetSelect"
                     name="target_folder"
                     required
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                    class="hidden"
+                    tabindex="-1"
+                    aria-hidden="true"
                 >
                     <option value="">⇄ Verschieben / 📋 Kopieren...</option>
                     <optgroup id="optGroupMovePersonal" label="⇄ Verschieben – Meine Dateien">
@@ -3138,7 +3209,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 </button>
                 <button
                     type="submit"
-                    class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                    id="transferSubmitBtn"
+                    disabled
+                    class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-45 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
                 >
                     Ausführen
                 </button>
@@ -4261,9 +4334,9 @@ function openBatchTransferModal() {
         optGroupMoveGroup.hidden = !allCanManage;
     }
 
+    initTransferTreeModal('batch', '', allCanManage);
     transferModal.classList.remove('hidden');
     transferModal.classList.add('flex');
-    setTimeout(() => transferTargetSelect.focus(), 50);
 }
 
 function deleteBatchFiles() {
@@ -4298,7 +4371,7 @@ function deleteBatchFiles() {
     }
 }
 
-// --- VERSCHIEBEN / KOPIEREN MODAL LOGIK ---
+// --- VERSCHIEBEN / KOPIEREN MODAL LOGIK (INKL. AUFKLAPPBAREM ORDNERBAUM) ---
 const transferModal = document.getElementById('transferModal');
 const transferModalTitle = document.getElementById('transferModalTitle');
 const transferModalItemName = document.getElementById('transferModalItemName');
@@ -4308,6 +4381,411 @@ const transferModalSourceFolder = document.getElementById('transferModalSourceFo
 const transferTargetSelect = document.getElementById('transferTargetSelect');
 const optGroupMovePersonal = document.getElementById('optGroupMovePersonal');
 const optGroupMoveGroup = document.getElementById('optGroupMoveGroup');
+
+const TRANSFER_TREE_DATA = {
+    activeGfId: <?= $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : 'null' ?>,
+    personalFolders: <?= json_encode(array_values(array_map(static fn(array $r): string => (string)$r['folder_path'], $personalFoldersList)), JSON_UNESCAPED_UNICODE) ?>,
+    groupFolders: <?= json_encode(array_values(array_map(static function (array $wgf) use ($groupFoldersSubfoldersMap): array {
+        $gid = (int)$wgf['id'];
+        $subs = $groupFoldersSubfoldersMap[$gid] ?? [];
+        return [
+            'id' => $gid,
+            'name' => (string)$wgf['name'],
+            'folders' => array_values(array_map(static fn(array $r): string => (string)$r['folder_path'], $subs)),
+        ];
+    }, $writableGroupFolders)), JSON_UNESCAPED_UNICODE) ?>
+};
+
+const transferTreeState = {
+    mode: 'move',
+    canMove: true,
+    type: 'file',
+    sourceFolder: '',
+    selectedKey: '',
+    selectedLabel: '',
+    expandedKeys: new Set()
+};
+
+function buildFolderHierarchyTree(paths) {
+    const root = { children: new Map() };
+    (paths || []).forEach((rawPath) => {
+        const clean = String(rawPath || '').trim().replace(/^\/+|\/+$/g, '');
+        if (!clean) return;
+        const parts = clean.split('/').filter(Boolean);
+        let curr = root;
+        let acc = '';
+        parts.forEach((part) => {
+            acc = acc ? (acc + '/' + part) : part;
+            if (!curr.children.has(part)) {
+                curr.children.set(part, {
+                    name: part,
+                    path: acc,
+                    children: new Map()
+                });
+            }
+            curr = curr.children.get(part);
+        });
+    });
+    return root;
+}
+
+function collectAllExpandableKeys() {
+    const keys = [];
+    const walk = (nodeMap, prefix) => {
+        nodeMap.forEach((node) => {
+            const k = `${prefix}:${node.path}`;
+            if (node.children.size > 0) {
+                keys.push(k);
+                walk(node.children, prefix);
+            }
+        });
+    };
+    const pTree = buildFolderHierarchyTree(TRANSFER_TREE_DATA.personalFolders);
+    walk(pTree.children, 'personal');
+
+    (TRANSFER_TREE_DATA.groupFolders || []).forEach((gf) => {
+        const gfPrefix = `gf:${gf.id}`;
+        const gTree = buildFolderHierarchyTree(gf.folders);
+        if (gTree.children.size > 0) {
+            keys.push(`${gfPrefix}:__root__`);
+            walk(gTree.children, gfPrefix);
+        }
+    });
+    return keys;
+}
+
+function syncTransferSelectAndSummary() {
+    const summaryEl = document.getElementById('transferSelectedSummary');
+    const submitBtn = document.getElementById('transferSubmitBtn');
+    const toggleAllBtn = document.getElementById('transferTreeToggleAllBtn');
+
+    if (toggleAllBtn) {
+        const allKeys = collectAllExpandableKeys();
+        const allOpen = allKeys.length > 0 && allKeys.every((k) => transferTreeState.expandedKeys.has(k));
+        toggleAllBtn.textContent = allOpen ? 'Alle zuklappen' : 'Alle aufklappen';
+        toggleAllBtn.classList.toggle('hidden', allKeys.length === 0);
+    }
+
+    if (!transferTreeState.selectedKey) {
+        transferTargetSelect.value = '';
+        if (submitBtn) submitBtn.disabled = true;
+        if (summaryEl) {
+            summaryEl.className = 'mt-2 px-3 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/70 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2';
+            summaryEl.innerHTML = '<span class="truncate">Bitte oben einen Zielordner im Baum anklicken…</span>';
+        }
+        return;
+    }
+
+    const combinedVal = `${transferTreeState.mode}|${transferTreeState.selectedKey}`;
+    transferTargetSelect.value = combinedVal;
+    if (submitBtn) submitBtn.disabled = false;
+
+    const modeBadge = transferTreeState.mode === 'move'
+        ? '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold">⇄ Verschieben nach</span>'
+        : '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 font-bold">📋 Kopieren nach</span>';
+
+    if (summaryEl) {
+        summaryEl.className = 'mt-2 px-3 py-2 rounded-xl bg-brand-50/80 dark:bg-brand-950/40 border border-brand-300 dark:border-brand-700/80 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2';
+        summaryEl.innerHTML = `<div class="flex items-center gap-1.5 min-w-0 flex-wrap">${modeBadge} <span class="font-bold truncate"></span></div><span class="text-brand-600 dark:text-brand-400 font-bold shrink-0">✓</span>`;
+        const labelSpan = summaryEl.querySelector('span.font-bold.truncate');
+        if (labelSpan) labelSpan.textContent = transferTreeState.selectedLabel;
+    }
+}
+
+function setTransferTreeMode(mode) {
+    if (mode === 'move' && !transferTreeState.canMove) return;
+    transferTreeState.mode = mode;
+
+    const btnMove = document.getElementById('btnTransferModeMove');
+    const btnCopy = document.getElementById('btnTransferModeCopy');
+    const activeCls = ['bg-white', 'dark:bg-slate-900', 'text-brand-600', 'dark:text-brand-400', 'shadow-2xs'];
+    const inactiveCls = ['text-slate-600', 'dark:text-slate-300', 'hover:text-slate-900', 'dark:hover:text-white'];
+
+    if (btnMove && btnCopy) {
+        if (mode === 'move') {
+            btnMove.classList.add(...activeCls);
+            btnMove.classList.remove(...inactiveCls);
+            btnCopy.classList.remove(...activeCls);
+            btnCopy.classList.add(...inactiveCls);
+        } else {
+            btnCopy.classList.add(...activeCls);
+            btnCopy.classList.remove(...inactiveCls);
+            btnMove.classList.remove(...activeCls);
+            btnMove.classList.add(...inactiveCls);
+        }
+    }
+    syncTransferSelectAndSummary();
+    renderTransferFolderTree();
+}
+
+function toggleAllTransferTreeNodes() {
+    const allKeys = collectAllExpandableKeys();
+    const allOpen = allKeys.length > 0 && allKeys.every((k) => transferTreeState.expandedKeys.has(k));
+    if (allOpen) {
+        transferTreeState.expandedKeys.clear();
+    } else {
+        allKeys.forEach((k) => transferTreeState.expandedKeys.add(k));
+    }
+    renderTransferFolderTree();
+    syncTransferSelectAndSummary();
+}
+
+function isInvalidFolderTransferTarget(scopeGfId, targetFolderPath) {
+    if (transferTreeState.type !== 'folder' || !transferTreeState.sourceFolder) return false;
+    const srcGfId = TRANSFER_TREE_DATA.activeGfId;
+    if (scopeGfId !== srcGfId) return false;
+    const src = transferTreeState.sourceFolder;
+    if (targetFolderPath === src || targetFolderPath.startsWith(src + '/')) {
+        return true;
+    }
+    return false;
+}
+
+function renderTransferFolderTree() {
+    const viewport = document.getElementById('transferTreeViewport');
+    if (!viewport) return;
+
+    const searchInput = document.getElementById('transferTreeSearchInput');
+    const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    viewport.innerHTML = '';
+
+    const createTreeRow = ({ targetKey, displayLabel, fullLabel, icon, depth, hasChildren, isExpanded, isDisabled, subCount, onToggleExpand }) => {
+        const isSelected = transferTreeState.selectedKey === targetKey && !isDisabled;
+        const row = document.createElement('div');
+        row.className = `flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs transition-colors ${
+            isDisabled
+                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-500'
+                : isSelected
+                    ? 'bg-brand-600 text-white font-bold shadow-2xs'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700/60 cursor-pointer'
+        }`;
+        row.style.paddingLeft = `${Math.max(4, depth * 16 + 4)}px`;
+
+        // Aufklapp-Pfeil (▶ / ▼) nur wenn Unterordner existieren
+        if (hasChildren) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.title = isExpanded ? 'Unterordner zuklappen' : 'Unterordner öffnen';
+            toggleBtn.className = `w-5 h-5 rounded flex items-center justify-center shrink-0 transition-transform cursor-pointer ${
+                isSelected
+                    ? 'text-white hover:bg-white/20'
+                    : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-300/60 dark:hover:bg-slate-600/60'
+            }`;
+            toggleBtn.innerHTML = `<svg class="w-3.5 h-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`;
+            toggleBtn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                onToggleExpand();
+            });
+            row.appendChild(toggleBtn);
+        } else {
+            const spacer = document.createElement('span');
+            spacer.className = 'w-5 h-5 shrink-0 inline-block';
+            row.appendChild(spacer);
+        }
+
+        // Ordner-Icon + Name
+        const mainBtn = document.createElement('div');
+        mainBtn.className = 'flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-1';
+
+        const leftPart = document.createElement('div');
+        leftPart.className = 'flex items-center gap-1.5 min-w-0';
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'shrink-0 text-sm leading-none';
+        iconSpan.textContent = icon;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'truncate';
+        nameSpan.textContent = displayLabel;
+
+        leftPart.appendChild(iconSpan);
+        leftPart.appendChild(nameSpan);
+        mainBtn.appendChild(leftPart);
+
+        const rightPart = document.createElement('div');
+        rightPart.className = 'flex items-center gap-1 shrink-0';
+
+        if (isDisabled) {
+            const badge = document.createElement('span');
+            badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-500';
+            badge.textContent = 'Quelle';
+            rightPart.appendChild(badge);
+        } else if (hasChildren) {
+            const cntBadge = document.createElement('span');
+            cntBadge.className = `text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
+                isSelected
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300'
+            }`;
+            cntBadge.title = `${subCount} direkte(r) Unterordner – zum Öffnen anklicken`;
+            cntBadge.textContent = `${subCount}`;
+            rightPart.appendChild(cntBadge);
+        }
+
+        if (isSelected) {
+            const checkSpan = document.createElement('span');
+            checkSpan.className = 'text-xs font-bold pl-0.5';
+            checkSpan.textContent = '✓';
+            rightPart.appendChild(checkSpan);
+        }
+
+        mainBtn.appendChild(rightPart);
+        row.appendChild(mainBtn);
+
+        if (!isDisabled) {
+            row.addEventListener('click', () => {
+                transferTreeState.selectedKey = targetKey;
+                transferTreeState.selectedLabel = fullLabel;
+                // Wenn der Ordner Unterordner hat und noch zugeklappt ist, beim Anklicken direkt seine 1. Unterebene öffnen
+                if (hasChildren && !transferTreeState.expandedKeys.has(targetKey)) {
+                    transferTreeState.expandedKeys.add(targetKey);
+                }
+                syncTransferSelectAndSummary();
+                renderTransferFolderTree();
+            });
+        }
+
+        return row;
+    };
+
+    const nodeMatchesQuery = (node) => {
+        if (!query) return true;
+        if (node.name.toLowerCase().includes(query) || node.path.toLowerCase().includes(query)) return true;
+        for (const child of node.children.values()) {
+            if (nodeMatchesQuery(child)) return true;
+        }
+        return false;
+    };
+
+    const renderSubtree = (container, childrenMap, prefix, scopeGfId, scopePrefixLabel, depth) => {
+        childrenMap.forEach((node) => {
+            if (!nodeMatchesQuery(node)) return;
+
+            const targetKey = `${prefix}:${node.path}`;
+            const hasChildren = node.children.size > 0;
+            const isExpanded = query !== '' ? true : transferTreeState.expandedKeys.has(targetKey);
+            const isDisabled = isInvalidFolderTransferTarget(scopeGfId, node.path);
+            const fullLabel = scopePrefixLabel
+                ? `${scopePrefixLabel} / 📁 ${node.path}`
+                : `📁 ${node.path}`;
+
+            const rowEl = createTreeRow({
+                targetKey,
+                displayLabel: node.name,
+                fullLabel,
+                icon: isExpanded && hasChildren ? '📂' : '📁',
+                depth,
+                hasChildren,
+                isExpanded,
+                isDisabled,
+                subCount: node.children.size,
+                onToggleExpand: () => {
+                    if (transferTreeState.expandedKeys.has(targetKey)) {
+                        transferTreeState.expandedKeys.delete(targetKey);
+                    } else {
+                        transferTreeState.expandedKeys.add(targetKey);
+                    }
+                    renderTransferFolderTree();
+                    syncTransferSelectAndSummary();
+                }
+            });
+            container.appendChild(rowEl);
+
+            if (hasChildren && isExpanded) {
+                renderSubtree(container, node.children, prefix, scopeGfId, scopePrefixLabel, depth + 1);
+            }
+        });
+    };
+
+    // 1. Sektion: Meine Dateien (Persönliche Ablage)
+    const pHeader = document.createElement('div');
+    pHeader.className = 'px-2 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500';
+    pHeader.textContent = 'Meine Dateien (Persönlich)';
+    viewport.appendChild(pHeader);
+
+    const pRootRow = createTreeRow({
+        targetKey: 'personal:__root__',
+        displayLabel: 'Mein Hauptverzeichnis',
+        fullLabel: '🏠 Mein Hauptverzeichnis',
+        icon: '🏠',
+        depth: 0,
+        hasChildren: false,
+        isExpanded: false,
+        isDisabled: false,
+        subCount: 0,
+        onToggleExpand: () => {}
+    });
+    viewport.appendChild(pRootRow);
+
+    const personalTree = buildFolderHierarchyTree(TRANSFER_TREE_DATA.personalFolders);
+    renderSubtree(viewport, personalTree.children, 'personal', null, '', 0);
+
+    // 2. Sektion: Beschreibbare Gruppenordner (falls vorhanden)
+    if (Array.isArray(TRANSFER_TREE_DATA.groupFolders) && TRANSFER_TREE_DATA.groupFolders.length > 0) {
+        const gHeader = document.createElement('div');
+        gHeader.className = 'px-2 pt-3 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t border-slate-200/70 dark:border-slate-700/70 mt-2';
+        gHeader.textContent = 'Gruppenordner';
+        viewport.appendChild(gHeader);
+
+        TRANSFER_TREE_DATA.groupFolders.forEach((gf) => {
+            const gfPrefix = `gf:${gf.id}`;
+            const gfRootKey = `${gfPrefix}:__root__`;
+            const gfTree = buildFolderHierarchyTree(gf.folders || []);
+            const hasSubs = gfTree.children.size > 0;
+            const anySubMatches = !query || gf.name.toLowerCase().includes(query) || Array.from(gfTree.children.values()).some(nodeMatchesQuery);
+            if (!anySubMatches) return;
+
+            const isExpanded = query !== '' ? true : transferTreeState.expandedKeys.has(gfRootKey);
+
+            const gfRow = createTreeRow({
+                targetKey: gfRootKey,
+                displayLabel: `${gf.name} (Hauptverzeichnis)`,
+                fullLabel: `👥 ${gf.name} (Hauptverzeichnis)`,
+                icon: '👥',
+                depth: 0,
+                hasChildren: hasSubs,
+                isExpanded,
+                isDisabled: false,
+                subCount: gfTree.children.size,
+                onToggleExpand: () => {
+                    if (transferTreeState.expandedKeys.has(gfRootKey)) {
+                        transferTreeState.expandedKeys.delete(gfRootKey);
+                    } else {
+                        transferTreeState.expandedKeys.add(gfRootKey);
+                    }
+                    renderTransferFolderTree();
+                    syncTransferSelectAndSummary();
+                }
+            });
+            viewport.appendChild(gfRow);
+
+            if (hasSubs && isExpanded) {
+                renderSubtree(viewport, gfTree.children, gfPrefix, Number(gf.id), `👥 ${gf.name}`, 1);
+            }
+        });
+    }
+}
+
+function initTransferTreeModal(type, folderPath, canMove) {
+    transferTreeState.type = type;
+    transferTreeState.sourceFolder = folderPath || '';
+    transferTreeState.canMove = Boolean(canMove);
+    transferTreeState.selectedKey = '';
+    transferTreeState.selectedLabel = '';
+    transferTreeState.expandedKeys.clear();
+
+    const btnMove = document.getElementById('btnTransferModeMove');
+    if (btnMove) {
+        btnMove.disabled = !canMove;
+        btnMove.classList.toggle('opacity-40', !canMove);
+        btnMove.classList.toggle('cursor-not-allowed', !canMove);
+    }
+
+    const searchInput = document.getElementById('transferTreeSearchInput');
+    if (searchInput) searchInput.value = '';
+
+    setTransferTreeMode(canMove ? 'move' : 'copy');
+}
 
 function openTransferModal(type, fileId, displayName, folderPath = '', canMove = true) {
     const batchIdsEl = document.getElementById('transferModalBatchIds');
@@ -4340,9 +4818,9 @@ function openTransferModal(type, fileId, displayName, folderPath = '', canMove =
         optGroupMoveGroup.hidden = !canMove;
     }
 
+    initTransferTreeModal(type, folderPath, canMove);
     transferModal.classList.remove('hidden');
     transferModal.classList.add('flex');
-    setTimeout(() => transferTargetSelect.focus(), 50);
 }
 
 function closeTransferModal() {
