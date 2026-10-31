@@ -143,7 +143,7 @@ function ensureSchemaUpdated(PDO $pdo): void
     }
     $checked = true;
 
-    $targetSchemaVersion = '2026.10.30.2';
+    $targetSchemaVersion = '2026.10.31.1';
     try {
         $stmtVer = $pdo->prepare("SELECT `setting_value` FROM `settings` WHERE `setting_key` = 'schema_version' LIMIT 1");
         $stmtVer->execute();
@@ -1072,6 +1072,24 @@ function ensureSchemaUpdated(PDO $pdo): void
             PRIMARY KEY (`id`),
             KEY `idx_fsub_form` (`form_id`, `created_at`),
             CONSTRAINT `fk_fsub_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    // Volltext-Suchindex für Dokumente (Zero-RAM Alternative zu Elasticsearch via MariaDB/MySQL InnoDB FULLTEXT)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `file_search_index` (
+            `file_id` INT UNSIGNED NOT NULL,
+            `user_id` INT UNSIGNED NOT NULL,
+            `group_folder_id` INT UNSIGNED DEFAULT NULL,
+            `original_name` VARCHAR(255) NOT NULL DEFAULT '',
+            `content_text` MEDIUMTEXT NOT NULL,
+            `char_count` INT UNSIGNED NOT NULL DEFAULT 0,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`file_id`),
+            KEY `idx_fsi_user` (`user_id`),
+            KEY `idx_fsi_gf` (`group_folder_id`),
+            FULLTEXT KEY `idx_fsi_ft` (`original_name`, `content_text`),
+            CONSTRAINT `fk_fsi_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 

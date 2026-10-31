@@ -110,6 +110,7 @@ if ($action === 'encrypt_file') {
         ':sz' => $newSize,
         ':id' => $fileId,
     ]);
+    removeFileFromFulltextSearch($pdo, $fileId);
 
     setFlash('success', sprintf('Datei "%s" wurde erfolgreich mit AES-256 im Tresor verschlüsselt.', (string)$file['original_name']));
     header('Location: ' . $redirectUrl);
@@ -165,6 +166,7 @@ if ($action === 'decrypt_file') {
         ':fh' => $restoredHash,
         ':id' => $fileId,
     ]);
+    indexFileForFulltextSearch($pdo, $fileId);
 
     setFlash('success', sprintf('Tresor-Schutz für "%s" wurde aufgehoben. Die Datei liegt wieder unverschlüsselt vor.', (string)$file['original_name']));
     header('Location: ' . $redirectUrl);

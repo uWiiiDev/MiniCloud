@@ -301,6 +301,7 @@ foreach ($validCandidates as $fileItem) {
                 ':mime_type' => $mimeType,
                 ':id'        => (int)$existingFile['id'],
             ]);
+            indexFileForFulltextSearch($pdo, (int)$existingFile['id']);
         } else {
             $stmtInsert->execute([
                 ':user_id'         => $effectiveOwnerId,
@@ -313,6 +314,9 @@ foreach ($validCandidates as $fileItem) {
                 ':mime_type'       => $mimeType,
                 ':is_encrypted'    => $isEncryptedFlag,
             ]);
+            if ($isEncryptedFlag === 0) {
+                indexFileForFulltextSearch($pdo, (int)$pdo->lastInsertId());
+            }
         }
 
         if ($finalFolderPath !== '') {

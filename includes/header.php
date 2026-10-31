@@ -1268,6 +1268,10 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                             if (subEl) {
                                 subEl.className = 'text-[11px] truncate ' + (active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400');
                             }
+                            const snipEl = row.querySelector('[data-gs-snippet]');
+                            if (snipEl) {
+                                snipEl.className = 'text-[11px] italic truncate mt-0.5 ' + (active ? 'text-amber-200 font-medium' : 'text-indigo-600 dark:text-indigo-400');
+                            }
                             const catEl = row.querySelector('[data-gs-cat]');
                             if (catEl) {
                                 catEl.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ' + (
@@ -1329,6 +1333,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                         <div class="min-w-0">
                                             <div class="text-xs sm:text-sm font-bold truncate">${escapeGsHtml(item.title)}</div>
                                             <div data-gs-sub="1" class="text-[11px] truncate ${active ? 'text-brand-100' : 'text-slate-400 dark:text-slate-400'}">${escapeGsHtml(item.sub || '')}</div>
+                                            ${item.snippet ? `<div data-gs-snippet="1" class="text-[11px] italic truncate mt-0.5 ${active ? 'text-amber-200 font-medium' : 'text-indigo-600 dark:text-indigo-400'}">🔎 „${escapeGsHtml(item.snippet)}“</div>` : ''}
                                         </div>
                                     </a>
                                     ${actionsHtml}
@@ -1392,7 +1397,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                 type="text"
                                 id="globalSearchInput"
                                 oninput="onGlobalSearchInput(this.value)"
-                                placeholder="Dateien, Ordner, Module, Whiteboards, Notizen, Termine oder Kontakte suchen…"
+                                placeholder="Dateien & Dokument-Inhalte (Volltext), Ordner, Module, Notizen oder Kontakte suchen…"
                                 class="flex-1 bg-transparent border-0 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
                                 autocomplete="off"
                             >

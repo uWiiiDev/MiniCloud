@@ -395,6 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     ]);
 
     $newFileId = (int)$pdo->lastInsertId();
+    indexFileForFulltextSearch($pdo, $newFileId);
     $params = ['id' => $newFileId];
     if ($sharedFolderId > 0) {
         $params['return_sf'] = $sharedFolderId;
@@ -636,6 +637,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         ':mime' => $newMime,
         ':id'   => $fileId,
     ]);
+    indexFileForFulltextSearch($pdo, $fileId);
 
     // Live-Team über den Speichervorgang informieren
     try {

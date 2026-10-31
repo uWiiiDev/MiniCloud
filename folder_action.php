@@ -208,6 +208,11 @@ if ($action === 'move_file') {
                 ':fp'    => $targetFolder,
                 ':id'    => $fileId,
             ]);
+            try {
+                $pdo->prepare('UPDATE file_search_index SET user_id = :uid, group_folder_id = :gf_id WHERE file_id = :id')
+                    ->execute([':uid' => $newOwnerId, ':gf_id' => $targetGfId, ':id' => $fileId]);
+            } catch (Throwable) {
+            }
 
             setFlash('success', sprintf('Datei "%s" wurde in %s verschoben.', (string)$file['original_name'], $destLabel));
         }
@@ -266,6 +271,9 @@ if ($action === 'move_file') {
             ':mime'  => (string)$file['mime_type'],
             ':enc'   => (int)($file['is_encrypted'] ?? 0),
         ]);
+        if ((int)($file['is_encrypted'] ?? 0) === 0) {
+            indexFileForFulltextSearch($pdo, (int)$pdo->lastInsertId());
+        }
 
         setFlash('success', sprintf('Datei "%s" wurde in %s kopiert.', (string)$file['original_name'], $destLabel));
     }
@@ -361,6 +369,11 @@ if ($action === 'rename_file') {
             ':name' => $cleanNewName,
             ':id'   => $fileId,
         ]);
+        try {
+            $pdo->prepare('UPDATE file_search_index SET original_name = :name WHERE file_id = :id')
+                ->execute([':name' => mb_substr($cleanNewName, 0, 255, 'UTF-8'), ':id' => $fileId]);
+        } catch (Throwable) {
+        }
         setFlash('success', sprintf('Datei „%s“ wurde in „%s“ umbenannt.', $oldOrigName, $cleanNewName));
     }
 

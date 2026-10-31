@@ -699,6 +699,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_surflog'                => '1',
         'enable_cinema'                 => '1',
         'enable_dashboard'              => '1',
+        'enable_fulltext_search'        => '1',
         'trash_retention_days'          => '30',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
@@ -3616,6 +3617,556 @@ function probeLocalOllamaStatus(string $preferredModel = 'gemma2:2b'): array
 
     $cached = $result;
     return $result;
+}
+
+/**
+ * Prüft einmalig pro Request, ob das Systemwerkzeug `pdftotext` (poppler-utils) für die
+ * schnelle Volltext-Extraktion aus PDF-Dokumenten verfügbar ist.
+ */
+function probePdfToTextAvailable(): bool
+{
+    static $available = null;
+    if (is_bool($available)) {
+        return $available;
+    }
+
+    if (!function_exists('proc_open')) {
+        $available = false;
+        return false;
+    }
+
+    $disabled = array_map('trim', explode(',', strtolower((string)ini_get('disable_functions'))));
+    if (in_array('proc_open', $disabled, true)) {
+        $available = false;
+        return false;
+    }
+
+    foreach (['/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext'] as $bin) {
+        if (@is_executable($bin)) {
+            $available = true;
+            return true;
+        }
+    }
+
+    $available = false;
+    return false;
+}
+
+/**
+ * Reine PHP-Fallback-Extraktion für PDF-Dateien (für Shared-Webhosting wie STRATO ohne `pdftotext`).
+ * Dekomprimiert FlateDecode-Streams und liest Textblöcke (BT ... ET) aus.
+ */
+function extractPdfTextPurePhp(string $filePath, int $maxBytesToRead = 4194304): string
+{
+    if (!is_file($filePath) || !is_readable($filePath)) {
+        return '';
+    }
+
+    $raw = @file_get_contents($filePath, false, null, 0, $maxBytesToRead);
+    if (!is_string($raw) || $raw === '') {
+        return '';
+    }
+
+    $chunks = [];
+    if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $raw, $matches)) {
+        foreach (array_slice($matches[1], 0, 120) as $streamData) {
+            $decoded = @gzuncompress($streamData);
+            if ($decoded === false) {
+                $decoded = @gzinflate($streamData);
+            }
+            if (!is_string($decoded) || $decoded === '') {
+                $decoded = $streamData;
+            }
+            if (strpos($decoded, 'BT') === false && strpos($decoded, '(') === false) {
+                continue;
+            }
+            if (preg_match_all('/\(([^()\\\\]*(?:\\\\.[^()\\\\]*)*)\)\s*T[jJ]/s', $decoded, $tm)) {
+                foreach ($tm[1] as $str) {
+                    $clean = strtr($str, [
+                        '\\n' => "\n",
+                        '\\r' => ' ',
+                        '\\t' => ' ',
+                        '\\(' => '(',
+                        '\\)' => ')',
+                        '\\\\' => '\\',
+                    ]);
+                    $chunks[] = $clean;
+                }
+            }
+            if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $tjm)) {
+                foreach ($tjm[1] as $arrStr) {
+                    if (preg_match_all('/\(([^()\\\\]*(?:\\\\.[^()\\\\]*)*)\)/s', $arrStr, $subM)) {
+                        $line = '';
+                        foreach ($subM[1] as $part) {
+                            $line .= strtr($part, [
+                                '\\n' => "\n",
+                                '\\r' => ' ',
+                                '\\t' => ' ',
+                                '\\(' => '(',
+                                '\\)' => ')',
+                                '\\\\' => '\\',
+                            ]);
+                        }
+                        if ($line !== '') {
+                            $chunks[] = $line;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $text = implode(' ', $chunks);
+    $text = @mb_convert_encoding($text, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+    $text = (string)preg_replace('/[^\P{C}\n\t]+/u', ' ', (string)$text);
+    return trim((string)preg_replace('/\s+/u', ' ', $text));
+}
+
+/**
+ * Prüft, ob eine Datei anhand ihrer Dateiendung für die Volltext-Indexierung geeignet ist.
+ */
+function isFileEligibleForFulltextIndex(string $originalName): bool
+{
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    return in_array($ext, [
+        'pdf', 'docx', 'odt', 'xlsx', 'ods', 'csv', 'pptx', 'odp',
+        'txt', 'md', 'html', 'htm', 'drawio', 'diagram', 'vsdx', 'epub',
+        'json', 'xml', 'yml', 'yaml', 'ini', 'log', 'sql', 'srt', 'vtt',
+    ], true);
+}
+
+/**
+ * Extrahiert den durchsuchbaren Klartext aus einer Cloud-Datei (bis max. 120.000 Zeichen).
+ * Unterstützt Word (.docx/.odt), Excel (.xlsx/.ods/.csv), PowerPoint (.pptx/.odp),
+ * Visio/Diagramme (.drawio/.diagram/.vsdx), PDF (.pdf via pdftotext oder Pure-PHP),
+ * E-Books (.epub) sowie Text-/Markdown-/HTML-/Code-Dateien.
+ */
+function extractSearchableDocumentText(string $filePath, string $originalName, int $maxChars = 120000): string
+{
+    if (!is_file($filePath) || !is_readable($filePath)) {
+        return '';
+    }
+
+    $fileSize = (int)@filesize($filePath);
+    if ($fileSize <= 0 || $fileSize > 60 * 1048576) {
+        return '';
+    }
+
+    // Niemals Zero-Knowledge-Tresor-Dateien auslesen
+    if (function_exists('isVaultEncryptedFile') && isVaultEncryptedFile($filePath)) {
+        return '';
+    }
+
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    $extracted = '';
+
+    try {
+        if ($ext === 'pdf') {
+            if (probePdfToTextAvailable()) {
+                $bin = '/usr/bin/pdftotext';
+                foreach (['/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext'] as $cand) {
+                    if (@is_executable($cand)) {
+                        $bin = $cand;
+                        break;
+                    }
+                }
+                $descriptors = [
+                    0 => ['pipe', 'r'],
+                    1 => ['pipe', 'w'],
+                    2 => ['pipe', 'w'],
+                ];
+                $proc = @proc_open([$bin, '-q', '-nopgbrk', '-enc', 'UTF-8', $filePath, '-'], $descriptors, $pipes);
+                if (is_resource($proc)) {
+                    @fclose($pipes[0]);
+                    $stdout = @stream_get_contents($pipes[1], $maxChars * 4);
+                    @fclose($pipes[1]);
+                    @fclose($pipes[2]);
+                    @proc_close($proc);
+                    if (is_string($stdout) && trim($stdout) !== '') {
+                        $extracted = $stdout;
+                    }
+                }
+            }
+            if (trim($extracted) === '') {
+                $extracted = extractPdfTextPurePhp($filePath);
+            }
+        } elseif (in_array($ext, ['txt', 'md', 'csv', 'json', 'xml', 'yml', 'yaml', 'ini', 'log', 'sql', 'srt', 'vtt'], true)) {
+            if ($fileSize <= 8 * 1048576) {
+                $raw = @file_get_contents($filePath, false, null, 0, $maxChars * 3);
+                if (is_string($raw) && $raw !== '') {
+                    $extracted = @mb_convert_encoding($raw, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252') ?: $raw;
+                }
+            }
+        } elseif (in_array($ext, ['html', 'htm', 'drawio', 'diagram'], true)) {
+            if ($fileSize <= 10 * 1048576) {
+                $raw = @file_get_contents($filePath, false, null, 0, $maxChars * 4);
+                if (is_string($raw) && $raw !== '') {
+                    $parts = [];
+                    if (preg_match('/data-mc-visio="([^"]+)"/i', $raw, $vm)) {
+                        $jsonStr = html_entity_decode($vm[1], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $vData = json_decode($jsonStr, true);
+                        if (is_array($vData)) {
+                            foreach (($vData['nodes'] ?? []) as $n) {
+                                if (!empty($n['text'])) {
+                                    $parts[] = (string)$n['text'];
+                                }
+                                if (!empty($n['subtext'])) {
+                                    $parts[] = (string)$n['subtext'];
+                                }
+                            }
+                            foreach (($vData['edges'] ?? []) as $e) {
+                                if (!empty($e['label'])) {
+                                    $parts[] = (string)$e['label'];
+                                }
+                            }
+                        }
+                    }
+                    $stripped = strip_tags((string)preg_replace('/<(script|style)\b[^>]*>.*?<\/\1>/is', ' ', $raw));
+                    $parts[] = html_entity_decode($stripped, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $extracted = implode(' ', $parts);
+                }
+            }
+        } elseif (class_exists('ZipArchive') && in_array($ext, ['docx', 'odt', 'xlsx', 'ods', 'pptx', 'odp', 'vsdx', 'epub'], true)) {
+            $zip = new ZipArchive();
+            if (@$zip->open($filePath) === true) {
+                $parts = [];
+                if ($ext === 'docx') {
+                    $xml = $zip->getFromName('word/document.xml');
+                    if (is_string($xml) && $xml !== '') {
+                        $xml = str_replace(['</w:p>', '<w:br/>', '<w:tab/>', '</w:tr>', '</w:tc>'], ' ', $xml);
+                        $parts[] = html_entity_decode(strip_tags($xml), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    }
+                } elseif ($ext === 'odt' || $ext === 'ods' || $ext === 'odp') {
+                    $xml = $zip->getFromName('content.xml');
+                    if (is_string($xml) && $xml !== '') {
+                        $xml = str_replace(['</text:p>', '</table:table-cell>', '</table:table-row>'], ' ', $xml);
+                        $parts[] = html_entity_decode(strip_tags($xml), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    }
+                } elseif ($ext === 'xlsx') {
+                    $shared = $zip->getFromName('xl/sharedStrings.xml');
+                    if (is_string($shared) && $shared !== '') {
+                        $shared = str_replace('</si>', ' ', $shared);
+                        $parts[] = html_entity_decode(strip_tags($shared), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    }
+                    for ($i = 1; $i <= 15; $i++) {
+                        $sheetXml = $zip->getFromName('xl/worksheets/sheet' . $i . '.xml');
+                        if (!is_string($sheetXml) || $sheetXml === '') {
+                            break;
+                        }
+                        if (preg_match_all('/<is>.*?<\/is>/s', $sheetXml, $im)) {
+                            foreach ($im[0] as $inlineNode) {
+                                $parts[] = html_entity_decode(strip_tags($inlineNode), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                            }
+                        }
+                    }
+                } elseif ($ext === 'pptx') {
+                    for ($i = 1; $i <= 80; $i++) {
+                        $slideXml = $zip->getFromName('ppt/slides/slide' . $i . '.xml');
+                        if (!is_string($slideXml) || $slideXml === '') {
+                            if ($i > 3) {
+                                break;
+                            }
+                            continue;
+                        }
+                        $slideXml = str_replace(['</a:p>', '</a:t>'], ' ', $slideXml);
+                        $parts[] = html_entity_decode(strip_tags($slideXml), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+                        $notesXml = $zip->getFromName('ppt/notesSlides/notesSlide' . $i . '.xml');
+                        if (is_string($notesXml) && $notesXml !== '') {
+                            $notesXml = str_replace(['</a:p>', '</a:t>'], ' ', $notesXml);
+                            $parts[] = html_entity_decode(strip_tags($notesXml), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        }
+                    }
+                } elseif ($ext === 'vsdx') {
+                    for ($i = 1; $i <= 30; $i++) {
+                        $pageXml = $zip->getFromName('visio/pages/page' . $i . '.xml');
+                        if (!is_string($pageXml) || $pageXml === '') {
+                            break;
+                        }
+                        if (preg_match_all('/<Text\b[^>]*>(.*?)<\/Text>/is', $pageXml, $tm)) {
+                            foreach ($tm[1] as $tNode) {
+                                $parts[] = html_entity_decode(strip_tags($tNode), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                            }
+                        }
+                    }
+                } elseif ($ext === 'epub') {
+                    $numFiles = min($zip->numFiles, 80);
+                    $totalLen = 0;
+                    for ($i = 0; $i < $numFiles; $i++) {
+                        $entryName = (string)$zip->getNameIndex($i);
+                        $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
+                        if (!in_array($entryExt, ['xhtml', 'html', 'htm', 'opf'], true)) {
+                            continue;
+                        }
+                        $content = $zip->getFromIndex($i);
+                        if (!is_string($content) || $content === '') {
+                            continue;
+                        }
+                        $clean = html_entity_decode(strip_tags((string)preg_replace('/<(script|style)\b[^>]*>.*?<\/\1>/is', ' ', $content)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $parts[] = $clean;
+                        $totalLen += strlen($clean);
+                        if ($totalLen >= $maxChars) {
+                            break;
+                        }
+                    }
+                }
+                $zip->close();
+                $extracted = implode(' ', $parts);
+            }
+        }
+    } catch (Throwable) {
+        return '';
+    }
+
+    if ($extracted === '') {
+        return '';
+    }
+
+    $extracted = (string)preg_replace('/[^\P{C}\n\t]+/u', ' ', $extracted);
+    $extracted = trim((string)preg_replace('/\s+/u', ' ', $extracted));
+    if (mb_strlen($extracted, 'UTF-8') > $maxChars) {
+        $extracted = mb_substr($extracted, 0, $maxChars, 'UTF-8');
+    }
+
+    return $extracted;
+}
+
+/**
+ * Entfernt eine Datei sofort aus dem Volltext-Suchindex (z. B. beim Verschlüsseln im Tresor oder beim Löschen).
+ */
+function removeFileFromFulltextSearch(PDO $pdo, int $fileId): void
+{
+    if ($fileId <= 0) {
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare('DELETE FROM `file_search_index` WHERE `file_id` = :fid');
+        $stmt->execute([':fid' => $fileId]);
+    } catch (Throwable) {
+    }
+}
+
+/**
+ * Indexiert eine einzelne Cloud-Datei für die Volltextsuche in `file_search_index`.
+ * Verschlüsselte Tresor-Dateien oder gelöschte Dateien werden niemals indexiert (und ggf. aus dem Index entfernt).
+ */
+function indexFileForFulltextSearch(PDO $pdo, int $fileId, bool $forceEvenIfDisabled = false): bool
+{
+    if ($fileId <= 0) {
+        return false;
+    }
+
+    if (!$forceEvenIfDisabled) {
+        $settings = getAppSettings($pdo);
+        if (($settings['enable_fulltext_search'] ?? '1') !== '1') {
+            return false;
+        }
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT `id`, `user_id`, `group_folder_id`, `filename`, `original_name`, `is_encrypted`, `deleted_at`
+             FROM `files`
+             WHERE `id` = :id
+             LIMIT 1'
+        );
+        $stmt->execute([':id' => $fileId]);
+        $file = $stmt->fetch();
+
+        if (!$file || $file['deleted_at'] !== null || (int)($file['is_encrypted'] ?? 0) === 1) {
+            removeFileFromFulltextSearch($pdo, $fileId);
+            return false;
+        }
+
+        $origName = (string)$file['original_name'];
+        $physPath = UPLOAD_DIR . basename((string)$file['filename']);
+        if (!is_file($physPath)) {
+            removeFileFromFulltextSearch($pdo, $fileId);
+            return false;
+        }
+
+        $contentText = '';
+        if (isFileEligibleForFulltextIndex($origName)) {
+            $contentText = extractSearchableDocumentText($physPath, $origName);
+        }
+
+        // Wenn kein Dokumenttext extrahiert werden konnte (z. B. Bild/Video oder leeres Dokument),
+        // brauchen wir keinen unnötigen Volltext-Eintrag, sofern kein Text vorhanden ist.
+        if ($contentText === '') {
+            removeFileFromFulltextSearch($pdo, $fileId);
+            return false;
+        }
+
+        $charCount = mb_strlen($contentText, 'UTF-8');
+        $stmtUpsert = $pdo->prepare(
+            'INSERT INTO `file_search_index` (`file_id`, `user_id`, `group_folder_id`, `original_name`, `content_text`, `char_count`, `updated_at`)
+             VALUES (:fid, :uid, :gfid, :orig, :txt, :cc, CURRENT_TIMESTAMP)
+             ON DUPLICATE KEY UPDATE
+                `user_id`         = VALUES(`user_id`),
+                `group_folder_id` = VALUES(`group_folder_id`),
+                `original_name`   = VALUES(`original_name`),
+                `content_text`    = VALUES(`content_text`),
+                `char_count`      = VALUES(`char_count`),
+                `updated_at`      = CURRENT_TIMESTAMP'
+        );
+        $stmtUpsert->execute([
+            ':fid'  => $fileId,
+            ':uid'  => (int)$file['user_id'],
+            ':gfid' => !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null,
+            ':orig' => mb_substr($origName, 0, 255, 'UTF-8'),
+            ':txt'  => $contentText,
+            ':cc'   => $charCount,
+        ]);
+
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Baut den Volltext-Suchindex für alle bestehenden (unverschlüsselten, nicht gelöschten) Cloud-Dokumente auf.
+ *
+ * @return array{indexed: int, skipped: int, total_index_rows: int}
+ */
+function reindexAllCloudFiles(PDO $pdo, int $limit = 1000): array
+{
+    $indexed = 0;
+    $skipped = 0;
+
+    try {
+        // Zuerst verwaiste oder inzwischen verschlüsselte/gelöschte Einträge bereinigen
+        $pdo->exec(
+            'DELETE fsi FROM `file_search_index` fsi
+             LEFT JOIN `files` f ON f.`id` = fsi.`file_id`
+             WHERE f.`id` IS NULL OR f.`deleted_at` IS NOT NULL OR f.`is_encrypted` = 1'
+        );
+
+        $stmt = $pdo->prepare(
+            'SELECT `id`, `original_name`
+             FROM `files`
+             WHERE `deleted_at` IS NULL AND `is_encrypted` = 0
+             ORDER BY `id` DESC
+             LIMIT :lim'
+        );
+        $stmt->bindValue(':lim', max(1, $limit), PDO::PARAM_INT);
+        $stmt->execute();
+
+        foreach ($stmt->fetchAll() as $row) {
+            $fid = (int)$row['id'];
+            $orig = (string)$row['original_name'];
+            if (!isFileEligibleForFulltextIndex($orig)) {
+                continue;
+            }
+            if (indexFileForFulltextSearch($pdo, $fid, true)) {
+                $indexed++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        $totalRows = (int)$pdo->query('SELECT COUNT(*) FROM `file_search_index`')->fetchColumn();
+    } catch (Throwable) {
+        $totalRows = 0;
+    }
+
+    return [
+        'indexed'          => $indexed,
+        'skipped'          => $skipped,
+        'total_index_rows' => $totalRows,
+    ];
+}
+
+/**
+ * Liefert Status- und Statistikwerte des Volltext-Suchindex für das Admin-Dashboard.
+ *
+ * @return array{indexed_files: int, total_chars: int, eligible_files: int, pdftotext_available: bool}
+ */
+function getFulltextSearchStats(PDO $pdo): array
+{
+    $stats = [
+        'indexed_files'       => 0,
+        'total_chars'         => 0,
+        'eligible_files'      => 0,
+        'pdftotext_available' => probePdfToTextAvailable(),
+    ];
+
+    try {
+        $row = $pdo->query('SELECT COUNT(*) AS cnt, COALESCE(SUM(`char_count`), 0) AS chars FROM `file_search_index`')->fetch();
+        if ($row) {
+            $stats['indexed_files'] = (int)($row['cnt'] ?? 0);
+            $stats['total_chars']   = (int)($row['chars'] ?? 0);
+        }
+
+        $stmtEl = $pdo->query('SELECT `original_name` FROM `files` WHERE `deleted_at` IS NULL AND `is_encrypted` = 0');
+        if ($stmtEl) {
+            foreach ($stmtEl->fetchAll(PDO::FETCH_COLUMN) as $name) {
+                if (isFileEligibleForFulltextIndex((string)$name)) {
+                    $stats['eligible_files']++;
+                }
+            }
+        }
+    } catch (Throwable) {
+    }
+
+    return $stats;
+}
+
+/**
+ * Formatiert eine Benutzereingabe sicher für MariaDB/MySQL `MATCH(...) AGAINST(:q IN BOOLEAN MODE)`.
+ */
+function buildFulltextBooleanQuery(string $rawQuery): string
+{
+    $clean = (string)preg_replace('/[+\-><\(\)~*:\"\\\\@]+/u', ' ', trim($rawQuery));
+    $words = preg_split('/\s+/u', $clean, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $tokens = [];
+    foreach (array_slice($words, 0, 8) as $w) {
+        $w = trim($w);
+        if (mb_strlen($w, 'UTF-8') >= 2) {
+            $tokens[] = '+' . $w . '*';
+        }
+    }
+    return implode(' ', $tokens);
+}
+
+/**
+ * Erzeugt einen kompakten Textausschnitt („… Treffer im Kontext …“) rund um den gefundenen Suchbegriff.
+ */
+function buildFulltextSnippet(string $contentText, string $query, int $maxLength = 140): string
+{
+    $contentText = trim((string)preg_replace('/\s+/u', ' ', $contentText));
+    if ($contentText === '' || trim($query) === '') {
+        return '';
+    }
+
+    $words = preg_split('/\s+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $pos = false;
+    foreach ($words as $w) {
+        if (mb_strlen($w, 'UTF-8') >= 2) {
+            $pos = mb_stripos($contentText, $w, 0, 'UTF-8');
+            if ($pos !== false) {
+                break;
+            }
+        }
+    }
+
+    if ($pos === false) {
+        $pos = mb_stripos($contentText, trim($query), 0, 'UTF-8');
+    }
+
+    $totalLen = mb_strlen($contentText, 'UTF-8');
+    if ($pos === false) {
+        $sub = mb_substr($contentText, 0, $maxLength, 'UTF-8');
+        return $sub . ($totalLen > $maxLength ? ' …' : '');
+    }
+
+    $half = (int)floor($maxLength / 2);
+    $start = max(0, $pos - $half);
+    $snippet = mb_substr($contentText, $start, $maxLength, 'UTF-8');
+    $prefix = $start > 0 ? '… ' : '';
+    $suffix = ($start + $maxLength) < $totalLen ? ' …' : '';
+
+    return $prefix . trim($snippet) . $suffix;
 }
 
 

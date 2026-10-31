@@ -1423,6 +1423,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableVideoStudio = isset($_POST['enable_video_studio']) && $_POST['enable_video_studio'] === '1' ? '1' : '0';
         $enableSurflog     = isset($_POST['enable_surflog']) && $_POST['enable_surflog'] === '1' ? '1' : '0';
         $enableCinema      = isset($_POST['enable_cinema']) && $_POST['enable_cinema'] === '1' ? '1' : '0';
+        $enableFulltext    = isset($_POST['enable_fulltext_search']) && $_POST['enable_fulltext_search'] === '1' ? '1' : '0';
         $trashRetention    = isset($_POST['trash_retention_days']) ? max(0, min(3650, (int)$_POST['trash_retention_days'])) : 30;
         $useOllama         = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
         $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
@@ -1457,6 +1458,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_video_studio', $enableVideoStudio);
         saveAppSetting($pdo, 'enable_surflog', $enableSurflog);
         saveAppSetting($pdo, 'enable_cinema', $enableCinema);
+        saveAppSetting($pdo, 'enable_fulltext_search', $enableFulltext);
         saveAppSetting($pdo, 'trash_retention_days', (string)$trashRetention);
         if ($trashRetention > 0) {
             purgeExpiredTrashFiles($pdo, true);
@@ -1472,6 +1474,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         resetModuleUsageStatistics($pdo);
         logAuditEvent($pdo, 'admin_Action', 'Modul-Nutzungsstatistik zurückgesetzt');
         setFlash('success', 'Die Modul-Nutzungsstatistik wurde auf 0 zurückgesetzt.');
+        header('Location: admin.php#tab-modules');
+        exit;
+    }
+
+    // --- 11b-3. Volltext-Suchindex für alle bestehenden Cloud-Dokumente aufbauen / aktualisieren ---
+    if ($action === 'reindex_fulltext_search') {
+        @set_time_limit(120);
+        $res = reindexAllCloudFiles($pdo, 1500);
+        logAuditEvent(
+            $pdo,
+            'admin_action',
+            sprintf('Volltext-Suchindex aufgebaut (%d Dokumente indexiert, %d im Index)', $res['indexed'], $res['total_index_rows'])
+        );
+        setFlash(
+            'success',
+            sprintf(
+                '🔎✅ Volltext-Suchindex aktualisiert: %d Dokument(e) erfolgreich analysiert (%d Dokumente insgesamt im Suchindex).',
+                $res['indexed'],
+                $res['total_index_rows']
+            )
+        );
         header('Location: admin.php#tab-modules');
         exit;
     }
@@ -3730,6 +3753,59 @@ foreach ($modList as $mItem) {
                         </a>
                     </div>
                 </div>
+
+                <!-- Modul 29: Dokumenten-Volltextsuche (MariaDB FULLTEXT Index – Zero-RAM Alternative zu Elasticsearch) -->
+                <?php
+                $ftEnabled = ($currentSettings['enable_fulltext_search'] ?? '1') === '1';
+                $ftStats   = getFulltextSearchStats($pdo);
+                ?>
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3 sm:col-span-2">
+                    <div class="space-y-2.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <span>🔎 Dokumenten-Volltextsuche (Inhaltssuche in PDF, Word, Excel, PowerPoint, Visio &amp; Text)</span>
+                            </p>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">
+                                    📊 <?= (int)$ftStats['indexed_files'] ?> / <?= (int)$ftStats['eligible_files'] ?> Dokumente indexiert (<?= number_format((int)$ftStats['total_chars'], 0, ',', '.') ?> Zeichen)
+                                </span>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= $ftStats['pdftotext_available'] ? 'bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300' ?>">
+                                    <?= $ftStats['pdftotext_available'] ? '⚡ PDF-Turbo (pdftotext aktiv)' : '📄 PDF Pure-PHP Modus' ?>
+                                </span>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= $ftEnabled ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                    <?= $ftEnabled ? 'Aktiviert' : 'Deaktiviert' ?>
+                                </span>
+                            </div>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_fulltext_search"
+                                value="1"
+                                <?= $ftEnabled ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Dokumenten-Volltextsuche (<code>file_search_index</code> via MariaDB/MySQL FULLTEXT) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Durchsucht bei der globalen Schnellsuche (<code>Strg + K</code>) sowie im Dateimanager nicht nur Dateinamen, sondern in unter 5 Millisekunden auch den <strong>Textinhalt</strong> von PDF-, Word- (<code>.docx</code>), Excel- (<code>.xlsx</code>/<code>.csv</code>), PowerPoint- (<code>.pptx</code>), Visio-/Draw.io- (<code>.drawio</code>/<code>.vsdx</code>), E-Book- (<code>.epub</code>) und Text-/Markdown-Dateien – inklusive Treffer-Textausschnitt. <strong>Zero-Knowledge-Garantie:</strong> Tresor-verschlüsselte Dateien werden niemals indexiert. Benötigt im Gegensatz zu Java-Elasticsearch <strong>0 MB zusätzlichen RAM</strong>.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="pt-2.5 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                            Neue Uploads und Office-Light-Speicherungen werden automatisch im Hintergrund indexiert.
+                        </span>
+                        <button
+                            type="submit"
+                            form="formReindexFulltext"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                            🔄 Bestehende Cloud-Dateien jetzt indexieren
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="flex justify-end">
@@ -3740,6 +3816,10 @@ foreach ($modList as $mItem) {
                     Modul-Einstellungen speichern
                 </button>
             </div>
+        </form>
+        <form id="formReindexFulltext" action="admin.php" method="post" class="hidden">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="reindex_fulltext_search">
         </form>
     </section>
 </div>

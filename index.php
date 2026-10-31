@@ -451,19 +451,25 @@ if ($largeFilesMode) {
 
 // Dateien für die Haupttabelle abrufen (ohne teure korrelierte Subqueries pro Zeile; Zähler werden anschließend per Batch geladen)
 $params = [];
+$appSettingsForIndex = getAppSettings($pdo);
+$fulltextEnabledInIndex = (($appSettingsForIndex['enable_fulltext_search'] ?? '1') === '1');
+$joinSearchIndex = ($searchQuery !== '' && $fulltextEnabledInIndex)
+    ? ' LEFT JOIN file_search_index fsi ON fsi.file_id = f.id '
+    : ' ';
+
 if ($activeGroupFolder !== null) {
-    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id' . $joinSearchIndex . 'WHERE f.group_folder_id = :gf_id AND f.deleted_at IS NULL';
     $params[':gf_id'] = (int)$activeGroupFolder['id'];
 } elseif ($activeSharedFolder !== null) {
     $sharedFp = (string)$activeSharedFolder['folder_path'];
-    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id' . $joinSearchIndex . '
                  WHERE f.user_id = :owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
                    AND (f.folder_path = :sf_exact OR f.folder_path LIKE :sf_prefix)';
     $params[':owner_id']  = (int)$activeSharedFolder['owner_id'];
     $params[':sf_exact']  = $sharedFp;
     $params[':sf_prefix'] = $sharedFp . '/%';
 } else {
-    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
+    $sqlWhere = 'FROM files f INNER JOIN users u ON u.id = f.user_id' . $joinSearchIndex . 'WHERE f.user_id = :user_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL';
     $params[':user_id'] = $userId;
 }
 
@@ -497,9 +503,30 @@ if ($largeFilesMode && $onlyDuplicates) {
 }
 
 if ($searchQuery !== '') {
-    $sqlWhere .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
     $params[':search_name']   = '%' . $searchQuery . '%';
     $params[':search_folder'] = '%' . $searchQuery . '%';
+    $ftBoolIdx = $fulltextEnabledInIndex ? buildFulltextBooleanQuery($searchQuery) : '';
+    if ($fulltextEnabledInIndex && $ftBoolIdx !== '') {
+        $sqlWhere .= ' AND (
+            f.original_name LIKE :search_name
+            OR f.folder_path LIKE :search_folder
+            OR (f.is_encrypted = 0 AND (
+                MATCH(fsi.original_name, fsi.content_text) AGAINST(:search_ft IN BOOLEAN MODE)
+                OR fsi.content_text LIKE :search_content
+            ))
+        )';
+        $params[':search_ft']      = $ftBoolIdx;
+        $params[':search_content'] = '%' . $searchQuery . '%';
+    } elseif ($fulltextEnabledInIndex) {
+        $sqlWhere .= ' AND (
+            f.original_name LIKE :search_name
+            OR f.folder_path LIKE :search_folder
+            OR (f.is_encrypted = 0 AND fsi.content_text LIKE :search_content)
+        )';
+        $params[':search_content'] = '%' . $searchQuery . '%';
+    } else {
+        $sqlWhere .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
+    }
 }
 
 // Gesamtanzahl für Paginierung bestimmen (außer bei ?large=1, das fest auf Top 100 begrenzt ist)
@@ -518,7 +545,8 @@ if (!$largeFilesMode) {
     }
 }
 
-$sqlFiles = 'SELECT f.*, u.username AS uploader_name,
+$extraSelectCols = ($searchQuery !== '' && $fulltextEnabledInIndex) ? ', fsi.content_text AS fsi_content_text' : '';
+$sqlFiles = 'SELECT f.*, u.username AS uploader_name' . $extraSelectCols . ',
                     0 AS link_share_count, 0 AS user_share_count, 0 AS version_count, 0 AS comment_count ' . $sqlWhere;
 
 $orderByColumn = $allowedSortCols[$sortBy] ?? 'f.upload_date';
@@ -1898,6 +1926,14 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 <span class="truncate max-w-[115px] sm:max-w-none">&bull; von <?= e((string)$file['uploader_name']) ?></span>
                                             <?php endif; ?>
                                         </p>
+                                        <?php if ($searchQuery !== '' && !$isEncrypted && !empty($file['fsi_content_text'])): ?>
+                                            <?php $ftSnip = buildFulltextSnippet((string)$file['fsi_content_text'], $searchQuery, 120); ?>
+                                            <?php if ($ftSnip !== ''): ?>
+                                                <p class="text-[11px] italic text-indigo-600 dark:text-indigo-400 truncate max-w-[200px] sm:max-w-md mt-0.5" title="<?= e($ftSnip) ?>">
+                                                    🔎 „<?= e($ftSnip) ?>“
+                                                </p>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </td>

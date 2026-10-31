@@ -229,7 +229,7 @@ try {
 } catch (Throwable) {
 }
 
-// 3. Dateien durchsuchen (eigene Dateien + zugängliche Gruppenordner)
+// 3. Dateien durchsuchen (eigene Dateien + zugängliche Gruppenordner + optionaler Volltext-Suchindex)
 try {
     $accGfs = getAccessibleGroupFolders($pdo, $userId, isAdmin());
     $gfIds  = array_map(static fn(array $g): int => (int)$g['id'], $accGfs);
@@ -238,26 +238,74 @@ try {
         $gfCond = ' OR f.`group_folder_id` IN (' . implode(',', $gfIds) . ')';
     }
 
+    $seenFileIds = [];
+    $fulltextEnabled = (($appSettings['enable_fulltext_search'] ?? '1') === '1');
+
     $stmtFil = $pdo->prepare(
-        "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`
+        "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`,
+                fsi.`content_text`
          FROM `files` f
+         LEFT JOIN `file_search_index` fsi ON fsi.`file_id` = f.`id`
          WHERE f.`deleted_at` IS NULL
            AND (f.`user_id` = :uid1{$gfCond})
            AND (f.`original_name` LIKE :q1 OR f.`folder_path` LIKE :q2)
          ORDER BY f.`upload_date` DESC
-         LIMIT 12"
+         LIMIT 10"
     );
     $stmtFil->execute([
         ':uid1' => $userId,
         ':q1'   => $like,
         ':q2'   => $like,
     ]);
-    foreach ($stmtFil->fetchAll() as $f) {
+    $matchedFileRows = $stmtFil->fetchAll();
+    foreach ($matchedFileRows as $r) {
+        $seenFileIds[(int)$r['id']] = true;
+    }
+
+    // 3b. Volltextsuche im Dokumenten-Inhalt (PDF, Word, Excel, PowerPoint, Visio, Text/Markdown, EPUB)
+    if ($fulltextEnabled && mb_strlen($q, 'UTF-8') >= 2 && count($matchedFileRows) < 14) {
+        $ftBoolQuery = buildFulltextBooleanQuery($q);
+        $remLimit = max(4, 14 - count($matchedFileRows));
+        if ($ftBoolQuery !== '') {
+            $stmtFt = $pdo->prepare(
+                "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`,
+                        fsi.`content_text`,
+                        MATCH(fsi.`original_name`, fsi.`content_text`) AGAINST(:ftq1 IN BOOLEAN MODE) AS `ft_score`
+                 FROM `file_search_index` fsi
+                 INNER JOIN `files` f ON f.`id` = fsi.`file_id`
+                 WHERE f.`deleted_at` IS NULL
+                   AND f.`is_encrypted` = 0
+                   AND (f.`user_id` = :uid1{$gfCond})
+                   AND (
+                       MATCH(fsi.`original_name`, fsi.`content_text`) AGAINST(:ftq2 IN BOOLEAN MODE)
+                       OR fsi.`content_text` LIKE :qlike
+                   )
+                 ORDER BY `ft_score` DESC, f.`upload_date` DESC
+                 LIMIT {$remLimit}"
+            );
+            $stmtFt->execute([
+                ':ftq1'  => $ftBoolQuery,
+                ':ftq2'  => $ftBoolQuery,
+                ':uid1'  => $userId,
+                ':qlike' => $like,
+            ]);
+            foreach ($stmtFt->fetchAll() as $ftRow) {
+                $ftId = (int)$ftRow['id'];
+                if (!isset($seenFileIds[$ftId])) {
+                    $seenFileIds[$ftId] = true;
+                    $matchedFileRows[] = $ftRow;
+                }
+            }
+        }
+    }
+
+    foreach ($matchedFileRows as $f) {
         $fId   = (int)$f['id'];
         $name  = (string)$f['original_name'];
         $fp    = trim((string)($f['folder_path'] ?? ''));
         $gfId  = !empty($f['group_folder_id']) ? (int)$f['group_folder_id'] : 0;
         $isEnc = ((int)($f['is_encrypted'] ?? 0) === 1);
+        $cText = (!$isEnc && $fulltextEnabled) ? (string)($f['content_text'] ?? '') : '';
 
         $folderParams = [];
         if ($gfId > 0) {
@@ -278,11 +326,17 @@ try {
         $officeType = !$isEnc ? getOfficeEditorType($name) : null;
         $officeUrl  = $officeType !== null ? ('office.php?id=' . $fId) : '';
 
+        $snippet = '';
+        if ($cText !== '') {
+            $snippet = buildFulltextSnippet($cText, $q, 115);
+        }
+
         $locLabel = $fp !== '' ? ('📁 ' . $fp) : '🏠 Hauptverzeichnis';
         $items[] = [
-            'icon'         => $isEnc ? '🔒' : '📄',
+            'icon'         => $isEnc ? '🔒' : ($snippet !== '' ? '📑' : '📄'),
             'title'        => $name,
             'sub'          => formatBytes((int)$f['file_size']) . ' · ' . $locLabel,
+            'snippet'      => $snippet,
             'cat'          => 'Datei',
             'file_id'      => $fId,
             'url'          => $openUrl,
