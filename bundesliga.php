@@ -58,6 +58,26 @@ function ensureBundesligaTables(PDO $pdo): void
     ");
 
     $pdo->exec("
+        CREATE TABLE IF NOT EXISTS bundesliga_user_favs (
+            user_id INT NOT NULL,
+            league VARCHAR(16) NOT NULL,
+            fav_team_id INT NOT NULL DEFAULT 0,
+            fav_team_name VARCHAR(140) NOT NULL DEFAULT '',
+            fav_team_icon VARCHAR(255) NOT NULL DEFAULT '',
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (user_id, league)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    // Einmalige Übernahme bestehender Lieblingsvereine aus bundesliga_user_prefs nach bundesliga_user_favs
+    $pdo->exec("
+        INSERT IGNORE INTO bundesliga_user_favs (user_id, league, fav_team_id, fav_team_name, fav_team_icon, updated_at)
+        SELECT user_id, fav_league, fav_team_id, fav_team_name, fav_team_icon, updated_at
+        FROM bundesliga_user_prefs
+        WHERE fav_team_id > 0
+    ");
+
+    $pdo->exec("
         CREATE TABLE IF NOT EXISTS bundesliga_bets (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
@@ -633,25 +653,35 @@ function calculateBetPoints(int $bet1, int $bet2, int $real1, int $real2): array
 }
 
 // ============================================================================
-// 3. BENUTZER-EINSTELLUNGEN (Lieblingsverein) LADEN
+// 3. BENUTZER-EINSTELLUNGEN (Lieblingsverein je Liga) LADEN
 // ============================================================================
-$prefStmt = $pdo->prepare("SELECT * FROM bundesliga_user_prefs WHERE user_id = ?");
-$prefStmt->execute([$userId]);
-$userPrefs = $prefStmt->fetch(PDO::FETCH_ASSOC) ?: [
-    'fav_team_id'   => 0,
-    'fav_team_name' => '',
-    'fav_team_icon' => '',
-    'fav_league'    => 'bl1',
-];
+$favsByLeague = [];
+$favStmt = $pdo->prepare("SELECT * FROM bundesliga_user_favs WHERE user_id = ? AND fav_team_id > 0");
+$favStmt->execute([$userId]);
+foreach ($favStmt->fetchAll(PDO::FETCH_ASSOC) as $fRow) {
+    $favsByLeague[(string)$fRow['league']] = [
+        'fav_team_id'   => (int)$fRow['fav_team_id'],
+        'fav_team_name' => (string)$fRow['fav_team_name'],
+        'fav_team_icon' => (string)$fRow['fav_team_icon'],
+        'fav_league'    => (string)$fRow['league'],
+    ];
+}
 
 // ============================================================================
 // 4. AKTUELLE PARAMETER & POST-AKTIONEN VERARBEITEN
 // ============================================================================
-$selectedLeague = strtolower(trim((string)($_GET['league'] ?? $_POST['league'] ?? ($userPrefs['fav_league'] ?: 'bl1'))));
+$defaultLeague = !empty($favsByLeague) ? (string)array_key_first($favsByLeague) : 'bl1';
+$selectedLeague = strtolower(trim((string)($_GET['league'] ?? $_POST['league'] ?? $defaultLeague)));
 if (!isset($leagues[$selectedLeague])) {
     $selectedLeague = 'bl1';
 }
 $leagueMeta   = $leagues[$selectedLeague];
+$userPrefs    = $favsByLeague[$selectedLeague] ?? [
+    'fav_team_id'   => 0,
+    'fav_team_name' => '',
+    'fav_team_icon' => '',
+    'fav_league'    => $selectedLeague,
+];
 $forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] === '1';
 
 // Aktuellen Spieltag & aktuelle Saison von OpenLigaDB ermitteln
@@ -690,29 +720,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $postAction = (string)($_POST['action'] ?? '');
 
-    // A) Lieblingsverein festlegen oder entfernen
+    // A) Lieblingsverein für die jeweilige Liga festlegen oder entfernen
     if ($postAction === 'save_fav_team') {
         $favTeamId   = (int)($_POST['fav_team_id'] ?? 0);
         $favTeamName = mb_substr(trim((string)($_POST['fav_team_name'] ?? '')), 0, 140);
         $favTeamIcon = mb_substr(trim((string)($_POST['fav_team_icon'] ?? '')), 0, 255);
         $favLeague   = isset($leagues[$_POST['fav_league'] ?? '']) ? (string)$_POST['fav_league'] : $selectedLeague;
-
-        $upPref = $pdo->prepare("
-            INSERT INTO bundesliga_user_prefs (user_id, fav_team_id, fav_team_name, fav_team_icon, fav_league, updated_at)
-            VALUES (?, ?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE
-                fav_team_id   = VALUES(fav_team_id),
-                fav_team_name = VALUES(fav_team_name),
-                fav_team_icon = VALUES(fav_team_icon),
-                fav_league    = VALUES(fav_league),
-                updated_at    = NOW()
-        ");
-        $upPref->execute([$userId, $favTeamId, $favTeamName, $favTeamIcon, $favLeague]);
+        $leagueLabel = $leagues[$favLeague]['name'] ?? $favLeague;
 
         if ($favTeamId > 0) {
-            setFlash('success', "⭐ „{$favTeamName}“ wurde als dein Lieblingsverein gespeichert!");
+            $upPref = $pdo->prepare("
+                INSERT INTO bundesliga_user_favs (user_id, league, fav_team_id, fav_team_name, fav_team_icon, updated_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    fav_team_id   = VALUES(fav_team_id),
+                    fav_team_name = VALUES(fav_team_name),
+                    fav_team_icon = VALUES(fav_team_icon),
+                    updated_at    = NOW()
+            ");
+            $upPref->execute([$userId, $favLeague, $favTeamId, $favTeamName, $favTeamIcon]);
+            setFlash('success', "⭐ „{$favTeamName}“ wurde als dein Lieblingsverein für die {$leagueLabel} gespeichert!");
         } else {
-            setFlash('success', 'Lieblingsverein-Markierung wurde zurückgesetzt.');
+            $delPref = $pdo->prepare("DELETE FROM bundesliga_user_favs WHERE user_id = ? AND league = ?");
+            $delPref->execute([$userId, $favLeague]);
+            setFlash('success', "Lieblingsverein für die {$leagueLabel} wurde zurückgesetzt.");
         }
         header("Location: bundesliga.php?league={$selectedLeague}&season={$selectedSeason}&matchday={$selectedMatchday}");
         exit;
@@ -1037,74 +1068,100 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- ================================================================== -->
-    <!-- ⭐ LIEBLINGSVEREIN-SPOTLIGHT (falls ausgewählt)                    -->
+    <!-- ⭐ LIEBLINGSVEREIN-SPOTLIGHT (je Liga einzeln speicherbar!)        -->
     <!-- ================================================================== -->
-    <?php if ($favTeamId > 0 && ($favStanding !== null || !empty($userPrefs['fav_team_name']))): ?>
-        <div class="bg-gradient-to-r from-amber-50 via-emerald-50/70 to-teal-50 dark:from-amber-950/30 dark:via-slate-900 dark:to-emerald-950/30 rounded-2xl border border-amber-300/70 dark:border-amber-700/60 p-4 sm:p-5 shadow-sm">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div class="flex items-center gap-3.5">
-                    <?php
-                    $favIcon = (string)($favStanding['teamIconUrl'] ?? $userPrefs['fav_team_icon'] ?? '');
-                    $favName = (string)($favStanding['teamName'] ?? $userPrefs['fav_team_name'] ?? 'Mein Verein');
-                    ?>
-                    <?php if ($favIcon !== ''): ?>
-                        <img src="<?= e($favIcon) ?>" alt="<?= e($favName) ?>" class="w-12 h-12 object-contain shrink-0 drop-shadow-sm" loading="lazy" referrerpolicy="no-referrer">
-                    <?php else: ?>
-                        <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-2xl">⭐</div>
-                    <?php endif; ?>
-                    <div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-200/80 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200">
-                                ⭐ Dein Lieblingsverein
-                            </span>
-                            <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-                                <?= e($favName) ?>
-                            </h2>
-                        </div>
-                        <?php if ($favStanding !== null): ?>
-                            <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                                Aktuell <strong>Platz <?= (int)$favStanding['rank'] ?></strong> in der <?= e($leagueMeta['name']) ?>
-                                • <strong><?= (int)($favStanding['points'] ?? 0) ?> Punkte</strong>
-                                • Torverhältnis <strong><?= (int)($favStanding['goals'] ?? 0) ?>:<?= (int)($favStanding['opponentGoals'] ?? 0) ?></strong> (<?= ((int)($favStanding['goalDiff'] ?? 0) >= 0 ? '+' : '') . (int)($favStanding['goalDiff'] ?? 0) ?>)
-                                • Bilanz: <?= (int)($favStanding['won'] ?? 0) ?>S / <?= (int)($favStanding['draw'] ?? 0) ?>U / <?= (int)($favStanding['lost'] ?? 0) ?>N
-                            </p>
-                        <?php else: ?>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Spielt in einer anderen Liga oder Saison – wechsle oben auf <strong><?= e($leagues[$userPrefs['fav_league']]['name'] ?? '1. Bundesliga') ?></strong>.
-                            </p>
-                        <?php endif; ?>
-                    </div>
+    <?php if ($favTeamId > 0 || !empty($favsByLeague)): ?>
+        <div class="bg-gradient-to-r from-amber-50 via-emerald-50/70 to-teal-50 dark:from-amber-950/30 dark:via-slate-900 dark:to-emerald-950/30 rounded-2xl border border-amber-300/70 dark:border-amber-700/60 p-4 sm:p-5 shadow-sm space-y-3">
+            <?php if (count($favsByLeague) > 1 || ($favTeamId === 0 && !empty($favsByLeague))): ?>
+                <!-- Schnellwahl-Leiste über alle Ligen mit gespeichertem Lieblingsverein -->
+                <div class="flex flex-wrap items-center gap-1.5 pb-2 border-b border-amber-200/60 dark:border-amber-800/40">
+                    <span class="text-[11px] font-bold text-amber-800 dark:text-amber-300 mr-1">⭐ Meine Vereine:</span>
+                    <?php foreach ($favsByLeague as $fLgKey => $fLgData): ?>
+                        <?php if (!isset($leagues[$fLgKey])) continue; ?>
+                        <a href="bundesliga.php?league=<?= urlencode($fLgKey) ?>"
+                           class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all <?= $fLgKey === $selectedLeague ? 'bg-amber-500 text-white shadow-2xs' : 'bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-amber-100 dark:hover:bg-slate-700 border border-amber-300/50 dark:border-slate-700' ?>">
+                            <?php if ($fLgData['fav_team_icon'] !== ''): ?>
+                                <img src="<?= e($fLgData['fav_team_icon']) ?>" alt="" class="w-4 h-4 object-contain" loading="lazy" referrerpolicy="no-referrer">
+                            <?php else: ?>
+                                <span><?= $leagues[$fLgKey]['icon'] ?></span>
+                            <?php endif; ?>
+                            <span><?= e($fLgData['fav_team_name']) ?></span>
+                            <span class="text-[10px] opacity-75">(<?= e($leagues[$fLgKey]['short']) ?>)</span>
+                        </a>
+                    <?php endforeach; ?>
                 </div>
+            <?php endif; ?>
 
-                <?php if ($favMatch !== null): ?>
-                    <?php
-                    $fmScores = extractMatchScores($favMatch);
-                    $fmT1     = (string)($favMatch['team1']['shortName'] ?: $favMatch['team1']['teamName'] ?? '');
-                    $fmT2     = (string)($favMatch['team2']['shortName'] ?: $favMatch['team2']['teamName'] ?? '');
-                    ?>
-                    <div class="px-3.5 py-2.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between gap-4">
+            <?php if ($favTeamId > 0 && ($favStanding !== null || !empty($userPrefs['fav_team_name']))): ?>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div class="flex items-center gap-3.5">
+                        <?php
+                        $favIcon = (string)($favStanding['teamIconUrl'] ?? $userPrefs['fav_team_icon'] ?? '');
+                        $favName = (string)($favStanding['teamName'] ?? $userPrefs['fav_team_name'] ?? 'Mein Verein');
+                        ?>
+                        <?php if ($favIcon !== ''): ?>
+                            <img src="<?= e($favIcon) ?>" alt="<?= e($favName) ?>" class="w-12 h-12 object-contain shrink-0 drop-shadow-sm" loading="lazy" referrerpolicy="no-referrer">
+                        <?php else: ?>
+                            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-2xl">⭐</div>
+                        <?php endif; ?>
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                <?= (int)$selectedMatchday ?>. Spieltag <?= $fmScores['is_live'] ? '• 🔴 LIVE' : ($fmScores['is_finished'] ? '• Endstand' : '• Anstoß') ?>
-                            </div>
-                            <div class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                                <?= e($fmT1) ?> <span class="text-slate-400 font-normal">vs.</span> <?= e($fmT2) ?>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <?php if ($fmScores['has_score']): ?>
-                                <span class="px-2.5 py-1 rounded-lg text-sm font-extrabold <?= $fmScores['is_live'] ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900' ?>">
-                                    <?= (int)$fmScores['score1'] ?> : <?= (int)$fmScores['score2'] ?>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-200/80 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200">
+                                    ⭐ Dein Lieblingsverein (<?= e($leagueMeta['short']) ?>)
                                 </span>
-                            <?php elseif ($fmScores['kickoff_ts'] > 0): ?>
-                                <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                                    <?= $germanWeekdays[(int)date('N', $fmScores['kickoff_ts'])] ?? '' ?> <?= date('d.m., H:i', $fmScores['kickoff_ts']) ?>
-                                </span>
+                                <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                                    <?= e($favName) ?>
+                                </h2>
+                            </div>
+                            <?php if ($favStanding !== null): ?>
+                                <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                                    Aktuell <strong>Platz <?= (int)$favStanding['rank'] ?></strong> in der <?= e($leagueMeta['name']) ?>
+                                    • <strong><?= (int)($favStanding['points'] ?? 0) ?> Punkte</strong>
+                                    • Torverhältnis <strong><?= (int)($favStanding['goals'] ?? 0) ?>:<?= (int)($favStanding['opponentGoals'] ?? 0) ?></strong> (<?= ((int)($favStanding['goalDiff'] ?? 0) >= 0 ? '+' : '') . (int)($favStanding['goalDiff'] ?? 0) ?>)
+                                    • Bilanz: <?= (int)($favStanding['won'] ?? 0) ?>S / <?= (int)($favStanding['draw'] ?? 0) ?>U / <?= (int)($favStanding['lost'] ?? 0) ?>N
+                                </p>
+                            <?php else: ?>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    In der gewählten Saison <?= (int)$selectedSeason ?>/<?= substr((string)($selectedSeason + 1), -2) ?> nicht in dieser Liga vertreten.
+                                </p>
                             <?php endif; ?>
                         </div>
                     </div>
-                <?php endif; ?>
-            </div>
+
+                    <?php if ($favMatch !== null): ?>
+                        <?php
+                        $fmScores = extractMatchScores($favMatch);
+                        $fmT1     = (string)($favMatch['team1']['shortName'] ?: $favMatch['team1']['teamName'] ?? '');
+                        $fmT2     = (string)($favMatch['team2']['shortName'] ?: $favMatch['team2']['teamName'] ?? '');
+                        ?>
+                        <div class="px-3.5 py-2.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between gap-4">
+                            <div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                    <?= (int)$selectedMatchday ?>. Spieltag <?= $fmScores['is_live'] ? '• 🔴 LIVE' : ($fmScores['is_finished'] ? '• Endstand' : '• Anstoß') ?>
+                                </div>
+                                <div class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                                    <?= e($fmT1) ?> <span class="text-slate-400 font-normal">vs.</span> <?= e($fmT2) ?>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <?php if ($fmScores['has_score']): ?>
+                                    <span class="px-2.5 py-1 rounded-lg text-sm font-extrabold <?= $fmScores['is_live'] ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900' ?>">
+                                        <?= (int)$fmScores['score1'] ?> : <?= (int)$fmScores['score2'] ?><?= $fmScores['extra_suffix'] !== '' ? ' ' . e($fmScores['extra_suffix']) : '' ?>
+                                    </span>
+                                <?php elseif ($fmScores['kickoff_ts'] > 0): ?>
+                                    <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                        <?= $germanWeekdays[(int)date('N', $fmScores['kickoff_ts'])] ?? '' ?> <?= date('d.m., H:i', $fmScores['kickoff_ts']) ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <p class="text-xs text-slate-600 dark:text-slate-300">
+                    💡 Für die <strong><?= e($leagueMeta['name']) ?></strong> hast du noch keinen Lieblingsverein ausgewählt – klicke unten in der Tabelle einfach auf den Stern <kbd class="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold">☆</kbd> neben deinem Wunschverein!
+                </p>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 
