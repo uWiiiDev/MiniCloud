@@ -2217,19 +2217,27 @@ function queryLocalOllamaAssistant(
     string $question,
     string $lang,
     array $topKbEntries,
-    bool $isGeneralQuestion = false
+    bool $isGeneralQuestion = false,
+    ?string &$replyHeadingOut = null
 ): ?string {
-    if (($appSettings['assistant_use_ollama'] ?? '1') !== '1') {
+    $llmProvider = (string)($appSettings['assistant_llm_provider'] ?? 'auto');
+    if (($appSettings['assistant_use_ollama'] ?? '1') !== '1' || $llmProvider === 'none') {
         return null;
     }
+
+    $geminiKey   = trim((string)($appSettings['assistant_gemini_api_key'] ?? ''));
+    $geminiModel = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+    $tryGemini   = ($geminiKey !== '' && in_array($llmProvider, ['auto', 'gemini'], true));
+    $tryOllama   = in_array($llmProvider, ['auto', 'ollama'], true);
 
     $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
-    $status = probeLocalOllamaStatus($preferredModel);
-    if (!$status['available'] || $status['active_model'] === '') {
+    $status = $tryOllama ? probeLocalOllamaStatus($preferredModel) : ['available' => false, 'active_model' => ''];
+
+    if (!$tryGemini && (!$status['available'] || $status['active_model'] === '')) {
         return null;
     }
 
-    // Session-Lock vor dem lokalen Modell-Aufruf nicht blockieren, aber History vorher auslesen
+    // Session-Lock vor dem KI-Aufruf nicht blockieren, aber History vorher auslesen
     $history = $_SESSION['assistant_context']['history'] ?? [];
 
     // Kompakte Live-Konto-Fakten für den System-Prompt zusammenstellen
@@ -2292,14 +2300,43 @@ function queryLocalOllamaAssistant(
         ['role' => 'system', 'content' => $sysPrompt],
     ];
     if (is_array($history)) {
-        foreach (array_slice($history, -2) as $turn) {
+        foreach (array_slice($history, -3) as $turn) {
             if (!empty($turn['q']) && !empty($turn['a'])) {
-                $messages[] = ['role' => 'user', 'content' => mb_substr((string)$turn['q'], 0, 180)];
-                $messages[] = ['role' => 'assistant', 'content' => mb_substr((string)$turn['a'], 0, 240)];
+                $messages[] = ['role' => 'user', 'content' => mb_substr((string)$turn['q'], 0, 280)];
+                $messages[] = ['role' => 'assistant', 'content' => mb_substr((string)$turn['a'], 0, 380)];
             }
         }
     }
     $messages[] = ['role' => 'user', 'content' => $question];
+
+    // PHP-Session-Sperre vor dem KI-Aufruf freigeben, damit andere Requests nicht warten
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    // A) Zuerst Google Gemini API versuchen (sofern API-Key vorhanden und Modus 'auto' oder 'gemini')
+    if ($tryGemini && function_exists('callGoogleGeminiApi')) {
+        $usedGeminiModel = null;
+        $geminiReply = callGoogleGeminiApi(
+            $geminiKey,
+            $geminiModel,
+            $sysPrompt,
+            $messages,
+            $isGeneralQuestion ? 0.3 : 0.2,
+            750,
+            $usedGeminiModel
+        );
+        if ($geminiReply !== null && $geminiReply !== '') {
+            $mdlLbl = $usedGeminiModel ?: $geminiModel;
+            $replyHeadingOut = "✨ **Google Gemini KI-Antwort (`{$mdlLbl}`)**";
+            return $geminiReply;
+        }
+    }
+
+    // B) Lokales Ollama auf 127.0.0.1:11434 (sofern Modus 'auto' oder 'ollama' und Dienst erreichbar)
+    if (!$tryOllama || !$status['available'] || $status['active_model'] === '') {
+        return null;
+    }
 
     $payload = json_encode([
         'model'      => $status['active_model'],
@@ -2314,11 +2351,6 @@ function queryLocalOllamaAssistant(
 
     if (!is_string($payload)) {
         return null;
-    }
-
-    // PHP-Session-Sperre vor dem lokalen KI-Aufruf freigeben, damit andere Requests nicht warten
-    if (session_status() === PHP_SESSION_ACTIVE) {
-        session_write_close();
     }
 
     $ctx = stream_context_create([
@@ -2351,6 +2383,7 @@ function queryLocalOllamaAssistant(
         }
     }
 
+    $replyHeadingOut = "🧠 **Lokale KI-Antwort (`{$status['active_model']}`)**";
     return $content;
 }
 
@@ -2481,52 +2514,78 @@ function createAssistantOfficeDocx(
     $draftMarkdown = '';
     $usedAi = false;
 
-    // 1. Versuch: Stufe 2 (Lokales KI-Modell z. B. gemma2:2b via Ollama), falls aktiv
-    if (($appSettings['assistant_use_ollama'] ?? '1') === '1') {
-        $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
-        $status = probeLocalOllamaStatus($preferredModel);
-        if ($status['available'] && $status['active_model'] !== '') {
+    // 1. Versuch: Stufe 2 (Google Gemini API oder lokales KI-Modell via Ollama), falls aktiv
+    $llmProvider = (string)($appSettings['assistant_llm_provider'] ?? 'auto');
+    if (($appSettings['assistant_use_ollama'] ?? '1') === '1' && $llmProvider !== 'none') {
+        $geminiKey   = trim((string)($appSettings['assistant_gemini_api_key'] ?? ''));
+        $geminiModel = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+        $tryGemini   = ($geminiKey !== '' && in_array($llmProvider, ['auto', 'gemini'], true));
+        $tryOllama   = in_array($llmProvider, ['auto', 'ollama'], true);
+
+        $docPrompt = "Du bist ein professioneller deutscher Brief- und Dokumenten-Assistent. "
+            . "Verfasse SOFORT und OHNE einleitende Vorrede direkt den fertigen Text für folgenden Wunsch von {$username} (Datum: {$todayStr}):\n"
+            . "„{$question}“\n\n"
+            . "Vorgaben:\n"
+            . "- Beginne mit Absender ({$username}, [Straße], [PLZ Ort]), Empfänger ({$topicLabel}, [Adresse]) und Datum ({$todayStr}).\n"
+            . "- Füge eine fettgedruckte Betreffzeile (**Betreff: ...**), eine höfliche Anrede, alle rechtlich/inhaltlich wichtigen Absätze (bei Kündigungen inkl. Mitglieds-/Vertragsnummer-Platzhalter, Kündigung zum nächstmöglichen Zeitpunkt, Bitte um schriftliche Bestätigung und Widerruf einer evtl. Einzugsermächtigung) sowie „Mit freundlichen Grüßen“ und {$username} ein.";
+
+        if ($tryGemini && function_exists('callGoogleGeminiApi')) {
             if (session_status() === PHP_SESSION_ACTIVE) {
                 session_write_close();
             }
+            $geminiDocText = callGoogleGeminiApi(
+                $geminiKey,
+                $geminiModel,
+                'Du bist ein präziser deutscher Brief- und Dokumenten-Generator.',
+                [['role' => 'user', 'content' => $docPrompt]],
+                0.25,
+                900
+            );
+            if ($geminiDocText !== null && mb_strlen($geminiDocText) >= 80) {
+                $draftMarkdown = $geminiDocText;
+                $usedAi = true;
+            }
+        }
 
-            $docPrompt = "Du bist ein professioneller deutscher Brief- und Dokumenten-Assistent. "
-                . "Verfasse SOFORT und OHNE einleitende Vorrede direkt den fertigen Text für folgenden Wunsch von {$username} (Datum: {$todayStr}):\n"
-                . "„{$question}“\n\n"
-                . "Vorgaben:\n"
-                . "- Beginne mit Absender ({$username}, [Straße], [PLZ Ort]), Empfänger ({$topicLabel}, [Adresse]) und Datum ({$todayStr}).\n"
-                . "- Füge eine fettgedruckte Betreffzeile (**Betreff: ...**), eine höfliche Anrede, alle rechtlich/inhaltlich wichtigen Absätze (bei Kündigungen inkl. Mitglieds-/Vertragsnummer-Platzhalter, Kündigung zum nächstmöglichen Zeitpunkt, Bitte um schriftliche Bestätigung und Widerruf einer evtl. Einzugsermächtigung) sowie „Mit freundlichen Grüßen“ und {$username} ein.";
+        if ($draftMarkdown === '' && $tryOllama) {
+            $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+            $status = probeLocalOllamaStatus($preferredModel);
+            if ($status['available'] && $status['active_model'] !== '') {
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    session_write_close();
+                }
 
-            $payload = json_encode([
-                'model'      => $status['active_model'],
-                'messages'   => [
-                    ['role' => 'user', 'content' => $docPrompt],
-                ],
-                'stream'     => false,
-                'keep_alive' => '24h',
-                'options'    => [
-                    'temperature' => 0.25,
-                    'num_predict' => 420,
-                ],
-            ], JSON_UNESCAPED_UNICODE);
-
-            if (is_string($payload)) {
-                $ctx = stream_context_create([
-                    'http' => [
-                        'method'        => 'POST',
-                        'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
-                        'content'       => $payload,
-                        'timeout'       => 45.0,
-                        'ignore_errors' => true,
+                $payload = json_encode([
+                    'model'      => $status['active_model'],
+                    'messages'   => [
+                        ['role' => 'user', 'content' => $docPrompt],
                     ],
-                ]);
-                $rawResp = @file_get_contents('http://127.0.0.1:11434/api/chat', false, $ctx);
-                if (is_string($rawResp) && $rawResp !== '') {
-                    $decoded = json_decode($rawResp, true);
-                    $aiText  = trim((string)($decoded['message']['content'] ?? ''));
-                    if (mb_strlen($aiText) >= 80) {
-                        $draftMarkdown = $aiText;
-                        $usedAi = true;
+                    'stream'     => false,
+                    'keep_alive' => '24h',
+                    'options'    => [
+                        'temperature' => 0.25,
+                        'num_predict' => 420,
+                    ],
+                ], JSON_UNESCAPED_UNICODE);
+
+                if (is_string($payload)) {
+                    $ctx = stream_context_create([
+                        'http' => [
+                            'method'        => 'POST',
+                            'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($payload) . "\r\n",
+                            'content'       => $payload,
+                            'timeout'       => 45.0,
+                            'ignore_errors' => true,
+                        ],
+                    ]);
+                    $rawResp = @file_get_contents('http://127.0.0.1:11434/api/chat', false, $ctx);
+                    if (is_string($rawResp) && $rawResp !== '') {
+                        $decoded = json_decode($rawResp, true);
+                        $aiText  = trim((string)($decoded['message']['content'] ?? ''));
+                        if (mb_strlen($aiText) >= 80) {
+                            $draftMarkdown = $aiText;
+                            $usedAi = true;
+                        }
                     }
                 }
             }
@@ -2768,10 +2827,53 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
     ];
     $targetLangName = $langNames[$lang] ?? 'Deutsch';
 
-    // 1. Versuch: Lokales KI-Sprachmodell (Ollama gemma2:2b)
-    if (($appSettings['assistant_use_ollama'] ?? '1') === '1') {
+    // 1. Versuch: Stufe 2 (Google Gemini API oder lokales Ollama gemma2:2b)
+    $llmProvider = (string)($appSettings['assistant_llm_provider'] ?? 'auto');
+    if (($appSettings['assistant_use_ollama'] ?? '1') === '1' && $llmProvider !== 'none') {
+        $geminiKey   = trim((string)($appSettings['assistant_gemini_api_key'] ?? ''));
+        $geminiModel = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+        $tryGemini   = ($geminiKey !== '' && in_array($llmProvider, ['auto', 'gemini'], true));
+        $tryOllama   = in_array($llmProvider, ['auto', 'ollama'], true);
+
+        if ($tryGemini && function_exists('callGoogleGeminiApi')) {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            $sysPromptGem = "Du bist ein präziser Dokumenten-Assistent. Datei: \"{$docInfo['name']}\" ({$docInfo['words']} Wörter).\n"
+                . "Beantworte die Frage auf {$targetLangName} kompakt und strukturiert (mit **Fettdruck** und Stichpunkten) anhand des folgenden Dateiinhalts:\n\n"
+                . mb_substr($docInfo['text'], 0, 6000, 'UTF-8');
+
+            $usedGemMdl = null;
+            $gemDocAns = callGoogleGeminiApi(
+                $geminiKey,
+                $geminiModel,
+                $sysPromptGem,
+                [['role' => 'user', 'content' => $qEffective]],
+                0.2,
+                800,
+                $usedGemMdl
+            );
+            if ($gemDocAns !== null && $gemDocAns !== '') {
+                $mdlLbl = $usedGemMdl ?: $geminiModel;
+                $header = "✨ **Google Gemini Dokumenten-Analyse (`{$mdlLbl}`): „" . htmlspecialchars($docInfo['name'], ENT_QUOTES, 'UTF-8') . "“** ({$docInfo['size']} · {$docInfo['words']} Wörter)\n\n";
+                return [
+                    'reply'   => $header . $gemDocAns,
+                    'actions' => [
+                        ['label' => '📝 In Office Light öffnen', 'url' => 'office.php?id=' . $docInfo['id']],
+                        ['label' => '📥 Datei herunterladen', 'url' => 'download.php?id=' . $docInfo['id']],
+                    ],
+                    'followups' => [
+                        'Welche Zahlen, Daten oder Fristen stehen im Dokument?',
+                        'Erstelle 3 kurze To-Dos aus diesem Dokument',
+                        'Übersetze die Kernaussagen auf Englisch',
+                    ],
+                    'lang' => $lang,
+                ];
+            }
+        }
+
         $preferredModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
-        $status = probeLocalOllamaStatus($preferredModel);
+        $status = $tryOllama ? probeLocalOllamaStatus($preferredModel) : ['available' => false, 'active_model' => ''];
         if ($status['available'] && $status['active_model'] !== '') {
             if (session_status() === PHP_SESSION_ACTIVE) {
                 session_write_close();
@@ -4036,6 +4138,7 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             ? (string)$bestEntry['id']
             : 'ollama_general';
 
+        $stage2Heading = null;
         $ollamaReply = queryLocalOllamaAssistant(
             $pdo,
             $userId,
@@ -4045,7 +4148,8 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
             $qTrim,
             $lang,
             $topKbForRag,
-            $isGeneralQuestion
+            $isGeneralQuestion,
+            $stage2Heading
         );
         if ($ollamaReply !== null && $ollamaReply !== '') {
             rememberAssistantTurn($qTrim, $ollamaReply, $topicId);
@@ -4063,8 +4167,9 @@ function generateAssistantResponse(PDO $pdo, int $userId, string $username, bool
                     $pack['q_events'],
                     'Generiere ein sicheres Passwort',
                 ];
+            $headLbl = $stage2Heading ?: "🧠 **Lokale KI-Antwort**";
             return [
-                'reply'     => "🧠 **Lokale KI-Antwort**\n\n" . $ollamaReply,
+                'reply'     => $headLbl . "\n\n" . $ollamaReply,
                 'actions'   => $actions,
                 'followups' => $followups,
                 'lang'      => $lang,
@@ -4264,9 +4369,15 @@ $appTitle         = (string)($appSettings['app_title'] ?? 'MiniCloud');
 $uiPack           = getAssistantLangPack($uiLang, $username, $appTitle);
 $allowedLanguages = getAllowedLanguages();
 $pageTitle        = $uiPack['page_title'];
-$ollamaUiEnabled  = ($appSettings['assistant_use_ollama'] ?? '1') === '1';
+$uiLlmProvider    = (string)($appSettings['assistant_llm_provider'] ?? 'auto');
+$ollamaUiEnabled  = ($appSettings['assistant_use_ollama'] ?? '1') === '1' && $uiLlmProvider !== 'none';
+$geminiUiKey      = trim((string)($appSettings['assistant_gemini_api_key'] ?? ''));
+$geminiUiModel    = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+$geminiUiActive   = $ollamaUiEnabled && $geminiUiKey !== '' && in_array($uiLlmProvider, ['auto', 'gemini'], true);
 $ollamaUiModel    = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
-$ollamaUiProbe    = $ollamaUiEnabled ? probeLocalOllamaStatus($ollamaUiModel) : ['available' => false, 'active_model' => ''];
+$ollamaUiProbe    = ($ollamaUiEnabled && in_array($uiLlmProvider, ['auto', 'ollama'], true))
+    ? probeLocalOllamaStatus($ollamaUiModel)
+    : ['available' => false, 'active_model' => ''];
 require_once __DIR__ . '/includes/header.php';
 $csrfToken = getCsrfToken();
 ?>
@@ -4286,7 +4397,11 @@ $csrfToken = getCsrfToken();
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                         <?= e($uiPack['header_badge']) ?>
                     </span>
-                    <?php if (!empty($ollamaUiProbe['available'])): ?>
+                    <?php if ($geminiUiActive): ?>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800" title="Google Gemini API aktiv">
+                            ✨ Stufe 1 + 2 (Google Gemini: <?= e($geminiUiModel) ?>)
+                        </span>
+                    <?php elseif (!empty($ollamaUiProbe['available'])): ?>
                         <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800" title="Lokales KI-Sprachmodell auf 127.0.0.1:11434 aktiv">
                             🧠 Stufe 1 + 2 (Ollama: <?= e((string)$ollamaUiProbe['active_model']) ?>)
                         </span>

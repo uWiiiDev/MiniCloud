@@ -1682,9 +1682,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $enableFulltext    = isset($_POST['enable_fulltext_search']) && $_POST['enable_fulltext_search'] === '1' ? '1' : '0';
         $trashRetention    = isset($_POST['trash_retention_days']) ? max(0, min(3650, (int)$_POST['trash_retention_days'])) : 30;
-        $useOllama         = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
-        $ollamaModelRaw   = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
-        $ollamaModel      = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'gemma2:2b';
+        $llmProvider       = trim((string)($_POST['assistant_llm_provider'] ?? 'auto'));
+        if (!in_array($llmProvider, ['auto', 'gemini', 'ollama', 'none'], true)) {
+            $llmProvider = 'auto';
+        }
+        $useOllama         = ($llmProvider === 'none') ? '0' : '1';
+        $ollamaModelRaw    = trim((string)($_POST['assistant_ollama_model'] ?? 'gemma2:2b'));
+        $ollamaModel       = preg_replace('/[^a-zA-Z0-9._:-]/', '', $ollamaModelRaw) ?: 'gemma2:2b';
+        $geminiApiKey      = trim((string)($_POST['assistant_gemini_api_key'] ?? ''));
+        $geminiModelRaw    = trim((string)($_POST['assistant_gemini_model'] ?? 'gemini-2.5-flash'));
+        $geminiModel       = preg_replace('/[^a-zA-Z0-9._-]/', '', $geminiModelRaw) ?: 'gemini-2.5-flash';
 
         saveAppSetting($pdo, 'enable_calendar', $enableCalendar);
         saveAppSetting($pdo, 'enable_chat', $enableChat);
@@ -1700,8 +1707,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_projects', $enableProjects);
         saveAppSetting($pdo, 'enable_office', $enableOffice);
         saveAppSetting($pdo, 'enable_assistant', $enableAssistant);
+        saveAppSetting($pdo, 'assistant_llm_provider', $llmProvider);
         saveAppSetting($pdo, 'assistant_use_ollama', $useOllama);
         saveAppSetting($pdo, 'assistant_ollama_model', mb_substr($ollamaModel, 0, 64));
+        saveAppSetting($pdo, 'assistant_gemini_api_key', mb_substr($geminiApiKey, 0, 180));
+        saveAppSetting($pdo, 'assistant_gemini_model', mb_substr($geminiModel, 0, 64));
         saveAppSetting($pdo, 'enable_ebooks', $enableEbooks);
         saveAppSetting($pdo, 'enable_games', $enableGames);
         saveAppSetting($pdo, 'enable_mindmap', $enableMindmap);
@@ -3484,31 +3494,88 @@ foreach ($modList as $mItem) {
                             </span>
                         </label>
 
-                        <!-- Stufe 2: Optionales lokales KI-Sprachmodell (Ollama) -->
-                        <div class="mt-2 p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
-                            <div class="flex items-center justify-between gap-2">
-                                <label class="flex items-center gap-2 text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        name="assistant_use_ollama"
-                                        value="1"
-                                        <?= ($currentSettings['assistant_use_ollama'] ?? '1') === '1' ? 'checked' : '' ?>
-                                        class="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                                    >
-                                    <span>🧠 Stufe 2: Lokales Sprachmodell (Ollama) nutzen, falls verfügbar</span>
-                                </label>
-                                <?php if ($ollamaStatus['available']): ?>
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                        🟢 Ollama aktiv (<?= e($ollamaStatus['active_model']) ?>)
-                                    </span>
-                                <?php else: ?>
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400" title="Auf Shared-Webhosting (z. B. STRATO) wird automatisch und verzögerungsfrei Stufe 1 verwendet.">
-                                        ⚪ Nur Stufe 1 (kein lokales Ollama)
-                                    </span>
-                                <?php endif; ?>
+                        <!-- Stufe 2: KI-Sprachmodell (Google Gemini API & Lokales Ollama) -->
+                        <?php
+                        $curLlmProvider = (string)($currentSettings['assistant_llm_provider'] ?? 'auto');
+                        if (($currentSettings['assistant_use_ollama'] ?? '1') === '0' && $curLlmProvider === 'auto') {
+                            $curLlmProvider = 'none';
+                        }
+                        $hasGeminiKey = trim((string)($currentSettings['assistant_gemini_api_key'] ?? '')) !== '';
+                        $curGeminiModel = trim((string)($currentSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+                        ?>
+                        <div class="mt-2 p-3 rounded-xl bg-white/90 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                                    🧠 Stufe 2: KI-Sprachmodell (Google Gemini / Lokales Ollama)
+                                </span>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <?php if ($hasGeminiKey && in_array($curLlmProvider, ['auto', 'gemini'], true)): ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                                            ✨ Google Gemini aktiv (<?= e($curGeminiModel) ?>)
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if ($ollamaStatus['available'] && in_array($curLlmProvider, ['auto', 'ollama'], true)): ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                            🟢 Ollama bereit (<?= e($ollamaStatus['active_model']) ?>)
+                                        </span>
+                                    <?php elseif (!$hasGeminiKey && !$ollamaStatus['available']): ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                            ⚪ Nur Stufe 1 aktiv
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">Modell (`127.0.0.1:11434`):</span>
+
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">KI-Engine Modus:</label>
+                                <select
+                                    name="assistant_llm_provider"
+                                    class="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100"
+                                >
+                                    <option value="auto" <?= $curLlmProvider === 'auto' ? 'selected' : '' ?>>✨ Automatisch (Google Gemini API falls Key hinterlegt, sonst lokales Ollama)</option>
+                                    <option value="gemini" <?= $curLlmProvider === 'gemini' ? 'selected' : '' ?>>✨ Nur Google Gemini API (Antigravity / Gemini-Modelle)</option>
+                                    <option value="ollama" <?= $curLlmProvider === 'ollama' ? 'selected' : '' ?>>🔒 Nur 100 % Lokal (Ollama auf eigenem Server 127.0.0.1)</option>
+                                    <option value="none" <?= $curLlmProvider === 'none' ? 'selected' : '' ?>>⚪ Deaktiviert (Nur Stufe 1 lokale Datenbank-Engine)</option>
+                                </select>
+                            </div>
+
+                            <!-- Google Gemini API-Key & Modell -->
+                            <div class="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/25 border border-indigo-200/60 dark:border-indigo-800/50 space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-[11px] font-bold text-indigo-900 dark:text-indigo-200">✨ Google Gemini API (Google AI Studio)</span>
+                                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                                        🔑 Kostenlosen API-Key holen &rarr;
+                                    </a>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div class="sm:col-span-2">
+                                        <input
+                                            type="password"
+                                            name="assistant_gemini_api_key"
+                                            value="<?= e((string)($currentSettings['assistant_gemini_api_key'] ?? '')) ?>"
+                                            placeholder="AIzaSy... (Google AI Studio API-Key)"
+                                            autocomplete="off"
+                                            class="w-full px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700/70 text-[11px] font-mono text-slate-800 dark:text-slate-200"
+                                        >
+                                    </div>
+                                    <div>
+                                        <select
+                                            name="assistant_gemini_model"
+                                            class="w-full px-2 py-1 rounded-md bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700/70 text-[11px] font-semibold text-slate-800 dark:text-slate-200"
+                                            title="Google Gemini Modell"
+                                        >
+                                            <option value="gemini-2.5-flash" <?= $curGeminiModel === 'gemini-2.5-flash' ? 'selected' : '' ?>>gemini-2.5-flash (Empfohlen)</option>
+                                            <option value="gemini-2.5-pro" <?= $curGeminiModel === 'gemini-2.5-pro' ? 'selected' : '' ?>>gemini-2.5-pro (Max. Qualität)</option>
+                                            <option value="gemini-2.0-flash" <?= $curGeminiModel === 'gemini-2.0-flash' ? 'selected' : '' ?>>gemini-2.0-flash (Schnell)</option>
+                                            <option value="gemini-2.0-flash-lite" <?= $curGeminiModel === 'gemini-2.0-flash-lite' ? 'selected' : '' ?>>gemini-2.0-flash-lite (Sparsam)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Lokales Ollama Modell -->
+                            <div class="flex items-center gap-2 pt-0.5">
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">🔒 Lokales Ollama (`127.0.0.1:11434`):</span>
                                 <input
                                     type="text"
                                     name="assistant_ollama_model"

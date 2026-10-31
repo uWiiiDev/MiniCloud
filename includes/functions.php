@@ -708,6 +708,9 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'trash_retention_days'          => '30',
         'assistant_use_ollama'          => '1',
         'assistant_ollama_model'        => 'gemma2:2b',
+        'assistant_llm_provider'        => 'auto',
+        'assistant_gemini_api_key'      => '',
+        'assistant_gemini_model'        => 'gemini-2.5-flash',
         'github_repo'                   => 'uWiiiDev/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
@@ -3644,6 +3647,153 @@ function probeLocalOllamaStatus(string $preferredModel = 'gemma2:2b'): array
 
     $cached = $result;
     return $result;
+}
+
+/**
+ * Sendet eine Chat-/Text-Anfrage an die offizielle Google Gemini API (Google AI Studio / Generative Language API).
+ *
+ * @param array<int, array{role: string, content: string}> $messages
+ */
+function callGoogleGeminiApi(
+    string $apiKey,
+    string $model = 'gemini-2.5-flash',
+    string $systemPrompt = '',
+    array $messages = [],
+    float $temperature = 0.25,
+    int $maxOutputTokens = 700,
+    ?string &$usedModelOut = null
+): ?string {
+    $cleanKey = trim($apiKey);
+    if ($cleanKey === '') {
+        return null;
+    }
+
+    $cleanModel = preg_replace('/[^a-zA-Z0-9._-]/', '', trim($model)) ?: 'gemini-2.5-flash';
+    $candidateModels = array_values(array_unique([$cleanModel, 'gemini-2.5-flash', 'gemini-2.0-flash']));
+
+    $contents = [];
+    foreach ($messages as $m) {
+        $role = strtolower(trim((string)($m['role'] ?? 'user')));
+        $text = trim((string)($m['content'] ?? ''));
+        if ($text === '' || $role === 'system') {
+            continue;
+        }
+        $geminiRole = ($role === 'assistant' || $role === 'model') ? 'model' : 'user';
+        // Aufeinanderfolgende Nachrichten derselben Rolle zusammenführen (Gemini-API-Anforderung)
+        $lastIdx = count($contents) - 1;
+        if ($lastIdx >= 0 && $contents[$lastIdx]['role'] === $geminiRole) {
+            $contents[$lastIdx]['parts'][0]['text'] .= "\n\n" . $text;
+        } else {
+            $contents[] = [
+                'role'  => $geminiRole,
+                'parts' => [['text' => $text]],
+            ];
+        }
+    }
+
+    // Gemini erwartet als erste Nachricht zwingend role = 'user'
+    while (!empty($contents) && $contents[0]['role'] !== 'user') {
+        array_shift($contents);
+    }
+
+    if (empty($contents)) {
+        return null;
+    }
+
+    $bodyArr = [
+        'contents' => $contents,
+        'generationConfig' => [
+            'temperature'     => $temperature,
+            'maxOutputTokens' => $maxOutputTokens,
+        ],
+    ];
+
+    if (trim($systemPrompt) !== '') {
+        $bodyArr['systemInstruction'] = [
+            'parts' => [['text' => trim($systemPrompt)]],
+        ];
+    }
+
+    $jsonPayload = json_encode($bodyArr, JSON_UNESCAPED_UNICODE);
+    if (!is_string($jsonPayload)) {
+        return null;
+    }
+
+    foreach ($candidateModels as $tryModel) {
+        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/'
+            . rawurlencode($tryModel)
+            . ':generateContent?key='
+            . rawurlencode($cleanKey);
+
+        $rawResp  = null;
+        $httpCode = 0;
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($endpoint);
+            if ($ch !== false) {
+                curl_setopt_array($ch, [
+                    CURLOPT_POST           => true,
+                    CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+                    CURLOPT_POSTFIELDS     => $jsonPayload,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 28,
+                    CURLOPT_CONNECTTIMEOUT => 8,
+                ]);
+                $res = curl_exec($ch);
+                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if (is_string($res)) {
+                    $rawResp = $res;
+                }
+            }
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'        => 'POST',
+                    'header'        => "Content-Type: application/json\r\nContent-Length: " . strlen($jsonPayload) . "\r\n",
+                    'content'       => $jsonPayload,
+                    'timeout'       => 28.0,
+                    'ignore_errors' => true,
+                ],
+            ]);
+            $res = @file_get_contents($endpoint, false, $ctx);
+            if (is_string($res)) {
+                $rawResp = $res;
+                $httpCode = 200;
+            }
+        }
+
+        if (!is_string($rawResp) || $rawResp === '') {
+            continue;
+        }
+
+        $decoded = json_decode($rawResp, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+
+        $parts = $decoded['candidates'][0]['content']['parts'] ?? [];
+        if (is_array($parts) && !empty($parts)) {
+            $textChunks = [];
+            foreach ($parts as $p) {
+                if (isset($p['text']) && is_string($p['text'])) {
+                    $textChunks[] = $p['text'];
+                }
+            }
+            $finalText = trim(implode("\n", $textChunks));
+            if ($finalText !== '') {
+                $usedModelOut = $tryModel;
+                return $finalText;
+            }
+        }
+
+        // Bei ungültigem API-Key (400 / 403) nicht unnötig weitere Modelle probieren
+        if ($httpCode === 400 || $httpCode === 401 || $httpCode === 403) {
+            break;
+        }
+    }
+
+    return null;
 }
 
 /**

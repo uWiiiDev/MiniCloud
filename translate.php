@@ -583,6 +583,63 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
 }
 
 /**
+ * Übersetzt Text kontext- und stilbewusst über die Google Gemini API (sofern ein API-Key hinterlegt ist).
+ *
+ * @return array{ok: bool, translated: string, detected_lang: string, engine: string, error?: string}
+ */
+function translateViaGoogleGemini(string $text, string $sourceLang, string $targetLang, string $apiKey, string $model = 'gemini-2.5-flash', string $formality = 'default'): array
+{
+    if (trim($apiKey) === '' || !function_exists('callGoogleGeminiApi')) {
+        return ['ok' => false, 'translated' => '', 'detected_lang' => '', 'engine' => 'Google Gemini', 'error' => 'Kein Google Gemini API-Key konfiguriert.'];
+    }
+
+    $langs = getTranslationLanguages();
+    $targetName = $langs[$targetLang]['name'] ?? $targetLang;
+    $sourceName = ($sourceLang !== 'auto' && isset($langs[$sourceLang])) ? $langs[$sourceLang]['name'] : 'der automatisch erkannten Ausgangssprache';
+
+    $toneHint = '';
+    if ($formality === 'more') {
+        $toneHint = ' Verwende eine höfliche, formelle Anrede (Siezen).';
+    } elseif ($formality === 'less') {
+        $toneHint = ' Verwende eine lockere, persönliche Anrede (Duzen).';
+    }
+
+    $sysPrompt = "Du bist ein hochpräziser, muttersprachlicher Fachübersetzer. "
+        . "Übersetze den eingegebenen Text von {$sourceName} nach {$targetName}.{$toneHint} "
+        . "Behalte Absätze, Zeilenumbrüche und Formatierungen exakt bei. "
+        . "Gib AUSSCHLIESSLICH den übersetzten Text ohne Vorrede, ohne Erklärungen und ohne zusätzliche Anführungszeichen zurück.";
+
+    $usedModel = null;
+    $translated = callGoogleGeminiApi(
+        $apiKey,
+        $model,
+        $sysPrompt,
+        [['role' => 'user', 'content' => $text]],
+        0.15,
+        4096,
+        $usedModel
+    );
+
+    if ($translated === null || trim($translated) === '') {
+        return [
+            'ok'            => false,
+            'translated'    => '',
+            'detected_lang' => $sourceLang !== 'auto' ? $sourceLang : 'de',
+            'engine'        => 'Google Gemini',
+            'error'         => 'Google Gemini API hat keine Übersetzung zurückgegeben (bitte API-Key prüfen).',
+        ];
+    }
+
+    $mdlLbl = $usedModel ?: $model;
+    return [
+        'ok'            => true,
+        'translated'    => trim($translated),
+        'detected_lang' => $sourceLang !== 'auto' ? $sourceLang : 'de',
+        'engine'        => '✨ Google Gemini KI (' . $mdlLbl . ')',
+    ];
+}
+
+/**
  * Extrahiert lesbaren Dokumenttext mit erhaltenen Zeilenumbrüchen für die Dokument-Übersetzung.
  */
 function extractDocumentTextForTranslation(PDO $pdo, array $fileRow, int $maxChars = 25000): string
@@ -696,7 +753,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         if (str_starts_with($engineMode, 'local:')) {
             $customOllamaModel = preg_replace('/[^a-zA-Z0-9._:-]/', '', substr($engineMode, 6)) ?: '';
             $engineMode = 'local_ollama';
-        } elseif (!in_array($engineMode, ['auto', 'local', 'local_lt', 'local_ollama', 'nmt', 'deepl'], true)) {
+        } elseif (!in_array($engineMode, ['auto', 'local', 'local_lt', 'local_ollama', 'nmt', 'deepl', 'gemini'], true)) {
             $engineMode = 'auto';
         }
 
@@ -717,6 +774,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         session_write_close();
 
         $deeplKey    = trim((string)($appSettings['translator_deepl_api_key'] ?? ''));
+        $geminiKey   = trim((string)($appSettings['assistant_gemini_api_key'] ?? ''));
+        $geminiModel = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
         $libreUrl    = trim((string)($appSettings['translator_libretranslate_url'] ?? ''));
         $ollamaModel = $customOllamaModel !== ''
             ? $customOllamaModel
@@ -739,18 +798,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 }
             }
         }
-        // B) Expliziter DeepL-Modus
+        // B) Expliziter Google Gemini KI-Modus
+        elseif ($engineMode === 'gemini' && $geminiKey !== '') {
+            $result = translateViaGoogleGemini($sourceText, $sourceLang, $targetLang, $geminiKey, $geminiModel, $formality);
+        }
+        // C) Expliziter DeepL-Modus
         elseif ($engineMode === 'deepl' && $deeplKey !== '') {
             $result = translateViaDeepL($sourceText, $sourceLang, $targetLang, $deeplKey, $formality);
         }
-        // C) Expliziter Standard-NMT-Modus
+        // D) Expliziter Standard-NMT-Modus
         elseif ($engineMode === 'nmt') {
             $result = translateViaStandardNmt($sourceText, $sourceLang, $targetLang);
         }
-        // D) Automatischer Modus (Kaskade: DeepL -> Standard-NMT -> Intranet-LibreTranslate -> Intranet-Ollama)
+        // E) Automatischer Modus (Kaskade: DeepL -> Google Gemini -> Standard-NMT -> Intranet-LibreTranslate -> Intranet-Ollama)
         else {
             if ($deeplKey !== '') {
                 $result = translateViaDeepL($sourceText, $sourceLang, $targetLang, $deeplKey, $formality);
+            }
+
+            if (($result === null || !$result['ok']) && $geminiKey !== '') {
+                $gemRes = translateViaGoogleGemini($sourceText, $sourceLang, $targetLang, $geminiKey, $geminiModel, $formality);
+                if ($gemRes['ok']) {
+                    $result = $gemRes;
+                }
             }
 
             if ($result === null || !$result['ok']) {
@@ -974,10 +1044,12 @@ $defaultTarget   = strtolower(trim((string)($appSettings['translator_default_tar
 if (!isset($translatorLangs[$defaultTarget])) {
     $defaultTarget = 'en';
 }
-$hasDeepLKey   = trim((string)($appSettings['translator_deepl_api_key'] ?? '')) !== '';
-$hasLibreUrl   = trim((string)($appSettings['translator_libretranslate_url'] ?? '')) !== '';
-$ollamaPrefMdl = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
-$ollamaStatus  = probeLocalOllamaStatus($ollamaPrefMdl);
+$hasDeepLKey    = trim((string)($appSettings['translator_deepl_api_key'] ?? '')) !== '';
+$hasGeminiKey   = trim((string)($appSettings['assistant_gemini_api_key'] ?? '')) !== '';
+$geminiMdlName  = trim((string)($appSettings['assistant_gemini_model'] ?? 'gemini-2.5-flash')) ?: 'gemini-2.5-flash';
+$hasLibreUrl    = trim((string)($appSettings['translator_libretranslate_url'] ?? '')) !== '';
+$ollamaPrefMdl  = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+$ollamaStatus   = probeLocalOllamaStatus($ollamaPrefMdl);
 $hasLocalIntranetEngine = $ollamaStatus['available'] || $hasLibreUrl;
 
 // Übersetzbare Dokumente des Benutzers (und seiner Gruppenordner) laden
@@ -1071,6 +1143,9 @@ require_once __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                     <?php if ($hasLibreUrl): ?>
                         <option value="local_lt">🔒 100 % Lokal: LibreTranslate (Intranet)</option>
+                    <?php endif; ?>
+                    <?php if ($hasGeminiKey): ?>
+                        <option value="gemini">✨ Google Gemini KI (<?= e($geminiMdlName) ?>)</option>
                     <?php endif; ?>
                     <option value="nmt">🌐 Online-NMT (Schnelle Direkt-Übersetzung)</option>
                     <?php if ($hasDeepLKey): ?>
