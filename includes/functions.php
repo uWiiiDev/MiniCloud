@@ -700,6 +700,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_cinema'                 => '1',
         'enable_translator'             => '1',
         'translator_deepl_api_key'      => '',
+        'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
         'enable_dashboard'              => '1',
         'enable_fulltext_search'        => '1',

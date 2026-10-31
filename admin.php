@@ -1664,6 +1664,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableCinema      = isset($_POST['enable_cinema']) && $_POST['enable_cinema'] === '1' ? '1' : '0';
         $enableTranslator  = isset($_POST['enable_translator']) && $_POST['enable_translator'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
+        $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
+        $libreUrl          = ($libreUrlRaw !== '' && preg_match('/^https?:\/\/[^\s"\'<>]+$/i', $libreUrlRaw))
+            ? rtrim(mb_substr($libreUrlRaw, 0, 200), '/')
+            : '';
         $transDefaultTgt   = strtolower(trim((string)($_POST['translator_default_target'] ?? 'en')));
         if (!in_array($transDefaultTgt, ['de', 'en', 'fr', 'es', 'it', 'nl', 'pl', 'pt', 'cs', 'tr', 'uk', 'da', 'sv', 'el', 'ru', 'ar', 'zh', 'ja'], true)) {
             $transDefaultTgt = 'en';
@@ -1705,6 +1709,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_cinema', $enableCinema);
         saveAppSetting($pdo, 'enable_translator', $enableTranslator);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
+        saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
         saveAppSetting($pdo, 'enable_fulltext_search', $enableFulltext);
         saveAppSetting($pdo, 'trash_retention_days', (string)$trashRetention);
@@ -4037,6 +4042,36 @@ foreach ($modList as $mItem) {
                                             <option value="<?= e($tCode) ?>" <?= $curTransTgt === $tCode ? 'selected' : '' ?>><?= e($tName) ?></option>
                                         <?php endforeach; ?>
                                     </select>
+                                </div>
+                            </div>
+
+                            <!-- Intranet / Offline-Übersetzung (Ollama + optional LibreTranslate) -->
+                            <div class="pt-2 border-t border-slate-200/70 dark:border-slate-700/70 space-y-1.5">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                        🔒 Intranet- &amp; Offline-Fähigkeit (100 % lokal ohne Internet):
+                                    </span>
+                                    <?php if ($ollamaStatus['available']): ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                            🟢 Lokales Ollama bereit (<?= e($ollamaStatus['active_model']) ?>)
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                            ⚪ Kein lokales Ollama erkannt
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+                                        Optionale lokale LibreTranslate-URL im Intranet (z. B. <code>http://127.0.0.1:5000</code>):
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="translator_libretranslate_url"
+                                        value="<?= e((string)($currentSettings['translator_libretranslate_url'] ?? '')) ?>"
+                                        placeholder="http://127.0.0.1:5000 (optional – sonst nutzt der Intranet-Modus automatisch das lokale Ollama-Modell)"
+                                        class="w-full px-2.5 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
+                                    >
                                 </div>
                             </div>
                         </div>

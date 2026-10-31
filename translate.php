@@ -385,6 +385,172 @@ function translateViaStandardNmt(string $text, string $sourceLang, string $targe
 }
 
 /**
+ * Übersetzt Text 100 % lokal im Intranet über eine selbstgehostete LibreTranslate-Instanz (z. B. http://127.0.0.1:5000).
+ *
+ * @return array{ok: bool, translated: string, detected_lang: string, engine: string, error?: string}
+ */
+function translateViaLocalLibreTranslate(string $text, string $sourceLang, string $targetLang, string $baseUrl): array
+{
+    $baseUrl = rtrim(trim($baseUrl), '/');
+    if ($baseUrl === '') {
+        return ['ok' => false, 'translated' => '', 'detected_lang' => '', 'engine' => 'LibreTranslate (Intranet)', 'error' => 'Keine LibreTranslate-URL konfiguriert.'];
+    }
+
+    $endpoint = str_ends_with($baseUrl, '/translate') ? $baseUrl : ($baseUrl . '/translate');
+    $chunks   = splitTextIntoTranslationChunks($text, 2000);
+    $translatedParts = [];
+    $detected = $sourceLang !== 'auto' ? $sourceLang : '';
+
+    foreach ($chunks as $chunk) {
+        $payload = json_encode([
+            'q'      => $chunk,
+            'source' => $sourceLang === 'auto' ? 'auto' : $sourceLang,
+            'target' => $targetLang,
+            'format' => 'text',
+        ], JSON_UNESCAPED_UNICODE);
+
+        $res = performTranslationHttpRequest(
+            $endpoint,
+            $payload !== false ? $payload : '{}',
+            ['Content-Type: application/json; charset=UTF-8', 'Accept: application/json'],
+            20
+        );
+
+        if (!$res['ok'] || $res['body'] === '') {
+            return [
+                'ok'            => false,
+                'translated'    => '',
+                'detected_lang' => $detected,
+                'engine'        => 'LibreTranslate (Intranet)',
+                'error'         => 'Lokaler LibreTranslate-Server (' . $baseUrl . ') nicht erreichbar.',
+            ];
+        }
+
+        $json = json_decode($res['body'], true);
+        if (!is_array($json) || !isset($json['translatedText']) || trim((string)$json['translatedText']) === '') {
+            return [
+                'ok'            => false,
+                'translated'    => '',
+                'detected_lang' => $detected,
+                'engine'        => 'LibreTranslate (Intranet)',
+                'error'         => 'Ungültige Antwort vom lokalen LibreTranslate-Server.',
+            ];
+        }
+
+        $translatedParts[] = (string)$json['translatedText'];
+        if ($detected === '' && !empty($json['detectedLanguage']['language'])) {
+            $detected = strtolower(substr((string)$json['detectedLanguage']['language'], 0, 2));
+        }
+    }
+
+    return [
+        'ok'            => true,
+        'translated'    => implode("\n", $translatedParts),
+        'detected_lang' => $detected !== '' ? $detected : ($sourceLang !== 'auto' ? $sourceLang : 'de'),
+        'engine'        => '🔒 LibreTranslate (100 % Intranet / Lokal)',
+    ];
+}
+
+/**
+ * Übersetzt Text 100 % lokal & offline im Intranet über das lokale Ollama-Sprachmodell (127.0.0.1:11434, z. B. gemma2:2b).
+ * Es verlässt kein einziges Byte den Server.
+ *
+ * @return array{ok: bool, translated: string, detected_lang: string, engine: string, error?: string}
+ */
+function translateViaLocalOllama(string $text, string $sourceLang, string $targetLang, string $model = 'gemma2:2b', string $formality = 'default'): array
+{
+    $ollamaStatus = probeLocalOllamaStatus($model);
+    if (!$ollamaStatus['available']) {
+        return [
+            'ok'            => false,
+            'translated'    => '',
+            'detected_lang' => '',
+            'engine'        => 'Lokales Ollama (Intranet)',
+            'error'         => 'Auf diesem Server läuft aktuell kein lokaler Ollama-Dienst (127.0.0.1:11434).',
+        ];
+    }
+
+    $activeModel = $ollamaStatus['active_model'] ?: $model;
+    $langs       = getTranslatorLanguages();
+    $targetName  = $langs[$targetLang]['name'] ?? strtoupper($targetLang);
+    $sourceHint  = ($sourceLang !== 'auto' && isset($langs[$sourceLang]))
+        ? ('from ' . $langs[$sourceLang]['name'] . ' ')
+        : '';
+
+    $toneHint = '';
+    if ($formality === 'more') {
+        $toneHint = ' Use formal, polite address (e.g., German "Sie", French "vous").';
+    } elseif ($formality === 'less') {
+        $toneHint = ' Use informal, friendly address (e.g., German "du", French "tu").';
+    }
+
+    $chunks = splitTextIntoTranslationChunks($text, 1400);
+    $translatedParts = [];
+
+    foreach ($chunks as $chunk) {
+        $prompt = "You are a precise professional translator. Translate the following text {$sourceHint}into {$targetName} ({$targetLang}).{$toneHint}\n"
+            . "IMPORTANT RULES:\n"
+            . "- Output ONLY the translated text.\n"
+            . "- Do NOT include explanations, introductory remarks, notes, or surrounding quotes.\n"
+            . "- Preserve all line breaks and paragraph structure.\n\n"
+            . "Text to translate:\n" . $chunk;
+
+        $payload = json_encode([
+            'model'   => $activeModel,
+            'prompt'  => $prompt,
+            'stream'  => false,
+            'options' => [
+                'temperature' => 0.15,
+                'num_predict' => 1024,
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+
+        $res = performTranslationHttpRequest(
+            'http://127.0.0.1:11434/api/generate',
+            $payload !== false ? $payload : '{}',
+            ['Content-Type: application/json'],
+            35
+        );
+
+        if (!$res['ok'] || $res['body'] === '') {
+            return [
+                'ok'            => false,
+                'translated'    => '',
+                'detected_lang' => $sourceLang !== 'auto' ? $sourceLang : 'de',
+                'engine'        => 'Lokales Ollama (' . $activeModel . ')',
+                'error'         => 'Lokales Ollama-Modell hat nicht rechtzeitig geantwortet.',
+            ];
+        }
+
+        $json = json_decode($res['body'], true);
+        $out  = is_array($json) ? trim((string)($json['response'] ?? '')) : '';
+        // Eventuelle umschließende Anführungszeichen bereinigen, falls der Ausgangstext keine hatte
+        if ($out !== '' && str_starts_with($out, '"') && str_ends_with($out, '"') && !str_starts_with(trim($chunk), '"')) {
+            $out = trim(substr($out, 1, -1));
+        }
+
+        if ($out === '') {
+            return [
+                'ok'            => false,
+                'translated'    => '',
+                'detected_lang' => $sourceLang !== 'auto' ? $sourceLang : 'de',
+                'engine'        => 'Lokales Ollama (' . $activeModel . ')',
+                'error'         => 'Leere Antwort vom lokalen Sprachmodell.',
+            ];
+        }
+
+        $translatedParts[] = $out;
+    }
+
+    return [
+        'ok'            => true,
+        'translated'    => implode("\n", $translatedParts),
+        'detected_lang' => $sourceLang !== 'auto' ? $sourceLang : 'de',
+        'engine'        => '🔒 Lokale Intranet-KI (Ollama ' . $activeModel . ' · 100 % Offline)',
+    ];
+}
+
+/**
  * Extrahiert lesbaren Dokumenttext mit erhaltenen Zeilenumbrüchen für die Dokument-Übersetzung.
  */
 function extractDocumentTextForTranslation(PDO $pdo, array $fileRow, int $maxChars = 25000): string
@@ -493,6 +659,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         $sourceLang = strtolower(trim((string)($_POST['source_lang'] ?? 'auto')));
         $targetLang = strtolower(trim((string)($_POST['target_lang'] ?? 'en')));
         $formality  = strtolower(trim((string)($_POST['formality'] ?? 'default')));
+        $engineMode = strtolower(trim((string)($_POST['engine_mode'] ?? 'auto')));
+        if (!in_array($engineMode, ['auto', 'local', 'nmt', 'deepl'], true)) {
+            $engineMode = 'auto';
+        }
 
         if ($sourceText === '') {
             echo json_encode(['ok' => false, 'error' => 'Bitte geben Sie einen Text zum Übersetzen ein.']);
@@ -510,20 +680,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
         session_write_close();
 
-        $deeplKey = trim((string)($appSettings['translator_deepl_api_key'] ?? ''));
-        $result   = null;
+        $deeplKey    = trim((string)($appSettings['translator_deepl_api_key'] ?? ''));
+        $libreUrl    = trim((string)($appSettings['translator_libretranslate_url'] ?? ''));
+        $ollamaModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+        $result      = null;
 
-        if ($deeplKey !== '') {
+        // A) Expliziter 100 % Intranet / Offline-Modus (kein einziges Paket verlässt den Server / das Intranet)
+        if ($engineMode === 'local') {
+            if ($libreUrl !== '') {
+                $result = translateViaLocalLibreTranslate($sourceText, $sourceLang, $targetLang, $libreUrl);
+            }
+            if ($result === null || !$result['ok']) {
+                $ollamaRes = translateViaLocalOllama($sourceText, $sourceLang, $targetLang, $ollamaModel, $formality);
+                if ($ollamaRes['ok'] || $result === null) {
+                    $result = $ollamaRes;
+                }
+            }
+        }
+        // B) Expliziter DeepL-Modus
+        elseif ($engineMode === 'deepl' && $deeplKey !== '') {
             $result = translateViaDeepL($sourceText, $sourceLang, $targetLang, $deeplKey, $formality);
         }
+        // C) Expliziter Standard-NMT-Modus
+        elseif ($engineMode === 'nmt') {
+            $result = translateViaStandardNmt($sourceText, $sourceLang, $targetLang);
+        }
+        // D) Automatischer Modus (Kaskade: DeepL -> Standard-NMT -> Intranet-LibreTranslate -> Intranet-Ollama)
+        else {
+            if ($deeplKey !== '') {
+                $result = translateViaDeepL($sourceText, $sourceLang, $targetLang, $deeplKey, $formality);
+            }
 
-        // Falls kein DeepL-Key gesetzt ist oder DeepL fehlschlägt -> Standard NMT Engine
-        if ($result === null || !$result['ok']) {
-            $nmtRes = translateViaStandardNmt($sourceText, $sourceLang, $targetLang);
-            if ($nmtRes['ok']) {
-                $result = $nmtRes;
-            } elseif ($result === null) {
-                $result = $nmtRes;
+            if ($result === null || !$result['ok']) {
+                $nmtRes = translateViaStandardNmt($sourceText, $sourceLang, $targetLang);
+                if ($nmtRes['ok'] || $result === null) {
+                    $result = $nmtRes;
+                }
+            }
+
+            // Automatischer Intranet-Offline-Fallback, falls der Server vom Internet getrennt ist
+            if ($result === null || !$result['ok']) {
+                if ($libreUrl !== '') {
+                    $ltRes = translateViaLocalLibreTranslate($sourceText, $sourceLang, $targetLang, $libreUrl);
+                    if ($ltRes['ok']) {
+                        $result = $ltRes;
+                    }
+                }
+            }
+            if ($result === null || !$result['ok']) {
+                $ollamaRes = translateViaLocalOllama($sourceText, $sourceLang, $targetLang, $ollamaModel, $formality);
+                if ($ollamaRes['ok']) {
+                    $result = $ollamaRes;
+                }
             }
         }
 
@@ -718,7 +926,11 @@ $defaultTarget   = strtolower(trim((string)($appSettings['translator_default_tar
 if (!isset($translatorLangs[$defaultTarget])) {
     $defaultTarget = 'en';
 }
-$hasDeepLKey = trim((string)($appSettings['translator_deepl_api_key'] ?? '')) !== '';
+$hasDeepLKey   = trim((string)($appSettings['translator_deepl_api_key'] ?? '')) !== '';
+$hasLibreUrl   = trim((string)($appSettings['translator_libretranslate_url'] ?? '')) !== '';
+$ollamaPrefMdl = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+$ollamaStatus  = probeLocalOllamaStatus($ollamaPrefMdl);
+$hasLocalIntranetEngine = $ollamaStatus['available'] || $hasLibreUrl;
 
 // Übersetzbare Dokumente des Benutzers (und seiner Gruppenordner) laden
 $accGfs = getAccessibleGroupFolders($pdo, $userId, $isAdmin);
@@ -771,6 +983,11 @@ require_once __DIR__ . '/includes/header.php';
                     <span id="translatorEngineBadge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold <?= $hasDeepLKey ? 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' ?>">
                         <?= $hasDeepLKey ? '⚡ DeepL Neural API aktiv' : '🧠 Neuronale Satz- & Kontext-Engine aktiv' ?>
                     </span>
+                    <?php if ($hasLocalIntranetEngine): ?>
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800" title="Auf diesem Server steht eine 100 % lokale Offline-/Intranet-Übersetzungs-Engine bereit.">
+                            🔒 Intranet-fähig (<?= $ollamaStatus['available'] ? ('Ollama ' . e($ollamaStatus['active_model'])) : 'LibreTranslate' ?>)
+                        </span>
+                    <?php endif; ?>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Ganze Texte, Briefe, PDFs (inkl. Scan-OCR) und Word-Dokumente im vollen Satzkontext in 18 Sprachen übersetzen und direkt in der Cloud speichern.
@@ -778,8 +995,27 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
 
-        <!-- Cloud-Dokument direkt auswählen -->
+        <!-- Engine-Auswahl & Cloud-Dokument direkt auswählen -->
         <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div class="relative flex-1 sm:flex-initial">
+                <select
+                    id="engineModeSelect"
+                    onchange="onEngineModeChange()"
+                    title="Übersetzungs-Engine wählen (Automatisch oder 100 % Lokal im Intranet)"
+                    class="w-full pl-3 pr-7 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                >
+                    <option value="auto" selected>⚡ Engine: Automatisch (Optimal + Intranet-Fallback)</option>
+                    <?php if ($hasLocalIntranetEngine): ?>
+                        <option value="local">🔒 100 % Lokal / Intranet (Offline · <?= $ollamaStatus['available'] ? ('Ollama ' . e($ollamaStatus['active_model'])) : 'LibreTranslate' ?>)</option>
+                    <?php else: ?>
+                        <option value="local">🔒 100 % Lokal / Intranet (Ollama / LibreTranslate)</option>
+                    <?php endif; ?>
+                    <option value="nmt">🌐 Online-NMT (Schnelle Direkt-Übersetzung)</option>
+                    <?php if ($hasDeepLKey): ?>
+                        <option value="deepl">🔑 DeepL Neural API</option>
+                    <?php endif; ?>
+                </select>
+            </div>
             <div class="relative flex-1 md:w-72">
                 <select
                     id="cloudDocSelect"
@@ -858,11 +1094,11 @@ require_once __DIR__ . '/includes/header.php';
                     </select>
                 </div>
 
-                <?php if ($hasDeepLKey): ?>
+                <?php if ($hasDeepLKey || $hasLocalIntranetEngine): ?>
                     <select
                         id="formalitySelect"
                         onchange="triggerTranslationNow()"
-                        title="Tonfall / Anredeform für DeepL auswählen"
+                        title="Tonfall / Anredeform für die Übersetzung auswählen"
                         class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
                     >
                         <option value="default">Tonfall: Standard</option>
@@ -1166,6 +1402,19 @@ function onSourceLangChange() {
     if (val !== '') triggerTranslationNow(true);
 }
 
+function onEngineModeChange() {
+    const engSel = document.getElementById('engineModeSelect');
+    const autoToggle = document.getElementById('autoTranslateToggle');
+    // Im lokalen Ollama-Modus ist es angenehmer, nicht bei jedem einzelnen Tastenanschlag sofort das LLM neu zu starten
+    if (engSel && autoToggle && engSel.value === 'local') {
+        autoToggle.checked = false;
+    } else if (engSel && autoToggle && engSel.value !== 'local') {
+        autoToggle.checked = true;
+    }
+    const val = document.getElementById('sourceTextInput')?.value.trim() || '';
+    if (val !== '') triggerTranslationNow(true);
+}
+
 function onTargetLangChange() {
     const targetSel = document.getElementById('targetLangSelect');
     const flagBox = document.getElementById('targetLangFlagBox');
@@ -1231,6 +1480,7 @@ async function triggerTranslationNow(saveToHistory = true) {
     const srcSel = document.getElementById('sourceLangSelect');
     const tgtSel = document.getElementById('targetLangSelect');
     const formSel = document.getElementById('formalitySelect');
+    const engSel = document.getElementById('engineModeSelect');
     const overlay = document.getElementById('translationLoadingOverlay');
     const detBadge = document.getElementById('detectedLangBadge');
     const engineBadge = document.getElementById('translatorEngineBadge');
@@ -1253,6 +1503,7 @@ async function triggerTranslationNow(saveToHistory = true) {
         fd.append('source_lang', srcSel.value);
         fd.append('target_lang', tgtSel.value);
         fd.append('formality', formSel ? formSel.value : 'default');
+        fd.append('engine_mode', engSel ? engSel.value : 'auto');
 
         const res = await fetch('translate.php', { method: 'POST', body: fd, credentials: 'same-origin' });
         const data = await res.json();
