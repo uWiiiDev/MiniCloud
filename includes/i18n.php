@@ -22,6 +22,52 @@ if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) 
  */
 
 /**
+ * Liefert den reinen Eigennamen der unterstützten Sprachen (ohne Unicode-Flaggen-Emoji).
+ *
+ * @return array<string, string>
+ */
+function getAllowedLanguageNames(): array
+{
+    return [
+        'de' => 'Deutsch',
+        'en' => 'English',
+        'fr' => 'Français',
+        'es' => 'Español',
+        'it' => 'Italiano',
+        'nl' => 'Nederlands',
+        'pl' => 'Polski',
+        'pt' => 'Português',
+        'cs' => 'Čeština',
+        'tr' => 'Türkçe',
+        'uk' => 'Українська',
+    ];
+}
+
+/**
+ * Rendert eine gestochen scharfe, betriebssystemunabhängige SVG-Länderflagge (funktioniert auch unter Windows 10/11 & Linux ohne Emoji-Font).
+ */
+function renderLanguageFlagSvg(string $langCode, string $class = 'w-5 h-3.5 rounded-[2px] shadow-2xs shrink-0'): string
+{
+    $code = strtolower(trim($langCode));
+    $svgInner = match ($code) {
+        'de' => '<rect width="24" height="5.33" y="0" fill="#111"/><rect width="24" height="5.34" y="5.33" fill="#dd0000"/><rect width="24" height="5.33" y="10.67" fill="#ffce00"/>',
+        'en' => '<rect width="24" height="16" fill="#012169"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#fff" stroke-width="3.2"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" stroke-width="1.6"/><path d="M12,0 V16 M0,8 H24" stroke="#fff" stroke-width="5.2"/><path d="M12,0 V16 M0,8 H24" stroke="#C8102E" stroke-width="3.2"/>',
+        'fr' => '<rect width="8" height="16" x="0" fill="#002395"/><rect width="8" height="16" x="8" fill="#fff"/><rect width="8" height="16" x="16" fill="#ED2939"/>',
+        'es' => '<rect width="24" height="4" y="0" fill="#AA151B"/><rect width="24" height="8" y="4" fill="#F1BF00"/><rect width="24" height="4" y="12" fill="#AA151B"/>',
+        'it' => '<rect width="8" height="16" x="0" fill="#009246"/><rect width="8" height="16" x="8" fill="#fff"/><rect width="8" height="16" x="16" fill="#CE2B37"/>',
+        'nl' => '<rect width="24" height="5.33" y="0" fill="#AE1C28"/><rect width="24" height="5.34" y="5.33" fill="#fff"/><rect width="24" height="5.33" y="10.67" fill="#21468B"/>',
+        'pl' => '<rect width="24" height="8" y="0" fill="#fff"/><rect width="24" height="8" y="8" fill="#DC143C"/>',
+        'pt' => '<rect width="9.6" height="16" x="0" fill="#006600"/><rect width="14.4" height="16" x="9.6" fill="#FF0000"/><circle cx="9.6" cy="8" r="3.2" fill="#FFCC00"/>',
+        'cs' => '<rect width="24" height="8" y="0" fill="#fff"/><rect width="24" height="8" y="8" fill="#D7141A"/><polygon points="0,0 12,8 0,16" fill="#11457E"/>',
+        'tr' => '<rect width="24" height="16" fill="#E30A17"/><circle cx="9.5" cy="8" r="4" fill="#fff"/><circle cx="10.6" cy="8" r="3.2" fill="#E30A17"/><polygon points="13.5,8 16.5,6.9 14.7,9.5 14.7,6.5 16.5,9.1" fill="#fff"/>',
+        'uk' => '<rect width="24" height="8" y="0" fill="#005BBB"/><rect width="24" height="8" y="8" fill="#FFD500"/>',
+        default => '<rect width="24" height="16" fill="#64748b"/>',
+    };
+
+    return '<svg class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . '" viewBox="0 0 24 16" aria-hidden="true">' . $svgInner . '</svg>';
+}
+
+/**
  * Liefert alle unterstützten Sprachen mit Flagge und Eigennamen.
  *
  * @return array<string, string>

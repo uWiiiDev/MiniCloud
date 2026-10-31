@@ -365,16 +365,17 @@ $themeGroups = [
             Wählen Sie Ihre bevorzugte Sprache für die Benutzeroberfläche.
         </p>
 
-        <form action="lang.php" method="post" class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-            <?php foreach (getAllowedLanguages() as $lCode => $lLabel): ?>
+        <form action="lang.php" method="post" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+            <?php foreach (getAllowedLanguageNames() as $lCode => $lName): ?>
                 <?php $isSelectedLang = ($currentLang === $lCode); ?>
                 <button
                     type="submit"
                     name="lang"
                     value="<?= e($lCode) ?>"
-                    class="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedLang ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                    class="flex items-center justify-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedLang ? 'bg-brand-600 text-white border-brand-600 shadow-xs ring-2 ring-brand-500/30' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
                 >
-                    <span><?= e($lLabel) ?></span>
+                    <?= renderLanguageFlagSvg($lCode, 'w-5 h-3.5 rounded-[2px] shadow-2xs shrink-0 border border-black/10') ?>
+                    <span><?= e($lName) ?></span>
                 </button>
             <?php endforeach; ?>
         </form>
