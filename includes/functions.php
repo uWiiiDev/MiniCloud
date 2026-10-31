@@ -4029,7 +4029,7 @@ function indexFileForFulltextSearch(PDO $pdo, int $fileId, bool $forceEvenIfDisa
  *
  * @return array{indexed: int, skipped: int, total_index_rows: int}
  */
-function reindexAllCloudFiles(PDO $pdo, int $limit = 1000): array
+function reindexAllCloudFiles(PDO $pdo, int $limit = 10000): array
 {
     $indexed = 0;
     $skipped = 0;

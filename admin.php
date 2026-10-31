@@ -1480,8 +1480,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- 11b-3. Volltext-Suchindex für alle bestehenden Cloud-Dokumente aufbauen / aktualisieren ---
     if ($action === 'reindex_fulltext_search') {
-        @set_time_limit(120);
-        $res = reindexAllCloudFiles($pdo, 1500);
+        @set_time_limit(300);
+        $res = reindexAllCloudFiles($pdo, 10000);
         logAuditEvent(
             $pdo,
             'admin_action',
