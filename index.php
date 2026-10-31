@@ -726,8 +726,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
 <!-- Haupt-Dateitabelle (Eigene Dateien, aktiver Gruppenordner oder geöffneter freigegebener Ordner) -->
 <section id="mainFilesSection" class="mc-card relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8 transition-all">
-    <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
+    <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                     <?php if ($largeFilesMode): ?>
@@ -875,16 +875,16 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <?php endif; ?>
                 </div>
             <?php else: ?>
-                <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                <p class="hidden sm:block mt-0.5 text-[11px] text-slate-400 dark:text-slate-500 truncate">
                     💡 Tipp: Dateien oder Ordner einfach per Drag &amp; Drop direkt auf einen Ordner (oder in diese Liste) ziehen.
                 </p>
             <?php endif; ?>
         </div>
 
-        <!-- Rechts: Kompakte Upload-Buttons, Neuer-Ordner-Button, Favoriten-Filter, Ansicht-Umschalter & Globale Suche -->
-        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+        <!-- Rechts: Kompakte, gruppierte Funktionsleiste (Upload/Erstellen + Filter/Ansicht) -->
+        <div class="flex flex-wrap items-center gap-1.5 w-full lg:w-auto lg:justify-end">
             <?php if ($canUploadHere): ?>
-                <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data" class="inline-flex flex-wrap items-center gap-1.5">
+                <form id="uploadForm" action="upload.php" method="post" enctype="multipart/form-data" class="inline-flex flex-wrap items-center gap-1">
                     <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                     <input type="hidden" id="target_folder" name="target_folder" value="<?= e($currentFolder) ?>">
                     <?php if ($activeSharedFolder !== null): ?>
@@ -895,11 +895,12 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <input type="file" id="fileInput" name="files[]" multiple class="sr-only">
                     <input type="file" id="folderInput" webkitdirectory directory multiple class="sr-only">
 
+                    <!-- Haupt-Aktion: Dateien hochladen -->
                     <button
                         type="button"
                         id="btnSelectFiles"
                         title="Dateien in <?= e($currentFolder !== '' ? '„' . $currentFolder . '“' : 'das aktuelle Verzeichnis') ?> hochladen (Frei: <?= e(formatBytes($storageStats['free'])) ?>)"
-                        class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
                     >
                         <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8.5 7.5M12 4l3.5 3.5"/>
@@ -907,50 +908,53 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <span>+ Dateien</span>
                     </button>
 
-                    <button
-                        type="button"
-                        id="btnSelectFolder"
-                        title="Kompletten Ordner samt Unterordnern vom Gerät hochladen"
-                        class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                    >
-                        <span>📁↑</span>
-                        <span class="hidden sm:inline">Ordner-Upload</span>
-                    </button>
-
-                    <?php if ($activeSharedFolder === null): ?>
+                    <!-- Gruppierte Sekundär-Aktionen: Ordner-Upload, Neuer Ordner, Office, Cloud-Import -->
+                    <div class="inline-flex items-center rounded-lg bg-slate-100/90 dark:bg-slate-800/90 p-0.5 border border-slate-200/90 dark:border-slate-700/90 gap-0.5">
                         <button
                             type="button"
-                            onclick="toggleNewFolderBar()"
-                            title="Neuen Ordner im aktuellen Verzeichnis anlegen"
-                            class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                            id="btnSelectFolder"
+                            title="Kompletten Ordner samt Unterordnern vom Gerät hochladen"
+                            class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-amber-800 dark:text-amber-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-2xs text-[11px] font-semibold transition-all cursor-pointer"
                         >
-                            <span>📁+</span>
-                            <span class="hidden sm:inline">Neuer Ordner</span>
+                            <span>📁↑</span>
+                            <span class="hidden sm:inline">Ordner</span>
                         </button>
-                    <?php endif; ?>
 
-                    <button
-                        type="button"
-                        onclick="openCreateOfficeModal()"
-                        title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx) oder Textnotiz direkt in der Cloud erstellen"
-                        aria-label="Office Light – Neues Dokument erstellen"
-                        class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                    >
-                        <span>📄+</span>
-                        <span class="hidden xl:inline">Office</span>
-                    </button>
+                        <?php if ($activeSharedFolder === null): ?>
+                            <button
+                                type="button"
+                                onclick="toggleNewFolderBar()"
+                                title="Neuen Ordner im aktuellen Verzeichnis anlegen"
+                                class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-amber-700 dark:text-amber-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-2xs text-[11px] font-semibold transition-all cursor-pointer"
+                            >
+                                <span>📁+</span>
+                                <span class="hidden sm:inline">Neu</span>
+                            </button>
+                        <?php endif; ?>
 
-                    <?php if ($activeSharedFolder === null): ?>
                         <button
                             type="button"
-                            onclick="toggleCloudImportBar()"
-                            title="Dropbox-Ordner oder Datei per Freigabelink direkt von Server zu Server in die MiniCloud importieren"
-                            class="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/70 hover:bg-sky-100 dark:hover:bg-sky-900/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                            onclick="openCreateOfficeModal()"
+                            title="Neues Word-Dokument (.docx), Excel-Tabelle (.xlsx), Präsentation oder Textnotiz direkt in der Cloud erstellen"
+                            aria-label="Office Light – Neues Dokument erstellen"
+                            class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-2xs text-[11px] font-semibold transition-all cursor-pointer"
                         >
-                            <span>☁️↓</span>
-                            <span class="hidden sm:inline">Dropbox / Import</span>
+                            <span>📄+</span>
+                            <span class="hidden md:inline">Office</span>
                         </button>
-                    <?php endif; ?>
+
+                        <?php if ($activeSharedFolder === null): ?>
+                            <button
+                                type="button"
+                                onclick="toggleCloudImportBar()"
+                                title="Dropbox-/Nextcloud-Ordner oder Datei per Freigabelink direkt von Server zu Server in die MiniCloud importieren"
+                                class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-sky-700 dark:text-sky-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-2xs text-[11px] font-semibold transition-all cursor-pointer"
+                            >
+                                <span>☁️↓</span>
+                                <span class="hidden sm:inline">Import</span>
+                            </button>
+                        <?php endif; ?>
+                    </div>
                 </form>
             <?php endif; ?>
 
@@ -965,17 +969,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 $favFilterParams['folder'] = $currentFolder;
             }
             $favFilterUrl = 'index.php' . (!empty($favFilterParams) ? '?' . http_build_query($favFilterParams) : '');
-            ?>
-            <a
-                href="<?= e($favFilterUrl) ?>"
-                title="<?= $onlyFavorites ? 'Alle Dateien anzeigen' : 'Nur Favoriten (⭐) anzeigen' ?>"
-                class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-semibold transition-colors <?= $onlyFavorites ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/40' ?>"
-            >
-                <span><?= $onlyFavorites ? '⭐' : '☆' ?></span>
-                <span class="hidden md:inline">Favoriten</span>
-            </a>
 
-            <?php
             $largeFilterParams = [];
             if ($activeGroupFolder !== null) {
                 $largeFilterParams['group_folder'] = (int)$activeGroupFolder['id'];
@@ -989,26 +983,40 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             }
             $largeFilterUrl = 'index.php' . (!empty($largeFilterParams) ? '?' . http_build_query($largeFilterParams) : '');
             ?>
-            <a
-                href="<?= e($largeFilterUrl) ?>"
-                title="<?= $largeFilesMode ? 'Zurück zur normalen Ordneransicht' : 'Große Dateien, Speicherfresser & Duplikate über alle Ordner hinweg aufspüren' ?>"
-                class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-semibold transition-colors <?= $largeFilesMode ? 'bg-violet-100 dark:bg-violet-950/80 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300 shadow-2xs' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-violet-50 dark:hover:bg-violet-950/40' ?>"
-            >
-                <span>📊</span>
-                <span class="hidden md:inline">Große Dateien</span>
-            </a>
 
-            <!-- Umschalter: Listenansicht <-> Kachel-/Galerieansicht -->
-            <div class="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700">
+            <!-- Kompakte Filter- & Ansichtsleiste (Favoriten, Speicher-Analyse, Liste/Kacheln) -->
+            <div class="inline-flex items-center rounded-lg bg-slate-100/90 dark:bg-slate-800/90 p-0.5 border border-slate-200/90 dark:border-slate-700/90 gap-0.5">
+                <a
+                    href="<?= e($favFilterUrl) ?>"
+                    title="<?= $onlyFavorites ? 'Alle Dateien anzeigen' : 'Nur Favoriten (⭐) anzeigen' ?>"
+                    aria-label="Favoriten filtern"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all <?= $onlyFavorites ? 'bg-amber-400/25 dark:bg-amber-500/25 text-amber-800 dark:text-amber-300 shadow-2xs' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-amber-600 dark:hover:text-amber-300' ?>"
+                >
+                    <span><?= $onlyFavorites ? '⭐' : '☆' ?></span>
+                    <span class="hidden 2xl:inline">Favoriten</span>
+                </a>
+
+                <a
+                    href="<?= e($largeFilterUrl) ?>"
+                    title="<?= $largeFilesMode ? 'Zurück zur normalen Ordneransicht' : 'Große Dateien, Speicherfresser & Duplikate über alle Ordner hinweg aufspüren' ?>"
+                    aria-label="Große Dateien & Speicheranalyse"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all <?= $largeFilesMode ? 'bg-violet-500/20 dark:bg-violet-500/30 text-violet-800 dark:text-violet-200 shadow-2xs' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-violet-600 dark:hover:text-violet-300' ?>"
+                >
+                    <span>📊</span>
+                    <span class="hidden 2xl:inline">Große Dateien</span>
+                </a>
+
+                <span class="w-px h-3.5 bg-slate-300/80 dark:bg-slate-700 mx-0.5"></span>
+
                 <button
                     type="button"
                     id="btnViewList"
                     onclick="setFileViewMode('list')"
                     title="Tabellen-/Listenansicht"
                     aria-label="Listenansicht"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
+                    class="px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
                 >
-                    📋 <span class="hidden lg:inline">Liste</span>
+                    📋
                 </button>
                 <button
                     type="button"
@@ -1016,9 +1024,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     onclick="setFileViewMode('grid')"
                     title="Kachel- & Foto-Galerieansicht"
                     aria-label="Kachelansicht"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                    class="px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                 >
-                    🖼️ <span class="hidden lg:inline">Kacheln</span>
+                    🖼️
                 </button>
             </div>
         </div>
