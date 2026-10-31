@@ -3653,6 +3653,139 @@ function probePdfToTextAvailable(): bool
 }
 
 /**
+ * Prüft einmalig pro Request, ob `pdftoppm` + `tesseract` für die automatische Server-OCR
+ * gescannter PDF-Dokumente (ohne eingebetteten Text-Layer) verfügbar sind.
+ */
+function probePdfOcrAvailable(): bool
+{
+    static $ocrAvailable = null;
+    if (is_bool($ocrAvailable)) {
+        return $ocrAvailable;
+    }
+
+    if (!function_exists('proc_open')) {
+        $ocrAvailable = false;
+        return false;
+    }
+
+    $disabled = array_map('trim', explode(',', strtolower((string)ini_get('disable_functions'))));
+    if (in_array('proc_open', $disabled, true)) {
+        $ocrAvailable = false;
+        return false;
+    }
+
+    $hasPdftoppm  = false;
+    $hasTesseract = false;
+    foreach (['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'] as $b) {
+        if (@is_executable($b)) {
+            $hasPdftoppm = true;
+            break;
+        }
+    }
+    foreach (['/usr/bin/tesseract', '/usr/local/bin/tesseract', '/bin/tesseract'] as $b) {
+        if (@is_executable($b)) {
+            $hasTesseract = true;
+            break;
+        }
+    }
+
+    $ocrAvailable = ($hasPdftoppm && $hasTesseract);
+    return $ocrAvailable;
+}
+
+/**
+ * Führt für ein gescanntes PDF-Dokument (Bild-PDF ohne digitalen Text-Layer) automatisch
+ * eine OCR-Texterkennung über `pdftoppm` + `tesseract` (Deutsch + Englisch) durch.
+ */
+function extractScannedPdfTextViaOcr(string $filePath, int $maxPages = 8): string
+{
+    if (!probePdfOcrAvailable() || !is_file($filePath) || !is_readable($filePath)) {
+        return '';
+    }
+
+    $fileSize = (int)@filesize($filePath);
+    if ($fileSize <= 0 || $fileSize > 25 * 1048576) {
+        return '';
+    }
+
+    $pdftoppmBin  = '/usr/bin/pdftoppm';
+    $tesseractBin = '/usr/bin/tesseract';
+    foreach (['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'] as $b) {
+        if (@is_executable($b)) {
+            $pdftoppmBin = $b;
+            break;
+        }
+    }
+    foreach (['/usr/bin/tesseract', '/usr/local/bin/tesseract', '/bin/tesseract'] as $b) {
+        if (@is_executable($b)) {
+            $tesseractBin = $b;
+            break;
+        }
+    }
+
+    $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/mc_pdfocr_' . bin2hex(random_bytes(6));
+    if (!@mkdir($tmpDir, 0700, true)) {
+        return '';
+    }
+
+    $ocrParts = [];
+    try {
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $prefix = $tmpDir . '/page';
+        $proc = @proc_open(
+            [$pdftoppmBin, '-png', '-r', '200', '-f', '1', '-l', (string)max(1, $maxPages), $filePath, $prefix],
+            $descriptors,
+            $pipes
+        );
+        if (is_resource($proc)) {
+            @fclose($pipes[0]);
+            @stream_get_contents($pipes[1]);
+            @fclose($pipes[1]);
+            @fclose($pipes[2]);
+            @proc_close($proc);
+        }
+
+        $pngFiles = glob($tmpDir . '/page*.png') ?: [];
+        natsort($pngFiles);
+
+        foreach ($pngFiles as $pngPath) {
+            if (!is_file($pngPath)) {
+                continue;
+            }
+            $procOcr = @proc_open(
+                [$tesseractBin, $pngPath, 'stdout', '-l', 'deu+eng', '--oem', '1', '--psm', '3', 'quiet'],
+                $descriptors,
+                $ocrPipes
+            );
+            if (is_resource($procOcr)) {
+                @fclose($ocrPipes[0]);
+                $out = @stream_get_contents($ocrPipes[1], 160000);
+                @fclose($ocrPipes[1]);
+                @fclose($ocrPipes[2]);
+                @proc_close($procOcr);
+                if (is_string($out) && trim($out) !== '') {
+                    $ocrParts[] = trim($out);
+                }
+            }
+            @unlink($pngPath);
+        }
+    } catch (Throwable) {
+        // Ignorieren
+    } finally {
+        foreach ((glob($tmpDir . '/*') ?: []) as $f) {
+            @unlink($f);
+        }
+        @rmdir($tmpDir);
+    }
+
+    return trim(implode("\n", $ocrParts));
+}
+
+/**
  * Reine PHP-Fallback-Extraktion für PDF-Dateien (für Shared-Webhosting wie STRATO ohne `pdftotext`).
  * Dekomprimiert FlateDecode-Streams und liest Textblöcke (BT ... ET) aus.
  */
@@ -3789,6 +3922,15 @@ function extractSearchableDocumentText(string $filePath, string $originalName, i
             }
             if (trim($extracted) === '') {
                 $extracted = extractPdfTextPurePhp($filePath);
+            }
+            // Falls das PDF keinen digitalen Text-Layer besitzt (z. B. eingescanntes Bild-PDF wie „Herberts Tod.pdf“),
+            // automatisch Server-OCR (pdftoppm + tesseract deu+eng) auf den ersten Seiten ausführen:
+            $alphaNumLen = mb_strlen((string)preg_replace('/[^\p{L}\p{N}]+/u', '', $extracted), 'UTF-8');
+            if ($alphaNumLen < 15 && probePdfOcrAvailable()) {
+                $ocrText = extractScannedPdfTextViaOcr($filePath, 8);
+                if ($ocrText !== '') {
+                    $extracted = trim($extracted . ' ' . $ocrText);
+                }
             }
         } elseif (in_array($ext, ['txt', 'md', 'csv', 'json', 'xml', 'yml', 'yaml', 'ini', 'log', 'sql', 'srt', 'vtt'], true)) {
             if ($fileSize <= 8 * 1048576) {
@@ -4005,30 +4147,106 @@ function indexFileForFulltextSearch(PDO $pdo, int $fileId, bool $forceEvenIfDisa
 }
 
 /**
- * Baut den Volltext-Suchindex für alle bestehenden (unverschlüsselten, nicht gelöschten) Cloud-Dokumente auf.
+ * Speichert einen extern/clientseitig (z. B. per Browser-WebAssembly-OCR auf STRATO) erkannten
+ * Dokumenttext direkt im Volltext-Suchindex `file_search_index`.
+ */
+function saveManualFileSearchIndexText(PDO $pdo, int $fileId, string $rawText, int $maxChars = 120000): bool
+{
+    if ($fileId <= 0) {
+        return false;
+    }
+
+    $cleanText = (string)preg_replace('/[^\P{C}\n\t]+/u', ' ', $rawText);
+    $cleanText = trim((string)preg_replace('/\s+/u', ' ', $cleanText));
+    if ($cleanText === '') {
+        return false;
+    }
+    if (mb_strlen($cleanText, 'UTF-8') > $maxChars) {
+        $cleanText = mb_substr($cleanText, 0, $maxChars, 'UTF-8');
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT `id`, `user_id`, `group_folder_id`, `original_name`, `is_encrypted`, `deleted_at`
+             FROM `files`
+             WHERE `id` = :id
+             LIMIT 1'
+        );
+        $stmt->execute([':id' => $fileId]);
+        $file = $stmt->fetch();
+        if (!$file || $file['deleted_at'] !== null || (int)($file['is_encrypted'] ?? 0) === 1) {
+            return false;
+        }
+
+        $origName  = (string)$file['original_name'];
+        $charCount = mb_strlen($cleanText, 'UTF-8');
+        $stmtUpsert = $pdo->prepare(
+            'INSERT INTO `file_search_index` (`file_id`, `user_id`, `group_folder_id`, `original_name`, `content_text`, `char_count`, `updated_at`)
+             VALUES (:fid, :uid, :gfid, :orig, :txt, :cc, CURRENT_TIMESTAMP)
+             ON DUPLICATE KEY UPDATE
+                `user_id`         = VALUES(`user_id`),
+                `group_folder_id` = VALUES(`group_folder_id`),
+                `original_name`   = VALUES(`original_name`),
+                `content_text`    = VALUES(`content_text`),
+                `char_count`      = VALUES(`char_count`),
+                `updated_at`      = CURRENT_TIMESTAMP'
+        );
+        $stmtUpsert->execute([
+            ':fid'  => $fileId,
+            ':uid'  => (int)$file['user_id'],
+            ':gfid' => !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null,
+            ':orig' => mb_substr($origName, 0, 255, 'UTF-8'),
+            ':txt'  => $cleanText,
+            ':cc'   => $charCount,
+        ]);
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Baut den Volltext-Suchindex für bestehende (unverschlüsselte, nicht gelöschte) Cloud-Dokumente auf.
+ * Standardmäßig ($onlyMissing = true) werden nur noch fehlende Dokumente (inkl. Scan-PDFs per OCR) nachindexiert.
  *
  * @return array{indexed: int, skipped: int, total_index_rows: int}
  */
-function reindexAllCloudFiles(PDO $pdo, int $limit = 10000): array
+function reindexAllCloudFiles(PDO $pdo, int $limit = 10000, bool $onlyMissing = true): array
 {
     $indexed = 0;
     $skipped = 0;
 
     try {
-        // Zuerst verwaiste oder inzwischen verschlüsselte/gelöschte Einträge bereinigen
+        // Zuerst verwaiste, gelöschte, verschlüsselte oder ausgeschlossene (.epub) Einträge bereinigen
         $pdo->exec(
-            'DELETE fsi FROM `file_search_index` fsi
+            "DELETE fsi FROM `file_search_index` fsi
              LEFT JOIN `files` f ON f.`id` = fsi.`file_id`
-             WHERE f.`id` IS NULL OR f.`deleted_at` IS NOT NULL OR f.`is_encrypted` = 1'
+             WHERE f.`id` IS NULL
+                OR f.`deleted_at` IS NOT NULL
+                OR f.`is_encrypted` = 1
+                OR LOWER(fsi.`original_name`) LIKE '%.epub'"
         );
 
-        $stmt = $pdo->prepare(
-            'SELECT `id`, `original_name`
-             FROM `files`
-             WHERE `deleted_at` IS NULL AND `is_encrypted` = 0
-             ORDER BY `id` DESC
-             LIMIT :lim'
-        );
+        if ($onlyMissing) {
+            $stmt = $pdo->prepare(
+                'SELECT f.`id`, f.`original_name`
+                 FROM `files` f
+                 LEFT JOIN `file_search_index` fsi ON fsi.`file_id` = f.`id`
+                 WHERE f.`deleted_at` IS NULL
+                   AND f.`is_encrypted` = 0
+                   AND fsi.`file_id` IS NULL
+                 ORDER BY f.`id` DESC
+                 LIMIT :lim'
+            );
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT `id`, `original_name`
+                 FROM `files`
+                 WHERE `deleted_at` IS NULL AND `is_encrypted` = 0
+                 ORDER BY `id` DESC
+                 LIMIT :lim'
+            );
+        }
         $stmt->bindValue(':lim', max(1, $limit), PDO::PARAM_INT);
         $stmt->execute();
 
@@ -4036,7 +4254,9 @@ function reindexAllCloudFiles(PDO $pdo, int $limit = 10000): array
             $fid = (int)$row['id'];
             $orig = (string)$row['original_name'];
             if (!isFileEligibleForFulltextIndex($orig)) {
-                removeFileFromFulltextSearch($pdo, $fid);
+                if (!$onlyMissing) {
+                    removeFileFromFulltextSearch($pdo, $fid);
+                }
                 continue;
             }
             if (indexFileForFulltextSearch($pdo, $fid, true)) {
@@ -4061,7 +4281,7 @@ function reindexAllCloudFiles(PDO $pdo, int $limit = 10000): array
 /**
  * Liefert Status- und Statistikwerte des Volltext-Suchindex für das Admin-Dashboard.
  *
- * @return array{indexed_files: int, total_chars: int, eligible_files: int, pdftotext_available: bool}
+ * @return array{indexed_files: int, total_chars: int, eligible_files: int, pdftotext_available: bool, ocr_available: bool, local_wasm_ocr: bool, unindexed_pdfs: array<int, array{id: int, name: string, size: int}>}
  */
 function getFulltextSearchStats(PDO $pdo): array
 {
@@ -4070,6 +4290,9 @@ function getFulltextSearchStats(PDO $pdo): array
         'total_chars'         => 0,
         'eligible_files'      => 0,
         'pdftotext_available' => probePdfToTextAvailable(),
+        'ocr_available'       => probePdfOcrAvailable(),
+        'local_wasm_ocr'      => is_file(__DIR__ . '/../assets/ocr/tesseract.min.js') && is_file(__DIR__ . '/../assets/ocr/deu.traineddata.gz'),
+        'unindexed_pdfs'      => [],
     ];
 
     try {
@@ -4085,6 +4308,28 @@ function getFulltextSearchStats(PDO $pdo): array
                 if (isFileEligibleForFulltextIndex((string)$name)) {
                     $stats['eligible_files']++;
                 }
+            }
+        }
+
+        $stmtUn = $pdo->query(
+            "SELECT f.`id`, f.`original_name`, f.`file_size`
+             FROM `files` f
+             LEFT JOIN `file_search_index` fsi ON fsi.`file_id` = f.`id`
+             WHERE f.`deleted_at` IS NULL
+               AND f.`is_encrypted` = 0
+               AND f.`file_size` <= 25165824
+               AND LOWER(f.`original_name`) LIKE '%.pdf'
+               AND fsi.`file_id` IS NULL
+             ORDER BY f.`id` DESC
+             LIMIT 30"
+        );
+        if ($stmtUn) {
+            foreach ($stmtUn->fetchAll(PDO::FETCH_ASSOC) as $u) {
+                $stats['unindexed_pdfs'][] = [
+                    'id'   => (int)$u['id'],
+                    'name' => (string)$u['original_name'],
+                    'size' => (int)$u['file_size'],
+                ];
             }
         }
     } catch (Throwable) {

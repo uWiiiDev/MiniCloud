@@ -1154,6 +1154,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'revoke_group_folder_permission'  => 'users',
         'update_modules_settings'         => 'modules',
         'reset_module_stats'              => 'modules',
+        'reindex_fulltext_search'         => 'modules',
+        'save_browser_ocr_index'          => 'modules',
         'update_branding_only'            => 'branding',
         'update_mail_settings'            => 'mail',
         'send_test_email'                 => 'mail',
@@ -1715,24 +1717,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 11b-3. Volltext-Suchindex für alle bestehenden Cloud-Dokumente aufbauen / aktualisieren ---
+    // --- 11b-3. Volltext-Suchindex für fehlende (oder alle) Cloud-Dokumente aufbauen / aktualisieren ---
     if ($action === 'reindex_fulltext_search') {
         @set_time_limit(300);
-        $res = reindexAllCloudFiles($pdo, 10000);
+        $onlyMissing = !isset($_POST['full_rebuild']) || $_POST['full_rebuild'] !== '1';
+        $res = reindexAllCloudFiles($pdo, 10000, $onlyMissing);
         logAuditEvent(
             $pdo,
             'admin_action',
-            sprintf('Volltext-Suchindex aufgebaut (%d Dokumente indexiert, %d im Index)', $res['indexed'], $res['total_index_rows'])
+            sprintf(
+                'Volltext-Suchindex aktualisiert (%s: %d Dokumente neu indexiert, %d im Index)',
+                $onlyMissing ? 'Nur fehlende Dokumente inkl. OCR' : 'Komplett-Neuaufbau',
+                $res['indexed'],
+                $res['total_index_rows']
+            )
         );
         setFlash(
             'success',
             sprintf(
-                '🔎✅ Volltext-Suchindex aktualisiert: %d Dokument(e) erfolgreich analysiert (%d Dokumente insgesamt im Suchindex).',
+                '🔎✅ Volltext-Suchindex aktualisiert (%s): %d Dokument(e) erfolgreich neu indexiert (%d Dokumente insgesamt im Suchindex).',
+                $onlyMissing ? 'nur fehlende Dateien inkl. Scan-OCR' : 'Komplett-Neuaufbau',
                 $res['indexed'],
                 $res['total_index_rows']
             )
         );
         header('Location: admin.php#tab-modules');
+        exit;
+    }
+
+    // --- 11b-4. Browser-WebAssembly-OCR-Ergebnis für ein Scan-PDF speichern (STRATO-Fallback) ---
+    if ($action === 'save_browser_ocr_index') {
+        header('Content-Type: application/json; charset=UTF-8');
+        $fileId  = (int)($_POST['file_id'] ?? 0);
+        $ocrText = trim((string)($_POST['ocr_text'] ?? ''));
+        $ok      = ($fileId > 0 && $ocrText !== '') ? saveManualFileSearchIndexText($pdo, $fileId, $ocrText) : false;
+        echo json_encode(['ok' => $ok]);
         exit;
     }
 
@@ -4009,6 +4028,9 @@ foreach ($modList as $mItem) {
                                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= $ftStats['pdftotext_available'] ? 'bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300' ?>">
                                     <?= $ftStats['pdftotext_available'] ? '⚡ PDF-Turbo (pdftotext aktiv)' : '📄 PDF Pure-PHP Modus' ?>
                                 </span>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= !empty($ftStats['ocr_available']) ? 'bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-300' : (!empty($ftStats['local_wasm_ocr']) ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300') ?>">
+                                    <?= !empty($ftStats['ocr_available']) ? '👁️ Scan-OCR aktiv (Tesseract)' : (!empty($ftStats['local_wasm_ocr']) ? '🌐 Browser-WASM-OCR bereit (STRATO)' : 'Kein OCR') ?>
+                                </span>
                                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= $ftEnabled ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                                     <?= $ftEnabled ? 'Aktiviert' : 'Deaktiviert' ?>
                                 </span>
@@ -4023,24 +4045,38 @@ foreach ($modList as $mItem) {
                                 class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                             >
                             <span>
-                                <strong>Dokumenten-Volltextsuche (<code>file_search_index</code> via MariaDB/MySQL FULLTEXT) aktivieren</strong><br>
+                                <strong>Dokumenten-Volltextsuche (<code>file_search_index</code> via MariaDB/MySQL FULLTEXT + automatisches Scan-OCR) aktivieren</strong><br>
                                 <span class="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Durchsucht bei der globalen Schnellsuche (<code>Strg + K</code>) sowie im Dateimanager nicht nur Dateinamen, sondern in unter 5 Millisekunden auch den <strong>Textinhalt</strong> von PDF-, Word- (<code>.docx</code>), Excel- (<code>.xlsx</code>/<code>.csv</code>), PowerPoint- (<code>.pptx</code>), Visio-/Draw.io- (<code>.drawio</code>/<code>.vsdx</code>) und Text-/Markdown-Dateien – inklusive Treffer-Textausschnitt (E-Books sind ausgeschlossen). <strong>Zero-Knowledge-Garantie:</strong> Tresor-verschlüsselte Dateien werden niemals indexiert. Benötigt im Gegensatz zu Java-Elasticsearch <strong>0 MB zusätzlichen RAM</strong>.
+                                    Durchsucht bei der globalen Schnellsuche (<code>Strg + K</code>) sowie im Dateimanager nicht nur Dateinamen, sondern in unter 5 Millisekunden auch den <strong>Textinhalt</strong> von PDF- (inkl. eingescannten Bild-PDFs per automatischer OCR-Texterkennung), Word- (<code>.docx</code>), Excel- (<code>.xlsx</code>/<code>.csv</code>), PowerPoint- (<code>.pptx</code>), Visio-/Draw.io- (<code>.drawio</code>/<code>.vsdx</code>) und Text-/Markdown-Dateien – inklusive Treffer-Textausschnitt (E-Books sind ausgeschlossen). <strong>Zero-Knowledge-Garantie:</strong> Tresor-verschlüsselte Dateien werden niemals indexiert.
                                 </span>
                             </span>
                         </label>
                     </div>
                     <div class="pt-2.5 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">
-                            Neue Uploads und Office-Light-Speicherungen werden automatisch im Hintergrund indexiert.
+                        <span id="browserOcrStatusText" class="text-[11px] text-slate-500 dark:text-slate-400">
+                            Neue Uploads und Office-Light-Speicherungen werden automatisch im Hintergrund indexiert (inkl. OCR bei Scan-PDFs).
                         </span>
-                        <button
-                            type="submit"
-                            form="formReindexFulltext"
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                            🔄 Bestehende Cloud-Dateien jetzt indexieren
-                        </button>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="submit"
+                                form="formReindexFulltext"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold transition-colors cursor-pointer"
+                                title="Indexiert ausschließlich noch fehlende Dokumente (inkl. Scan-PDFs per OCR), ohne bereits indexierte Dateien erneut zu verarbeiten"
+                            >
+                                🔄 Fehlende Dokumente nachindexieren<?= count($ftStats['unindexed_pdfs'] ?? []) > 0 ? ' (' . count($ftStats['unindexed_pdfs']) . ' Scan-PDFs)' : '' ?>
+                            </button>
+                            <?php if (empty($ftStats['ocr_available']) && !empty($ftStats['local_wasm_ocr']) && !empty($ftStats['unindexed_pdfs'])): ?>
+                                <button
+                                    type="button"
+                                    id="btnBrowserWasmOcr"
+                                    onclick="runBrowserWasmOcrForUnindexedPdfs()"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                                    title="Für Shared-Webhosting ohne Server-Tesseract (z. B. STRATO): Führt die OCR-Texterkennung für fehlende Scan-PDFs direkt im Browser über WebAssembly aus"
+                                >
+                                    🌐 Scan-PDFs im Browser per OCR indexieren (<?= count($ftStats['unindexed_pdfs']) ?>)
+                                </button>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4057,7 +4093,87 @@ foreach ($modList as $mItem) {
         <form id="formReindexFulltext" action="admin.php" method="post" class="hidden">
             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
             <input type="hidden" name="action" value="reindex_fulltext_search">
+            <input type="hidden" name="only_missing" value="1">
         </form>
+        <?php if (!empty($ftStats['unindexed_pdfs'])): ?>
+            <script>
+            window.mcUnindexedScanPdfs = <?= json_encode($ftStats['unindexed_pdfs'], JSON_UNESCAPED_UNICODE) ?>;
+            async function runBrowserWasmOcrForUnindexedPdfs() {
+                const list = window.mcUnindexedScanPdfs || [];
+                if (!list.length) return;
+                const btn = document.getElementById('btnBrowserWasmOcr');
+                const statusEl = document.getElementById('browserOcrStatusText');
+                if (btn) btn.disabled = true;
+
+                try {
+                    if (!window.Tesseract) {
+                        if (statusEl) statusEl.textContent = '⏳ Lade lokale WebAssembly-OCR-Engine (assets/ocr/tesseract.min.js)…';
+                        await new Promise((resolve, reject) => {
+                            const s = document.createElement('script');
+                            s.src = 'assets/ocr/tesseract.min.js';
+                            s.onload = resolve;
+                            s.onerror = reject;
+                            document.head.appendChild(s);
+                        });
+                    }
+                    const pdfjsLib = await import('./assets/pdfjs/pdf.min.mjs');
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = './assets/pdfjs/pdf.worker.min.mjs';
+
+                    const ocrBaseUrl = new URL('assets/ocr', window.location.href).href;
+                    const worker = await window.Tesseract.createWorker('deu', 1, {
+                        workerPath: ocrBaseUrl + '/worker.min.js',
+                        corePath: ocrBaseUrl,
+                        langPath: ocrBaseUrl,
+                        workerBlobURL: false
+                    });
+
+                    let doneCount = 0;
+                    for (let i = 0; i < list.length; i++) {
+                        const item = list[i];
+                        if (statusEl) {
+                            statusEl.textContent = `🔍 Browser-OCR (${i + 1}/${list.length}): „${item.name}“…`;
+                        }
+                        try {
+                            const pdfDoc = await pdfjsLib.getDocument('download.php?id=' + item.id + '&inline=1').promise;
+                            const maxP = Math.min(pdfDoc.numPages, 6);
+                            const textParts = [];
+                            for (let p = 1; p <= maxP; p++) {
+                                const page = await pdfDoc.getPage(p);
+                                const vp = page.getViewport({ scale: 1.75 });
+                                const canvas = document.createElement('canvas');
+                                canvas.width = vp.width;
+                                canvas.height = vp.height;
+                                await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                                const res = await worker.recognize(canvas);
+                                if (res && res.data && res.data.text) {
+                                    textParts.push(res.data.text.trim());
+                                }
+                            }
+                            const fullText = textParts.join('\n').trim();
+                            if (fullText.length > 0) {
+                                const fd = new FormData();
+                                fd.append('csrf_token', <?= json_encode(getCsrfToken()) ?>);
+                                fd.append('action', 'save_browser_ocr_index');
+                                fd.append('file_id', String(item.id));
+                                fd.append('ocr_text', fullText);
+                                const saveRes = await fetch('admin.php', { method: 'POST', body: fd });
+                                const saveJson = await saveRes.json();
+                                if (saveJson && saveJson.ok) doneCount++;
+                            }
+                        } catch (e) {}
+                    }
+                    await worker.terminate();
+                    if (statusEl) {
+                        statusEl.textContent = `✅ Browser-OCR abgeschlossen: ${doneCount} Scan-PDF(s) wurden erfolgreich im Volltext-Index gespeichert!`;
+                    }
+                    setTimeout(() => window.location.reload(), 1200);
+                } catch (err) {
+                    if (statusEl) statusEl.textContent = '⚠️ Browser-OCR Fehler: ' + (err.message || err);
+                    if (btn) btn.disabled = false;
+                }
+            }
+            </script>
+        <?php endif; ?>
     </section>
 </div>
 <?php endif; ?>
