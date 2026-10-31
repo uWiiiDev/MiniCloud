@@ -805,8 +805,8 @@ require_once __DIR__ . '/includes/header.php';
                 <!-- 4 Zeit-Kategorien -->
                 <div class="flex flex-wrap items-center gap-1.5">
                     <?php foreach ($tvFeeds as $slotKey => $slotCfg): ?>
-                        <?php $isSlotActive = ($slotKey === $tvFeedSlot); ?>
-                        <a href="tv_radio.php?view=tv&amp;slot=<?= urlencode($slotKey) ?>"
+                        <?php $isSlotActive = ((string)$slotKey === $tvFeedSlot); ?>
+                        <a href="tv_radio.php?view=tv&amp;slot=<?= urlencode((string)$slotKey) ?>"
                            class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all <?= $isSlotActive ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700' ?>">
                             <?= e($slotCfg['label']) ?>
                         </a>
