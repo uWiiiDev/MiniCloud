@@ -505,7 +505,9 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
 
     @set_time_limit(300);
 
-    $activeModel = $ollamaStatus['active_model'] ?: $model;
+    $activeModel = in_array($model, $ollamaStatus['models'] ?? [], true)
+        ? $model
+        : ($ollamaStatus['active_model'] ?: $model);
     $langs       = getTranslatorLanguages();
     $targetName  = $langs[$targetLang]['name'] ?? strtoupper($targetLang);
     $sourceHint  = ($sourceLang !== 'auto' && isset($langs[$sourceLang]))
@@ -690,7 +692,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         $targetLang = strtolower(trim((string)($_POST['target_lang'] ?? 'en')));
         $formality  = strtolower(trim((string)($_POST['formality'] ?? 'default')));
         $engineMode = strtolower(trim((string)($_POST['engine_mode'] ?? 'auto')));
-        if (!in_array($engineMode, ['auto', 'local', 'nmt', 'deepl'], true)) {
+        $customOllamaModel = '';
+        if (str_starts_with($engineMode, 'local:')) {
+            $customOllamaModel = preg_replace('/[^a-zA-Z0-9._:-]/', '', substr($engineMode, 6)) ?: '';
+            $engineMode = 'local_ollama';
+        } elseif (!in_array($engineMode, ['auto', 'local', 'local_lt', 'local_ollama', 'nmt', 'deepl'], true)) {
             $engineMode = 'auto';
         }
 
@@ -712,11 +718,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
         $deeplKey    = trim((string)($appSettings['translator_deepl_api_key'] ?? ''));
         $libreUrl    = trim((string)($appSettings['translator_libretranslate_url'] ?? ''));
-        $ollamaModel = trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b';
+        $ollamaModel = $customOllamaModel !== ''
+            ? $customOllamaModel
+            : (trim((string)($appSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?: 'gemma2:2b');
         $result      = null;
 
         // A) Expliziter 100 % Intranet / Offline-Modus (kein einziges Paket verlässt den Server / das Intranet)
-        if ($engineMode === 'local') {
+        if ($engineMode === 'local_ollama') {
+            $result = translateViaLocalOllama($sourceText, $sourceLang, $targetLang, $ollamaModel, $formality);
+        } elseif ($engineMode === 'local_lt') {
+            $result = translateViaLocalLibreTranslate($sourceText, $sourceLang, $targetLang, $libreUrl);
+        } elseif ($engineMode === 'local') {
             if ($libreUrl !== '') {
                 $result = translateViaLocalLibreTranslate($sourceText, $sourceLang, $targetLang, $libreUrl);
             }
@@ -1020,8 +1032,9 @@ require_once __DIR__ . '/includes/header.php';
                         <?= $hasDeepLKey ? '⚡ DeepL Neural API aktiv' : '🧠 Neuronale Satz- & Kontext-Engine aktiv' ?>
                     </span>
                     <?php if ($hasLocalIntranetEngine): ?>
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800" title="Auf diesem Server steht eine 100 % lokale Offline-/Intranet-Übersetzungs-Engine bereit.">
-                            🔒 Intranet-fähig (<?= $ollamaStatus['available'] ? ('Ollama ' . e($ollamaStatus['active_model'])) : 'LibreTranslate' ?>)
+                        <?php $localCount = count($ollamaStatus['models'] ?? []); ?>
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800" title="Auf diesem Server stehen <?= $localCount > 0 ? ($localCount . ' lokale Offline-Sprachmodelle (' . e(implode(', ', $ollamaStatus['models'])) . ')') : 'lokale Intranet-Engines' ?> bereit.">
+                            🔒 Intranet-fähig (<?= $ollamaStatus['available'] ? ($localCount > 1 ? ($localCount . ' lokale KI-Modelle') : ('Ollama ' . e($ollamaStatus['active_model']))) : 'LibreTranslate' ?>)
                         </span>
                     <?php endif; ?>
                 </div>
@@ -1041,10 +1054,23 @@ require_once __DIR__ . '/includes/header.php';
                     class="w-full pl-3 pr-7 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
                 >
                     <option value="auto" selected>⚡ Engine: Automatisch (Optimal + Intranet-Fallback)</option>
-                    <?php if ($hasLocalIntranetEngine): ?>
-                        <option value="local">🔒 100 % Lokal / Intranet (Offline · <?= $ollamaStatus['available'] ? ('Ollama ' . e($ollamaStatus['active_model'])) : 'LibreTranslate' ?>)</option>
-                    <?php else: ?>
+                    <?php if ($ollamaStatus['available'] && !empty($ollamaStatus['models'])): ?>
+                        <?php foreach ($ollamaStatus['models'] as $mdlName): ?>
+                            <?php
+                            $mdlHint = match (strtolower($mdlName)) {
+                                'gemma2:2b'  => 'Schnell · ~5s',
+                                'qwen2.5:3b' => '29 Sprachen · Empfohlen',
+                                'qwen2.5:7b' => 'Meister-Qualität · Fachtexte',
+                                default      => '100 % Offline',
+                            };
+                            ?>
+                            <option value="<?= e('local:' . $mdlName) ?>">🔒 100 % Lokal: <?= e($mdlName) ?> (<?= e($mdlHint) ?>)</option>
+                        <?php endforeach; ?>
+                    <?php elseif (!$hasLibreUrl): ?>
                         <option value="local">🔒 100 % Lokal / Intranet (Ollama / LibreTranslate)</option>
+                    <?php endif; ?>
+                    <?php if ($hasLibreUrl): ?>
+                        <option value="local_lt">🔒 100 % Lokal: LibreTranslate (Intranet)</option>
                     <?php endif; ?>
                     <option value="nmt">🌐 Online-NMT (Schnelle Direkt-Übersetzung)</option>
                     <?php if ($hasDeepLKey): ?>
@@ -1477,10 +1503,11 @@ function onSourceLangChange() {
 function onEngineModeChange() {
     const engSel = document.getElementById('engineModeSelect');
     const autoToggle = document.getElementById('autoTranslateToggle');
+    const isLocal = engSel && engSel.value.startsWith('local');
     // Im lokalen Ollama-Modus ist es angenehmer, nicht bei jedem einzelnen Tastenanschlag sofort das LLM neu zu starten
-    if (engSel && autoToggle && engSel.value === 'local') {
+    if (autoToggle && isLocal) {
         autoToggle.checked = false;
-    } else if (engSel && autoToggle && engSel.value !== 'local') {
+    } else if (autoToggle && !isLocal) {
         autoToggle.checked = true;
     }
     const val = document.getElementById('sourceTextInput')?.value.trim() || '';
@@ -1577,9 +1604,10 @@ async function triggerTranslationNow(saveToHistory = true) {
     if (overlay) overlay.classList.remove('hidden');
 
     try {
+        const isLocalMode = engineMode.startsWith('local');
         // Im 100 % lokalen CPU-Modus (Ollama) längere Texte abschnittsweise übersetzen,
         // damit das erste Ergebnis schon nach wenigen Sekunden sichtbar ist und kein Timeout auftritt
-        if (engineMode === 'local' && text.length > 320) {
+        if (isLocalMode && text.length > 320) {
             const blocks = splitClientTextIntoLocalBlocks(text, 320);
             const translatedBlocks = [];
             let lastData = null;
@@ -1597,7 +1625,7 @@ async function triggerTranslationNow(saveToHistory = true) {
                 fd.append('source_lang', srcSel.value);
                 fd.append('target_lang', tgtSel.value);
                 fd.append('formality', formSel ? formSel.value : 'default');
-                fd.append('engine_mode', 'local');
+                fd.append('engine_mode', engineMode);
 
                 const res = await fetch('translate.php', {
                     method: 'POST',
@@ -1635,7 +1663,7 @@ async function triggerTranslationNow(saveToHistory = true) {
         }
 
         if (loadTxt) {
-            loadTxt.textContent = engineMode === 'local'
+            loadTxt.textContent = isLocalMode
                 ? '🔒 Übersetze 100 % lokal über Server-KI (Ollama)…'
                 : 'Übersetze im Satzkontext…';
         }

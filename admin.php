@@ -3510,10 +3510,18 @@ foreach ($modList as $mItem) {
                                 <input
                                     type="text"
                                     name="assistant_ollama_model"
+                                    list="ollamaModelsDatalist"
                                     value="<?= e((string)($currentSettings['assistant_ollama_model'] ?? 'gemma2:2b')) ?>"
                                     placeholder="gemma2:2b"
                                     class="w-full px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
                                 >
+                                <?php if (!empty($ollamaStatus['models'])): ?>
+                                    <datalist id="ollamaModelsDatalist">
+                                        <?php foreach ($ollamaStatus['models'] as $oMdl): ?>
+                                            <option value="<?= e($oMdl) ?>"></option>
+                                        <?php endforeach; ?>
+                                    </datalist>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -4059,8 +4067,8 @@ foreach ($modList as $mItem) {
                                         🔒 Intranet- &amp; Offline-Fähigkeit (100 % lokal ohne Internet):
                                     </span>
                                     <?php if ($ollamaStatus['available']): ?>
-                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                            🟢 Lokales Ollama bereit (<?= e($ollamaStatus['active_model']) ?>)
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300" title="<?= e(implode(', ', $ollamaStatus['models'] ?? [])) ?>">
+                                            🟢 Lokales Ollama bereit (<?= !empty($ollamaStatus['models']) ? e(implode(', ', $ollamaStatus['models'])) : e($ollamaStatus['active_model']) ?>)
                                         </span>
                                     <?php else: ?>
                                         <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
