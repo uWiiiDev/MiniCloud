@@ -148,6 +148,59 @@ $leagues = [
             ['color' => 'bg-rose-500',    'label' => 'Platz 17–20: Abstieg'],
         ],
     ],
+    'del' => [
+        'name'         => 'PENNY DEL (Eishockey)',
+        'short'        => 'DEL',
+        'icon'         => '🏒',
+        'max_matchday' => 52,
+        'teams_count'  => 14,
+        'zones'        => [
+            1  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            2  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            5  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            6  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            7  => ['label' => '1. Playoff-Runde (Pre-Playoffs)', 'color' => 'bg-sky-500', 'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            8  => ['label' => '1. Playoff-Runde (Pre-Playoffs)', 'color' => 'bg-sky-500', 'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            9  => ['label' => '1. Playoff-Runde (Pre-Playoffs)', 'color' => 'bg-sky-500', 'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            10 => ['label' => '1. Playoff-Runde (Pre-Playoffs)', 'color' => 'bg-sky-500', 'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            14 => ['label' => 'Abstieg in die DEL2',         'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–6: Playoff-Viertelfinale'],
+            ['color' => 'bg-sky-500',     'label' => 'Platz 7–10: 1. Playoff-Runde (Pre-Playoffs)'],
+            ['color' => 'bg-rose-500',    'label' => 'Platz 14: Abstieg in die DEL2'],
+        ],
+    ],
+    'del2' => [
+        'name'         => 'DEL2 (2. Eishockey-BL)',
+        'short'        => 'DEL2',
+        'icon'         => '🥅',
+        'max_matchday' => 52,
+        'teams_count'  => 14,
+        'zones'        => [
+            1  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            2  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            5  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            6  => ['label' => 'Playoff-Viertelfinale',       'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            7  => ['label' => 'Pre-Playoffs',                'color' => 'bg-sky-500',     'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            8  => ['label' => 'Pre-Playoffs',                'color' => 'bg-sky-500',     'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            9  => ['label' => 'Pre-Playoffs',                'color' => 'bg-sky-500',     'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            10 => ['label' => 'Pre-Playoffs',                'color' => 'bg-sky-500',     'row_bg' => 'bg-sky-50/40 dark:bg-sky-950/20',         'badge' => 'text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/50'],
+            11 => ['label' => 'Playdowns',                   'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/40 dark:bg-amber-950/20',     'badge' => 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+            12 => ['label' => 'Playdowns',                   'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/40 dark:bg-amber-950/20',     'badge' => 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+            13 => ['label' => 'Playdowns',                   'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/40 dark:bg-amber-950/20',     'badge' => 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+            14 => ['label' => 'Playdowns',                   'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/40 dark:bg-amber-950/20',     'badge' => 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–6: Playoff-Viertelfinale'],
+            ['color' => 'bg-sky-500',     'label' => 'Platz 7–10: Pre-Playoffs'],
+            ['color' => 'bg-amber-500',   'label' => 'Platz 11–14: Playdowns (Klassenerhalt)'],
+        ],
+    ],
 ];
 
 /**
@@ -464,30 +517,52 @@ function enrichMatchdayWithLiveScoreboard(PDO $pdo, string $league, array $match
 }
 
 /**
- * Extrahiert Endergebnis (resultTypeID=2) und Halbzeitergebnis (resultTypeID=1) aus einem OpenLigaDB-Match.
+ * Extrahiert Endergebnis, Halbzeitergebnis (Fußball) bzw. Drittelergebnisse & Overtime/Penalty (Eishockey).
  */
 function extractMatchScores(array $match): array
 {
-    $final1 = null;
-    $final2 = null;
-    $ht1    = null;
-    $ht2    = null;
+    $final1      = null;
+    $final2      = null;
+    $ht1         = null;
+    $ht2         = null;
+    $periods     = [];
+    $extraSuffix = '';
 
     $results = $match['matchResults'] ?? [];
-    if (is_array($results)) {
+    if (is_array($results) && !empty($results)) {
+        usort($results, static fn(array $a, array $b): int => ((int)($a['resultOrderID'] ?? 0)) <=> ((int)($b['resultOrderID'] ?? 0)));
+
         foreach ($results as $r) {
             $typeId = (int)($r['resultTypeID'] ?? 0);
-            if ($typeId === 2) {
-                $final1 = (int)($r['pointsTeam1'] ?? 0);
-                $final2 = (int)($r['pointsTeam2'] ?? 0);
+            $rName  = strtolower(trim((string)($r['resultName'] ?? '')));
+            $rKind  = strtolower(trim((string)($r['resultTypeKind'] ?? '')));
+            $p1     = (int)($r['pointsTeam1'] ?? 0);
+            $p2     = (int)($r['pointsTeam2'] ?? 0);
+
+            if (str_contains($rName, 'drittel')) {
+                $periods[] = "{$p1}:{$p2}";
+                $final1 = $p1;
+                $final2 = $p2;
+            } elseif (str_contains($rName, 'overtime') || str_contains($rName, 'verlängerung') || $rKind === 'afterextratime' || $typeId === 4) {
+                $final1      = $p1;
+                $final2      = $p2;
+                $extraSuffix = 'n.V.';
+            } elseif (str_contains($rName, 'penalty') || str_contains($rName, 'shootout') || $typeId === 5) {
+                $final1      = $p1;
+                $final2      = $p2;
+                $extraSuffix = 'n.P.';
+            } elseif ($typeId === 2) {
+                $final1 = $p1;
+                $final2 = $p2;
             } elseif ($typeId === 1) {
-                $ht1 = (int)($r['pointsTeam1'] ?? 0);
-                $ht2 = (int)($r['pointsTeam2'] ?? 0);
+                $ht1 = $p1;
+                $ht2 = $p2;
             }
         }
-        // Fallback: falls nur ein Resultat oder Tore existieren
-        if ($final1 === null && !empty($results)) {
-            $last   = end($results);
+
+        // Fallback: höchstes Resultat in der Reihenfolge als aktuellen/endgültigen Stand verwenden
+        $last = end($results);
+        if ($last && ($final1 === null || (int)($last['resultOrderID'] ?? 0) > 2)) {
             $final1 = (int)($last['pointsTeam1'] ?? 0);
             $final2 = (int)($last['pointsTeam2'] ?? 0);
         }
@@ -507,28 +582,30 @@ function extractMatchScores(array $match): array
     $isStarted  = $kickoffTs > 0 && $now >= $kickoffTs;
     $isFinished = !empty($match['matchIsFinished']);
 
-    // Sicherheits-Fallback: Wenn ein Spiel vor mehr als 130 Minuten (2 Std. 10 Min.) angepfiffen wurde
+    // Sicherheits-Fallback: Wenn ein Spiel vor mehr als 150 Minuten (2,5 Std.) angepfiffen wurde
     // und nicht explizit als laufend (_live_state === 'in') gemeldet ist, gilt es als beendet statt endlos "LIVE".
     $liveState = (string)($match['_live_state'] ?? '');
     if ($liveState === 'post') {
         $isFinished = true;
-    } elseif ($liveState !== 'in' && $isStarted && !$isFinished && ($now - $kickoffTs) > 7800) {
+    } elseif ($liveState !== 'in' && $isStarted && !$isFinished && ($now - $kickoffTs) > 9000) {
         $isFinished = true;
     }
 
     $isLive = $isStarted && !$isFinished;
 
     return [
-        'has_score'   => ($final1 !== null && $final2 !== null && ($isStarted || $isFinished)),
-        'score1'      => $final1,
-        'score2'      => $final2,
-        'ht1'         => $ht1,
-        'ht2'         => $ht2,
-        'is_finished' => $isFinished,
-        'is_started'  => $isStarted,
-        'is_live'     => $isLive,
-        'live_clock'  => (string)($match['_live_clock'] ?? ''),
-        'kickoff_ts'  => $kickoffTs,
+        'has_score'    => ($final1 !== null && $final2 !== null && ($isStarted || $isFinished)),
+        'score1'       => $final1,
+        'score2'       => $final2,
+        'ht1'          => $ht1,
+        'ht2'          => $ht2,
+        'periods_str'  => !empty($periods) ? implode(' • ', $periods) : '',
+        'extra_suffix' => $extraSuffix,
+        'is_finished'  => $isFinished,
+        'is_started'   => $isStarted,
+        'is_live'      => $isLive,
+        'live_clock'   => (string)($match['_live_clock'] ?? ''),
+        'kickoff_ts'   => $kickoffTs,
     ];
 }
 
@@ -906,8 +983,8 @@ require_once __DIR__ . '/includes/header.php';
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div class="flex items-start sm:items-center gap-3.5">
-                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-700 text-white flex items-center justify-center text-2xl shadow-sm shrink-0">
-                    ⚽
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br <?= in_array($selectedLeague, ['del', 'del2'], true) ? 'from-sky-500 to-blue-700' : 'from-emerald-500 to-green-700' ?> text-white flex items-center justify-center text-2xl shadow-sm shrink-0">
+                    <?= in_array($selectedLeague, ['del', 'del2'], true) ? '🏒' : '⚽' ?>
                 </div>
                 <div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -932,11 +1009,11 @@ require_once __DIR__ . '/includes/header.php';
 
             <!-- Liga-Tabs + Saison-Wähler -->
             <div class="flex flex-wrap items-center gap-2">
-                <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/70 dark:border-slate-700">
+                <div class="flex flex-wrap rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/70 dark:border-slate-700 gap-1">
                     <?php foreach ($leagues as $lKey => $lCfg): ?>
                         <?php $isActiveLeague = ($lKey === $selectedLeague); ?>
                         <a href="bundesliga.php?league=<?= urlencode($lKey) ?>&amp;season=<?= (int)$selectedSeason ?>"
-                           class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $isActiveLeague ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white' ?>">
+                           class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $isActiveLeague ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white' ?>">
                             <span><?= $lCfg['icon'] ?></span>
                             <span><?= e($lCfg['name']) ?></span>
                         </a>
@@ -1322,10 +1399,12 @@ require_once __DIR__ . '/includes/header.php';
                                         <!-- Mittelblock: Spielstand oder Anstoß -->
                                         <div class="col-span-2 flex flex-col items-center justify-center">
                                             <?php if ($scores['has_score']): ?>
-                                                <div class="px-2.5 py-1 rounded-lg font-extrabold text-xs sm:text-sm tracking-tight <?= $scores['is_live'] ? 'bg-rose-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900' ?>">
-                                                    <?= (int)$scores['score1'] ?> : <?= (int)$scores['score2'] ?>
+                                                <div class="px-2.5 py-1 rounded-lg font-extrabold text-xs sm:text-sm tracking-tight whitespace-nowrap <?= $scores['is_live'] ? 'bg-rose-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900' ?>">
+                                                    <?= (int)$scores['score1'] ?> : <?= (int)$scores['score2'] ?><?= $scores['extra_suffix'] !== '' ? ' <span class="text-[10px] font-bold opacity-85">' . e($scores['extra_suffix']) . '</span>' : '' ?>
                                                 </div>
-                                                <?php if ($scores['ht1'] !== null && $scores['ht2'] !== null): ?>
+                                                <?php if ($scores['periods_str'] !== ''): ?>
+                                                    <span class="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap" title="Zwischenstände nach Dritteln">(<?= e($scores['periods_str']) ?>)</span>
+                                                <?php elseif ($scores['ht1'] !== null && $scores['ht2'] !== null): ?>
                                                     <span class="text-[10px] text-slate-400 mt-0.5">(<?= (int)$scores['ht1'] ?>:<?= (int)$scores['ht2'] ?>)</span>
                                                 <?php endif; ?>
                                             <?php else: ?>

@@ -497,10 +497,39 @@ $myFavoriteStations = $myStationsStmt->fetchAll(PDO::FETCH_ASSOC);
 // 6. TV-PROGRAMM RSS/EPG ABRUF & PARSER (MIT SERVER-CACHE)
 // ============================================================================
 $tvFeeds = [
-    'now'    => ['label' => '🔴 Jetzt im TV',              'url' => 'https://www.tvspielfilm.de/tv-programm/rss/jetzt.xml',     'ttl' => 180],
-    '2015'   => ['label' => '🍿 Heute 20:15 Uhr',          'url' => 'https://www.tvspielfilm.de/tv-programm/rss/heute2015.xml', 'ttl' => 600],
-    '2200'   => ['label' => '🌙 Heute 22:00 Uhr',          'url' => 'https://www.tvspielfilm.de/tv-programm/rss/heute2200.xml', 'ttl' => 600],
-    'movies' => ['label' => '🎬 Spielfilm-Highlights',     'url' => 'https://www.tvspielfilm.de/tv-programm/rss/filme.xml',     'ttl' => 900],
+    'now'    => [
+        'label' => '🔴 Jetzt im TV',
+        'urls'  => [
+            'https://www.klack.de/fernsehprogramm/was-laeuft-gerade/0/0/all.html',
+            'https://www.tvspielfilm.de/tv-programm/rss/jetzt.xml',
+        ],
+        'ttl'   => 180,
+    ],
+    '2015'   => [
+        'label' => '🍿 Heute 20:15 Uhr',
+        'urls'  => [
+            'https://www.klack.de/xml/2015RSS.xml',
+            'https://www.klack.de/fernsehprogramm/20-15-uhr-im-tv/0/0/all.html',
+            'https://www.tvspielfilm.de/tv-programm/rss/heute2015.xml',
+        ],
+        'ttl'   => 600,
+    ],
+    '2200'   => [
+        'label' => '🌙 Heute 22:00 Uhr',
+        'urls'  => [
+            'https://www.klack.de/fernsehprogramm/22-00-uhr-im-tv/0/0/all.html',
+            'https://www.tvspielfilm.de/tv-programm/rss/heute2200.xml',
+        ],
+        'ttl'   => 600,
+    ],
+    'movies' => [
+        'label' => '🎬 Highlights & Tipps',
+        'urls'  => [
+            'https://www.klack.de/xml/topRSS.xml',
+            'https://www.tvspielfilm.de/tv-programm/rss/filme.xml',
+        ],
+        'ttl'   => 900,
+    ],
 ];
 
 // Direktlinks zu offiziellen Live-TV-Streams bekannter Sender
@@ -551,9 +580,198 @@ $channelLiveStreams = [
     'SUPER RTL'       => 'https://plus.rtl.de/video-tv/live-tv/super-rtl-7',
 ];
 
+/**
+ * Lädt eine URL per cURL oder Stream-Context mit Browser-User-Agent.
+ */
+function fetchRemoteTextUrl(string $url): ?string
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 7,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            CURLOPT_HTTPHEADER     => [
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language: de-DE,de;q=0.9',
+            ],
+        ]);
+        $res  = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if (is_string($res) && $res !== '' && $code >= 200 && $code < 300) {
+            return $res;
+        }
+    } else {
+        $ctx = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'timeout' => 7,
+                'header'  => "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36\r\nAccept-Language: de-DE,de;q=0.9\r\n",
+            ],
+        ]);
+        $res = @file_get_contents($url, false, $ctx);
+        if (is_string($res) && $res !== '') {
+            return $res;
+        }
+    }
+    return null;
+}
+
+/**
+ * Parst Klack.de EPG-HTML-Tabellen (Jetzt im TV, 20:15 Uhr, 22:00 Uhr) inklusive Folgesendung („Danach“).
+ */
+function parseKlackEpgHtml(string $html): array
+{
+    $items = [];
+    if (!preg_match_all('/<tr\s+class="(?:oddRow|evenRow)"[^>]*>(.*?)<\/tr>/isu', $html, $rowMatches)) {
+        return [];
+    }
+
+    foreach ($rowMatches[1] as $rowHtml) {
+        if (!str_contains($rowHtml, 'class="station"')) {
+            continue;
+        }
+
+        // 1. Sendername & Senderlogo
+        $channel = 'TV';
+        if (preg_match('/<td\s+class="station"[^>]*>.*?title="([^"]+)"/isu', $rowHtml, $mCh)) {
+            $channel = trim(html_entity_decode($mCh[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        } elseif (preg_match('/class="stationIcon"[^>]*alt="([^"]+)"/isu', $rowHtml, $mCh2)) {
+            $channel = trim(html_entity_decode($mCh2[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        }
+
+        // 2. Uhrzeiten im Row finden (1. = aktuelle Sendung, 2. = Folgesendung)
+        preg_match_all('/<td\s+class="time[^"]*"[^>]*>\s*(\d{1,2}:\d{2})/isu', $rowHtml, $timeMatches);
+        $timeCurrent = $timeMatches[1][0] ?? '';
+        $timeNext    = $timeMatches[1][1] ?? '';
+
+        // 3. Details-Spalten (1. = aktuelle Sendung, 2. = Folgesendung)
+        preg_match_all('/<td\s+class="details"[^>]*>\s*<div\s+class="content">(.*?)<\/div>\s*<\/td>/isu', $rowHtml, $detailMatches);
+        if (empty($detailMatches[1][0])) {
+            continue;
+        }
+
+        $det1 = $detailMatches[1][0];
+        $title = '';
+        $link  = '';
+        if (preg_match('/<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/isu', $det1, $mLink)) {
+            $rawHref = trim($mLink[1]);
+            $link    = str_starts_with($rawHref, 'http') ? $rawHref : ('https://www.klack.de' . $rawHref);
+            $title   = trim(strip_tags(html_entity_decode($mLink[2], ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        }
+        if ($title === '') {
+            continue;
+        }
+
+        // Beschreibung ohne den ersten Titel-Link aufbereiten
+        $descHtml = preg_replace('/^.*?<\/a>\s*(?:<br\s*\/?>)*/isu', '', $det1) ?? $det1;
+        $descHtml = preg_replace('/<br\s*\/?>/i', ' • ', $descHtml) ?? $descHtml;
+        $desc     = trim(preg_replace('/(\s*•\s*)+/u', ' • ', strip_tags(html_entity_decode($descHtml, ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?? '', " \t\n\r\0\x0B•");
+
+        // 4. Vorschaubild (epgImage)
+        $img = '';
+        if (preg_match('/<img\s+class="epgImage"\s+src="([^"]+)"/isu', $rowHtml, $mImg)) {
+            $img = trim($mImg[1]);
+        }
+
+        // 5. Folgesendung („Danach“)
+        $nextTitle = '';
+        if (!empty($detailMatches[1][1]) && preg_match('/<a\s+[^>]*>(.*?)<\/a>/isu', $detailMatches[1][1], $mNext)) {
+            $nextTitle = trim(strip_tags(html_entity_decode($mNext[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        }
+
+        $items[] = [
+            'time'        => $timeCurrent,
+            'channel'     => $channel,
+            'title'       => $title,
+            'description' => mb_substr($desc, 0, 420),
+            'image'       => $img,
+            'link'        => $link,
+            'next_time'   => $timeNext,
+            'next_title'  => $nextTitle,
+        ];
+    }
+
+    return $items;
+}
+
+/**
+ * Parst RSS-XML-Feeds (sowohl Klack.de XML als auch TV-Spielfilm XML).
+ */
+function parseTvRssXml(string $rawXml): array
+{
+    $xml = @simplexml_load_string($rawXml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NONET);
+    if ($xml === false || !isset($xml->channel->item)) {
+        return [];
+    }
+
+    $items = [];
+    foreach ($xml->channel->item as $item) {
+        $rawTitle = trim((string)$item->title);
+        $rawDesc  = (string)$item->description;
+        $link     = trim((string)$item->link);
+        $img      = '';
+
+        if (isset($item->enclosure['url'])) {
+            $img = trim((string)$item->enclosure['url']);
+        } elseif (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $rawDesc, $mImg)) {
+            $img = trim($mImg[1]);
+        }
+
+        $timeStr = '';
+        $channel = 'TV';
+        $title   = $rawTitle;
+
+        // Variante 1: TV Spielfilm ("20:15 | Das Erste | Klein gegen Groß")
+        if (str_contains($rawTitle, '|')) {
+            $parts = array_map('trim', explode('|', $rawTitle, 3));
+            if (count($parts) === 3) {
+                $timeStr = $parts[0];
+                $channel = $parts[1];
+                $title   = $parts[2];
+            } elseif (count($parts) === 2) {
+                $channel = $parts[0];
+                $title   = $parts[1];
+            }
+        } elseif (str_contains($rawTitle, ':')) {
+            // Variante 2: Klack RSS ("Das Erste: Klein gegen Groß")
+            [$chCand, $tCand] = array_map('trim', explode(':', $rawTitle, 2));
+            if ($chCand !== '' && $tCand !== '') {
+                $channel = $chCand;
+                $title   = $tCand;
+            }
+        }
+
+        // Uhrzeit aus Klack-Description ("20:15 Uhr - <b>...</b>") oder dc:date extrahieren
+        if ($timeStr === '' && preg_match('/^\s*(\d{1,2}:\d{2})\s*Uhr\s*-\s*(?:<b>.*?<\/b>)?/isu', $rawDesc, $mT)) {
+            $timeStr = $mT[1];
+            $rawDesc = preg_replace('/^\s*\d{1,2}:\d{2}\s*Uhr\s*-\s*(?:<b>.*?<\/b>)?\s*(?:<br\s*\/?>)*/isu', '', $rawDesc) ?? $rawDesc;
+        }
+
+        $desc = trim(preg_replace('/\s+/u', ' ', strip_tags(html_entity_decode($rawDesc, ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?? '');
+
+        $items[] = [
+            'time'        => $timeStr,
+            'channel'     => $channel,
+            'title'       => $title,
+            'description' => mb_substr($desc, 0, 420),
+            'image'       => $img,
+            'link'        => $link,
+            'next_time'   => '',
+            'next_title'  => '',
+        ];
+    }
+
+    return $items;
+}
+
 function fetchTvProgramSlot(PDO $pdo, string $slotKey, array $feedMeta, bool $forceRefresh = false): array
 {
-    $cacheKey = 'tv_rss_' . $slotKey;
+    $cacheKey = 'tv_epg_' . $slotKey;
     $stmt     = $pdo->prepare("SELECT payload, updated_at FROM tv_radio_cache WHERE cache_key = ?");
     $stmt->execute([$cacheKey]);
     $cached = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -562,80 +780,24 @@ function fetchTvProgramSlot(PDO $pdo, string $slotKey, array $feedMeta, bool $fo
         $age = time() - (int)strtotime((string)$cached['updated_at']);
         if ($age >= 0 && $age <= (int)$feedMeta['ttl']) {
             $decoded = json_decode((string)$cached['payload'], true);
-            if (is_array($decoded)) {
+            if (is_array($decoded) && !empty($decoded)) {
                 return ['items' => $decoded, 'updated_at' => (string)$cached['updated_at']];
             }
         }
     }
 
-    $rawXml = null;
-    if (function_exists('curl_init')) {
-        $ch = curl_init((string)$feedMeta['url']);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT        => 6,
-            CURLOPT_CONNECTTIMEOUT => 4,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; MiniCloud-TVGuide/1.0)',
-        ]);
-        $res  = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if (is_string($res) && $code >= 200 && $code < 300) {
-            $rawXml = $res;
+    $urls = $feedMeta['urls'] ?? [];
+    foreach ($urls as $url) {
+        $raw = fetchRemoteTextUrl((string)$url);
+        if ($raw === null) {
+            continue;
         }
-    } else {
-        $ctx = stream_context_create([
-            'http' => [
-                'method'  => 'GET',
-                'timeout' => 6,
-                'header'  => "User-Agent: Mozilla/5.0 (compatible; MiniCloud-TVGuide/1.0)\r\n",
-            ],
-        ]);
-        $res = @file_get_contents((string)$feedMeta['url'], false, $ctx);
-        if (is_string($res) && $res !== '') {
-            $rawXml = $res;
-        }
-    }
 
-    if ($rawXml !== null) {
-        $xml = @simplexml_load_string($rawXml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NONET);
-        if ($xml !== false && isset($xml->channel->item)) {
-            $items = [];
-            foreach ($xml->channel->item as $item) {
-                $rawTitle = trim((string)$item->title);
-                // Format ist typischerweise: "20:15 | Das Erste | Klein gegen Groß"
-                $parts   = array_map('trim', explode('|', $rawTitle, 3));
-                $timeStr = '';
-                $channel = 'TV';
-                $title   = $rawTitle;
+        $items = str_ends_with(strtolower((string)$url), '.xml')
+            ? parseTvRssXml($raw)
+            : parseKlackEpgHtml($raw);
 
-                if (count($parts) === 3) {
-                    $timeStr = $parts[0];
-                    $channel = $parts[1];
-                    $title   = $parts[2];
-                } elseif (count($parts) === 2) {
-                    $channel = $parts[0];
-                    $title   = $parts[1];
-                }
-
-                $desc = trim(strip_tags(html_entity_decode((string)$item->description, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
-                $img  = '';
-                if (isset($item->enclosure['url'])) {
-                    $img = trim((string)$item->enclosure['url']);
-                }
-                $link = trim((string)$item->link);
-
-                $items[] = [
-                    'time'        => $timeStr,
-                    'channel'     => $channel,
-                    'title'       => $title,
-                    'description' => $desc,
-                    'image'       => $img,
-                    'link'        => $link,
-                ];
-            }
-
+        if (!empty($items)) {
             $now = date('Y-m-d H:i:s');
             $up  = $pdo->prepare("
                 INSERT INTO tv_radio_cache (cache_key, payload, updated_at)
@@ -643,14 +805,13 @@ function fetchTvProgramSlot(PDO $pdo, string $slotKey, array $feedMeta, bool $fo
                 ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = VALUES(updated_at)
             ");
             $up->execute([$cacheKey, json_encode($items, JSON_UNESCAPED_UNICODE), $now]);
-
             return ['items' => $items, 'updated_at' => $now];
         }
     }
 
     if ($cached) {
         $decoded = json_decode((string)$cached['payload'], true);
-        if (is_array($decoded)) {
+        if (is_array($decoded) && !empty($decoded)) {
             return ['items' => $decoded, 'updated_at' => (string)$cached['updated_at']];
         }
     }
@@ -919,6 +1080,11 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php if ($item['description'] !== ''): ?>
                                         <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 leading-relaxed">
                                             <?= e($item['description']) ?>
+                                        </p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($item['next_title'])): ?>
+                                        <p class="pt-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 truncate">
+                                            ⏭️ Danach<?= !empty($item['next_time']) ? ' ' . e((string)$item['next_time']) : '' ?>: <?= e((string)$item['next_title']) ?>
                                         </p>
                                     <?php endif; ?>
                                 </div>
