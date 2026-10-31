@@ -1515,15 +1515,21 @@ if ($bookFileId > 0) {
 // ANSICHT B: BÜCHERREGAL / E-BOOK-BIBLIOTHEK (`ebooks.php`)
 // =============================================================================
 
-// 1. Alle für den Benutzer zugänglichen .epub-Dateien laden (eigene & direkt geteilte)
+// 1. Alle für den Benutzer zugänglichen .epub-Dateien laden (inkl. leichtgewichtiger Text-Metadaten ohne Cover-Blob)
 $stmtEpubs = $pdo->prepare(
     "SELECT f.*, u.username AS owner_username, '' AS group_folder_name,
+            emc.title AS cached_title,
+            emc.author AS cached_author,
+            emc.language AS cached_language,
+            emc.description AS cached_description,
+            emc.chapter_count AS cached_chapter_count,
             CASE
                 WHEN f.user_id = :uid1 THEN 'own'
                 ELSE 'shared'
             END AS source_kind
      FROM `files` f
      LEFT JOIN `users` u ON u.id = f.user_id
+     LEFT JOIN `ebook_metadata_cache` emc ON emc.file_id = f.id
      WHERE f.deleted_at IS NULL
        AND f.group_folder_id IS NULL
        AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) = 'epub'
@@ -1558,10 +1564,15 @@ try {
 } catch (Throwable) {
 }
 
-// 3. Buch-Katalog mit gecachten Metadaten & Fortschritt zusammenbauen
-$books = [];
-$lastReadBook = null;
-$lastReadTs   = 0;
+// 3. Filter-, Such- und Paginierungsparameter (6 Bücher pro Seite)
+$activeTab = strtolower(trim((string)($_GET['tab'] ?? 'all')));
+if (!in_array($activeTab, ['all', 'reading', 'unread', 'finished'], true)) {
+    $activeTab = 'all';
+}
+$searchQuery = trim((string)($_GET['q'] ?? ''));
+$searchLower = $searchQuery !== '' ? mb_strtolower($searchQuery, 'UTF-8') : '';
+$perPage     = 6;
+$currentPage = max(1, (int)($_GET['page'] ?? 1));
 
 $spineColors = [
     'from-amber-700 to-orange-900',
@@ -1572,7 +1583,76 @@ $spineColors = [
     'from-purple-700 to-indigo-950',
 ];
 
-foreach ($rawEpubFiles as $idx => $fRow) {
+// 4. Leichtgewichtigen Katalog aufbauen & filtern (ohne ZIP/Cover-Laden für alle Bücher!)
+$totalBooksCount = count($rawEpubFiles);
+$tabCounts = [
+    'all'      => 0,
+    'reading'  => 0,
+    'unread'   => 0,
+    'finished' => 0,
+];
+$filteredRows   = [];
+$lastReadRow    = null;
+$lastReadTs     = 0;
+
+foreach ($rawEpubFiles as $fRow) {
+    $fid       = (int)$fRow['id'];
+    $prog      = $progressByFileId[$fid] ?? null;
+    $progPct   = $prog ? (float)$prog['progress_pct'] : 0.0;
+    $updatedAt = $prog ? (string)$prog['updated_at'] : null;
+
+    if ($progPct >= 98.0) {
+        $statusKey = 'finished';
+    } elseif ($prog !== null && $progPct > 0.0) {
+        $statusKey = 'reading';
+    } else {
+        $statusKey = 'unread';
+    }
+
+    if ($updatedAt !== null) {
+        $ts = strtotime($updatedAt) ?: 0;
+        if ($ts > $lastReadTs) {
+            $lastReadTs  = $ts;
+            $lastReadRow = $fRow;
+        }
+    }
+
+    // Suchfilter prüfen (über Dateiname + gecachten Titel/Autor/Beschreibung/Ordner)
+    if ($searchLower !== '') {
+        $haystack = mb_strtolower(
+            (string)($fRow['cached_title'] ?? '') . ' ' .
+            (string)($fRow['cached_author'] ?? '') . ' ' .
+            (string)($fRow['cached_description'] ?? '') . ' ' .
+            (string)($fRow['original_name'] ?? '') . ' ' .
+            (string)($fRow['folder_path'] ?? ''),
+            'UTF-8'
+        );
+        if (!str_contains($haystack, $searchLower)) {
+            continue;
+        }
+    }
+
+    $tabCounts['all']++;
+    $tabCounts[$statusKey]++;
+
+    if ($activeTab === 'all' || $statusKey === $activeTab) {
+        $fRow['_status_key'] = $statusKey;
+        $filteredRows[]      = $fRow;
+    }
+}
+
+$filteredCount = count($filteredRows);
+$totalPages    = max(1, (int)ceil($filteredCount / $perPage));
+if ($currentPage > $totalPages) {
+    $currentPage = $totalPages;
+}
+$offset    = ($currentPage - 1) * $perPage;
+$pagedRows = array_slice($filteredRows, $offset, $perPage);
+
+/**
+ * Hilfsfunktion: Baut einen vollständigen Buch-Eintrag inkl. Cover & Metadaten (nur für die 6 sichtbaren Bücher!).
+ */
+$hydrateBookEntry = static function (array $fRow) use ($pdo, $progressByFileId, $spineColors): array {
     $fid          = (int)$fRow['id'];
     $physicalPath = UPLOAD_DIR . (string)$fRow['filename'];
     $meta         = getCachedEpubMetadata($pdo, $fid, $physicalPath, (string)$fRow['original_name']);
@@ -1589,7 +1669,7 @@ foreach ($rawEpubFiles as $idx => $fRow) {
         $statusKey = 'unread';
     }
 
-    $bookEntry = [
+    return [
         'id'                => $fid,
         'original_name'     => (string)$fRow['original_name'],
         'folder_path'       => (string)($fRow['folder_path'] ?? ''),
@@ -1610,17 +1690,33 @@ foreach ($rawEpubFiles as $idx => $fRow) {
         'status_key'        => $statusKey,
         'gradient'          => $spineColors[$fid % count($spineColors)],
     ];
+};
 
-    $books[] = $bookEntry;
-
-    if ($updatedAt !== null) {
-        $ts = strtotime($updatedAt) ?: 0;
-        if ($ts > $lastReadTs) {
-            $lastReadTs   = $ts;
-            $lastReadBook = $bookEntry;
-        }
-    }
+$books = [];
+foreach ($pagedRows as $pRow) {
+    $books[] = $hydrateBookEntry($pRow);
 }
+
+$lastReadBook = $lastReadRow !== null ? $hydrateBookEntry($lastReadRow) : null;
+
+$buildShelfUrl = static function (array $overrides = []) use ($activeTab, $searchQuery, $currentPage): string {
+    $params = [
+        'tab'  => $overrides['tab'] ?? $activeTab,
+        'q'    => $overrides['q'] ?? $searchQuery,
+        'page' => $overrides['page'] ?? $currentPage,
+    ];
+    if ($params['tab'] === 'all') {
+        unset($params['tab']);
+    }
+    if ($params['q'] === '') {
+        unset($params['q']);
+    }
+    if ((int)$params['page'] <= 1) {
+        unset($params['page']);
+    }
+    $qs = http_build_query($params);
+    return 'ebooks.php' . ($qs !== '' ? '?' . $qs : '');
+};
 
 $pageTitle = '📚 E-Book-Reader & Bibliothek';
 require_once __DIR__ . '/includes/header.php';
@@ -1639,7 +1735,7 @@ require_once __DIR__ . '/includes/header.php';
                         E-Book-Bibliothek &amp; EPUB-Reader
                     </h1>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        <?= count($books) ?> <?= count($books) === 1 ? 'Buch' : 'Bücher' ?>
+                        <?= $totalBooksCount ?> <?= $totalBooksCount === 1 ? 'Buch' : 'Bücher' ?>
                     </span>
                 </div>
                 <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1704,36 +1800,49 @@ require_once __DIR__ . '/includes/header.php';
         </section>
     <?php endif; ?>
 
-    <!-- FILTER-LEISTE & LIVE-SUCHE -->
+    <!-- FILTER-LEISTE & SUCHE -->
     <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-1.5" role="group">
-            <button type="button" onclick="filterEbooksShelf('all')" data-ebook-tab="all"
-                    class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white shadow-2xs cursor-pointer">
-                📚 Alle (<?= count($books) ?>)
-            </button>
-            <button type="button" onclick="filterEbooksShelf('reading')" data-ebook-tab="reading"
-                    class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer">
-                ⏳ Am Lesen
-            </button>
-            <button type="button" onclick="filterEbooksShelf('unread')" data-ebook-tab="unread"
-                    class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer">
-                🆕 Ungelesen
-            </button>
-            <button type="button" onclick="filterEbooksShelf('finished')" data-ebook-tab="finished"
-                    class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer">
-                ✅ Gelesen
-            </button>
+            <?php
+            $tabDefs = [
+                'all'      => '📚 Alle (' . $tabCounts['all'] . ')',
+                'reading'  => '⏳ Am Lesen (' . $tabCounts['reading'] . ')',
+                'unread'   => '🆕 Ungelesen (' . $tabCounts['unread'] . ')',
+                'finished' => '✅ Gelesen (' . $tabCounts['finished'] . ')',
+            ];
+            foreach ($tabDefs as $tKey => $tLabel):
+                $isTabActive = ($activeTab === $tKey);
+            ?>
+                <a href="<?= e($buildShelfUrl(['tab' => $tKey, 'page' => 1])) ?>"
+                   class="px-3 py-1.5 rounded-xl text-xs transition-colors <?= $isTabActive ? 'font-bold bg-brand-600 text-white shadow-2xs' : 'font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' ?>">
+                    <?= e($tLabel) ?>
+                </a>
+            <?php endforeach; ?>
         </div>
 
-        <div class="relative w-full sm:w-72">
-            <input type="text" id="ebookShelfSearchInput" oninput="applyEbooksShelfFilters()"
-                   placeholder="Buchtitel, Autor oder Thema suchen…"
-                   class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
-        </div>
+        <form method="get" action="ebooks.php" class="flex items-center gap-2 w-full sm:w-auto">
+            <?php if ($activeTab !== 'all'): ?>
+                <input type="hidden" name="tab" value="<?= e($activeTab) ?>">
+            <?php endif; ?>
+            <div class="relative flex-1 sm:w-72">
+                <input type="text" name="q" value="<?= e($searchQuery) ?>"
+                       placeholder="Buchtitel, Autor oder Dateiname suchen…"
+                       class="w-full pl-3.5 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <?php if ($searchQuery !== ''): ?>
+                    <a href="<?= e($buildShelfUrl(['q' => '', 'page' => 1])) ?>"
+                       title="Suche zurücksetzen"
+                       class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold">✕</a>
+                <?php endif; ?>
+            </div>
+            <button type="submit"
+                    class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold shrink-0 cursor-pointer">
+                🔎 Suchen
+            </button>
+        </form>
     </div>
 
-    <!-- BÜCHERREGAL-RASTER -->
-    <?php if (empty($books)): ?>
+    <!-- BÜCHERREGAL-RASTER (6 Bücher pro Seite) -->
+    <?php if ($totalBooksCount === 0): ?>
         <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-3">
             <div class="text-4xl">📚</div>
             <h2 class="text-base font-bold text-slate-900 dark:text-white">Noch keine E-Books (.epub) in deiner Cloud gefunden</h2>
@@ -1741,13 +1850,23 @@ require_once __DIR__ . '/includes/header.php';
                 Lade oben über den Button <strong>„📤 .epub Buch hochladen“</strong> oder im Datei-Manager deine erste <code class="font-mono">.epub</code>-Datei hoch, um sie hier im E-Book-Reader zu lesen.
             </p>
         </div>
+    <?php elseif (empty($books)): ?>
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center space-y-2">
+            <div class="text-3xl">🔎</div>
+            <h2 class="text-sm font-bold text-slate-900 dark:text-white">Keine passenden Bücher gefunden</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+                Für deine aktuelle Auswahl oder Suche wurden keine E-Books gefunden.
+            </p>
+            <div class="pt-2">
+                <a href="ebooks.php" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold">
+                    Alle Bücher anzeigen
+                </a>
+            </div>
+        </div>
     <?php else: ?>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" id="ebookShelfGrid">
             <?php foreach ($books as $b): ?>
-                <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs hover:shadow-md transition-all flex gap-4"
-                     data-ebook-card
-                     data-status="<?= e($b['status_key']) ?>"
-                     data-search="<?= e(mb_strtolower($b['title'] . ' ' . $b['author'] . ' ' . $b['description'] . ' ' . $b['original_name'], 'UTF-8')) ?>">
+                <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs hover:shadow-md transition-all flex gap-4">
                     <!-- Buch-Cover -->
                     <a href="ebooks.php?id=<?= (int)$b['id'] ?>" class="shrink-0 group">
                         <?php if ($b['cover_data_uri'] !== ''): ?>
@@ -1831,33 +1950,72 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             <?php endforeach; ?>
         </div>
+
+        <!-- BLÄTTER-NAVIGATION (PAGINATION) -->
+        <?php if ($totalPages > 1): ?>
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Zeige Bücher <strong class="text-slate-800 dark:text-slate-200"><?= $offset + 1 ?>–<?= min($filteredCount, $offset + count($books)) ?></strong>
+                    von <strong class="text-slate-800 dark:text-slate-200"><?= $filteredCount ?></strong>
+                    (Seite <?= $currentPage ?> von <?= $totalPages ?>)
+                </p>
+
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <!-- Zurück -->
+                    <?php if ($currentPage > 1): ?>
+                        <a href="<?= e($buildShelfUrl(['page' => $currentPage - 1])) ?>"
+                           class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                            &larr; Zurück
+                        </a>
+                    <?php else: ?>
+                        <span class="px-3 py-1.5 rounded-xl bg-slate-100/60 dark:bg-slate-800/40 text-xs font-bold text-slate-400 dark:text-slate-600 cursor-not-allowed">
+                            &larr; Zurück
+                        </span>
+                    <?php endif; ?>
+
+                    <!-- Seitenzahlen (kompakt mit Auslassungspunkten) -->
+                    <?php
+                    $startPage = max(1, $currentPage - 2);
+                    $endPage   = min($totalPages, $currentPage + 2);
+                    if ($startPage > 1):
+                    ?>
+                        <a href="<?= e($buildShelfUrl(['page' => 1])) ?>"
+                           class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 inline-flex items-center justify-center">1</a>
+                        <?php if ($startPage > 2): ?>
+                            <span class="px-1 text-xs text-slate-400">…</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+
+                    <?php for ($p = $startPage; $p <= $endPage; $p++): ?>
+                        <a href="<?= e($buildShelfUrl(['page' => $p])) ?>"
+                           class="w-8 h-8 rounded-xl text-xs font-bold inline-flex items-center justify-center transition-colors <?= $p === $currentPage ? 'bg-brand-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200' ?>">
+                            <?= $p ?>
+                        </a>
+                    <?php endfor; ?>
+
+                    <?php if ($endPage < $totalPages): ?>
+                        <?php if ($endPage < $totalPages - 1): ?>
+                            <span class="px-1 text-xs text-slate-400">…</span>
+                        <?php endif; ?>
+                        <a href="<?= e($buildShelfUrl(['page' => $totalPages])) ?>"
+                           class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 inline-flex items-center justify-center"><?= $totalPages ?></a>
+                    <?php endif; ?>
+
+                    <!-- Weiter -->
+                    <?php if ($currentPage < $totalPages): ?>
+                        <a href="<?= e($buildShelfUrl(['page' => $currentPage + 1])) ?>"
+                           class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-2xs transition-colors">
+                            Weiter &rarr;
+                        </a>
+                    <?php else: ?>
+                        <span class="px-3 py-1.5 rounded-xl bg-slate-100/60 dark:bg-slate-800/40 text-xs font-bold text-slate-400 dark:text-slate-600 cursor-not-allowed">
+                            Weiter &rarr;
+                        </span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
-
-<script>
-let currentEbookTab = 'all';
-
-function filterEbooksShelf(tabKey) {
-    currentEbookTab = tabKey;
-    document.querySelectorAll('[data-ebook-tab]').forEach((btn) => {
-        const active = btn.getAttribute('data-ebook-tab') === tabKey;
-        btn.className = active
-            ? 'px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white shadow-2xs cursor-pointer'
-            : 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer';
-    });
-    applyEbooksShelfFilters();
-}
-
-function applyEbooksShelfFilters() {
-    const q = (document.getElementById('ebookShelfSearchInput')?.value || '').trim().toLowerCase();
-    document.querySelectorAll('[data-ebook-card]').forEach((card) => {
-        const st = card.getAttribute('data-status') || 'unread';
-        const hay = card.getAttribute('data-search') || '';
-        const matchTab = currentEbookTab === 'all' || st === currentEbookTab;
-        const matchSearch = q === '' || hay.includes(q);
-        card.classList.toggle('hidden', !(matchTab && matchSearch));
-    });
-}
-</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
