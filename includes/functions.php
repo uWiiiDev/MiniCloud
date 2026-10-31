@@ -698,6 +698,9 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_video_studio'           => '1',
         'enable_surflog'                => '1',
         'enable_cinema'                 => '1',
+        'enable_translator'             => '1',
+        'translator_deepl_api_key'      => '',
+        'translator_default_target'     => 'en',
         'enable_dashboard'              => '1',
         'enable_fulltext_search'        => '1',
         'trash_retention_days'          => '30',
@@ -3186,6 +3189,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_cinema',
             'color'       => 'bg-red-600',
         ],
+        'translator' => [
+            'icon'        => '🌐',
+            'label'       => 'Übersetzungs-Studio & Dokument-Übersetzer',
+            'url'         => 'translate.php',
+            'setting_key' => 'enable_translator',
+            'color'       => 'bg-sky-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3237,6 +3247,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'video_studio.php' => 'video_studio',
         'surflog.php'      => 'surflog',
         'cinema.php'       => 'cinema',
+        'translate.php'    => 'translator',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
@@ -3388,6 +3399,8 @@ function getModuleInventorySummary(PDO $pdo): array
 
     $cinemaPlCount = $safeCount("SELECT COUNT(*) FROM `cinema_playlists`");
     $summary['cinema'] = $videoCount . ' ' . ($videoCount === 1 ? 'Film' : 'Filme') . ' · ' . $cinemaPlCount . ' ' . ($cinemaPlCount === 1 ? 'Filmreihe' : 'Filmreihen');
+
+    $summary['translator'] = '18 Sprachen · NMT & Dokument-Übersetzung';
 
     $davCount = $safeCount("SELECT COUNT(*) FROM `app_passwords`");
     $summary['webdav'] = $davCount . ' App-' . ($davCount === 1 ? 'Passwort' : 'Passwörter');

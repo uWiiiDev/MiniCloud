@@ -743,6 +743,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_translator'] ?? '1') === '1'): ?>
+                        <a
+                            href="translate.php"
+                            data-nav-item="translator"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Übersetzungs-Studio &amp; Dokument-Übersetzer (18 Sprachen)"
+                        >
+                            <span>🌐</span>
+                            <span class="hidden md:inline">Übersetzer</span>
+                        </a>
+                    <?php endif; ?>
+
                     <a
                         href="trash.php"
                         data-nav-item="trash"
@@ -891,7 +904,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'office', 'ebooks', 'music', 'cinema', 'video_studio', 'surflog', 'mindmap', 'budget', 'toolbox', 'calculator', 'games', 'assistant', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'pdf_tools', 'trash'];
+                    const defaultOrder  = ['files', 'office', 'translator', 'ebooks', 'music', 'cinema', 'video_studio', 'surflog', 'mindmap', 'budget', 'toolbox', 'calculator', 'games', 'assistant', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'pdf_tools', 'trash'];
 
                     function getPinnedNav() {
                         try {

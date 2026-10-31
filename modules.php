@@ -73,6 +73,18 @@ $allModules = [
         'badgeCls' => 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300',
     ],
     [
+        'key'      => 'translator',
+        'enabled'  => ($appSettings['enable_translator'] ?? '1') === '1',
+        'title'    => 'Übersetzungs-Studio',
+        'icon'     => '🌐',
+        'url'      => 'translate.php',
+        'category' => 'files_office',
+        'catLabel' => 'Dateien & Büro',
+        'desc'     => 'Neuronale Satz- & Kontext-Übersetzung (NMT & DeepL-Support) für 18 Sprachen inkl. Direkt-Übersetzung von Cloud-Dokumenten (PDF, Word .docx, Text) und 1-Klick-Speichern in der Cloud.',
+        'badge'    => '18 Sprachen',
+        'badgeCls' => 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300',
+    ],
+    [
         'key'      => 'whiteboard',
         'enabled'  => ($appSettings['enable_whiteboard'] ?? '1') === '1',
         'title'    => 'Whiteboard & Skizzenbuch',

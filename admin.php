@@ -1662,6 +1662,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableVideoStudio = isset($_POST['enable_video_studio']) && $_POST['enable_video_studio'] === '1' ? '1' : '0';
         $enableSurflog     = isset($_POST['enable_surflog']) && $_POST['enable_surflog'] === '1' ? '1' : '0';
         $enableCinema      = isset($_POST['enable_cinema']) && $_POST['enable_cinema'] === '1' ? '1' : '0';
+        $enableTranslator  = isset($_POST['enable_translator']) && $_POST['enable_translator'] === '1' ? '1' : '0';
+        $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
+        $transDefaultTgt   = strtolower(trim((string)($_POST['translator_default_target'] ?? 'en')));
+        if (!in_array($transDefaultTgt, ['de', 'en', 'fr', 'es', 'it', 'nl', 'pl', 'pt', 'cs', 'tr', 'uk', 'da', 'sv', 'el', 'ru', 'ar', 'zh', 'ja'], true)) {
+            $transDefaultTgt = 'en';
+        }
         $enableFulltext    = isset($_POST['enable_fulltext_search']) && $_POST['enable_fulltext_search'] === '1' ? '1' : '0';
         $trashRetention    = isset($_POST['trash_retention_days']) ? max(0, min(3650, (int)$_POST['trash_retention_days'])) : 30;
         $useOllama         = isset($_POST['assistant_use_ollama']) && $_POST['assistant_use_ollama'] === '1' ? '1' : '0';
@@ -1697,6 +1703,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_video_studio', $enableVideoStudio);
         saveAppSetting($pdo, 'enable_surflog', $enableSurflog);
         saveAppSetting($pdo, 'enable_cinema', $enableCinema);
+        saveAppSetting($pdo, 'enable_translator', $enableTranslator);
+        saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
+        saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
         saveAppSetting($pdo, 'enable_fulltext_search', $enableFulltext);
         saveAppSetting($pdo, 'trash_retention_days', (string)$trashRetention);
         if ($trashRetention > 0) {
@@ -3968,6 +3977,74 @@ foreach ($modList as $mItem) {
                         <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                             <a href="cinema.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                                 🍿 Heimkino öffnen &rarr;
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Modul 27b: Übersetzungs-Studio & Dokument-Übersetzer -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🌐 Übersetzungs-Studio &amp; Dokument-Übersetzer
+                            </p>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_translator'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                                <?= ($currentSettings['enable_translator'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                            </span>
+                        </div>
+                        <label class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="enable_translator"
+                                value="1"
+                                <?= ($currentSettings['enable_translator'] ?? '1') === '1' ? 'checked' : '' ?>
+                                class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            >
+                            <span>
+                                <strong>Neuronales Übersetzungs-Studio (<code>translate.php</code>) aktivieren</strong><br>
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Satz- und kontextbasierte Übersetzung (18 Sprachen) für Freitexte und Cloud-Dokumente (PDF inkl. OCR, Word <code>.docx</code>, Text/Markdown) mit 1-Klick-Export in die Cloud. Läuft sofort ohne API-Key; optional mit eigenem DeepL-Key.
+                                </span>
+                            </span>
+                        </label>
+
+                        <div class="mt-2 p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div class="sm:col-span-2">
+                                    <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-0.5">
+                                        🔑 Optionaler DeepL API-Key (Free <code>:fx</code> oder Pro):
+                                    </label>
+                                    <input
+                                        type="password"
+                                        name="translator_deepl_api_key"
+                                        value="<?= e((string)($currentSettings['translator_deepl_api_key'] ?? '')) ?>"
+                                        autocomplete="off"
+                                        placeholder="Leer lassen für kostenlose Standard-NMT-Engine"
+                                        class="w-full px-2.5 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-800 dark:text-slate-200"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-0.5">
+                                        🎯 Standard-Zielsprache:
+                                    </label>
+                                    <?php $curTransTgt = (string)($currentSettings['translator_default_target'] ?? 'en'); ?>
+                                    <select
+                                        name="translator_default_target"
+                                        class="w-full px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-800 dark:text-slate-200"
+                                    >
+                                        <?php foreach (['en' => 'Englisch (EN)', 'de' => 'Deutsch (DE)', 'fr' => 'Französisch (FR)', 'es' => 'Spanisch (ES)', 'it' => 'Italienisch (IT)', 'nl' => 'Niederländisch (NL)', 'pl' => 'Polnisch (PL)', 'tr' => 'Türkisch (TR)', 'uk' => 'Ukrainisch (UK)'] as $tCode => $tName): ?>
+                                            <option value="<?= e($tCode) ?>" <?= $curTransTgt === $tCode ? 'selected' : '' ?>><?= e($tName) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php if (($currentSettings['enable_translator'] ?? '1') === '1'): ?>
+                        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                            <a href="translate.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                                🌐 Übersetzungs-Studio öffnen &rarr;
                             </a>
                         </div>
                     <?php endif; ?>

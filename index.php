@@ -4626,6 +4626,15 @@ function openMobileFileMenu(fileIdx, canDelete) {
         }, 'office');
     }
 
+    // 2b. Im Übersetzungs-Studio übersetzen (für PDF, Word, Text, Markdown, Excel, PowerPoint, Untertitel)
+    <?php if (($appSettings['enable_translator'] ?? '1') === '1'): ?>
+    if (!item.isEncrypted && ['pdf', 'docx', 'odt', 'txt', 'md', 'csv', 'xlsx', 'pptx', 'html', 'htm', 'srt', 'vtt'].includes(String(item.ext || '').toLowerCase())) {
+        appendMenuActionRow('🌐 Dokument übersetzen (18 Sprachen)', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+            window.location.href = 'translate.php?file_id=' + Number(item.id);
+        }, null);
+    }
+    <?php endif; ?>
+
     // 3. Herunterladen
     appendMenuActionRow(item.isEncrypted ? '🔓 Entschlüsseln & Herunterladen' : '⬇️ Datei herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
         if (item.isEncrypted) {
