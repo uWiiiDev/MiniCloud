@@ -1665,9 +1665,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableTranslator  = isset($_POST['enable_translator']) && $_POST['enable_translator'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
-        $libreUrl          = ($libreUrlRaw !== '' && preg_match('/^https?:\/\/[^\s"\'<>]+$/i', $libreUrlRaw))
-            ? rtrim(mb_substr($libreUrlRaw, 0, 200), '/')
-            : '';
+        $libreUrl          = '';
+        if ($libreUrlRaw !== '' && preg_match('/^https?:\/\/[^\s"\'<>]+$/i', $libreUrlRaw)) {
+            $ltParts = @parse_url($libreUrlRaw);
+            $ltHost  = strtolower(trim((string)($ltParts['host'] ?? ''), '[]'));
+            $ltPort  = isset($ltParts['port']) ? (int)$ltParts['port'] : (strtolower((string)($ltParts['scheme'] ?? 'http')) === 'https' ? 443 : 80);
+            $blockedPorts = [21, 22, 23, 25, 53, 110, 143, 445, 3306, 5432, 6379, 9200, 11211, 11434, 27017];
+            if ($ltHost !== '' && !in_array($ltHost, ['169.254.169.254', 'metadata.google.internal', '100.100.100.200', 'fd00:ec2::254'], true) && !in_array($ltPort, $blockedPorts, true)) {
+                $libreUrl = rtrim(mb_substr($libreUrlRaw, 0, 200), '/');
+            }
+        }
         $transDefaultTgt   = strtolower(trim((string)($_POST['translator_default_target'] ?? 'en')));
         if (!in_array($transDefaultTgt, ['de', 'en', 'fr', 'es', 'it', 'nl', 'pl', 'pt', 'cs', 'tr', 'uk', 'da', 'sv', 'el', 'ru', 'ar', 'zh', 'ja'], true)) {
             $transDefaultTgt = 'en';

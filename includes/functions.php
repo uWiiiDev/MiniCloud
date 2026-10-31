@@ -3272,6 +3272,10 @@ function recordModuleUsage(PDO $pdo, ?string $moduleKey = null, bool $forceCount
     }
 
     $isPost = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST';
+    // Laufende Live-Tipp-/Block-Übersetzungen in translate.php im 60-Sekunden-Intervall entprellen
+    if ($isPost && (string)($_POST['ajax_action'] ?? '') === 'translate_text') {
+        $isPost = false;
+    }
 
     if (session_status() === PHP_SESSION_ACTIVE) {
         $now = time();

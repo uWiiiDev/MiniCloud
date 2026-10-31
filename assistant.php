@@ -1144,6 +1144,18 @@ function getLocalizedKbTranslation(string $id, string $lang, string $appTitle): 
             'tr' => ['📊 Büyük Dosyaları Bulma (`index.php?large=1`)', "**📂 Dosyalarım** (`index.php`) sayfasında *⭐ Favoriler* yanındaki **📊 Büyük dosyalar** düğmesine tıklayarak tüm klasörlerdeki en büyük dosyaları (`≥ 5 MB`, `≥ 25 MB`, `≥ 100 MB`) listeleyebilirsiniz."],
             'uk' => ['📊 Пошук великих файлів (`index.php?large=1`)', "Натисніть кнопку **📊 Великі файли** поруч із *⭐ Обране* у **📂 Мої файли** (`index.php`), щоб побачити найбільші файли з усіх папок (`≥ 5 МБ`, `≥ 25 МБ`, `≥ 100 МБ`)."],
         ],
+        'translator_studio' => [
+            'en' => ['🌐 Neural Translation Studio & Document Translator (`translate.php`)', "The **🌐 Neural Translation Studio** (`translate.php`) translates free text, emails, and entire Cloud documents in full sentence and paragraph context across **18 languages**:\n\n- **⚡ 3-Tier Engine:** Works out-of-the-box via **Online NMT**, optionally uses your **DeepL API Key (Free/Pro)**, and includes a **🔒 100% Local / Intranet Mode (Offline)** powered by local **Ollama (`gemma2:2b`)** or **LibreTranslate** where zero data leaves your server.\n- **📄 Direct Cloud Document Translation & Export:** Load PDFs (including scanned PDFs via OCR), Word `.docx`, or `.txt`/`.md`/`.srt` files and save the translation with 1 click as a `.docx`, `.md`, or `.txt` file back into your Cloud!"],
+            'fr' => ['🌐 Studio de Traduction Neuronale (`translate.php`)', "Le **🌐 Studio de Traduction** (`translate.php`) traduit textes et documents Cloud (PDF avec OCR, Word `.docx`, `.txt`, `.md`) dans le contexte complet de la phrase en **18 langues**, avec mode **NMT en ligne**, **DeepL API** et mode **🔒 100 % Local / Intranet (Ollama / LibreTranslate hors-ligne)** + export `.docx` en 1 clic."],
+            'es' => ['🌐 Estudio de Traducción Neuronal (`translate.php`)', "El **🌐 Estudio de Traducción** (`translate.php`) traduce textos y documentos de la nube (PDF con OCR, Word `.docx`, `.txt`, `.md`) en contexto completo en **18 idiomas**, con motor **NMT online**, **DeepL API** y modo **🔒 100 % Local / Intranet (Ollama / LibreTranslate sin internet)** + guardado `.docx` en 1 clic."],
+            'it' => ['🌐 Studio di Traduzione Neurale (`translate.php`)', "Lo **🌐 Studio di Traduzione** (`translate.php`) traduce testi e documenti Cloud (PDF con OCR, Word `.docx`, `.txt`, `.md`) nel pieno contesto della frase in **18 lingue**, con motore **NMT online**, **DeepL API** e modalità **🔒 100% Locale / Intranet (Ollama / LibreTranslate offline)** + salvataggio `.docx` in 1 clic."],
+            'nl' => ['🌐 Neurale Vertaalstudio & Documentvertaler (`translate.php`)', "De **🌐 Vertaalstudio** (`translate.php`) vertaalt teksten en clouddocumenten (PDF incl. OCR, Word `.docx`, `.txt`, `.md`) in volledige zinscontext tussen **18 talen**, met **Online-NMT**, **DeepL API** en **🔒 100% Lokaal / Intranet-modus (Ollama / LibreTranslate offline)** + 1-klik `.docx`-export."],
+            'pl' => ['🌐 Neuronowe Studio Tłumaczeń (`translate.php`)', "**🌐 Studio Tłumaczeń** (`translate.php`) tłumaczy teksty i dokumenty z chmury (PDF z OCR, Word `.docx`, `.txt`, `.md`) w pełnym kontekście zdań na **18 języków**, oferując silnik **Online NMT**, **DeepL API** oraz tryb **🔒 100% Lokalny / Intranet (Ollama / LibreTranslate offline)** i zapis do `.docx` jednym kliknięciem."],
+            'pt' => ['🌐 Estúdio de Tradução Neural (`translate.php`)', "O **🌐 Estúdio de Tradução** (`translate.php`) traduz textos e documentos da nuvem (PDF com OCR, Word `.docx`, `.txt`, `.md`) em contexto completo em **18 idiomas**, com motor **NMT online**, **DeepL API** e modo **🔒 100% Local / Intranet (Ollama / LibreTranslate offline)** + exportação `.docx` em 1 clique."],
+            'cs' => ['🌐 Neuronové překladatelské studio (`translate.php`)', "**🌐 Překladatelské studio** (`translate.php`) překládá texty a dokumenty z cloudu (PDF vč. OCR, Word `.docx`, `.txt`, `.md`) v plném kontextu vět mezi **18 jazyky**, s režimem **Online NMT**, **DeepL API** a **🔒 100% Lokálním / Intranet režimem (Ollama / LibreTranslate offline)** + uložením do `.docx` na 1 kliknutí."],
+            'tr' => ['🌐 Nöral Çeviri Stüdyosu ve Belge Çevirici (`translate.php`)', "**🌐 Çeviri Stüdyosu** (`translate.php`), metinleri ve bulut belgelerini (OCR dahil PDF, Word `.docx`, `.txt`, `.md`) tam cümle bağlamında **18 dil** arasında çevirir; **Çevrimiçi NMT**, **DeepL API** ve **🔒 %100 Yerel / İntranet (Çevrimdışı Ollama / LibreTranslate)** modları ile tek tıkla `.docx` olarak kaydeder."],
+            'uk' => ['🌐 Студія нейронного перекладу (`translate.php`)', "**🌐 Студія перекладу** (`translate.php`) перекладає тексти та хмарні документи (PDF з OCR, Word `.docx`, `.txt`, `.md`) у повному контексті речень між **18 мовами**, підтримуючи **Онлайн NMT**, **DeepL API** та режим **🔒 100% Локально / Інтранет (офлайн Ollama / LibreTranslate)** із збереженням у `.docx` в 1 клік."],
+        ],
     ];
 
     if (isset($translations[$id][$lang])) {
@@ -1847,7 +1859,7 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
                 . "1. **🔐 Login, 2FA & Brute-Force-Schutz:** Passwörter werden mit **BCRYPT (Cost 12)** gehasht. Optional ist **2FA per E-Mail oder Google Authenticator (TOTP RFC 6238 mit 100 % lokalem QR-Code)** aktivierbar. Nach **5 Fehlversuchen in 5 Minuten** greift eine automatische Sperre.\n"
                 . "2. **🔒 Dateispeicher-Isolierung & Zero-Knowledge-Tresor:** Dateien werden niemals unter ihrem Originalnamen im Dateisystem abgelegt, sondern als nicht ausführbare `.bin`-Dateien (`0640`) im per Webserver gesperrten Ordner `uploads/`. Im **Tresor-Modus** erfolgt eine **AES-256-GCM-Verschlüsselung** (`PBKDF2-HMAC-SHA256`), ohne dass das Passwort jemals gespeichert wird.\n"
                 . "3. **🛡️ Schutz vor SQLi, XSS, CSRF & IDOR:** 100 % echte **PDO Prepared Statements**, kontextsensitive HTML-/JSON-Maskierung, **256-Bit-CSRF-Tokens** für jede Änderung sowie strikte Eigentümer-/Freigabeprüfungen.\n"
-                . "4. **🧠 100 % Lokale KI (DSGVO-konform):** Der Cloud-Assistent und das optionale Sprachmodell (Ollama auf `127.0.0.1:11434`) laufen vollständig lokal auf diesem Server – es fließen keinerlei Daten an externe Cloud-Anbieter.",
+                . "4. **🧠 100 % Lokale KI & Intranet-Übersetzung (DSGVO-konform):** Der Cloud-Assistent und das lokale Sprachmodell (Ollama auf `127.0.0.1:11434`) sowie der **🔒 100 % Lokale Intranet-Modus** im Übersetzungs-Studio (`translate.php`) laufen vollständig lokal auf diesem Server – es fließen dabei keinerlei Daten an externe Cloud-Anbieter.",
             'actions'  => [
                 ['label' => '🛡️ IT-Sicherheitskonzept', 'url' => 'help.php#it-sicherheit'],
                 ['label' => '⚙️ Sicherheit & 2FA', 'url' => 'settings.php'],
@@ -1990,6 +2002,24 @@ function getAssistantKnowledgeBase(array $appSettings, bool $isAdmin, string $la
             'followups' => [
                 $pack['q_storage'],
                 'Wie leere ich den Papierkorb?',
+            ],
+        ],
+        [
+            'id'       => 'translator_studio',
+            'title'    => 'Neuronales Übersetzungs-Studio & Dokument-Übersetzer (translate.php)',
+            'icon'     => '🌐',
+            'keywords' => ['übersetzen', 'uebersetzen', 'übersetzer', 'uebersetzer', 'übersetzung', 'uebersetzung', 'translate', 'translator', 'translation', 'deepl', 'libretranslate', 'intranet übersetzung', 'offline übersetzung', 'dokument übersetzen', 'pdf übersetzen', 'word übersetzen', 'sprachen übersetzen', 'traduire', 'traduction', 'traducir', 'tradurre', 'vertalen', 'tlumacz', 'preklad', 'ceviri', 'переклад'],
+            'answer'   => "Das **🌐 Neuronale Übersetzungs-Studio** (`translate.php`) übersetzt Texte, E-Mails und ganze Cloud-Dokumente im vollen Satz- und Absatzkontext zwischen **18 Sprachen**:\n\n"
+                . "1. **⚡ 3-Stufen-Engine (Online-NMT, DeepL API & 🔒 100 % Lokal im Intranet):** Arbeitet sofort ohne API-Key über die neuronale Direkt-Übersetzung, nutzt optional deinen **DeepL API-Key (Free/Pro inkl. Sie/Du-Tonfall)** und bietet den Modus **„🔒 100 % Lokal / Intranet (Offline)“** über das lokale Server-Sprachmodell (`Ollama gemma2:2b` auf `127.0.0.1:11434` mit abschnittsweiser Live-Anzeige) oder `LibreTranslate` – dabei verlässt kein einziges Byte den Server!\n"
+                . "2. **📄 Cloud-Dokumente direkt laden (inkl. Scan-OCR):** Wähle oben rechts (oder im `⋯`-Menü einer Datei in *Meine Dateien*) ein PDF (auch gescannte PDFs per OCR!), Word-Dokument (`.docx`) oder eine Text-/Untertiteldatei (`.txt`, `.md`, `.csv`, `.srt`) aus.\n"
+                . "3. **💾 1-Klick-Export in die Cloud & 🔊 Vorlesen:** Speichere die fertige Übersetzung direkt als **Word-Dokument (`.docx`)**, **Markdown (`.md`)** oder **Textdatei (`.txt`)** in deinem Wunschordner.",
+            'actions'  => [
+                ['label' => '🌐 Übersetzungs-Studio öffnen', 'url' => 'translate.php'],
+                ['label' => '📄 Office Light', 'url' => 'office.php'],
+            ],
+            'followups' => [
+                'Wie funktioniert der 100 % lokale Intranet-Modus beim Übersetzen?',
+                'Wie bearbeite ich Dokumente in Office Light?',
             ],
         ],
     ];

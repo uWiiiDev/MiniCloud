@@ -155,7 +155,37 @@ function splitTextIntoTranslationChunks(string $text, int $maxChunkChars = 1600)
 }
 
 /**
- * Führt einen schnellen HTTPS-Request (per cURL oder PHP-Stream-Fallback) aus.
+ * Prüft eine konfigurierte LibreTranslate-URL auf SSRF-Sicherheit (nur http/https,
+ * keine Cloud-Metadaten-IPs und keine sensiblen Nicht-HTTP-Systemports).
+ */
+function isSafeLibreTranslateUrl(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || !preg_match('/^https?:\/\/[^\s"\'<>]+$/i', $url)) {
+        return false;
+    }
+    $parts = @parse_url($url);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return false;
+    }
+    $scheme = strtolower((string)($parts['scheme'] ?? ''));
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return false;
+    }
+    $host = strtolower(trim((string)$parts['host'], '[]'));
+    if (in_array($host, ['169.254.169.254', 'metadata.google.internal', '100.100.100.200', 'fd00:ec2::254'], true)) {
+        return false;
+    }
+    $port = isset($parts['port']) ? (int)$parts['port'] : ($scheme === 'https' ? 443 : 80);
+    $blockedPorts = [21, 22, 23, 25, 53, 110, 143, 445, 3306, 5432, 6379, 9200, 11211, 11434, 27017];
+    if ($port <= 0 || $port > 65535 || in_array($port, $blockedPorts, true)) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Führt einen schnellen HTTPS-Request (per cURL oder PHP-Stream-Fallback) ohne offene Weiterleitungen aus.
  *
  * @param array<int, string> $headers
  * @return array{ok: bool, status: int, body: string}
@@ -168,12 +198,13 @@ function performTranslationHttpRequest(string $url, ?string $postBody = null, ar
         if ($ch !== false) {
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 3,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_MAXREDIRS      => 0,
                 CURLOPT_TIMEOUT        => $timeoutSec,
                 CURLOPT_CONNECTTIMEOUT => 6,
                 CURLOPT_USERAGENT      => $ua,
                 CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
             ]);
             if ($postBody !== null) {
                 curl_setopt($ch, CURLOPT_POST, true);
@@ -193,10 +224,12 @@ function performTranslationHttpRequest(string $url, ?string $postBody = null, ar
     }
 
     $httpOpts = [
-        'method'        => $postBody !== null ? 'POST' : 'GET',
-        'timeout'       => $timeoutSec,
-        'ignore_errors' => true,
-        'header'        => implode("\r\n", array_merge(['User-Agent: ' . $ua], $headers)),
+        'method'          => $postBody !== null ? 'POST' : 'GET',
+        'timeout'         => $timeoutSec,
+        'follow_location' => 0,
+        'max_redirects'   => 0,
+        'ignore_errors'   => true,
+        'header'          => implode("\r\n", array_merge(['User-Agent: ' . $ua], $headers)),
     ];
     if ($postBody !== null) {
         $httpOpts['content'] = $postBody;
@@ -392,8 +425,8 @@ function translateViaStandardNmt(string $text, string $sourceLang, string $targe
 function translateViaLocalLibreTranslate(string $text, string $sourceLang, string $targetLang, string $baseUrl): array
 {
     $baseUrl = rtrim(trim($baseUrl), '/');
-    if ($baseUrl === '') {
-        return ['ok' => false, 'translated' => '', 'detected_lang' => '', 'engine' => 'LibreTranslate (Intranet)', 'error' => 'Keine LibreTranslate-URL konfiguriert.'];
+    if ($baseUrl === '' || !isSafeLibreTranslateUrl($baseUrl)) {
+        return ['ok' => false, 'translated' => '', 'detected_lang' => '', 'engine' => 'LibreTranslate (Intranet)', 'error' => 'Keine gültige oder zulässige LibreTranslate-URL konfiguriert.'];
     }
 
     $endpoint = str_ends_with($baseUrl, '/translate') ? $baseUrl : ($baseUrl . '/translate');
@@ -822,6 +855,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         if (!in_array($format, ['docx', 'txt', 'md'], true)) {
             $format = 'docx';
         }
+        if (mb_strlen($content, 'UTF-8') > 250000) {
+            $content = mb_substr($content, 0, 250000, 'UTF-8');
+        }
+
+        session_write_close();
 
         // Dateiname bereinigen
         $baseName = pathinfo($rawFilename, PATHINFO_FILENAME);
@@ -893,6 +931,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
         if ($newFileId > 0) {
             indexFileForFulltextSearch($pdo, $newFileId);
+            logAuditEvent($pdo, 'file_upload', 'Übersetzung in Cloud gespeichert: ' . $finalOriginalName . ' (' . formatBytes($fileSize) . ')', $userId);
         }
 
         $openUrl = $format === 'docx' || $format === 'md' || $format === 'txt'
@@ -1344,12 +1383,12 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <script>
-const csrfToken = <?= json_encode(getCsrfToken()) ?>;
-const translatorLangsMeta = <?= json_encode($translatorLangs, JSON_UNESCAPED_UNICODE) ?>;
+const csrfToken = <?= json_encode(getCsrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const translatorLangsMeta = <?= json_encode($translatorLangs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const flagSvgMap = <?= json_encode(array_combine(
     array_keys($translatorLangs),
     array_map(static fn(string $c): string => renderTranslatorFlagSvg($c, 'w-5 h-3.5 rounded-[2px] shadow-2xs'), array_keys($translatorLangs))
-), JSON_UNESCAPED_UNICODE) ?>;
+), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const historyStorageKey = 'mc_translator_history_u<?= (int)$userId ?>';
 
 let debounceTimer = null;
