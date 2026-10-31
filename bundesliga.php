@@ -245,6 +245,225 @@ function fetchOpenLigaData(PDO $pdo, string $cacheKey, string $endpoint, int $tt
 }
 
 /**
+ * Normalisiert Vereinsnamen für den zuverlässigen Abgleich zwischen OpenLigaDB und dem Echtzeit-Scoreboard.
+ */
+function normalizeClubMatchToken(string $name): string
+{
+    $s = mb_strtolower($name, 'UTF-8');
+    $s = strtr($s, [
+        'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
+        'munich' => 'muenchen', 'cologne' => 'koeln', 'nuremberg' => 'nuernberg',
+    ]);
+    $s = preg_replace('/\b(1\.|fc|sv|vfb|vfl|tsg|rb|sc|bv|borussia|bayer|04|05|07|98|1846|1899|eintracht|spvgg|fortuna|hertha|bsc|arminia|dynamo|hans|st\.)\b/u', ' ', $s) ?? $s;
+    $s = preg_replace('/[^a-z0-9]+/', ' ', $s) ?? $s;
+    return trim($s);
+}
+
+/**
+ * Ergänzt Spieltags-Begegnungen aus OpenLigaDB automatisch um Echtzeit-Spielstände, Spielstatus (Beendet / Live-Minute)
+ * und Torschützen über das Live-Scoreboard, falls OpenLigaDB-Moderatoren ein Ergebnis noch nicht als beendet eingetragen haben.
+ */
+function enrichMatchdayWithLiveScoreboard(PDO $pdo, string $league, array $matchdayData, bool $forceRefresh = false): array
+{
+    if (empty($matchdayData) || !in_array($league, ['bl1', 'bl2'], true)) {
+        return $matchdayData;
+    }
+
+    $espnLeague = $league === 'bl1' ? 'ger.1' : 'ger.2';
+    $datesNeeded = [];
+    $now = time();
+
+    foreach ($matchdayData as $m) {
+        $ko = !empty($m['matchDateTime']) ? (int)strtotime((string)$m['matchDateTime']) : 0;
+        if ($ko > 0 && $ko <= $now && empty($m['matchIsFinished'])) {
+            $datesNeeded[date('Ymd', $ko)] = true;
+        }
+    }
+
+    if (empty($datesNeeded)) {
+        return $matchdayData;
+    }
+
+    $espnEvents = [];
+    foreach (array_keys($datesNeeded) as $ymd) {
+        $cacheKey = "espn_{$espnLeague}_{$ymd}";
+        $stmt = $pdo->prepare("SELECT json_data, updated_at FROM bundesliga_cache WHERE cache_key = ?");
+        $stmt->execute([$cacheKey]);
+        $cached = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $raw = null;
+        if ($cached && !$forceRefresh && ($now - (int)strtotime((string)$cached['updated_at'])) <= 120) {
+            $raw = (string)$cached['json_data'];
+        } else {
+            $url = "https://site.api.espn.com/apis/site/v2/sports/soccer/{$espnLeague}/scoreboard?dates={$ymd}";
+            if (function_exists('curl_init')) {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_TIMEOUT        => 4,
+                    CURLOPT_CONNECTTIMEOUT => 3,
+                    CURLOPT_USERAGENT      => 'MiniCloud-Bundesliga-Live/1.0',
+                ]);
+                $res  = curl_exec($ch);
+                $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if (is_string($res) && $code >= 200 && $code < 300) {
+                    $raw = $res;
+                }
+            } else {
+                $rawRes = @file_get_contents($url);
+                if (is_string($rawRes) && $rawRes !== '') {
+                    $raw = $rawRes;
+                }
+            }
+
+            if ($raw !== null) {
+                $up = $pdo->prepare("
+                    INSERT INTO bundesliga_cache (cache_key, json_data, updated_at)
+                    VALUES (?, ?, NOW())
+                    ON DUPLICATE KEY UPDATE json_data = VALUES(json_data), updated_at = NOW()
+                ");
+                $up->execute([$cacheKey, $raw]);
+            } elseif ($cached) {
+                $raw = (string)$cached['json_data'];
+            }
+        }
+
+        if ($raw !== null) {
+            $dec = json_decode($raw, true);
+            if (is_array($dec['events'] ?? null)) {
+                foreach ($dec['events'] as $ev) {
+                    $espnEvents[] = $ev;
+                }
+            }
+        }
+    }
+
+    if (empty($espnEvents)) {
+        return $matchdayData;
+    }
+
+    foreach ($matchdayData as &$m) {
+        if (!empty($m['matchIsFinished'])) {
+            continue;
+        }
+        $t1Token = normalizeClubMatchToken((string)($m['team1']['teamName'] ?? '') . ' ' . (string)($m['team1']['shortName'] ?? ''));
+        $t2Token = normalizeClubMatchToken((string)($m['team2']['teamName'] ?? '') . ' ' . (string)($m['team2']['shortName'] ?? ''));
+        $koTs    = !empty($m['matchDateTime']) ? (int)strtotime((string)$m['matchDateTime']) : 0;
+
+        foreach ($espnEvents as $ev) {
+            $comp = $ev['competitions'][0] ?? null;
+            if (!is_array($comp) || empty($comp['competitors'])) {
+                continue;
+            }
+            $homeComp = null;
+            $awayComp = null;
+            foreach ($comp['competitors'] as $c) {
+                if (($c['homeAway'] ?? '') === 'home') {
+                    $homeComp = $c;
+                } elseif (($c['homeAway'] ?? '') === 'away') {
+                    $awayComp = $c;
+                }
+            }
+            if (!$homeComp || !$awayComp) {
+                continue;
+            }
+
+            $eHomeTok = normalizeClubMatchToken((string)($homeComp['team']['displayName'] ?? '') . ' ' . (string)($homeComp['team']['shortDisplayName'] ?? ''));
+            $eAwayTok = normalizeClubMatchToken((string)($awayComp['team']['displayName'] ?? '') . ' ' . (string)($awayComp['team']['shortDisplayName'] ?? ''));
+
+            // Prüfen, ob Heim- oder Gastteam-Schlagwort übereinstimmt (und gleicher Tag)
+            $homeWords = array_filter(explode(' ', $eHomeTok), static fn(string $w): bool => strlen($w) >= 3);
+            $awayWords = array_filter(explode(' ', $eAwayTok), static fn(string $w): bool => strlen($w) >= 3);
+
+            $matchHome = false;
+            foreach ($homeWords as $hw) {
+                if (str_contains($t1Token, $hw)) {
+                    $matchHome = true;
+                    break;
+                }
+            }
+            $matchAway = false;
+            foreach ($awayWords as $aw) {
+                if (str_contains($t2Token, $aw)) {
+                    $matchAway = true;
+                    break;
+                }
+            }
+
+            if (!$matchHome && !$matchAway) {
+                continue;
+            }
+            // Falls nur eines durch Sondername gematcht hat, zumindest Anstoßzeit (±2h) prüfen
+            if (!($matchHome && $matchAway)) {
+                $evTs = !empty($ev['date']) ? (int)strtotime((string)$ev['date']) : 0;
+                if ($koTs <= 0 || $evTs <= 0 || abs($koTs - $evTs) > 7200) {
+                    continue;
+                }
+            }
+
+            $state     = strtolower((string)($comp['status']['type']['state'] ?? ''));
+            $completed = !empty($comp['status']['type']['completed']) || $state === 'post';
+            $clockStr  = trim((string)($comp['status']['displayClock'] ?? ''));
+
+            if ($state === 'in' || $completed) {
+                $s1 = (int)($homeComp['score'] ?? 0);
+                $s2 = (int)($awayComp['score'] ?? 0);
+
+                $m['matchIsFinished'] = $completed;
+                $m['_live_state']     = $completed ? 'post' : 'in';
+                $m['_live_clock']     = $clockStr;
+
+                $m['matchResults'] = [
+                    [
+                        'resultTypeID' => 2,
+                        'pointsTeam1'  => $s1,
+                        'pointsTeam2'  => $s2,
+                    ],
+                ];
+
+                // Torschützen aus ESPN details übernehmen, falls OpenLigaDB noch keine Tore hat
+                if (empty($m['goals']) && !empty($comp['details']) && is_array($comp['details'])) {
+                    $homeEspnId = (string)($homeComp['team']['id'] ?? '');
+                    $run1 = 0;
+                    $run2 = 0;
+                    $builtGoals = [];
+                    foreach ($comp['details'] as $det) {
+                        if (empty($det['scoringPlay'])) {
+                            continue;
+                        }
+                        $detTeamId = (string)($det['team']['id'] ?? '');
+                        if ($detTeamId === $homeEspnId) {
+                            $run1++;
+                        } else {
+                            $run2++;
+                        }
+                        $minVal = (int)preg_replace('/\D+/', '', (string)($det['clock']['displayValue'] ?? '0'));
+                        $scorer = (string)($det['athletesInvolved'][0]['displayName'] ?? 'Torschütze');
+                        $builtGoals[] = [
+                            'matchMinute'    => $minVal,
+                            'goalGetterName' => $scorer,
+                            'scoreTeam1'     => $run1,
+                            'scoreTeam2'     => $run2,
+                            'isPenalty'      => !empty($det['penaltyKick']),
+                            'isOwnGoal'      => !empty($det['ownGoal']),
+                        ];
+                    }
+                    if (!empty($builtGoals)) {
+                        $m['goals'] = $builtGoals;
+                    }
+                }
+            }
+            break;
+        }
+    }
+    unset($m);
+
+    return $matchdayData;
+}
+
+/**
  * Extrahiert Endergebnis (resultTypeID=2) und Halbzeitergebnis (resultTypeID=1) aus einem OpenLigaDB-Match.
  */
 function extractMatchScores(array $match): array
@@ -284,9 +503,20 @@ function extractMatchScores(array $match): array
     }
 
     $kickoffTs  = !empty($match['matchDateTime']) ? (int)strtotime((string)$match['matchDateTime']) : 0;
+    $now        = time();
+    $isStarted  = $kickoffTs > 0 && $now >= $kickoffTs;
     $isFinished = !empty($match['matchIsFinished']);
-    $isStarted  = $kickoffTs > 0 && time() >= $kickoffTs;
-    $isLive     = $isStarted && !$isFinished;
+
+    // Sicherheits-Fallback: Wenn ein Spiel vor mehr als 130 Minuten (2 Std. 10 Min.) angepfiffen wurde
+    // und nicht explizit als laufend (_live_state === 'in') gemeldet ist, gilt es als beendet statt endlos "LIVE".
+    $liveState = (string)($match['_live_state'] ?? '');
+    if ($liveState === 'post') {
+        $isFinished = true;
+    } elseif ($liveState !== 'in' && $isStarted && !$isFinished && ($now - $kickoffTs) > 7800) {
+        $isFinished = true;
+    }
+
+    $isLive = $isStarted && !$isFinished;
 
     return [
         'has_score'   => ($final1 !== null && $final2 !== null && ($isStarted || $isFinished)),
@@ -297,6 +527,7 @@ function extractMatchScores(array $match): array
         'is_finished' => $isFinished,
         'is_started'  => $isStarted,
         'is_live'     => $isLive,
+        'live_clock'  => (string)($match['_live_clock'] ?? ''),
         'kickoff_ts'  => $kickoffTs,
     ];
 }
@@ -512,6 +743,7 @@ if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchd
     $matchdayData = $matchdayRes['data'];
 }
 
+$matchdayData   = enrichMatchdayWithLiveScoreboard($pdo, $selectedLeague, $matchdayData, $forceRefresh);
 $lastUpdatedStr = $matchdayRes['cached_at'] ?: $tableRes['cached_at'];
 
 // ============================================================================
@@ -1062,7 +1294,7 @@ require_once __DIR__ . '/includes/header.php';
 
                                         <?php if ($scores['is_live']): ?>
                                             <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-rose-600 text-white animate-pulse">
-                                                🔴 LIVE
+                                                🔴 LIVE<?= $scores['live_clock'] !== '' ? ' • ' . e($scores['live_clock']) : '' ?>
                                             </span>
                                         <?php elseif ($scores['is_finished']): ?>
                                             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
