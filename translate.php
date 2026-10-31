@@ -529,7 +529,7 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
             'model'      => $activeModel,
             'prompt'     => $prompt,
             'stream'     => false,
-            'keep_alive' => '60m',
+            'keep_alive' => '24h',
             'options'    => [
                 'temperature' => 0.1,
             ],

@@ -2305,12 +2305,10 @@ function queryLocalOllamaAssistant(
         'model'      => $status['active_model'],
         'messages'   => $messages,
         'stream'     => false,
-        'keep_alive' => '30m',
+        'keep_alive' => '24h',
         'options'    => [
             'temperature' => $isGeneralQuestion ? 0.3 : 0.2,
-            'num_ctx'     => 2048,
-            'num_predict' => 180,
-            'num_thread'  => 4,
+            'num_predict' => 220,
         ],
     ], JSON_UNESCAPED_UNICODE);
 
@@ -2505,11 +2503,10 @@ function createAssistantOfficeDocx(
                     ['role' => 'user', 'content' => $docPrompt],
                 ],
                 'stream'     => false,
-                'keep_alive' => '30m',
+                'keep_alive' => '24h',
                 'options'    => [
                     'temperature' => 0.25,
-                    'num_predict' => 380,
-                    'num_thread'  => 3,
+                    'num_predict' => 420,
                 ],
             ], JSON_UNESCAPED_UNICODE);
 
@@ -2790,12 +2787,10 @@ function answerDocumentQuestion(PDO $pdo, array $appSettings, array $docInfo, st
                     ['role' => 'user', 'content' => $qEffective],
                 ],
                 'stream'     => false,
-                'keep_alive' => '30m',
+                'keep_alive' => '24h',
                 'options'    => [
                     'temperature' => 0.2,
-                    'num_ctx'     => 2048,
-                    'num_predict' => 210,
-                    'num_thread'  => 4,
+                    'num_predict' => 240,
                 ],
             ], JSON_UNESCAPED_UNICODE);
 
