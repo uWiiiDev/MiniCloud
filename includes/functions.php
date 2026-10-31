@@ -3730,7 +3730,7 @@ function isFileEligibleForFulltextIndex(string $originalName): bool
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     return in_array($ext, [
         'pdf', 'docx', 'odt', 'xlsx', 'ods', 'csv', 'pptx', 'odp',
-        'txt', 'md', 'html', 'htm', 'drawio', 'diagram', 'vsdx', 'epub',
+        'txt', 'md', 'html', 'htm', 'drawio', 'diagram', 'vsdx',
         'json', 'xml', 'yml', 'yaml', 'ini', 'log', 'sql', 'srt', 'vtt',
     ], true);
 }
@@ -3738,8 +3738,8 @@ function isFileEligibleForFulltextIndex(string $originalName): bool
 /**
  * Extrahiert den durchsuchbaren Klartext aus einer Cloud-Datei (bis max. 120.000 Zeichen).
  * Unterstützt Word (.docx/.odt), Excel (.xlsx/.ods/.csv), PowerPoint (.pptx/.odp),
- * Visio/Diagramme (.drawio/.diagram/.vsdx), PDF (.pdf via pdftotext oder Pure-PHP),
- * E-Books (.epub) sowie Text-/Markdown-/HTML-/Code-Dateien.
+ * Visio/Diagramme (.drawio/.diagram/.vsdx), PDF (.pdf via pdftotext oder Pure-PHP)
+ * sowie Text-/Markdown-/HTML-/Code-Dateien (E-Books sind bewusst von der Volltextindexierung ausgenommen).
  */
 function extractSearchableDocumentText(string $filePath, string $originalName, int $maxChars = 120000): string
 {
@@ -3826,7 +3826,7 @@ function extractSearchableDocumentText(string $filePath, string $originalName, i
                     $extracted = implode(' ', $parts);
                 }
             }
-        } elseif (class_exists('ZipArchive') && in_array($ext, ['docx', 'odt', 'xlsx', 'ods', 'pptx', 'odp', 'vsdx', 'epub'], true)) {
+        } elseif (class_exists('ZipArchive') && in_array($ext, ['docx', 'odt', 'xlsx', 'ods', 'pptx', 'odp', 'vsdx'], true)) {
             $zip = new ZipArchive();
             if (@$zip->open($filePath) === true) {
                 $parts = [];
@@ -3887,26 +3887,6 @@ function extractSearchableDocumentText(string $filePath, string $originalName, i
                             foreach ($tm[1] as $tNode) {
                                 $parts[] = html_entity_decode(strip_tags($tNode), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                             }
-                        }
-                    }
-                } elseif ($ext === 'epub') {
-                    $numFiles = min($zip->numFiles, 80);
-                    $totalLen = 0;
-                    for ($i = 0; $i < $numFiles; $i++) {
-                        $entryName = (string)$zip->getNameIndex($i);
-                        $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
-                        if (!in_array($entryExt, ['xhtml', 'html', 'htm', 'opf'], true)) {
-                            continue;
-                        }
-                        $content = $zip->getFromIndex($i);
-                        if (!is_string($content) || $content === '') {
-                            continue;
-                        }
-                        $clean = html_entity_decode(strip_tags((string)preg_replace('/<(script|style)\b[^>]*>.*?<\/\1>/is', ' ', $content)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                        $parts[] = $clean;
-                        $totalLen += strlen($clean);
-                        if ($totalLen >= $maxChars) {
-                            break;
                         }
                     }
                 }
@@ -4056,6 +4036,7 @@ function reindexAllCloudFiles(PDO $pdo, int $limit = 10000): array
             $fid = (int)$row['id'];
             $orig = (string)$row['original_name'];
             if (!isFileEligibleForFulltextIndex($orig)) {
+                removeFileFromFulltextSearch($pdo, $fid);
                 continue;
             }
             if (indexFileForFulltextSearch($pdo, $fid, true)) {

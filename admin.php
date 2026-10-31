@@ -4025,7 +4025,7 @@ foreach ($modList as $mItem) {
                             <span>
                                 <strong>Dokumenten-Volltextsuche (<code>file_search_index</code> via MariaDB/MySQL FULLTEXT) aktivieren</strong><br>
                                 <span class="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Durchsucht bei der globalen Schnellsuche (<code>Strg + K</code>) sowie im Dateimanager nicht nur Dateinamen, sondern in unter 5 Millisekunden auch den <strong>Textinhalt</strong> von PDF-, Word- (<code>.docx</code>), Excel- (<code>.xlsx</code>/<code>.csv</code>), PowerPoint- (<code>.pptx</code>), Visio-/Draw.io- (<code>.drawio</code>/<code>.vsdx</code>), E-Book- (<code>.epub</code>) und Text-/Markdown-Dateien – inklusive Treffer-Textausschnitt. <strong>Zero-Knowledge-Garantie:</strong> Tresor-verschlüsselte Dateien werden niemals indexiert. Benötigt im Gegensatz zu Java-Elasticsearch <strong>0 MB zusätzlichen RAM</strong>.
+                                    Durchsucht bei der globalen Schnellsuche (<code>Strg + K</code>) sowie im Dateimanager nicht nur Dateinamen, sondern in unter 5 Millisekunden auch den <strong>Textinhalt</strong> von PDF-, Word- (<code>.docx</code>), Excel- (<code>.xlsx</code>/<code>.csv</code>), PowerPoint- (<code>.pptx</code>), Visio-/Draw.io- (<code>.drawio</code>/<code>.vsdx</code>) und Text-/Markdown-Dateien – inklusive Treffer-Textausschnitt (E-Books sind ausgeschlossen). <strong>Zero-Knowledge-Garantie:</strong> Tresor-verschlüsselte Dateien werden niemals indexiert. Benötigt im Gegensatz zu Java-Elasticsearch <strong>0 MB zusätzlichen RAM</strong>.
                                 </span>
                             </span>
                         </label>
