@@ -1071,7 +1071,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'office', 'translator', 'split', 'ebooks', 'music', 'cinema', 'video_studio', 'surflog', 'mindmap', 'budget', 'toolbox', 'calculator', 'games', 'assistant', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'dashboard', 'polls', 'menti', 'passwords', 'pdf_tools', 'trash'];
+                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'polls', 'menti', 'forms', 'budget', 'split', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'assistant', 'passwords', 'toolbox', 'surflog', 'games', 'trash'];
 
                     function getPinnedNav() {
                         try {
