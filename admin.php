@@ -1664,6 +1664,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableSurflog     = isset($_POST['enable_surflog']) && $_POST['enable_surflog'] === '1' ? '1' : '0';
         $enableCinema      = isset($_POST['enable_cinema']) && $_POST['enable_cinema'] === '1' ? '1' : '0';
         $enableTranslator  = isset($_POST['enable_translator']) && $_POST['enable_translator'] === '1' ? '1' : '0';
+        $enableBundesliga  = isset($_POST['enable_bundesliga']) && $_POST['enable_bundesliga'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
         $libreUrl          = '';
@@ -1727,6 +1728,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_surflog', $enableSurflog);
         saveAppSetting($pdo, 'enable_cinema', $enableCinema);
         saveAppSetting($pdo, 'enable_translator', $enableTranslator);
+        saveAppSetting($pdo, 'enable_bundesliga', $enableBundesliga);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
         saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
@@ -4207,6 +4209,35 @@ foreach ($modList as $mItem) {
 
                 <!-- Modul 28: Automatische Papierkorb-Bereinigung (Aufbewahrungsfrist) -->
                 <?php $curTrashDays = isset($currentSettings['trash_retention_days']) ? (int)$currentSettings['trash_retention_days'] : 30; ?>
+                <!-- Modul 27c: Bundesliga-Zentrale & Cloud-Tippspiel -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_bundesliga"
+                            value="1"
+                            <?= ($currentSettings['enable_bundesliga'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                ⚽ Bundesliga-Zentrale &amp; Cloud-Tippspiel (<code class="text-xs font-mono">bundesliga.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Live-Tabelle (1. &amp; 2. Bundesliga, 3. Liga), Spieltage 1–38 mit Torschützen, Lieblingsverein-Hervorhebung, DSGVO-konformer Server-Cache (OpenLigaDB) sowie integriertes Cloud-Tippspiel mit Bestenliste.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="bundesliga.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            ⚽ Bundesliga &amp; Tippspiel öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_bundesliga'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_bundesliga'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
                     <div class="space-y-2.5">
                         <div class="flex items-center justify-between gap-2">

@@ -410,6 +410,18 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
+        'key'      => 'bundesliga',
+        'enabled'  => ($appSettings['enable_bundesliga'] ?? '1') === '1',
+        'title'    => 'Bundesliga & Tippspiel',
+        'shortSub' => '1.–3. Liga, Tabelle & Tipprunde',
+        'icon'     => '⚽',
+        'url'      => 'bundesliga.php',
+        'category' => 'tools_extra',
+        'desc'     => 'Live-Tabellen & alle Spieltage der 1. Bundesliga, 2. Bundesliga und 3. Liga (inkl. Torschützen, Lieblingsverein & Cloud-Tippspiel).',
+        'badge'    => '',
+        'badgeCls' => '',
+    ],
+    [
         'key'      => 'surflog',
         'enabled'  => ($appSettings['enable_surflog'] ?? '1') === '1',
         'title'    => 'Surftagebuch',

@@ -700,6 +700,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_surflog'                => '1',
         'enable_cinema'                 => '1',
         'enable_translator'             => '1',
+        'enable_bundesliga'             => '1',
         'translator_deepl_api_key'      => '',
         'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
@@ -3208,6 +3209,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_split',
             'color'       => 'bg-emerald-600',
         ],
+        'bundesliga' => [
+            'icon'        => '⚽',
+            'label'       => 'Bundesliga & Cloud-Tippspiel',
+            'url'         => 'bundesliga.php',
+            'setting_key' => 'enable_bundesliga',
+            'color'       => 'bg-green-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3261,6 +3269,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'cinema.php'       => 'cinema',
         'translate.php'    => 'translator',
         'split.php'        => 'split',
+        'bundesliga.php'   => 'bundesliga',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
