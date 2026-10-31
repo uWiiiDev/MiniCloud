@@ -70,8 +70,9 @@ $showAllFolders = ($rawFolderParam === '__all__' || $largeFilesMode);
 $currentFolder  = (!$showAllFolders && $rawFolderParam !== '')
     ? extractSanitizedFolderPath($rawFolderParam . '/placeholder')
     : '';
-$searchQuery   = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$onlyFavorites = isset($_GET['fav']) && $_GET['fav'] === '1';
+$searchQuery      = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+$onlyFavorites    = isset($_GET['fav']) && $_GET['fav'] === '1';
+$sharedWithMeMode = isset($_GET['shared_with_me']) && $_GET['shared_with_me'] === '1' && $activeGroupFolder === null && $activeSharedFolder === null;
 
 // Sortier-Parameter für die Haupttabelle (Standard: Datum absteigend; im Große-Dateien-Modus: Größe absteigend)
 $allowedSortCols = [
@@ -563,9 +564,69 @@ if ($largeFilesMode) {
     $sqlFiles .= sprintf(' LIMIT %d OFFSET %d', $perPage, $offset);
 }
 
-$stmtFiles = $pdo->prepare($sqlFiles);
-$stmtFiles->execute($params);
-$files = $stmtFiles->fetchAll();
+// Für mich freigegebene Ordner (von anderen Cloud-Benutzern via user_shares)
+$stmtSharedFoldersWithMe = $pdo->prepare(
+    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.can_write, us.can_delete, us.created_at AS shared_at,
+            u.username AS owner_username,
+            (SELECT COUNT(*) FROM files f
+             WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
+               AND (f.folder_path = us.folder_path OR f.folder_path LIKE CONCAT(us.folder_path, \'/%\'))) AS file_count,
+            (SELECT COALESCE(SUM(f.file_size), 0) FROM files f
+             WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
+               AND (f.folder_path = us.folder_path OR f.folder_path LIKE CONCAT(us.folder_path, \'/%\'))) AS folder_size
+     FROM user_shares us
+     INNER JOIN users u ON u.id = us.owner_id
+     WHERE us.shared_with_user_id = :uid AND us.folder_path IS NOT NULL
+     ORDER BY us.created_at DESC'
+);
+$stmtSharedFoldersWithMe->execute([':uid' => $userId]);
+$sharedWithMeFolders = $stmtSharedFoldersWithMe->fetchAll();
+
+// Für mich freigegebene Einzeldateien (von anderen Cloud-Benutzern via user_shares, nur aktive Dateien)
+$stmtSharedWithMe = $pdo->prepare(
+    'SELECT f.*, u.username AS uploader_name, u.username AS owner_username,
+            us.can_write AS us_can_write, us.can_delete AS us_can_delete, us.created_at AS shared_at,
+            0 AS link_share_count, 0 AS user_share_count, 0 AS version_count, 0 AS comment_count
+     FROM user_shares us
+     INNER JOIN files f ON f.id = us.file_id
+     INNER JOIN users u ON u.id = us.owner_id
+     WHERE us.shared_with_user_id = :uid AND us.file_id IS NOT NULL AND f.deleted_at IS NULL
+     ORDER BY us.created_at DESC'
+);
+$stmtSharedWithMe->execute([':uid' => $userId]);
+$sharedWithMeFiles = $stmtSharedWithMe->fetchAll();
+
+$totalSharedWithMeCount = count($sharedWithMeFolders) + count($sharedWithMeFiles);
+$totalSharedWithMeSize  = 0;
+foreach ($sharedWithMeFolders as $swfRow) {
+    $totalSharedWithMeSize += (int)($swfRow['folder_size'] ?? 0);
+}
+foreach ($sharedWithMeFiles as $swFileRow) {
+    $totalSharedWithMeSize += (int)($swFileRow['file_size'] ?? 0);
+}
+
+$showSharedVirtualFolder = (
+    $activeGroupFolder === null
+    && $activeSharedFolder === null
+    && !$sharedWithMeMode
+    && $currentFolder === ''
+    && !$largeFilesMode
+    && !$onlyFavorites
+    && !$showAllFolders
+    && $searchQuery === ''
+);
+
+// Im virtuellen Ordner "👥 Für mich freigegeben" (?shared_with_me=1) werden die für mich freigegebenen Einzeldateien direkt in der Haupttabelle geladen
+if ($sharedWithMeMode) {
+    $files              = $sharedWithMeFiles;
+    $totalMatchingFiles = count($files);
+    $totalPages         = 1;
+    $currentPage        = 1;
+} else {
+    $stmtFiles = $pdo->prepare($sqlFiles);
+    $stmtFiles->execute($params);
+    $files = $stmtFiles->fetchAll();
+}
 
 // Batch-Aggregation für Freigaben, Dateiversionen & Kommentare (nur für die tatsächlich angezeigten <= 200 Dateien)
 if (!empty($files)) {
@@ -575,7 +636,7 @@ if (!empty($files)) {
     $verCntMap     = [];
     $comCntMap     = [];
 
-    if ($activeSharedFolder === null) {
+    if ($activeSharedFolder === null && !$sharedWithMeMode) {
         foreach ($pdo->query("SELECT file_id, COUNT(*) AS c FROM shares WHERE file_id IN ({$visibleIdsSql}) GROUP BY file_id")->fetchAll() as $cr) {
             $shareCntMap[(int)$cr['file_id']] = (int)$cr['c'];
         }
@@ -602,7 +663,7 @@ if (!empty($files)) {
 
 // Direkte Unterordner des aktuell geöffneten Ordners ermitteln (oder bei globaler Suche alle passenden Ordner)
 $directSubfolders = [];
-if ($activeSharedFolder === null && !$showAllFolders && !$onlyFavorites) {
+if ($activeSharedFolder === null && !$sharedWithMeMode && !$showAllFolders && !$onlyFavorites) {
     foreach ($userFolders as $ufItem) {
         $fPath = (string)$ufItem['folder_path'];
         $parentOfF = str_contains($fPath, '/') ? dirname($fPath) : '';
@@ -620,7 +681,7 @@ if ($activeSharedFolder === null && !$showAllFolders && !$onlyFavorites) {
             if ($sortBy === 'size') {
                 $cmp = ((int)$a['folder_size']) <=> ((int)$b['folder_size']);
                 if ($cmp === 0) {
-                    $cmp = strnatcasecmp(basename((string)$a['folder_path']), basename((string)$b['folder_path']));
+                    $cmp = strnatcasecmp(basename((string)$a['folder_path']), basename((string)$a['folder_path']));
                 }
             } else {
                 $cmp = strnatcasecmp(basename((string)$a['folder_path']), basename((string)$b['folder_path']));
@@ -633,51 +694,22 @@ if ($activeSharedFolder === null && !$showAllFolders && !$onlyFavorites) {
     }
 }
 
-// Für mich freigegebene Ordner (von anderen Cloud-Benutzern via user_shares)
-$stmtSharedFoldersWithMe = $pdo->prepare(
-    'SELECT us.id AS user_share_id, us.owner_id, us.folder_path, us.can_write, us.can_delete, us.created_at AS shared_at,
-            u.username AS owner_username,
-            (SELECT COUNT(*) FROM files f
-             WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
-               AND (f.folder_path = us.folder_path OR f.folder_path LIKE CONCAT(us.folder_path, \'/%\'))) AS file_count,
-            (SELECT COALESCE(SUM(f.file_size), 0) FROM files f
-             WHERE f.user_id = us.owner_id AND f.group_folder_id IS NULL AND f.deleted_at IS NULL
-               AND (f.folder_path = us.folder_path OR f.folder_path LIKE CONCAT(us.folder_path, \'/%\'))) AS folder_size
-     FROM user_shares us
-     INNER JOIN users u ON u.id = us.owner_id
-     WHERE us.shared_with_user_id = :uid AND us.folder_path IS NOT NULL
-     ORDER BY us.created_at DESC'
-);
-$stmtSharedFoldersWithMe->execute([':uid' => $userId]);
-$sharedWithMeFolders = $stmtSharedFoldersWithMe->fetchAll();
-
-// Für mich freigegebene Einzeldateien (von anderen Cloud-Benutzern via user_shares, nur aktive Dateien)
-$stmtSharedWithMe = $pdo->prepare(
-    'SELECT f.id, f.original_name, f.file_size, f.mime_type, f.is_encrypted, f.upload_date,
-            us.can_write, us.can_delete, us.created_at AS shared_at, u.username AS owner_username
-     FROM user_shares us
-     INNER JOIN files f ON f.id = us.file_id
-     INNER JOIN users u ON u.id = us.owner_id
-     WHERE us.shared_with_user_id = :uid AND us.file_id IS NOT NULL AND f.deleted_at IS NULL
-     ORDER BY us.created_at DESC'
-);
-$stmtSharedWithMe->execute([':uid' => $userId]);
-$sharedWithMeFiles = $stmtSharedWithMe->fetchAll();
-
-$totalSharedWithMeCount = count($sharedWithMeFolders) + count($sharedWithMeFiles);
-
 // Liste anderer Cloud-Benutzer für das Teilen-Modal (nur Benutzer, die ihre Sichtbarkeit für Direktfreigaben aktiviert haben)
 $stmtOtherUsers = $pdo->prepare('SELECT id, username FROM users WHERE id <> :uid AND allow_user_sharing = 1 ORDER BY username ASC');
 $stmtOtherUsers->execute([':uid' => $userId]);
 $otherCloudUsers = $stmtOtherUsers->fetchAll();
 
-$canUploadHere = $activeSharedFolder !== null
-    ? $canWriteSharedFolder
-    : (($activeGroupFolder === null) || $canWriteActiveGf);
+$canUploadHere = $sharedWithMeMode
+    ? false
+    : ($activeSharedFolder !== null
+        ? $canWriteSharedFolder
+        : (($activeGroupFolder === null) || $canWriteActiveGf));
 
 $pageTitle = $activeGroupFolder
     ? 'Gruppenordner: ' . $activeGroupFolder['name']
-    : ($activeSharedFolder ? 'Geteilter Ordner: ' . $activeSharedFolder['folder_path'] : 'Dashboard');
+    : ($activeSharedFolder
+        ? 'Geteilter Ordner: ' . $activeSharedFolder['folder_path']
+        : ($sharedWithMeMode ? 'Für mich freigegeben' : 'Dashboard'));
 require_once __DIR__ . '/includes/header.php';
 ?>
 
@@ -708,6 +740,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         🔎 Globale Suche: <span class="text-brand-600 dark:text-brand-400">„<?= e($searchQuery) ?>“</span>
                     <?php elseif ($activeGroupFolder !== null): ?>
                         Gruppenordner: <span class="text-indigo-600 dark:text-indigo-400"><?= e((string)$activeGroupFolder['name']) ?></span>
+                    <?php elseif ($sharedWithMeMode): ?>
+                        👥 <span class="text-blue-600 dark:text-blue-400">Für mich freigegeben</span>
+                        <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(Von Cloud-Benutzern)</span>
                     <?php elseif ($activeSharedFolder !== null): ?>
                         Freigegebener Ordner: <span class="text-blue-600 dark:text-blue-400">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
                         <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(von <?= e((string)$activeSharedFolder['owner_username']) ?>)</span>
@@ -717,8 +752,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         Meine hochgeladenen Dateien
                     <?php endif; ?>
                 </h2>
+                <?php
+                $visibleFolderCountBadge = $sharedWithMeMode ? count($sharedWithMeFolders) : count($directSubfolders);
+                ?>
                 <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    <?= count($directSubfolders) > 0 ? count($directSubfolders) . ' Ordner &bull; ' : '' ?><?= count($files) ?> <?= count($files) === 1 ? 'Datei' : 'Dateien' ?>
+                    <?= $visibleFolderCountBadge > 0 ? $visibleFolderCountBadge . ' Ordner &bull; ' : '' ?><?= count($files) ?> <?= count($files) === 1 ? 'Datei' : 'Dateien' ?>
                 </span>
 
                 <?php if ($activeSharedFolder === null && $currentFolder !== ''): ?>
@@ -796,7 +834,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     </div>
                 <?php endif; ?>
             </div>
-            <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $showAllFolders || $onlyFavorites): ?>
+            <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $sharedWithMeMode || $showAllFolders || $onlyFavorites): ?>
                 <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <a
                         href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
@@ -804,7 +842,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         data-drop-folder-label="Hauptverzeichnis"
                         class="text-brand-600 dark:text-brand-400 hover:underline font-semibold rounded px-1 -mx-1 transition-all"
                     >🏠 Hauptverzeichnis</a>
-                    <?php if ($currentFolder !== ''): ?>
+                    <?php if ($sharedWithMeMode): ?>
+                        <span class="text-slate-400">/</span>
+                        <span class="font-semibold text-blue-600 dark:text-blue-400">👥 Für mich freigegeben</span>
+                    <?php elseif ($activeSharedFolder !== null): ?>
+                        <span class="text-slate-400">/</span>
+                        <a href="index.php?shared_with_me=1" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold">👥 Für mich freigegeben</a>
+                        <span class="text-slate-400">/</span>
+                        <span class="font-semibold text-slate-700 dark:text-slate-200">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
+                    <?php elseif ($currentFolder !== ''): ?>
                         <?php
                         $crumbParts = explode('/', $currentFolder);
                         $crumbAccum = '';
@@ -1387,7 +1433,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         </div>
     <?php endif; ?>
 
-    <?php if (empty($files) && empty($directSubfolders) && $currentFolder === ''): ?>
+    <?php if (empty($files) && empty($directSubfolders) && !$showSharedVirtualFolder && (!$sharedWithMeMode || empty($sharedWithMeFolders)) && $currentFolder === ''): ?>
         <div
             class="p-10 sm:p-12 text-center <?= $canUploadHere ? 'cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition-colors' : '' ?>"
             <?php if ($canUploadHere): ?>onclick="document.getElementById('fileInput')?.click()"<?php endif; ?>
@@ -1397,9 +1443,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                 </svg>
             </div>
-            <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Keine Dateien oder Ordner vorhanden</h3>
+            <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                <?= $sharedWithMeMode ? 'Noch keine Ordner oder Dateien für Sie freigegeben' : 'Keine Dateien oder Ordner vorhanden' ?>
+            </h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                <?= $canUploadHere ? 'Ziehen Sie Dateien oder Ordner einfach per Drag & Drop hierher oder klicken Sie auf „+ Dateien“.' : 'In diesem Ordner befinden sich aktuell keine Dateien.' ?>
+                <?php if ($sharedWithMeMode): ?>
+                    Aktuell wurden noch keine Ordner oder Dateien von anderen Cloud-Benutzern direkt mit Ihnen geteilt.
+                    <span class="block mt-2">
+                        <a href="index.php" class="text-brand-600 dark:text-brand-400 font-semibold hover:underline">&larr; Zurück zum Hauptverzeichnis</a>
+                    </span>
+                <?php else: ?>
+                    <?= $canUploadHere ? 'Ziehen Sie Dateien oder Ordner einfach per Drag & Drop hierher oder klicken Sie auf „+ Dateien“.' : 'In diesem Ordner befinden sich aktuell keine Dateien.' ?>
+                <?php endif; ?>
             </p>
         </div>
     <?php else: ?>
@@ -1520,16 +1575,28 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-sm">
-                    <?php if ($currentFolder !== '' && $activeSharedFolder === null): ?>
+                    <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null): ?>
                         <?php
-                        $upParent = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
-                        $upUrl = 'index.php'
-                            . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParent !== '' ? '&amp;folder=' . rawurlencode($upParent) : '') : ($upParent !== '' ? '?folder=' . rawurlencode($upParent) : ''));
-                        $upLabel = $upParent !== '' ? $upParent : 'Hauptverzeichnis';
+                        if ($sharedWithMeMode) {
+                            $upParent = '';
+                            $upUrl    = 'index.php';
+                            $upLabel  = 'Hauptverzeichnis';
+                        } elseif ($activeSharedFolder !== null) {
+                            $upParent = '';
+                            $upUrl    = 'index.php?shared_with_me=1';
+                            $upLabel  = '👥 Für mich freigegeben';
+                        } else {
+                            $upParent = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
+                            $upUrl = 'index.php'
+                                . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParent !== '' ? '&amp;folder=' . rawurlencode($upParent) : '') : ($upParent !== '' ? '?folder=' . rawurlencode($upParent) : ''));
+                            $upLabel = $upParent !== '' ? $upParent : 'Hauptverzeichnis';
+                        }
                         ?>
                         <tr
-                            data-drop-folder="<?= e($upParent) ?>"
-                            data-drop-folder-label="<?= e($upLabel) ?>"
+                            <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                                data-drop-folder="<?= e($upParent) ?>"
+                                data-drop-folder-label="<?= e($upLabel) ?>"
+                            <?php endif; ?>
                             class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-all"
                         >
                             <td class="py-2.5 px-4 sm:px-6" colspan="6">
@@ -1540,12 +1607,143 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </span>
                                         <span>Übergeordneter Ordner (<?= e($upLabel) ?>)</span>
                                     </a>
-                                    <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500">
-                                        📥 Dateien hierher ziehen zum Ablegen in <?= e($upLabel) ?>
-                                    </span>
+                                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                                        <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500">
+                                            📥 Dateien hierher ziehen zum Ablegen in <?= e($upLabel) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
+                    <?php endif; ?>
+
+                    <!-- 0. Andersfarbiger virtueller Ordner "👥 Für mich freigegeben" im Hauptverzeichnis -->
+                    <?php if ($showSharedVirtualFolder): ?>
+                        <tr class="bg-blue-50/35 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-950/40 transition-all">
+                            <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
+                                <span class="text-xs text-blue-500 dark:text-blue-400" title="Systemordner für empfangene Benutzer-Freigaben">👥</span>
+                            </td>
+                            <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                                <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
+                                    <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Von anderen Cloud-Benutzern für mich freigegebene Ordner &amp; Dateien öffnen">
+                                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                                        </svg>
+                                    </a>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                            <a href="index.php?shared_with_me=1" class="font-bold text-blue-900 dark:text-blue-200 hover:text-blue-600 dark:hover:text-blue-400 truncate max-w-[140px] sm:max-w-xs md:max-w-md block">
+                                                Für mich freigegeben (Von Cloud-Benutzern)
+                                            </a>
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold <?= $totalSharedWithMeCount > 0 ? 'bg-blue-600 text-white shadow-2xs' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' ?>">
+                                                👥 <?= $totalSharedWithMeCount ?>
+                                            </span>
+                                        </div>
+                                        <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5 truncate max-w-[140px] sm:max-w-none">
+                                            <?= count($sharedWithMeFolders) ?> <?= count($sharedWithMeFolders) === 1 ? 'Ordner' : 'Ordner' ?> &bull;
+                                            <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
+                                            <span class="sm:hidden"> &bull; <?= e(formatBytes($totalSharedWithMeSize)) ?></span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-blue-700 dark:text-blue-400 font-medium">
+                                👥 Cloud-Freigaben
+                            </td>
+                            <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
+                                <?= e(formatBytes($totalSharedWithMeSize)) ?>
+                            </td>
+                            <td class="py-3 px-4 whitespace-nowrap text-xs text-blue-700 dark:text-blue-400 font-medium hidden lg:table-cell">
+                                👥 Geteilter Bereich
+                            </td>
+                            <td class="py-3 pl-1 pr-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
+                                <a
+                                    href="index.php?shared_with_me=1"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors shadow-2xs"
+                                >
+                                    <span>Öffnen</span>
+                                </a>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
+
+                    <!-- 0b. Freigegebene Ordner innerhalb von "👥 Für mich freigegeben" (?shared_with_me=1) -->
+                    <?php if ($sharedWithMeMode): ?>
+                        <?php foreach ($sharedWithMeFolders as $sFolder): ?>
+                            <?php
+                            $usId         = (int)$sFolder['user_share_id'];
+                            $sfPath       = (string)$sFolder['folder_path'];
+                            $sfOwner      = (string)$sFolder['owner_username'];
+                            $sfDate       = date('d.m.Y H:i', strtotime((string)$sFolder['shared_at']));
+                            $sfCount      = (int)$sFolder['file_count'];
+                            $sfSize       = (int)$sFolder['folder_size'];
+                            $sfCanWrite   = ((int)($sFolder['can_write'] ?? 0) === 1);
+                            $sfCanDelete  = ((int)($sFolder['can_delete'] ?? 0) === 1);
+                            $sfPermLabel  = $sfCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
+                            $sfPermIcon   = $sfCanDelete ? '✏️🗑️' : ($sfCanWrite ? '✏️' : '👁️');
+                            ?>
+                            <tr class="bg-blue-50/25 dark:bg-blue-950/15 hover:bg-blue-50/60 dark:hover:bg-blue-950/35 transition-all">
+                                <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
+                                    <span class="text-xs text-blue-500">📁</span>
+                                </td>
+                                <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                                    <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
+                                        <a href="index.php?shared_folder=<?= $usId ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Freigegebenen Ordner öffnen">
+                                            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                                            </svg>
+                                        </a>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                <a href="index.php?shared_folder=<?= $usId ?>" class="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 truncate max-w-[130px] sm:max-w-xs md:max-w-md block">
+                                                    <?= e($sfPath) ?>
+                                                </a>
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                                    👤 von <?= e($sfOwner) ?>
+                                                </span>
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" title="<?= e($sfPermLabel) ?>">
+                                                    <?= $sfPermIcon ?> <?= e($sfPermLabel) ?>
+                                                </span>
+                                            </div>
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[130px] sm:max-w-none">
+                                                <?= $sfCount ?> <?= $sfCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($sfSize)) ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-blue-700 dark:text-blue-400 font-medium">
+                                    👤 <?= e($sfOwner) ?>
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
+                                    <?= e(formatBytes($sfSize)) ?>
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400 hidden lg:table-cell">
+                                    <?= e($sfDate) ?> Uhr
+                                </td>
+                                <td class="py-3 pl-1 pr-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
+                                    <div class="inline-flex items-center justify-end gap-1.5">
+                                        <a
+                                            href="index.php?shared_folder=<?= $usId ?>"
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors"
+                                        >
+                                            <span>Öffnen</span>
+                                        </a>
+                                        <?php if ($sfCount > 0): ?>
+                                            <a
+                                                href="download.php?user_share_id=<?= $usId ?>"
+                                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
+                                                title="Als ZIP herunterladen"
+                                                aria-label="Als ZIP herunterladen"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
+                                                </svg>
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
 
                     <!-- 1. Direkte Unterordner in diesem Verzeichnis -->
@@ -1753,12 +1951,16 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         $commentCount = (int)($file['comment_count'] ?? 0);
                         $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
                         $isFavorite  = ((int)($file['is_favorite'] ?? 0) === 1);
-                        $canManageThisFile = $activeSharedFolder !== null
-                            ? $canWriteSharedFolder
-                            : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
-                        $canDeleteThisFile = $activeSharedFolder !== null
-                            ? $canDeleteSharedFolder
-                            : $canManageThisFile;
+                        $canManageThisFile = $sharedWithMeMode
+                            ? ((int)($file['us_can_write'] ?? 0) === 1)
+                            : ($activeSharedFolder !== null
+                                ? $canWriteSharedFolder
+                                : (((int)$file['user_id'] === $userId) || $canWriteActiveGf));
+                        $canDeleteThisFile = $sharedWithMeMode
+                            ? ((int)($file['us_can_delete'] ?? 0) === 1)
+                            : ($activeSharedFolder !== null
+                                ? $canDeleteSharedFolder
+                                : $canManageThisFile);
 
                         $officeEditorType = getOfficeEditorType($origName);
                         $officeEditParams = ['id' => $fId];
@@ -1797,7 +1999,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             'textUrl'      => 'download.php?id=' . $fId . '&inline=1&as_text=1',
                         ];
                         $fileGfIdOrNull = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
-                        if ($fileGfIdOrNull !== null && $activeGroupFolder !== null) {
+                        if ($sharedWithMeMode) {
+                            $currentLocLabel = '👤 von ' . (string)($file['uploader_name'] ?? '');
+                            $folderJumpUrl   = 'index.php?shared_with_me=1';
+                        } elseif ($fileGfIdOrNull !== null && $activeGroupFolder !== null) {
                             $currentLocLabel = $folderPath !== ''
                                 ? '👥 ' . (string)$activeGroupFolder['name'] . ' / 📁 ' . $folderPath
                                 : '👥 ' . (string)$activeGroupFolder['name'] . ' (Hauptverz.)';
@@ -1922,8 +2127,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                     &bull; <?= e($currentLocLabel) ?>
                                                 </a>
                                             <?php endif; ?>
-                                            <?php if ($activeGroupFolder !== null || $activeSharedFolder !== null): ?>
-                                                <span class="truncate max-w-[115px] sm:max-w-none">&bull; von <?= e((string)$file['uploader_name']) ?></span>
+                                            <?php if ($activeGroupFolder !== null || $activeSharedFolder !== null || $sharedWithMeMode): ?>
+                                                <span class="truncate max-w-[115px] sm:max-w-none">&bull; 👤 von <?= e((string)$file['uploader_name']) ?></span>
                                             <?php endif; ?>
                                         </p>
                                         <?php if ($searchQuery !== '' && !$isEncrypted && !empty($file['fsi_content_text'])): ?>
@@ -2153,19 +2358,31 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
         <!-- FOTO-GALERIE / KACHEL-ANSICHT (#fileGridView) -->
         <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-            <?php if ($currentFolder !== '' && $activeSharedFolder === null): ?>
+            <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null): ?>
                 <?php
-                $upParentGrid = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
-                $upUrlGrid = 'index.php'
-                    . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParentGrid !== '' ? '&amp;folder=' . rawurlencode($upParentGrid) : '') : ($upParentGrid !== '' ? '?folder=' . rawurlencode($upParentGrid) : ''));
-                $upLabelGrid = $upParentGrid !== '' ? $upParentGrid : 'Hauptverzeichnis';
+                if ($sharedWithMeMode) {
+                    $upParentGrid = '';
+                    $upUrlGrid    = 'index.php';
+                    $upLabelGrid  = 'Hauptverzeichnis';
+                } elseif ($activeSharedFolder !== null) {
+                    $upParentGrid = '';
+                    $upUrlGrid    = 'index.php?shared_with_me=1';
+                    $upLabelGrid  = '👥 Für mich freigegeben';
+                } else {
+                    $upParentGrid = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
+                    $upUrlGrid = 'index.php'
+                        . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParentGrid !== '' ? '&amp;folder=' . rawurlencode($upParentGrid) : '') : ($upParentGrid !== '' ? '?folder=' . rawurlencode($upParentGrid) : ''));
+                    $upLabelGrid = $upParentGrid !== '' ? $upParentGrid : 'Hauptverzeichnis';
+                }
                 ?>
                 <a
                     href="<?= $upUrlGrid ?>"
-                    data-drop-folder="<?= e($upParentGrid) ?>"
-                    data-drop-folder-label="<?= e($upLabelGrid) ?>"
+                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                        data-drop-folder="<?= e($upParentGrid) ?>"
+                        data-drop-folder-label="<?= e($upLabelGrid) ?>"
+                    <?php endif; ?>
                     class="group flex flex-col justify-between p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs"
-                    title="Übergeordneter Ordner (oder Dateien hierher ziehen)"
+                    title="Übergeordneter Ordner"
                 >
                     <div class="flex items-center justify-center h-28 rounded-xl bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300 mb-2.5 group-hover:scale-[1.02] transition-transform text-xl font-bold">
                         &crarr; ..
@@ -2175,10 +2392,63 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             Übergeordneter Ordner
                         </p>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                            <?= e($upLabelGrid) ?> &bull; 📥 Drop-Zone
+                            <?= e($upLabelGrid) ?>
                         </p>
                     </div>
                 </a>
+            <?php endif; ?>
+
+            <?php if ($showSharedVirtualFolder): ?>
+                <a
+                    href="index.php?shared_with_me=1"
+                    class="group flex flex-col justify-between p-3.5 rounded-2xl bg-blue-50/50 dark:bg-blue-950/25 border border-blue-200/80 dark:border-blue-800/70 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
+                    title="Für mich freigegebene Ordner &amp; Dateien von anderen Cloud-Benutzern öffnen"
+                >
+                    <div class="flex items-center justify-center h-28 rounded-xl bg-blue-100/80 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 mb-2.5 group-hover:scale-[1.02] transition-transform">
+                        <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-bold text-blue-900 dark:text-blue-200 truncate">
+                            👥 Für mich freigegeben
+                        </p>
+                        <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5">
+                            <?= count($sharedWithMeFolders) ?> Ordner &bull; <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
+                        </p>
+                    </div>
+                </a>
+            <?php endif; ?>
+
+            <?php if ($sharedWithMeMode): ?>
+                <?php foreach ($sharedWithMeFolders as $sFolder): ?>
+                    <?php
+                    $usId    = (int)$sFolder['user_share_id'];
+                    $sfPath  = (string)$sFolder['folder_path'];
+                    $sfOwner = (string)$sFolder['owner_username'];
+                    $sfCount = (int)$sFolder['file_count'];
+                    $sfSize  = (int)$sFolder['folder_size'];
+                    ?>
+                    <a
+                        href="index.php?shared_folder=<?= $usId ?>"
+                        class="group flex flex-col justify-between p-3.5 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/60 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
+                        title="Freigegebenen Ordner <?= e($sfPath) ?> (von <?= e($sfOwner) ?>) öffnen"
+                    >
+                        <div class="flex items-center justify-center h-28 rounded-xl bg-blue-100/70 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 mb-2.5 group-hover:scale-[1.02] transition-transform">
+                            <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate" title="<?= e($sfPath) ?>">
+                                📁 <?= e($sfPath) ?>
+                            </p>
+                            <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 truncate">
+                                👤 <?= e($sfOwner) ?> &bull; <?= $sfCount ?> <?= $sfCount === 1 ? 'Datei' : 'Dateien' ?> (<?= e(formatBytes($sfSize)) ?>)
+                            </p>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
             <?php endif; ?>
 
             <?php foreach ($directSubfolders as $subFolder): ?>
@@ -2222,12 +2492,16 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 $isEncrypted = ((int)($file['is_encrypted'] ?? 0) === 1);
                 $isFavorite  = ((int)($file['is_favorite'] ?? 0) === 1);
                 $isImageThumb = !$isEncrypted && (str_starts_with($mimeType, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'], true));
-                $canManageThisFile = $activeSharedFolder !== null
-                    ? $canWriteSharedFolder
-                    : (((int)$file['user_id'] === $userId) || $canWriteActiveGf);
-                $canDeleteThisFile = $activeSharedFolder !== null
-                    ? $canDeleteSharedFolder
-                    : $canManageThisFile;
+                $canManageThisFile = $sharedWithMeMode
+                    ? ((int)($file['us_can_write'] ?? 0) === 1)
+                    : ($activeSharedFolder !== null
+                        ? $canWriteSharedFolder
+                        : (((int)$file['user_id'] === $userId) || $canWriteActiveGf));
+                $canDeleteThisFile = $sharedWithMeMode
+                    ? ((int)($file['us_can_delete'] ?? 0) === 1)
+                    : ($activeSharedFolder !== null
+                        ? $canDeleteSharedFolder
+                        : $canManageThisFile);
                 ?>
                 <div
                     class="group relative flex flex-col justify-between p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
@@ -2407,218 +2681,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         <input type="hidden" name="return_group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
     <?php endif; ?>
 </form>
-
-<!-- FÜR MICH FREIGEGEBEN (Ordner & Dateien, die von anderen Cloud-Benutzern geteilt wurden) -->
-<section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-    <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Für mich freigegeben (Von Cloud-Benutzern)</h2>
-            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                <?= $totalSharedWithMeCount ?>
-            </span>
-        </div>
-        <?php if ($activeSharedFolder !== null): ?>
-            <a href="index.php" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                &larr; Zurück zu meinen Dateien
-            </a>
-        <?php endif; ?>
-    </div>
-
-    <?php if ($totalSharedWithMeCount === 0): ?>
-        <div class="p-8 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Aktuell wurden noch keine Ordner oder Dateien von anderen Cloud-Benutzern direkt mit Ihnen geteilt.
-        </div>
-    <?php else: ?>
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        <th class="py-3 px-2.5 sm:px-6">Name</th>
-                        <th class="py-3 px-2 sm:px-4">Geteilt von</th>
-                        <th class="py-3 px-4 hidden sm:table-cell">Berechtigung</th>
-                        <th class="py-3 px-4 hidden sm:table-cell">Größe / Inhalt</th>
-                        <th class="py-3 px-4 hidden md:table-cell">Freigegeben am</th>
-                        <th class="py-3 px-2.5 sm:px-6 text-right">Aktion</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800">
-                    <!-- 1. Freigegebene Ordner -->
-                    <?php foreach ($sharedWithMeFolders as $sFolder): ?>
-                        <?php
-                        $usId = (int)$sFolder['user_share_id'];
-                        $isSelectedSf = ($activeSharedFolderId === $usId);
-                        $sfDate = date('d.m.Y H:i', strtotime((string)$sFolder['shared_at']));
-                        $sfCount = (int)$sFolder['file_count'];
-                        $sfSize  = (int)$sFolder['folder_size'];
-                        $sfCanWrite  = ((int)($sFolder['can_write'] ?? 0) === 1);
-                        $sfCanDelete = ((int)($sFolder['can_delete'] ?? 0) === 1);
-                        $sfPermLabel = $sfCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
-                        $sfPermIcon  = $sfCanDelete ? '✏️🗑️' : ($sfCanWrite ? '✏️' : '👁️');
-                        $sfPermBg    = $sfCanDelete
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                            : ($sfCanWrite ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
-                        ?>
-                        <tr class="<?= $isSelectedSf ? 'bg-blue-50/60 dark:bg-blue-950/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40' ?> transition-colors">
-                            <td class="py-3 px-2.5 sm:px-6 max-w-[140px] sm:max-w-none overflow-hidden">
-                                <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                                    <span class="inline-flex items-center justify-center w-9 sm:w-10 h-7 sm:h-8 rounded-lg text-[9px] sm:text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 shrink-0">
-                                        ORDNER
-                                    </span>
-                                    <a href="<?= $isSelectedSf ? 'index.php' : 'index.php?shared_folder=' . $usId ?>" class="font-semibold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[110px] sm:max-w-xs block">
-                                        📁 <?= e((string)$sFolder['folder_path']) ?>
-                                    </a>
-                                </div>
-                            </td>
-                            <td class="py-3 px-2 sm:px-4">
-                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-semibold truncate max-w-[90px] sm:max-w-none">
-                                    👤 <?= e((string)$sFolder['owner_username']) ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 hidden sm:table-cell">
-                                <span
-                                    class="inline-flex items-center justify-center px-2 h-8 rounded-lg <?= $sfPermBg ?> text-xs font-semibold"
-                                    title="<?= e($sfPermLabel) ?>"
-                                    aria-label="<?= e($sfPermLabel) ?>"
-                                >
-                                    <?= $sfPermIcon ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
-                                <?= $sfCount ?> <?= $sfCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($sfSize)) ?>
-                            </td>
-                            <td class="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 hidden md:table-cell">
-                                <?= e($sfDate) ?> Uhr
-                            </td>
-                            <td class="py-3 px-4 sm:px-6 text-right">
-                                <div class="inline-flex items-center justify-end gap-2">
-                                    <a
-                                        href="<?= $isSelectedSf ? 'index.php' : 'index.php?shared_folder=' . $usId ?>"
-                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg <?= $isSelectedSf ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-indigo-600 hover:bg-indigo-700 text-white' ?> font-semibold text-xs transition-colors"
-                                    >
-                                        <span><?= $isSelectedSf ? 'Schließen' : 'Öffnen' ?></span>
-                                    </a>
-                                    <?php if ($sfCount > 0): ?>
-                                        <a
-                                            href="download.php?user_share_id=<?= $usId ?>"
-                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
-                                            title="Als ZIP herunterladen"
-                                            aria-label="Als ZIP herunterladen"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                                            </svg>
-                                        </a>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-
-                    <!-- 2. Freigegebene Einzeldateien -->
-                    <?php foreach ($sharedWithMeFiles as $sf): ?>
-                        <?php
-                        $sfBadge = getFileTypeBadge((string)$sf['original_name'], (string)$sf['mime_type']);
-                        $sfDate  = date('d.m.Y H:i', strtotime((string)$sf['shared_at']));
-                        $sfFileCanWrite  = ((int)($sf['can_write'] ?? 0) === 1);
-                        $sfFileCanDelete = ((int)($sf['can_delete'] ?? 0) === 1);
-                        $sfFilePermLabel = $sfFileCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfFileCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
-                        $sfFilePermIcon  = $sfFileCanDelete ? '✏️🗑️' : ($sfFileCanWrite ? '✏️' : '👁️');
-                        $sfFilePermBg    = $sfFileCanDelete
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                            : ($sfFileCanWrite ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
-                        ?>
-                        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                            <td class="py-3 px-2.5 sm:px-6 max-w-[140px] sm:max-w-none overflow-hidden">
-                                <?php
-                                $sfOfficeType = getOfficeEditorType((string)$sf['original_name']);
-                                $sfIsEnc = ((int)($sf['is_encrypted'] ?? 0) === 1);
-                                ?>
-                                <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                                    <span class="inline-flex items-center justify-center w-9 sm:w-10 h-7 sm:h-8 rounded-lg text-[9px] sm:text-[10px] font-bold <?= e($sfBadge['bg']) ?> <?= e($sfBadge['text']) ?> shrink-0">
-                                        <?= e($sfBadge['label']) ?>
-                                    </span>
-                                    <?php if ($sfOfficeType !== null && !$sfIsEnc): ?>
-                                        <a
-                                            href="office.php?id=<?= (int)$sf['id'] ?>"
-                                            class="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[110px] sm:max-w-xs block transition-colors"
-                                            title="In Office Light öffnen"
-                                        >
-                                            <?= e((string)$sf['original_name']) ?>
-                                        </a>
-                                    <?php else: ?>
-                                        <span class="font-medium text-slate-900 dark:text-white truncate max-w-[110px] sm:max-w-xs block">
-                                            <?= e((string)$sf['original_name']) ?>
-                                        </span>
-                                    <?php endif; ?>
-                                    <?php if ($sfIsEnc): ?>
-                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Tresor-geschützt (AES-256)">
-                                            🔒 Tresor
-                                        </span>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                            <td class="py-3 px-2 sm:px-4">
-                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-semibold truncate max-w-[90px] sm:max-w-none">
-                                    👤 <?= e((string)$sf['owner_username']) ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 hidden sm:table-cell">
-                                <span
-                                    class="inline-flex items-center justify-center px-2 h-8 rounded-lg <?= $sfFilePermBg ?> text-xs font-semibold"
-                                    title="<?= e($sfFilePermLabel) ?>"
-                                    aria-label="<?= e($sfFilePermLabel) ?>"
-                                >
-                                    <?= $sfFilePermIcon ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
-                                <?= e(formatBytes((int)$sf['file_size'])) ?>
-                            </td>
-                            <td class="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 hidden md:table-cell">
-                                <?= e($sfDate) ?> Uhr
-                            </td>
-                            <td class="py-3 px-4 sm:px-6 text-right">
-                                <div class="inline-flex items-center justify-end gap-1.5">
-                                    <a
-                                        href="download.php?id=<?= (int)$sf['id'] ?>"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 transition-colors"
-                                        title="Herunterladen"
-                                        aria-label="Herunterladen"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"/>
-                                        </svg>
-                                    </a>
-                                    <?php if ($sfFileCanDelete): ?>
-                                        <form
-                                            action="delete.php"
-                                            method="post"
-                                            class="inline"
-                                            onsubmit="return confirm('Möchten Sie die freigegebene Datei &quot;<?= e(addslashes((string)$sf['original_name'])) ?>&quot; wirklich in den Papierkorb verschieben?');"
-                                        >
-                                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                            <input type="hidden" name="file_id" value="<?= (int)$sf['id'] ?>">
-                                            <button
-                                                type="submit"
-                                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 transition-colors cursor-pointer"
-                                                title="Löschen"
-                                                aria-label="Löschen"
-                                            >
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                                </svg>
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
-</section>
 
 <!-- TEILEN-MODAL (Popup für öffentliche Links & Teilen mit Cloud-Benutzern für Dateien UND Ordner) -->
 <div
