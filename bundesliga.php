@@ -17,8 +17,7 @@ require_once __DIR__ . '/includes/functions.php';
 requireLogin();
 
 $pdo     = getDB();
-$user    = currentUser();
-$userId  = (int)$user['id'];
+$userId  = (int)$_SESSION['user_id'];
 $isAdmin = isAdmin();
 
 $appSettings = getAppSettings($pdo);
@@ -905,7 +904,7 @@ require_once __DIR__ . '/includes/header.php';
 
                                             <!-- Stern-Button für Lieblingsverein -->
                                             <form method="post" action="bundesliga.php?league=<?= urlencode($selectedLeague) ?>&amp;season=<?= (int)$selectedSeason ?>&amp;matchday=<?= (int)$selectedMatchday ?>" class="shrink-0">
-                                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                                                 <input type="hidden" name="action" value="save_fav_team">
                                                 <input type="hidden" name="fav_team_id" value="<?= $isFav ? 0 : $teamId ?>">
                                                 <input type="hidden" name="fav_team_name" value="<?= e($teamName) ?>">
@@ -1007,7 +1006,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 <?php else: ?>
                     <form method="post" action="bundesliga.php?league=<?= urlencode($selectedLeague) ?>&amp;season=<?= (int)$selectedSeason ?>&amp;matchday=<?= (int)$selectedMatchday ?>">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                         <input type="hidden" name="action" value="save_bets">
                         <input type="hidden" name="league" value="<?= e($selectedLeague) ?>">
                         <input type="hidden" name="season" value="<?= (int)$selectedSeason ?>">
