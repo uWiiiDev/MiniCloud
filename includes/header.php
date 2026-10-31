@@ -946,18 +946,6 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     <span class="hidden sm:inline text-xs font-semibold">Module</span>
                 </a>
 
-                <?php if (hasAdminPermission()): ?>
-                    <!-- 🛡️ Direkt-Button zur System- bzw. Teil-Administration -->
-                    <a
-                        href="admin.php"
-                        class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors <?= $currentScript === 'admin.php' ? 'bg-indigo-600 text-white shadow-2xs border border-indigo-600' : (isAdmin() ? 'bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80' : 'bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80') ?>"
-                        title="<?= isAdmin() ? 'System-Administration öffnen' : 'Teil-Administration öffnen (übertragene Verwaltungsbereiche)' ?>"
-                    >
-                        <span>🛡️</span>
-                        <span class="hidden md:inline"><?= isAdmin() ? 'Admin' : 'Teil-Administration' ?></span>
-                    </a>
-                <?php endif; ?>
-
                 <!-- 👤 Konto, Speicherplatz, Einstellungen, Admin & Abmelden -->
                 <div class="relative">
                     <button
