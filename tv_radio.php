@@ -500,6 +500,7 @@ $tvFeeds = [
     'now'    => [
         'label' => '🔴 Jetzt im TV',
         'urls'  => [
+            'https://www.klack.de/fernsehprogramm/was-laeuft-gerade/0/-1/free.html',
             'https://www.klack.de/fernsehprogramm/was-laeuft-gerade/0/0/all.html',
             'https://www.tvspielfilm.de/tv-programm/rss/jetzt.xml',
         ],
@@ -508,8 +509,8 @@ $tvFeeds = [
     '2015'   => [
         'label' => '🍿 Heute 20:15 Uhr',
         'urls'  => [
+            'https://www.klack.de/fernsehprogramm/2015-im-tv/0/-1/free.html',
             'https://www.klack.de/xml/2015RSS.xml',
-            'https://www.klack.de/fernsehprogramm/20-15-uhr-im-tv/0/0/all.html',
             'https://www.tvspielfilm.de/tv-programm/rss/heute2015.xml',
         ],
         'ttl'   => 600,
@@ -517,7 +518,7 @@ $tvFeeds = [
     '2200'   => [
         'label' => '🌙 Heute 22:00 Uhr',
         'urls'  => [
-            'https://www.klack.de/fernsehprogramm/22-00-uhr-im-tv/0/0/all.html',
+            'https://www.klack.de/fernsehprogramm/2200-im-tv/0/-1/free.html',
             'https://www.tvspielfilm.de/tv-programm/rss/heute2200.xml',
         ],
         'ttl'   => 600,
