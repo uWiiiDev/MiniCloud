@@ -470,6 +470,8 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
         ];
     }
 
+    @set_time_limit(300);
+
     $activeModel = $ollamaStatus['active_model'] ?: $model;
     $langs       = getTranslatorLanguages();
     $targetName  = $langs[$targetLang]['name'] ?? strtoupper($targetLang);
@@ -479,29 +481,24 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
 
     $toneHint = '';
     if ($formality === 'more') {
-        $toneHint = ' Use formal, polite address (e.g., German "Sie", French "vous").';
+        $toneHint = ' (formal polite address)';
     } elseif ($formality === 'less') {
-        $toneHint = ' Use informal, friendly address (e.g., German "du", French "tu").';
+        $toneHint = ' (informal address)';
     }
 
-    $chunks = splitTextIntoTranslationChunks($text, 1400);
+    $chunks = splitTextIntoTranslationChunks($text, 750);
     $translatedParts = [];
 
     foreach ($chunks as $chunk) {
-        $prompt = "You are a precise professional translator. Translate the following text {$sourceHint}into {$targetName} ({$targetLang}).{$toneHint}\n"
-            . "IMPORTANT RULES:\n"
-            . "- Output ONLY the translated text.\n"
-            . "- Do NOT include explanations, introductory remarks, notes, or surrounding quotes.\n"
-            . "- Preserve all line breaks and paragraph structure.\n\n"
-            . "Text to translate:\n" . $chunk;
+        $prompt = "Translate {$sourceHint}into {$targetName} ({$targetLang}){$toneHint}. Output ONLY the translation without notes or quotes:\n" . $chunk;
 
         $payload = json_encode([
-            'model'   => $activeModel,
-            'prompt'  => $prompt,
-            'stream'  => false,
-            'options' => [
-                'temperature' => 0.15,
-                'num_predict' => 1024,
+            'model'      => $activeModel,
+            'prompt'     => $prompt,
+            'stream'     => false,
+            'keep_alive' => '60m',
+            'options'    => [
+                'temperature' => 0.1,
             ],
         ], JSON_UNESCAPED_UNICODE);
 
@@ -509,7 +506,7 @@ function translateViaLocalOllama(string $text, string $sourceLang, string $targe
             'http://127.0.0.1:11434/api/generate',
             $payload !== false ? $payload : '{}',
             ['Content-Type: application/json'],
-            35
+            180
         );
 
         if (!$res['ok'] || $res['body'] === '') {
@@ -1358,6 +1355,42 @@ const historyStorageKey = 'mc_translator_history_u<?= (int)$userId ?>';
 let debounceTimer = null;
 let currentLoadedFileName = '';
 let currentLoadedFolderPath = '';
+let currentTranslationAbortController = null;
+
+function splitClientTextIntoLocalBlocks(text, maxBlockChars = 320) {
+    const clean = text.replace(/\r\n|\r/g, '\n').trim();
+    if (clean.length <= maxBlockChars) return [clean];
+    const paras = clean.split('\n');
+    const blocks = [];
+    let current = '';
+    for (const para of paras) {
+        const cand = current === '' ? para : (current + '\n' + para);
+        if (cand.length <= maxBlockChars) {
+            current = cand;
+            continue;
+        }
+        if (current !== '') {
+            blocks.push(current);
+            current = '';
+        }
+        if (para.length <= maxBlockChars) {
+            current = para;
+            continue;
+        }
+        const sents = para.split(/(?<=[.!?;])\s+/);
+        for (const s of sents) {
+            const sCand = current === '' ? s : (current + ' ' + s);
+            if (sCand.length <= maxBlockChars) {
+                current = sCand;
+            } else {
+                if (current !== '') blocks.push(current);
+                current = s;
+            }
+        }
+    }
+    if (current !== '') blocks.push(current);
+    return blocks;
+}
 
 function updateTextCounters() {
     const srcEl = document.getElementById('sourceTextInput');
@@ -1474,6 +1507,10 @@ async function triggerTranslationNow(saveToHistory = true) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
     }
+    if (currentTranslationAbortController) {
+        currentTranslationAbortController.abort();
+        currentTranslationAbortController = null;
+    }
 
     const srcInp = document.getElementById('sourceTextInput');
     const tgtOut = document.getElementById('targetTextOutput');
@@ -1482,6 +1519,7 @@ async function triggerTranslationNow(saveToHistory = true) {
     const formSel = document.getElementById('formalitySelect');
     const engSel = document.getElementById('engineModeSelect');
     const overlay = document.getElementById('translationLoadingOverlay');
+    const loadTxt = document.getElementById('translationLoadingText');
     const detBadge = document.getElementById('detectedLangBadge');
     const engineBadge = document.getElementById('translatorEngineBadge');
 
@@ -1493,9 +1531,76 @@ async function triggerTranslationNow(saveToHistory = true) {
         return;
     }
 
+    const engineMode = engSel ? engSel.value : 'auto';
+    const abortCtrl = new AbortController();
+    currentTranslationAbortController = abortCtrl;
+
     if (overlay) overlay.classList.remove('hidden');
 
     try {
+        // Im 100 % lokalen CPU-Modus (Ollama) längere Texte abschnittsweise übersetzen,
+        // damit das erste Ergebnis schon nach wenigen Sekunden sichtbar ist und kein Timeout auftritt
+        if (engineMode === 'local' && text.length > 320) {
+            const blocks = splitClientTextIntoLocalBlocks(text, 320);
+            const translatedBlocks = [];
+            let lastData = null;
+
+            for (let i = 0; i < blocks.length; i++) {
+                if (abortCtrl.signal.aborted) return;
+                if (loadTxt) {
+                    loadTxt.textContent = `🔒 Lokale Server-KI übersetzt Abschnitt ${i + 1} von ${blocks.length}…`;
+                }
+
+                const fd = new FormData();
+                fd.append('csrf_token', csrfToken);
+                fd.append('ajax_action', 'translate_text');
+                fd.append('text', blocks[i]);
+                fd.append('source_lang', srcSel.value);
+                fd.append('target_lang', tgtSel.value);
+                fd.append('formality', formSel ? formSel.value : 'default');
+                fd.append('engine_mode', 'local');
+
+                const res = await fetch('translate.php', {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    signal: abortCtrl.signal
+                });
+                const data = await res.json();
+                if (!data || !data.ok) {
+                    tgtOut.value = (translatedBlocks.length > 0 ? translatedBlocks.join('\n') + '\n\n' : '')
+                        + '⚠️ ' + (data?.error || 'Fehler bei der lokalen Übersetzung.');
+                    return;
+                }
+                lastData = data;
+                translatedBlocks.push(data.translated_text || '');
+                tgtOut.value = translatedBlocks.join('\n');
+                updateTextCounters();
+            }
+
+            if (lastData && engineBadge && lastData.engine) {
+                engineBadge.textContent = '✨ ' + lastData.engine;
+            }
+            if (saveToHistory && text.length >= 3) {
+                addTranslationToHistory({
+                    srcLang: lastData?.detected_lang || srcSel.value,
+                    tgtLang: tgtSel.value,
+                    srcText: text.substring(0, 260),
+                    tgtText: tgtOut.value.substring(0, 260),
+                    fullSrc: text.substring(0, 4000),
+                    fullTgt: tgtOut.value.substring(0, 4000),
+                    ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                });
+            }
+            return;
+        }
+
+        if (loadTxt) {
+            loadTxt.textContent = engineMode === 'local'
+                ? '🔒 Übersetze 100 % lokal über Server-KI (Ollama)…'
+                : 'Übersetze im Satzkontext…';
+        }
+
         const fd = new FormData();
         fd.append('csrf_token', csrfToken);
         fd.append('ajax_action', 'translate_text');
@@ -1503,9 +1608,14 @@ async function triggerTranslationNow(saveToHistory = true) {
         fd.append('source_lang', srcSel.value);
         fd.append('target_lang', tgtSel.value);
         fd.append('formality', formSel ? formSel.value : 'default');
-        fd.append('engine_mode', engSel ? engSel.value : 'auto');
+        fd.append('engine_mode', engineMode);
 
-        const res = await fetch('translate.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const res = await fetch('translate.php', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin',
+            signal: abortCtrl.signal
+        });
         const data = await res.json();
 
         if (!data || !data.ok) {
@@ -1542,9 +1652,13 @@ async function triggerTranslationNow(saveToHistory = true) {
             });
         }
     } catch (e) {
+        if (e && e.name === 'AbortError') return;
         tgtOut.value = '⚠️ Netzwerkfehler bei der Verbindung zum Übersetzungsdienst.';
     } finally {
-        if (overlay) overlay.classList.add('hidden');
+        if (currentTranslationAbortController === abortCtrl) {
+            if (loadTxt) loadTxt.textContent = 'Übersetze im Satzkontext…';
+            if (overlay) overlay.classList.add('hidden');
+        }
     }
 }
 
