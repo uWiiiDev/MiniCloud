@@ -876,7 +876,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         $sha256   = @hash_file('sha256', $destPath) ?: null;
 
         if ($targetFolder !== '') {
-            ensureFolderHierarchyExists($pdo, $userId, $targetFolder);
+            registerFolderHierarchy($pdo, $userId, $targetFolder);
         }
 
         $stmtIns = $pdo->prepare(
@@ -961,7 +961,7 @@ try {
 } catch (Throwable) {
 }
 
-$userFolders = getUserFolders($pdo, $userId);
+$userFolders = getMergedFoldersList($pdo, $userId);
 $preselectedFileId = isset($_GET['file_id']) ? max(0, (int)$_GET['file_id']) : 0;
 
 $pageTitle = 'Übersetzungs-Studio';
