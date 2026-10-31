@@ -1021,35 +1021,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     🖼️ <span class="hidden lg:inline">Kacheln</span>
                 </button>
             </div>
-
-            <!-- Globale Suche über alle Ordner -->
-            <form action="index.php" method="get" class="flex items-center gap-1.5 flex-1 sm:flex-initial">
-                <?php if ($activeGroupFolder !== null): ?>
-                    <input type="hidden" name="group_folder" value="<?= (int)$activeGroupFolder['id'] ?>">
-                <?php endif; ?>
-                <?php if ($activeSharedFolder !== null): ?>
-                    <input type="hidden" name="shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
-                <?php endif; ?>
-                <?php if ($sortBy !== 'date' || $sortDir !== 'desc'): ?>
-                    <input type="hidden" name="sort" value="<?= e($sortBy) ?>">
-                    <input type="hidden" name="dir" value="<?= e($sortDir) ?>">
-                <?php endif; ?>
-                <div class="relative flex-1 sm:flex-initial">
-                    <input
-                        type="search"
-                        name="q"
-                        value="<?= e($searchQuery) ?>"
-                        placeholder="Alle Ordner durchsuchen..."
-                        class="w-full sm:w-48 pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                    <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                </div>
-                <button type="submit" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer">
-                    Suchen
-                </button>
-            </form>
         </div>
     </div>
 
