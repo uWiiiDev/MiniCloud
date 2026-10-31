@@ -281,19 +281,139 @@ if ($action === 'move_file') {
     exit;
 }
 
-// 3. Ordner umbenennen
+// 3a. Datei umbenennen
+if ($action === 'rename_file') {
+    $fileId             = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $rawNewName         = isset($_POST['new_name']) ? trim((string)$_POST['new_name']) : '';
+    $returnFolder       = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
+    $returnSharedFolder = isset($_POST['return_shared_folder']) ? (int)$_POST['return_shared_folder'] : 0;
+
+    $stmtFile = $pdo->prepare(
+        'SELECT id, user_id, group_folder_id, original_name, folder_path
+         FROM files
+         WHERE id = :id AND deleted_at IS NULL
+         LIMIT 1'
+    );
+    $stmtFile->execute([':id' => $fileId]);
+    $file = $stmtFile->fetch();
+
+    if (!$file) {
+        setFlash('error', 'Die ausgewählte Datei wurde nicht gefunden.');
+        header('Location: index.php');
+        exit;
+    }
+
+    $fileOwnerId = (int)$file['user_id'];
+    $fileGfId    = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+    $fileFolder  = (string)$file['folder_path'];
+    $oldOrigName = (string)$file['original_name'];
+
+    $canRename = ($fileOwnerId === $userId)
+        || ($fileGfId !== null && canUserAccessGroupFolder($pdo, $userId, $fileGfId, true, $isAdmin));
+
+    if (!$canRename) {
+        // Prüfen, ob Schreibberechtigung über direkte Datei- oder Ordnerfreigabe (user_shares) besteht
+        $stmtUs = $pdo->prepare(
+            'SELECT folder_path, file_id FROM user_shares
+             WHERE owner_id = :owner_id AND shared_with_user_id = :uid AND can_write = 1'
+        );
+        $stmtUs->execute([':owner_id' => $fileOwnerId, ':uid' => $userId]);
+        foreach ($stmtUs->fetchAll() as $usRow) {
+            if (!empty($usRow['file_id']) && (int)$usRow['file_id'] === $fileId) {
+                $canRename = true;
+                break;
+            }
+            $sfPath = (string)($usRow['folder_path'] ?? '');
+            if ($sfPath !== '' && ($fileFolder === $sfPath || str_starts_with($fileFolder, $sfPath . '/'))) {
+                $canRename = true;
+                break;
+            }
+        }
+    }
+
+    if (!$canRename) {
+        setFlash('error', 'Sie besitzen keine Schreibberechtigung, um diese Datei umzubenennen.');
+        header('Location: index.php');
+        exit;
+    }
+
+    // Slashes im Dateinamen entfernen
+    $rawNewName = str_replace(['/', '\\'], '-', $rawNewName);
+    $cleanNewName = sanitizeOriginalFilename($rawNewName);
+    if ($cleanNewName === '' || $cleanNewName === 'unbenannt') {
+        setFlash('error', 'Bitte geben Sie einen gültigen neuen Dateinamen ein.');
+        header('Location: index.php');
+        exit;
+    }
+
+    // Dateiendung automatisch beibehalten, falls der Benutzer nur den Stammnamen eingegeben hat
+    $oldExt = (string)pathinfo($oldOrigName, PATHINFO_EXTENSION);
+    $newExt = (string)pathinfo($cleanNewName, PATHINFO_EXTENSION);
+    if ($oldExt !== '' && $newExt === '' && !str_ends_with($cleanNewName, '.')) {
+        $cleanNewName .= '.' . $oldExt;
+    }
+
+    if ($cleanNewName === $oldOrigName) {
+        setFlash('warning', 'Der Dateiname wurde nicht geändert.');
+    } else {
+        $stmtUpd = $pdo->prepare('UPDATE files SET original_name = :name WHERE id = :id');
+        $stmtUpd->execute([
+            ':name' => $cleanNewName,
+            ':id'   => $fileId,
+        ]);
+        setFlash('success', sprintf('Datei „%s“ wurde in „%s“ umbenannt.', $oldOrigName, $cleanNewName));
+    }
+
+    $queryParams = [];
+    if ($returnSharedFolder > 0) {
+        $queryParams['shared_folder'] = (string)$returnSharedFolder;
+    } elseif ($fileGfId !== null) {
+        $queryParams['group_folder'] = (string)$fileGfId;
+    }
+    if ($returnFolder !== '') {
+        $queryParams['folder'] = $returnFolder;
+    }
+    header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
+    exit;
+}
+
+// 3b. Ordner umbenennen
 if ($action === 'rename_folder') {
     if ($groupFolderId !== null && !canUserAccessGroupFolder($pdo, $userId, $groupFolderId, true, $isAdmin)) {
         setFlash('error', 'Sie besitzen keine Schreibberechtigung für diesen Gruppenordner.');
         header('Location: index.php');
         exit;
     }
-    $oldFolder = isset($_POST['old_folder']) ? sanitizeFolderPathInput((string)$_POST['old_folder']) : '';
-    $newFolder = isset($_POST['new_folder']) ? sanitizeFolderPathInput((string)$_POST['new_folder']) : '';
+    $oldFolder    = isset($_POST['old_folder']) ? sanitizeFolderPathInput((string)$_POST['old_folder']) : '';
+    $rawNewFolder = isset($_POST['new_folder']) ? trim((string)$_POST['new_folder']) : '';
+    $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
 
-    if ($oldFolder === '' || $newFolder === '' || $oldFolder === $newFolder) {
+    if ($oldFolder === '' || $rawNewFolder === '') {
         setFlash('error', 'Bitte geben Sie einen gültigen neuen Ordnernamen an.');
         header('Location: index.php');
+        exit;
+    }
+
+    // Wenn der Benutzer im Umbenennen-Dialog nur den neuen Namen des Unterordners (ohne "/") eingibt,
+    // bleibt der übergeordnete Eltern-Ordnerpfad automatisch erhalten!
+    $oldParent = str_contains($oldFolder, '/') ? dirname($oldFolder) : '';
+    if (!str_contains($rawNewFolder, '/') && $oldParent !== '') {
+        $newFolder = sanitizeFolderPathInput($oldParent . '/' . $rawNewFolder);
+    } else {
+        $newFolder = sanitizeFolderPathInput($rawNewFolder);
+    }
+
+    if ($newFolder === '' || $oldFolder === $newFolder) {
+        setFlash('warning', 'Der Ordnername wurde nicht geändert.');
+        $queryParams = [];
+        if ($groupFolderId !== null) {
+            $queryParams['group_folder'] = (string)$groupFolderId;
+        }
+        $targetBack = $returnFolder !== '' ? $returnFolder : $oldFolder;
+        if ($targetBack !== '') {
+            $queryParams['folder'] = $targetBack;
+        }
+        header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
         exit;
     }
 
@@ -361,15 +481,49 @@ if ($action === 'rename_folder') {
             $pdo->prepare('UPDATE user_folders SET folder_path = :fp WHERE id = :id AND user_id = :uid')
                 ->execute([':fp' => $updatedPath, ':id' => (int)$ufRow['id'], ':uid' => $userId]);
         }
+
+        // Öffentliche Ordner-Freigabelinks (shares) und interne Ordner-Freigaben (user_shares) mitziehen
+        try {
+            $stmtSh = $pdo->prepare(
+                'SELECT id, folder_path FROM shares
+                 WHERE user_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+            );
+            $stmtSh->execute([':uid' => $userId, ':exact' => $oldFolder, ':prefix' => $oldFolder . '/%']);
+            foreach ($stmtSh->fetchAll() as $shRow) {
+                $updatedPath = $newFolder . substr((string)$shRow['folder_path'], strlen($oldFolder));
+                $pdo->prepare('UPDATE shares SET folder_path = :fp WHERE id = :id AND user_id = :uid')
+                    ->execute([':fp' => $updatedPath, ':id' => (int)$shRow['id'], ':uid' => $userId]);
+            }
+
+            $stmtUsh = $pdo->prepare(
+                'SELECT id, folder_path FROM user_shares
+                 WHERE owner_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+            );
+            $stmtUsh->execute([':uid' => $userId, ':exact' => $oldFolder, ':prefix' => $oldFolder . '/%']);
+            foreach ($stmtUsh->fetchAll() as $ushRow) {
+                $updatedPath = $newFolder . substr((string)$ushRow['folder_path'], strlen($oldFolder));
+                $pdo->prepare('UPDATE user_shares SET folder_path = :fp WHERE id = :id AND owner_id = :uid')
+                    ->execute([':fp' => $updatedPath, ':id' => (int)$ushRow['id'], ':uid' => $userId]);
+            }
+        } catch (Throwable) {
+        }
     }
 
-    setFlash('success', sprintf('Ordner "%s" wurde in "%s" umbenannt.', $oldFolder, $newFolder));
+    setFlash('success', sprintf('Ordner „%s“ wurde in „%s“ umbenannt.', basename($oldFolder), basename($newFolder)));
     $queryParams = [];
     if ($groupFolderId !== null) {
         $queryParams['group_folder'] = (string)$groupFolderId;
     }
-    $queryParams['folder'] = $newFolder;
-    header('Location: index.php?' . http_build_query($queryParams));
+    // Wenn der aktuell geöffnete Ordner selbst umbenannt wurde -> in den neuen Ordnernamen wechseln;
+    // wenn ein Unterordner aus der Liste umbenannt wurde -> in der aktuellen Ordneransicht bleiben
+    if ($returnFolder === $oldFolder) {
+        $queryParams['folder'] = $newFolder;
+    } elseif ($returnFolder !== '' && str_starts_with($returnFolder, $oldFolder . '/')) {
+        $queryParams['folder'] = $newFolder . substr($returnFolder, strlen($oldFolder));
+    } elseif ($returnFolder !== '') {
+        $queryParams['folder'] = $returnFolder;
+    }
+    header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
     exit;
 }
 

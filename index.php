@@ -709,6 +709,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </a>
                         <?php endif; ?>
 
+                        <?php if ($canUploadHere): ?>
+                            <button
+                                type="button"
+                                onclick="openRenameModal('folder', 0, <?= e((string)json_encode(basename($currentFolder))) ?>, <?= e((string)json_encode($currentFolder)) ?>)"
+                                title="Diesen Ordner umbenennen"
+                                aria-label="Ordner umbenennen"
+                                class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60 transition-colors cursor-pointer"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                        <?php endif; ?>
+
                         <button
                             type="button"
                             onclick="openTransferModal('folder', 0, <?= e((string)json_encode($currentFolder)) ?>, <?= e((string)json_encode($currentFolder)) ?>, <?= $canUploadHere ? 'true' : 'false' ?>)"
@@ -1605,6 +1619,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </a>
                                     <?php endif; ?>
 
+                                    <?php if ($canUploadHere && $activeSharedFolder === null): ?>
+                                        <!-- ORDNER UMBENENNEN BUTTON (Anheftbar über ⭐) -->
+                                        <button
+                                            type="button"
+                                            data-file-action="rename"
+                                            onclick="openRenameModal('folder', 0, <?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>)"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
+                                            title="Ordner umbenennen"
+                                            aria-label="Ordner umbenennen"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                            </svg>
+                                        </button>
+                                    <?php endif; ?>
+
                                     <!-- VERSCHIEBEN / KOPIEREN BUTTON (Nur wenn als ⭐ Favorit angeheftet) -->
                                     <button
                                         type="button"
@@ -1986,6 +2016,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     >
                                         <span class="text-xs leading-none">💬</span>
                                     </button>
+
+                                    <?php if ($canManageThisFile): ?>
+                                        <!-- DATEI UMBENENNEN BUTTON (Anheftbar über ⭐) -->
+                                        <button
+                                            type="button"
+                                            data-file-action="rename"
+                                            onclick="openRenameModal('file', <?= $fId ?>, <?= e((string)json_encode($origName)) ?>, <?= e((string)json_encode($folderPath)) ?>)"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
+                                            title="Datei umbenennen"
+                                            aria-label="Datei umbenennen"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                            </svg>
+                                        </button>
+                                    <?php endif; ?>
 
                                     <!-- VERSCHIEBEN / KOPIEREN BUTTON -->
                                     <button
@@ -3020,6 +3066,88 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
                 >
                     Ausführen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- UMBENENNEN MODAL (Für Dateien und Ordner) -->
+<div
+    id="renameModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="renameModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-base shrink-0">
+                    ✏️
+                </span>
+                <div class="min-w-0">
+                    <h3 id="renameModalTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                        Umbenennen
+                    </h3>
+                    <p id="renameModalSub" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeRenameModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <form id="renameModalForm" action="folder_action.php" method="post" class="p-5 space-y-4">
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" id="renameModalAction" value="rename_file">
+            <input type="hidden" name="file_id" id="renameModalFileId" value="">
+            <input type="hidden" name="old_folder" id="renameModalOldFolder" value="">
+            <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+            <?php if ($activeSharedFolder !== null): ?>
+                <input type="hidden" name="return_shared_folder" value="<?= (int)$activeSharedFolder['id'] ?>">
+            <?php elseif ($activeGroupFolder !== null): ?>
+                <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+            <?php endif; ?>
+
+            <div>
+                <label for="renameModalInput" id="renameModalLabel" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Neuer Name
+                </label>
+                <input
+                    type="text"
+                    id="renameModalInput"
+                    name="new_name"
+                    required
+                    maxlength="240"
+                    autocomplete="off"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                <p id="renameModalHint" class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+                    Tipp: Die Dateiendung bleibt automatisch erhalten.
+                </p>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeRenameModal()"
+                    class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                >
+                    Abbrechen
+                </button>
+                <button
+                    type="submit"
+                    class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                    💾 Umbenennen
                 </button>
             </div>
         </form>
@@ -4153,6 +4281,71 @@ transferModal.addEventListener('click', (e) => {
     }
 });
 
+// --- UMBENENNEN MODAL (Für Dateien und Ordner) ---
+const renameModal = document.getElementById('renameModal');
+const renameModalTitle = document.getElementById('renameModalTitle');
+const renameModalSub = document.getElementById('renameModalSub');
+const renameModalAction = document.getElementById('renameModalAction');
+const renameModalFileId = document.getElementById('renameModalFileId');
+const renameModalOldFolder = document.getElementById('renameModalOldFolder');
+const renameModalInput = document.getElementById('renameModalInput');
+const renameModalLabel = document.getElementById('renameModalLabel');
+const renameModalHint = document.getElementById('renameModalHint');
+
+function openRenameModal(type, fileId, currentName, folderPath = '') {
+    if (!renameModal || !renameModalInput) return;
+
+    if (type === 'folder') {
+        renameModalTitle.textContent = 'Ordner umbenennen';
+        renameModalSub.textContent = '📁 ' + (folderPath || currentName);
+        renameModalAction.value = 'rename_folder';
+        renameModalFileId.value = '';
+        renameModalOldFolder.value = folderPath;
+        renameModalInput.setAttribute('name', 'new_folder');
+        renameModalInput.value = currentName || '';
+        if (renameModalLabel) renameModalLabel.textContent = 'Neuer Ordnername';
+        if (renameModalHint) renameModalHint.textContent = 'Alle darin enthaltenen Dateien, Unterordner und Freigaben bleiben erhalten.';
+    } else {
+        renameModalTitle.textContent = 'Datei umbenennen';
+        renameModalSub.textContent = '📄 ' + currentName;
+        renameModalAction.value = 'rename_file';
+        renameModalFileId.value = String(fileId || 0);
+        renameModalOldFolder.value = '';
+        renameModalInput.setAttribute('name', 'new_name');
+        renameModalInput.value = currentName || '';
+        if (renameModalLabel) renameModalLabel.textContent = 'Neuer Dateiname';
+        if (renameModalHint) renameModalHint.textContent = 'Tipp: Die Dateiendung bleibt automatisch erhalten.';
+    }
+
+    renameModal.classList.remove('hidden');
+    renameModal.classList.add('flex');
+
+    setTimeout(() => {
+        renameModalInput.focus();
+        const val = renameModalInput.value;
+        const dotIdx = (type === 'file') ? val.lastIndexOf('.') : -1;
+        if (dotIdx > 0) {
+            renameModalInput.setSelectionRange(0, dotIdx);
+        } else {
+            renameModalInput.select();
+        }
+    }, 50);
+}
+
+function closeRenameModal() {
+    if (!renameModal) return;
+    renameModal.classList.add('hidden');
+    renameModal.classList.remove('flex');
+}
+
+if (renameModal) {
+    renameModal.addEventListener('click', (e) => {
+        if (e.target === renameModal) {
+            closeRenameModal();
+        }
+    });
+}
+
 // --- OFFICE LIGHT MODAL (Neues Dokument / Neue Tabelle anlegen) ---
 const createOfficeModal = document.getElementById('createOfficeModal');
 const officeCreateNameInput = document.getElementById('officeCreateName');
@@ -4216,8 +4409,8 @@ const mobileDeleteFileId = document.getElementById('mobileDeleteFileId');
 const mobileDeleteFolder = document.getElementById('mobileDeleteFolder');
 
 const PINNED_FILE_ACTIONS_STORAGE_KEY = 'mc_pinned_file_actions_u<?= (int)$userId ?>';
-const DEFAULT_PINNED_FILE_ACTIONS = ['preview', 'download', 'share'];
-const ALL_PINNABLE_FILE_ACTIONS = ['preview', 'office', 'download', 'vault', 'meta', 'move', 'share', 'delete'];
+const DEFAULT_PINNED_FILE_ACTIONS = ['preview', 'download', 'rename', 'share'];
+const ALL_PINNABLE_FILE_ACTIONS = ['preview', 'office', 'download', 'rename', 'vault', 'meta', 'move', 'share', 'delete'];
 
 function getPinnedFileActions() {
     try {
@@ -4388,7 +4581,14 @@ function openMobileFileMenu(fileIdx, canDelete) {
         }, 'vault');
     }
 
-    // 7. Verschieben / Kopieren
+    // 7a. Datei umbenennen
+    if (item.canManage) {
+        appendMenuActionRow('✏️ Datei umbenennen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
+            openRenameModal('file', item.id, item.name, item.rawFolder || '');
+        }, 'rename');
+    }
+
+    // 7b. Verschieben / Kopieren
     appendMenuActionRow('⇄ Verschieben oder kopieren', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
         openTransferModal('file', item.id, item.name, item.rawFolder || '', item.canManage);
     }, 'move');
@@ -4433,6 +4633,12 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
         appendMenuActionRow('🔗 Ordner teilen', 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100', () => {
             openShareModal(0, subPath, subPath);
         }, 'share');
+    }
+
+    if (canDelete || <?= ($canUploadHere && $activeSharedFolder === null) ? 'true' : 'false' ?>) {
+        appendMenuActionRow('✏️ Ordner umbenennen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
+            openRenameModal('folder', 0, displayName, subPath);
+        }, 'rename');
     }
 
     appendMenuActionRow('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
