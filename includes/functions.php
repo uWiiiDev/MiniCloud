@@ -4113,15 +4113,42 @@ function getFulltextSearchStats(PDO $pdo): array
 }
 
 /**
+ * Zerlegt eine Benutzereingabe in einzelne Suchbegriffe (für eine strikte UND-Verknüpfung).
+ *
+ * @return array<int, string>
+ */
+function splitSearchTerms(string $rawQuery, int $maxTerms = 8): array
+{
+    $words = preg_split('/\s+/u', trim($rawQuery), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $terms = [];
+    $seen  = [];
+    foreach ($words as $w) {
+        $w = trim($w);
+        if ($w === '') {
+            continue;
+        }
+        $low = mb_strtolower($w, 'UTF-8');
+        if (isset($seen[$low])) {
+            continue;
+        }
+        $seen[$low] = true;
+        $terms[]    = $w;
+        if (count($terms) >= $maxTerms) {
+            break;
+        }
+    }
+    return $terms;
+}
+
+/**
  * Formatiert eine Benutzereingabe sicher für MariaDB/MySQL `MATCH(...) AGAINST(:q IN BOOLEAN MODE)`.
  */
 function buildFulltextBooleanQuery(string $rawQuery): string
 {
     $clean = (string)preg_replace('/[+\-><\(\)~*:\"\\\\@]+/u', ' ', trim($rawQuery));
-    $words = preg_split('/\s+/u', $clean, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $words = splitSearchTerms($clean, 8);
     $tokens = [];
-    foreach (array_slice($words, 0, 8) as $w) {
-        $w = trim($w);
+    foreach ($words as $w) {
         if (mb_strlen($w, 'UTF-8') >= 2) {
             $tokens[] = '+' . $w . '*';
         }
@@ -4130,7 +4157,7 @@ function buildFulltextBooleanQuery(string $rawQuery): string
 }
 
 /**
- * Erzeugt einen kompakten Textausschnitt („… Treffer im Kontext …“) rund um den gefundenen Suchbegriff.
+ * Erzeugt einen kompakten Textausschnitt („… Treffer im Kontext …“) rund um die gefundenen Suchbegriffe.
  */
 function buildFulltextSnippet(string $contentText, string $query, int $maxLength = 140): string
 {
@@ -4139,14 +4166,15 @@ function buildFulltextSnippet(string $contentText, string $query, int $maxLength
         return '';
     }
 
-    $words = preg_split('/\s+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $words = splitSearchTerms($query, 8);
+    // Bevorzuge längere/spezifischere Suchbegriffe für den Ausschnitt-Anker
+    usort($words, static fn(string $a, string $b): int => mb_strlen($b, 'UTF-8') <=> mb_strlen($a, 'UTF-8'));
+
     $pos = false;
     foreach ($words as $w) {
-        if (mb_strlen($w, 'UTF-8') >= 2) {
-            $pos = mb_stripos($contentText, $w, 0, 'UTF-8');
-            if ($pos !== false) {
-                break;
-            }
+        $pos = mb_stripos($contentText, $w, 0, 'UTF-8');
+        if ($pos !== false) {
+            break;
         }
     }
 

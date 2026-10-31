@@ -83,6 +83,9 @@ $catalog = [
 ];
 
 $matchedModules = [];
+$searchTerms    = splitSearchTerms($q, 8);
+$searchTermsLow = array_map(static fn(string $t): string => mb_strtolower($t, 'UTF-8'), $searchTerms);
+
 foreach ($catalog as $mod) {
     if (isset($mod['setting']) && ($appSettings[$mod['setting']] ?? '1') !== '1') {
         continue;
@@ -98,8 +101,15 @@ foreach ($catalog as $mod) {
             ];
         }
     } else {
-        $haystack = mb_strtolower($mod['title'] . ' ' . $mod['kw'], 'UTF-8');
-        if (mb_strpos($haystack, $qLow) !== false && count($matchedModules) < 4) {
+        $haystack = mb_strtolower($mod['title'] . ' ' . $mod['sub'] . ' ' . $mod['kw'], 'UTF-8');
+        $allModMatched = !empty($searchTermsLow);
+        foreach ($searchTermsLow as $termLow) {
+            if (mb_strpos($haystack, $termLow) === false) {
+                $allModMatched = false;
+                break;
+            }
+        }
+        if ($allModMatched && count($matchedModules) < 4) {
             $matchedModules[] = [
                 'icon'  => $mod['icon'],
                 'title' => $mod['title'],
@@ -112,7 +122,7 @@ foreach ($catalog as $mod) {
 }
 
 // Wenn kein Suchbegriff eingegeben wurde: Zuletzt hochgeladene Dateien + Schnellzugriff-Module anzeigen
-if ($qLow === '') {
+if ($qLow === '' || empty($searchTerms)) {
     try {
         $stmtRec = $pdo->prepare(
             "SELECT `id`, `original_name`, `file_size`, `folder_path`, `group_folder_id`, `is_encrypted`
@@ -172,20 +182,25 @@ if ($qLow === '') {
     exit;
 }
 
-$like = '%' . $q . '%';
-
-// 2. Ordner durchsuchen (sowohl aus user_folders als auch aus files.folder_path)
+// 2. Ordner durchsuchen (sowohl aus user_folders als auch aus files.folder_path – alle Suchbegriffe per UND verknüpft)
 try {
     $foundFolders = [];
+    $fldConds     = [];
+    $fldParams    = [':uid' => $userId];
+    foreach ($searchTerms as $idx => $term) {
+        $fldConds[]                 = "`folder_path` LIKE :fq_{$idx}";
+        $fldParams[":fq_{$idx}"]    = '%' . $term . '%';
+    }
+    $fldAndSql = implode(' AND ', $fldConds);
 
     $stmtFld = $pdo->prepare(
         "SELECT `folder_path`, `group_folder_id`
          FROM `user_folders`
-         WHERE `user_id` = :uid AND `folder_path` LIKE :q
+         WHERE `user_id` = :uid AND {$fldAndSql}
          ORDER BY `folder_path` ASC
          LIMIT 8"
     );
-    $stmtFld->execute([':uid' => $userId, ':q' => $like]);
+    $stmtFld->execute($fldParams);
     foreach ($stmtFld->fetchAll() as $fld) {
         $fp   = trim((string)$fld['folder_path']);
         $gfId = !empty($fld['group_folder_id']) ? (int)$fld['group_folder_id'] : 0;
@@ -197,11 +212,11 @@ try {
     $stmtFldFiles = $pdo->prepare(
         "SELECT DISTINCT `folder_path`, `group_folder_id`
          FROM `files`
-         WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `folder_path` != '' AND `folder_path` LIKE :q
+         WHERE `user_id` = :uid AND `deleted_at` IS NULL AND `folder_path` != '' AND {$fldAndSql}
          ORDER BY `folder_path` ASC
          LIMIT 8"
     );
-    $stmtFldFiles->execute([':uid' => $userId, ':q' => $like]);
+    $stmtFldFiles->execute($fldParams);
     foreach ($stmtFldFiles->fetchAll() as $fld) {
         $fp   = trim((string)$fld['folder_path']);
         $gfId = !empty($fld['group_folder_id']) ? (int)$fld['group_folder_id'] : 0;
@@ -229,7 +244,7 @@ try {
 } catch (Throwable) {
 }
 
-// 3. Dateien durchsuchen (eigene Dateien + zugängliche Gruppenordner + optionaler Volltext-Suchindex)
+// 3. Dateien durchsuchen (eigene Dateien + zugängliche Gruppenordner + optionaler Volltext-Suchindex, alle Begriffe per UND verknüpft)
 try {
     $accGfs = getAccessibleGroupFolders($pdo, $userId, isAdmin());
     $gfIds  = array_map(static fn(array $g): int => (int)$g['id'], $accGfs);
@@ -238,8 +253,19 @@ try {
         $gfCond = ' OR f.`group_folder_id` IN (' . implode(',', $gfIds) . ')';
     }
 
-    $seenFileIds = [];
+    $seenFileIds     = [];
     $fulltextEnabled = (($appSettings['enable_fulltext_search'] ?? '1') === '1');
+
+    // 3a. Direkte Treffer in Dateiname / Ordnerpfad (jeder eingegebene Begriff muss vorkommen)
+    $nameConds  = [];
+    $nameParams = [':uid1' => $userId];
+    foreach ($searchTerms as $idx => $term) {
+        $likeVal                     = '%' . $term . '%';
+        $nameConds[]                 = "(f.`original_name` LIKE :fn_{$idx} OR f.`folder_path` LIKE :fp_{$idx})";
+        $nameParams[":fn_{$idx}"]    = $likeVal;
+        $nameParams[":fp_{$idx}"]    = $likeVal;
+    }
+    $nameAndSql = implode(' AND ', $nameConds);
 
     $stmtFil = $pdo->prepare(
         "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`,
@@ -248,25 +274,35 @@ try {
          LEFT JOIN `file_search_index` fsi ON fsi.`file_id` = f.`id`
          WHERE f.`deleted_at` IS NULL
            AND (f.`user_id` = :uid1{$gfCond})
-           AND (f.`original_name` LIKE :q1 OR f.`folder_path` LIKE :q2)
+           AND ({$nameAndSql})
          ORDER BY f.`upload_date` DESC
          LIMIT 10"
     );
-    $stmtFil->execute([
-        ':uid1' => $userId,
-        ':q1'   => $like,
-        ':q2'   => $like,
-    ]);
+    $stmtFil->execute($nameParams);
     $matchedFileRows = $stmtFil->fetchAll();
     foreach ($matchedFileRows as $r) {
         $seenFileIds[(int)$r['id']] = true;
     }
 
     // 3b. Volltextsuche im Dokumenten-Inhalt (PDF, Word, Excel, PowerPoint, Visio, Text/Markdown, EPUB)
+    //     Strikte UND-Verknüpfung: Jeder eingegebene Suchbegriff muss zwingend in Dateiname, Ordnerpfad oder Dokumenttext vorkommen!
     if ($fulltextEnabled && mb_strlen($q, 'UTF-8') >= 2 && count($matchedFileRows) < 14) {
         $ftBoolQuery = buildFulltextBooleanQuery($q);
-        $remLimit = max(4, 14 - count($matchedFileRows));
+        $remLimit    = max(4, 14 - count($matchedFileRows));
+
+        $ftTermConds  = [];
+        $ftParams     = [':uid1' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $likeVal                   = '%' . $term . '%';
+            $ftTermConds[]             = "(f.`original_name` LIKE :ftn_{$idx} OR f.`folder_path` LIKE :ftfp_{$idx} OR fsi.`content_text` LIKE :ftc_{$idx})";
+            $ftParams[":ftn_{$idx}"]   = $likeVal;
+            $ftParams[":ftfp_{$idx}"]  = $likeVal;
+            $ftParams[":ftc_{$idx}"]   = $likeVal;
+        }
+        $ftAndTermsSql = implode(' AND ', $ftTermConds);
+
         if ($ftBoolQuery !== '') {
+            $ftParams[':ftq1'] = $ftBoolQuery;
             $stmtFt = $pdo->prepare(
                 "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`,
                         fsi.`content_text`,
@@ -276,25 +312,31 @@ try {
                  WHERE f.`deleted_at` IS NULL
                    AND f.`is_encrypted` = 0
                    AND (f.`user_id` = :uid1{$gfCond})
-                   AND (
-                       MATCH(fsi.`original_name`, fsi.`content_text`) AGAINST(:ftq2 IN BOOLEAN MODE)
-                       OR fsi.`content_text` LIKE :qlike
-                   )
+                   AND ({$ftAndTermsSql})
                  ORDER BY `ft_score` DESC, f.`upload_date` DESC
                  LIMIT {$remLimit}"
             );
-            $stmtFt->execute([
-                ':ftq1'  => $ftBoolQuery,
-                ':ftq2'  => $ftBoolQuery,
-                ':uid1'  => $userId,
-                ':qlike' => $like,
-            ]);
-            foreach ($stmtFt->fetchAll() as $ftRow) {
-                $ftId = (int)$ftRow['id'];
-                if (!isset($seenFileIds[$ftId])) {
-                    $seenFileIds[$ftId] = true;
-                    $matchedFileRows[] = $ftRow;
-                }
+        } else {
+            $stmtFt = $pdo->prepare(
+                "SELECT f.`id`, f.`original_name`, f.`file_size`, f.`folder_path`, f.`group_folder_id`, f.`is_encrypted`,
+                        fsi.`content_text`
+                 FROM `file_search_index` fsi
+                 INNER JOIN `files` f ON f.`id` = fsi.`file_id`
+                 WHERE f.`deleted_at` IS NULL
+                   AND f.`is_encrypted` = 0
+                   AND (f.`user_id` = :uid1{$gfCond})
+                   AND ({$ftAndTermsSql})
+                 ORDER BY f.`upload_date` DESC
+                 LIMIT {$remLimit}"
+            );
+        }
+
+        $stmtFt->execute($ftParams);
+        foreach ($stmtFt->fetchAll() as $ftRow) {
+            $ftId = (int)$ftRow['id'];
+            if (!isset($seenFileIds[$ftId])) {
+                $seenFileIds[$ftId] = true;
+                $matchedFileRows[]  = $ftRow;
             }
         }
     }
@@ -349,9 +391,17 @@ try {
 } catch (Throwable) {
 }
 
-// 4. Whiteboards durchsuchen (nur eigene oder explizit für mich freigegebene)
+// 4. Whiteboards durchsuchen (nur eigene oder explizit für mich freigegebene – alle Begriffe per UND)
 if (($appSettings['enable_whiteboard'] ?? '1') === '1') {
     try {
+        $wbConds  = [];
+        $wbParams = [':uid' => $userId, ':uid2' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $wbConds[]              = "w.`title` LIKE :wb_{$idx}";
+            $wbParams[":wb_{$idx}"] = '%' . $term . '%';
+        }
+        $wbAndSql = implode(' AND ', $wbConds);
+
         $stmtWb = $pdo->prepare(
             "SELECT w.`id`, w.`title`, w.`is_shared`
              FROM `whiteboards` w
@@ -361,11 +411,11 @@ if (($appSettings['enable_whiteboard'] ?? '1') === '1') {
                      SELECT 1 FROM `whiteboard_shares` ws
                      WHERE ws.`board_id` = w.`id` AND ws.`user_id` = :uid2
                  )
-             ) AND w.`title` LIKE :q
+             ) AND ({$wbAndSql})
              ORDER BY w.`updated_at` DESC
              LIMIT 5"
         );
-        $stmtWb->execute([':uid' => $userId, ':uid2' => $userId, ':q' => $like]);
+        $stmtWb->execute($wbParams);
         foreach ($stmtWb->fetchAll() as $wb) {
             $items[] = [
                 'icon'  => '🎨',
@@ -379,18 +429,28 @@ if (($appSettings['enable_whiteboard'] ?? '1') === '1') {
     }
 }
 
-// 5. Notizen durchsuchen
+// 5. Notizen durchsuchen (alle Begriffe per UND)
 if (($appSettings['enable_notes'] ?? '1') === '1') {
     try {
+        $ntConds  = [];
+        $ntParams = [':u1' => $userId, ':u2' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $likeVal                 = '%' . $term . '%';
+            $ntConds[]               = "(`title` LIKE :ntt_{$idx} OR `content` LIKE :ntc_{$idx})";
+            $ntParams[":ntt_{$idx}"] = $likeVal;
+            $ntParams[":ntc_{$idx}"] = $likeVal;
+        }
+        $ntAndSql = implode(' AND ', $ntConds);
+
         $stmtNt = $pdo->prepare(
             "SELECT `id`, `title`, `content`
              FROM `notes`
              WHERE (`user_id` = :u1 OR `shared_user_id` = :u2)
-               AND (`title` LIKE :q1 OR `content` LIKE :q2)
+               AND ({$ntAndSql})
              ORDER BY `updated_at` DESC
              LIMIT 5"
         );
-        $stmtNt->execute([':u1' => $userId, ':u2' => $userId, ':q1' => $like, ':q2' => $like]);
+        $stmtNt->execute($ntParams);
         foreach ($stmtNt->fetchAll() as $nt) {
             $snippet = mb_substr(preg_replace('/\s+/', ' ', strip_tags((string)$nt['content'])) ?: '', 0, 65);
             $items[] = [
@@ -405,18 +465,28 @@ if (($appSettings['enable_notes'] ?? '1') === '1') {
     }
 }
 
-// 6. Aufgaben durchsuchen
+// 6. Aufgaben durchsuchen (alle Begriffe per UND)
 if (($appSettings['enable_tasks'] ?? '1') === '1') {
     try {
+        $tkConds  = [];
+        $tkParams = [':u1' => $userId, ':u2' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $likeVal                 = '%' . $term . '%';
+            $tkConds[]               = "(`title` LIKE :tkt_{$idx} OR `description` LIKE :tkd_{$idx})";
+            $tkParams[":tkt_{$idx}"] = $likeVal;
+            $tkParams[":tkd_{$idx}"] = $likeVal;
+        }
+        $tkAndSql = implode(' AND ', $tkConds);
+
         $stmtTk = $pdo->prepare(
             "SELECT `id`, `title`, `status`, `due_date`
              FROM `tasks`
              WHERE (`user_id` = :u1 OR `shared_user_id` = :u2)
-               AND (`title` LIKE :q1 OR `description` LIKE :q2)
+               AND ({$tkAndSql})
              ORDER BY `created_at` DESC
              LIMIT 5"
         );
-        $stmtTk->execute([':u1' => $userId, ':u2' => $userId, ':q1' => $like, ':q2' => $like]);
+        $stmtTk->execute($tkParams);
         foreach ($stmtTk->fetchAll() as $tk) {
             $due = !empty($tk['due_date']) ? ' · Fällig: ' . date('d.m.Y', strtotime((string)$tk['due_date']) ?: time()) : '';
             $items[] = [
@@ -431,18 +501,29 @@ if (($appSettings['enable_tasks'] ?? '1') === '1') {
     }
 }
 
-// 7. Kalender-Termine durchsuchen
+// 7. Kalender-Termine durchsuchen (alle Begriffe per UND)
 if (($appSettings['enable_calendar'] ?? '1') === '1') {
     try {
+        $evConds  = [];
+        $evParams = [':u1' => $userId, ':u2' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $likeVal                 = '%' . $term . '%';
+            $evConds[]               = "(`title` LIKE :evt_{$idx} OR `location` LIKE :evl_{$idx} OR `description` LIKE :evd_{$idx})";
+            $evParams[":evt_{$idx}"] = $likeVal;
+            $evParams[":evl_{$idx}"] = $likeVal;
+            $evParams[":evd_{$idx}"] = $likeVal;
+        }
+        $evAndSql = implode(' AND ', $evConds);
+
         $stmtEv = $pdo->prepare(
             "SELECT `id`, `title`, `start_at`, `location`
              FROM `calendar_events`
              WHERE (`user_id` = :u1 OR (`shared_user_id` = :u2 AND `is_private` = 0))
-               AND (`title` LIKE :q1 OR `location` LIKE :q2 OR `description` LIKE :q3)
+               AND ({$evAndSql})
              ORDER BY `start_at` DESC
              LIMIT 5"
         );
-        $stmtEv->execute([':u1' => $userId, ':u2' => $userId, ':q1' => $like, ':q2' => $like, ':q3' => $like]);
+        $stmtEv->execute($evParams);
         foreach ($stmtEv->fetchAll() as $ev) {
             $dtStr = date('d.m.Y H:i', strtotime((string)$ev['start_at']) ?: time());
             $loc   = trim((string)($ev['location'] ?? '')) !== '' ? ' · 📍 ' . $ev['location'] : '';
@@ -458,20 +539,30 @@ if (($appSettings['enable_calendar'] ?? '1') === '1') {
     }
 }
 
-// 8. Kontakte durchsuchen
+// 8. Kontakte durchsuchen (alle Begriffe per UND)
 if (($appSettings['enable_contacts'] ?? '1') === '1') {
     try {
+        $ctConds  = [];
+        $ctParams = [':u1' => $userId, ':u2' => $userId];
+        foreach ($searchTerms as $idx => $term) {
+            $likeVal                 = '%' . $term . '%';
+            $ctConds[]               = "(`first_name` LIKE :ctf_{$idx} OR `last_name` LIKE :ctl_{$idx} OR `organization` LIKE :cto_{$idx} OR `email` LIKE :cte_{$idx} OR `phone` LIKE :ctp_{$idx})";
+            $ctParams[":ctf_{$idx}"] = $likeVal;
+            $ctParams[":ctl_{$idx}"] = $likeVal;
+            $ctParams[":cto_{$idx}"] = $likeVal;
+            $ctParams[":cte_{$idx}"] = $likeVal;
+            $ctParams[":ctp_{$idx}"] = $likeVal;
+        }
+        $ctAndSql = implode(' AND ', $ctConds);
+
         $stmtCt = $pdo->prepare(
             "SELECT `id`, `first_name`, `last_name`, `organization`, `email`, `phone`
              FROM `contacts`
              WHERE (`user_id` = :u1 OR `shared_user_id` = :u2)
-               AND (`first_name` LIKE :q1 OR `last_name` LIKE :q2 OR `organization` LIKE :q3 OR `email` LIKE :q4 OR `phone` LIKE :q5)
+               AND ({$ctAndSql})
              LIMIT 5"
         );
-        $stmtCt->execute([
-            ':u1' => $userId, ':u2' => $userId,
-            ':q1' => $like,   ':q2' => $like, ':q3' => $like, ':q4' => $like, ':q5' => $like,
-        ]);
+        $stmtCt->execute($ctParams);
         foreach ($stmtCt->fetchAll() as $ct) {
             $name = trim($ct['first_name'] . ' ' . $ct['last_name']);
             if ($name === '') {

@@ -504,29 +504,27 @@ if ($largeFilesMode && $onlyDuplicates) {
 }
 
 if ($searchQuery !== '') {
-    $params[':search_name']   = '%' . $searchQuery . '%';
-    $params[':search_folder'] = '%' . $searchQuery . '%';
-    $ftBoolIdx = $fulltextEnabledInIndex ? buildFulltextBooleanQuery($searchQuery) : '';
-    if ($fulltextEnabledInIndex && $ftBoolIdx !== '') {
-        $sqlWhere .= ' AND (
-            f.original_name LIKE :search_name
-            OR f.folder_path LIKE :search_folder
-            OR (f.is_encrypted = 0 AND (
-                MATCH(fsi.original_name, fsi.content_text) AGAINST(:search_ft IN BOOLEAN MODE)
-                OR fsi.content_text LIKE :search_content
-            ))
-        )';
-        $params[':search_ft']      = $ftBoolIdx;
-        $params[':search_content'] = '%' . $searchQuery . '%';
-    } elseif ($fulltextEnabledInIndex) {
-        $sqlWhere .= ' AND (
-            f.original_name LIKE :search_name
-            OR f.folder_path LIKE :search_folder
-            OR (f.is_encrypted = 0 AND fsi.content_text LIKE :search_content)
-        )';
-        $params[':search_content'] = '%' . $searchQuery . '%';
-    } else {
-        $sqlWhere .= ' AND (f.original_name LIKE :search_name OR f.folder_path LIKE :search_folder)';
+    $searchTermsIdx = splitSearchTerms($searchQuery, 8);
+    if (empty($searchTermsIdx)) {
+        $searchTermsIdx = [$searchQuery];
+    }
+    foreach ($searchTermsIdx as $tIdx => $termVal) {
+        $likeVal = '%' . $termVal . '%';
+        $params[':s_name_' . $tIdx]   = $likeVal;
+        $params[':s_folder_' . $tIdx] = $likeVal;
+        if ($fulltextEnabledInIndex) {
+            $params[':s_content_' . $tIdx] = $likeVal;
+            $sqlWhere .= " AND (
+                f.original_name LIKE :s_name_{$tIdx}
+                OR f.folder_path LIKE :s_folder_{$tIdx}
+                OR (f.is_encrypted = 0 AND fsi.content_text LIKE :s_content_{$tIdx})
+            )";
+        } else {
+            $sqlWhere .= " AND (
+                f.original_name LIKE :s_name_{$tIdx}
+                OR f.folder_path LIKE :s_folder_{$tIdx}
+            )";
+        }
     }
 }
 
