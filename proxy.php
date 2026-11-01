@@ -82,6 +82,21 @@ function ensureProxyTables(PDO $pdo): void
             INDEX idx_user_bm (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS proxy_block_logs (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            category VARCHAR(24) NOT NULL DEFAULT 'ad',
+            matched_rule VARCHAR(190) NOT NULL DEFAULT '',
+            blocked_url VARCHAR(500) NOT NULL DEFAULT '',
+            source_domain VARCHAR(190) NOT NULL DEFAULT '',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_created (user_id, created_at),
+            INDEX idx_user_cat (user_id, category),
+            INDEX idx_user_rule (user_id, matched_rule)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 ensureProxyTables($pdo);
@@ -732,6 +747,17 @@ if (isset($_GET['asset']) && $_GET['asset'] === '1') {
     $assetUrl = trim((string)($_GET['url'] ?? ''));
     $check = checkDomainOrUrlAgainstAdblock($assetUrl, $proxySettings, $userBlockedDomains, $userAllowedDomains);
     if ($check['blocked']) {
+        $srcDom = (string)(parse_url($assetUrl, PHP_URL_HOST) ?: 'Asset');
+        $pdo->prepare('
+            INSERT INTO proxy_block_logs (user_id, category, matched_rule, blocked_url, source_domain)
+            VALUES (:uid, :cat, :rule, :url, :src)
+        ')->execute([
+            ':uid'  => $userId,
+            ':cat'  => mb_substr($check['category'], 0, 24),
+            ':rule' => mb_substr($check['matched_rule'], 0, 190),
+            ':url'  => mb_substr($assetUrl, 0, 490),
+            ':src'  => mb_substr($srcDom, 0, 180),
+        ]);
         // 1x1 transparentes GIF zurückgeben, wenn es ein Werbe-/Tracking-Pixel ist
         header('Content-Type: image/gif');
         header('X-MiniCloud-AdBlock: Blocked (' . $check['matched_rule'] . ')');
@@ -1320,6 +1346,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $domainCheckResult['input'] = $testInput;
         }
     }
+
+    if ($action === 'reset_proxy_stats') {
+        $pdo->prepare('DELETE FROM proxy_block_logs WHERE user_id = :uid')->execute([':uid' => $userId]);
+        $pdo->prepare('
+            UPDATE proxy_user_settings
+            SET ads_blocked_total = 0,
+                trackers_blocked_total = 0,
+                cookies_blocked_total = 0,
+                pages_proxied_total = 0
+            WHERE user_id = :uid
+        ')->execute([':uid' => $userId]);
+        setFlash('success', 'Die Werbeblocker-Statistik und das Block-Protokoll wurden zurückgesetzt.');
+        header('Location: proxy.php?tab=stats');
+        exit;
+    }
 }
 
 // =========================================================================
@@ -1374,6 +1415,24 @@ if ($targetUrlInput !== '') {
                 ':uid' => $userId,
             ]);
 
+            // Blockierte Elemente einzeln für die Statistik-Auswertung protokollieren
+            if (!empty($proxySanitized['blocked_items'])) {
+                $srcDomain = strtolower((string)(parse_url($fetchResult['final_url'], PHP_URL_HOST) ?: 'Unbekannt'));
+                $stmtLogIns = $pdo->prepare('
+                    INSERT INTO proxy_block_logs (user_id, category, matched_rule, blocked_url, source_domain)
+                    VALUES (:uid, :cat, :rule, :url, :src)
+                ');
+                foreach ($proxySanitized['blocked_items'] as $bi) {
+                    $stmtLogIns->execute([
+                        ':uid'  => $userId,
+                        ':cat'  => mb_substr((string)$bi['type'], 0, 24),
+                        ':rule' => mb_substr((string)$bi['rule'], 0, 190),
+                        ':url'  => mb_substr((string)$bi['url'], 0, 490),
+                        ':src'  => mb_substr($srcDomain, 0, 180),
+                    ]);
+                }
+            }
+
             $proxySettings['ads_blocked_total']      = (int)$proxySettings['ads_blocked_total'] + $proxySanitized['ads_blocked'];
             $proxySettings['trackers_blocked_total'] = (int)$proxySettings['trackers_blocked_total'] + $proxySanitized['trackers_blocked'];
             $proxySettings['cookies_blocked_total']  = (int)$proxySettings['cookies_blocked_total'] + $proxySanitized['cookies_blocked'];
@@ -1381,6 +1440,82 @@ if ($targetUrlInput !== '') {
         }
     }
 }
+
+// =========================================================================
+// STATISTIK-AUSWERTUNGEN LADEN (TOP-NETZWERKE, TOP-WEBSEITEN, 7-TAGE, LOG)
+// =========================================================================
+$stmtTopRules = $pdo->prepare('
+    SELECT matched_rule, category, COUNT(*) AS hits
+    FROM proxy_block_logs
+    WHERE user_id = :uid AND matched_rule <> ""
+    GROUP BY matched_rule, category
+    ORDER BY hits DESC
+    LIMIT 10
+');
+$stmtTopRules->execute([':uid' => $userId]);
+$topBlockedRules = $stmtTopRules->fetchAll(PDO::FETCH_ASSOC);
+
+$stmtTopSites = $pdo->prepare('
+    SELECT source_domain,
+           COUNT(*) AS total_hits,
+           SUM(CASE WHEN category IN ("ad", "custom") THEN 1 ELSE 0 END) AS ad_hits,
+           SUM(CASE WHEN category = "tracker" THEN 1 ELSE 0 END) AS tracker_hits,
+           SUM(CASE WHEN category = "cookie" THEN 1 ELSE 0 END) AS cookie_hits
+    FROM proxy_block_logs
+    WHERE user_id = :uid AND source_domain <> ""
+    GROUP BY source_domain
+    ORDER BY total_hits DESC
+    LIMIT 10
+');
+$stmtTopSites->execute([':uid' => $userId]);
+$topTrackedSites = $stmtTopSites->fetchAll(PDO::FETCH_ASSOC);
+
+$stmtDaily = $pdo->prepare('
+    SELECT DATE(created_at) AS day_date,
+           COUNT(*) AS total_hits,
+           SUM(CASE WHEN category IN ("ad", "custom") THEN 1 ELSE 0 END) AS ad_hits,
+           SUM(CASE WHEN category = "tracker" THEN 1 ELSE 0 END) AS tracker_hits,
+           SUM(CASE WHEN category = "cookie" THEN 1 ELSE 0 END) AS cookie_hits
+    FROM proxy_block_logs
+    WHERE user_id = :uid AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY DATE(created_at)
+    ORDER BY day_date ASC
+');
+$stmtDaily->execute([':uid' => $userId]);
+$dailyRaw = [];
+foreach ($stmtDaily->fetchAll(PDO::FETCH_ASSOC) as $dRow) {
+    $dailyRaw[(string)$dRow['day_date']] = $dRow;
+}
+$dailyStats7d = [];
+$maxDailyHits = 1;
+for ($i = 6; $i >= 0; $i--) {
+    $dKey = date('Y-m-d', strtotime("-{$i} days"));
+    $row  = $dailyRaw[$dKey] ?? ['total_hits' => 0, 'ad_hits' => 0, 'tracker_hits' => 0, 'cookie_hits' => 0];
+    $tot  = (int)$row['total_hits'];
+    if ($tot > $maxDailyHits) {
+        $maxDailyHits = $tot;
+    }
+    $dailyStats7d[] = [
+        'date'         => $dKey,
+        'label'        => date('d.m.', strtotime($dKey)),
+        'total_hits'   => $tot,
+        'ad_hits'      => (int)$row['ad_hits'],
+        'tracker_hits' => (int)$row['tracker_hits'],
+        'cookie_hits'  => (int)$row['cookie_hits'],
+    ];
+}
+
+$stmtRecentLogs = $pdo->prepare('
+    SELECT * FROM proxy_block_logs
+    WHERE user_id = :uid
+    ORDER BY id DESC
+    LIMIT 80
+');
+$stmtRecentLogs->execute([':uid' => $userId]);
+$recentBlockLogs = $stmtRecentLogs->fetchAll(PDO::FETCH_ASSOC);
+
+$totalBlockedAll = (int)$proxySettings['ads_blocked_total'] + (int)$proxySettings['trackers_blocked_total'] + (int)$proxySettings['cookies_blocked_total'];
+$estimatedSavedKb = $totalBlockedAll * 42; // Durchschnittlich ~42 KB pro Werbebanner/Tracking-SDK eingespart
 
 // Lesezeichen laden
 $stmtBmList = $pdo->prepare('SELECT * FROM proxy_bookmarks WHERE user_id = :uid ORDER BY id ASC');
@@ -1419,32 +1554,32 @@ require_once __DIR__ . '/includes/header.php';
                 </p>
             </div>
 
-            <!-- Statistik-Kacheln -->
+            <!-- Statistik-Kacheln (Klick öffnet die ausführliche Schutz-Statistik) -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
-                <div class="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/70 dark:border-rose-900/60 text-center">
+                <button type="button" onclick="switchProxyTab('stats')" class="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100/80 dark:hover:bg-rose-900/50 border border-rose-200/70 dark:border-rose-900/60 text-center transition-colors cursor-pointer" title="Klicken, um die ausführliche Werbeblocker-Statistik zu öffnen">
                     <div class="text-lg font-extrabold text-rose-600 dark:text-rose-400">
                         <?= number_format((int)$proxySettings['ads_blocked_total'], 0, ',', '.') ?>
                     </div>
                     <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">🚫 Werbung blockiert</div>
-                </div>
-                <div class="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-900/60 text-center">
+                </button>
+                <button type="button" onclick="switchProxyTab('stats')" class="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100/80 dark:hover:bg-amber-900/50 border border-amber-200/70 dark:border-amber-900/60 text-center transition-colors cursor-pointer" title="Klicken, um die ausführliche Tracker-Statistik zu öffnen">
                     <div class="text-lg font-extrabold text-amber-600 dark:text-amber-400">
                         <?= number_format((int)$proxySettings['trackers_blocked_total'], 0, ',', '.') ?>
                     </div>
                     <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">🕵️ Tracker gestoppt</div>
-                </div>
-                <div class="p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/70 dark:border-indigo-900/60 text-center">
+                </button>
+                <button type="button" onclick="switchProxyTab('stats')" class="p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/50 border border-indigo-200/70 dark:border-indigo-900/60 text-center transition-colors cursor-pointer" title="Klicken, um die Cookie-Banner-Statistik zu öffnen">
                     <div class="text-lg font-extrabold text-indigo-600 dark:text-indigo-400">
                         <?= number_format((int)$proxySettings['cookies_blocked_total'], 0, ',', '.') ?>
                     </div>
                     <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">🍪 Cookie-Banner</div>
-                </div>
-                <div class="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/60 text-center">
+                </button>
+                <button type="button" onclick="switchProxyTab('stats')" class="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/50 border border-emerald-200/70 dark:border-emerald-900/60 text-center transition-colors cursor-pointer" title="Klicken, um das vollständige Block-Protokoll zu öffnen">
                     <div class="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
                         <?= number_format($totalDomainsInCoreList, 0, ',', '.') ?>+
                     </div>
-                    <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">🛡️ Sperr-Domains</div>
-                </div>
+                    <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">📊 Statistik &amp; Log</div>
+                </button>
             </div>
         </div>
 
@@ -1531,7 +1666,16 @@ require_once __DIR__ . '/includes/header.php';
                 id="tabBtn-adblock"
                 class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer <?= $activeTab === 'adblock' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' ?>"
             >
-                📡 3. System-Werbeblocker (PAC), Filterregeln &amp; Lesezeichen
+                📡 3. System-Werbeblocker (PAC) &amp; Filterregeln
+            </button>
+
+            <button
+                type="button"
+                onclick="switchProxyTab('stats')"
+                id="tabBtn-stats"
+                class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer <?= $activeTab === 'stats' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' ?>"
+            >
+                📊 4. Schutz-Statistik &amp; Block-Protokoll (<?= number_format($totalBlockedAll, 0, ',', '.') ?>)
             </button>
         </div>
     </section>
@@ -2065,11 +2209,247 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
     </div>
+
+    <!-- =================================================================== -->
+    <!-- REITER 4: SCHUTZ-STATISTIK & BLOCK-PROTOKOLL (PI-HOLE / ADGUARD)    -->
+    <!-- =================================================================== -->
+    <div id="proxyTab-stats" class="<?= $activeTab === 'stats' ? '' : 'hidden' ?> space-y-6">
+        <!-- Obere Gesamt-Kennzahlen -->
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>📊 Ausführliche Werbeblocker- &amp; Tracker-Statistik</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Alle abgefangenen Werbenetzwerke, Analyse-Tracker, Cookie-Banner und Zählpixel über deinen MiniCloud-Proxy.
+                    </p>
+                </div>
+
+                <form method="post" action="proxy.php" onsubmit="return confirm('Möchtest du die gesamte Statistik und das Block-Protokoll wirklich auf 0 zurücksetzen?');">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="reset_proxy_stats">
+                    <button type="submit" class="px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 text-xs font-bold cursor-pointer">
+                        🗑️ Statistik &amp; Protokoll zurücksetzen
+                    </button>
+                </form>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70">
+                    <div class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">🌐 Geprüfte Seiten</div>
+                    <div class="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
+                        <?= number_format((int)$proxySettings['pages_proxied_total'], 0, ',', '.') ?>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/70 dark:border-rose-900/60">
+                    <div class="text-[11px] font-semibold text-rose-700 dark:text-rose-300">🚫 Werbung blockiert</div>
+                    <div class="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
+                        <?= number_format((int)$proxySettings['ads_blocked_total'], 0, ',', '.') ?>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-900/60">
+                    <div class="text-[11px] font-semibold text-amber-700 dark:text-amber-300">🕵️ Tracker gestoppt</div>
+                    <div class="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">
+                        <?= number_format((int)$proxySettings['trackers_blocked_total'], 0, ',', '.') ?>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/70 dark:border-indigo-900/60">
+                    <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">🍪 Cookie-Overlays</div>
+                    <div class="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                        <?= number_format((int)$proxySettings['cookies_blocked_total'], 0, ',', '.') ?>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/60">
+                    <div class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">💾 Traffic gespart</div>
+                    <div class="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                        <?= $estimatedSavedKb >= 1024 ? number_format($estimatedSavedKb / 1024, 1, ',', '.') . ' MB' : number_format($estimatedSavedKb, 0, ',', '.') . ' KB' ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7-Tage-Balkendiagramm -->
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    📅 Blockierte Elemente der letzten 7 Tage
+                </h3>
+                <div class="flex items-center gap-3 text-[11px] font-semibold">
+                    <span class="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400"><span class="w-2.5 h-2.5 rounded-xs bg-rose-500"></span> Werbung</span>
+                    <span class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><span class="w-2.5 h-2.5 rounded-xs bg-amber-500"></span> Tracker</span>
+                    <span class="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"><span class="w-2.5 h-2.5 rounded-xs bg-indigo-500"></span> Cookie-Banner</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-7 gap-2 sm:gap-4 items-end h-44 pt-4 px-2 border-b border-slate-200 dark:border-slate-800">
+                <?php foreach ($dailyStats7d as $dayItem): ?>
+                    <?php
+                    $barPct = $maxDailyHits > 0 ? max(4, (int)round(($dayItem['total_hits'] / $maxDailyHits) * 100)) : 4;
+                    if ($dayItem['total_hits'] === 0) {
+                        $barPct = 3;
+                    }
+                    ?>
+                    <div class="flex flex-col items-center justify-end h-full gap-1.5">
+                        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                            <?= (int)$dayItem['total_hits'] ?>
+                        </span>
+                        <div class="w-full max-w-[44px] rounded-t-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex flex-col justify-end" style="height: <?= $barPct ?>%;">
+                            <?php if ($dayItem['total_hits'] > 0): ?>
+                                <?php
+                                $adP = (int)round(($dayItem['ad_hits'] / $dayItem['total_hits']) * 100);
+                                $trP = (int)round(($dayItem['tracker_hits'] / $dayItem['total_hits']) * 100);
+                                $ckP = max(0, 100 - $adP - $trP);
+                                ?>
+                                <div class="w-full bg-indigo-500" style="height: <?= $ckP ?>%" title="Cookie-Banner: <?= (int)$dayItem['cookie_hits'] ?>"></div>
+                                <div class="w-full bg-amber-500" style="height: <?= $trP ?>%" title="Tracker: <?= (int)$dayItem['tracker_hits'] ?>"></div>
+                                <div class="w-full bg-rose-500" style="height: <?= $adP ?>%" title="Werbung: <?= (int)$dayItem['ad_hits'] ?>"></div>
+                            <?php else: ?>
+                                <div class="w-full h-full bg-slate-200 dark:bg-slate-700"></div>
+                            <?php endif; ?>
+                        </div>
+                        <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400 pb-1"><?= e($dayItem['label']) ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <!-- Top 10 Werbe-/Tracking-Netzwerke & Top 10 Webseiten -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Top 10 blockierte Werbe- & Tracking-Netzwerke -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    🏆 Top 10 blockierte Werbe- &amp; Tracking-Dienste
+                </h3>
+                <?php if (empty($topBlockedRules)): ?>
+                    <p class="text-xs text-slate-400 italic py-4">
+                        Noch keine Einträge im Block-Protokoll. Rufe eine Nachrichtenseite (z. B. <code class="font-mono">spiegel.de</code>, <code class="font-mono">kicker.de</code> oder <code class="font-mono">heise.de</code>) über den Web-Proxy auf, um Live-Daten zu sammeln!
+                    </p>
+                <?php else: ?>
+                    <?php $maxRuleHits = max(1, (int)$topBlockedRules[0]['hits']); ?>
+                    <div class="space-y-2.5">
+                        <?php foreach ($topBlockedRules as $tr): ?>
+                            <?php
+                            $hits = (int)$tr['hits'];
+                            $pct  = max(6, (int)round(($hits / $maxRuleHits) * 100));
+                            $cat  = (string)$tr['category'];
+                            $barCol = $cat === 'tracker' ? 'bg-amber-500' : ($cat === 'cookie' ? 'bg-indigo-500' : 'bg-rose-500');
+                            $badgeLabel = $cat === 'tracker' ? '🕵️ Tracker' : ($cat === 'cookie' ? '🍪 Cookie' : '🚫 Werbung');
+                            ?>
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="font-bold text-slate-800 dark:text-slate-100 truncate">
+                                        <?= e((string)$tr['matched_rule']) ?>
+                                        <span class="ml-1 text-[10px] font-semibold text-slate-400">(<?= $badgeLabel ?>)</span>
+                                    </span>
+                                    <span class="font-mono font-bold text-slate-700 dark:text-slate-200"><?= number_format($hits, 0, ',', '.') ?>×</span>
+                                </div>
+                                <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div class="h-full <?= $barCol ?> rounded-full" style="width: <?= $pct ?>%"></div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Top 10 Webseiten mit den meisten Trackern -->
+            <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    🌐 Top 10 Webseiten mit den meisten Trackern &amp; Anzeigen
+                </h3>
+                <?php if (empty($topTrackedSites)): ?>
+                    <p class="text-xs text-slate-400 italic py-4">
+                        Sobald du Webseiten über den Proxy öffnest, siehst du hier das Ranking der Seiten mit den meisten Werbe- und Tracking-Skripten.
+                    </p>
+                <?php else: ?>
+                    <div class="space-y-2">
+                        <?php foreach ($topTrackedSites as $idx => $ts): ?>
+                            <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 text-xs">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                                        <?= $idx + 1 ?>
+                                    </span>
+                                    <a href="proxy.php?mode=proxy&amp;url=<?= rawurlencode('https://' . (string)$ts['source_domain']) ?>" class="font-mono font-bold text-brand-600 dark:text-brand-400 hover:underline truncate">
+                                        <?= e((string)$ts['source_domain']) ?>
+                                    </a>
+                                </div>
+                                <div class="flex items-center gap-1.5 shrink-0 text-[11px] font-bold">
+                                    <span class="px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300" title="Blockierte Werbung">🚫 <?= (int)$ts['ad_hits'] ?></span>
+                                    <span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300" title="Gestoppte Tracker">🕵️ <?= (int)$ts['tracker_hits'] ?></span>
+                                    <span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300" title="Cookie-Banner">🍪 <?= (int)$ts['cookie_hits'] ?></span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Live-Block-Protokoll (Chronik der letzten 80 abgefangenen Elemente) -->
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    📜 Live-Block-Protokoll (Letzte <?= count($recentBlockLogs) ?> abgefangene Anfragen)
+                </h3>
+            </div>
+
+            <?php if (empty($recentBlockLogs)): ?>
+                <p class="text-xs text-slate-400 italic py-4">Noch keine blockierten Anfragen protokolliert.</p>
+            <?php else: ?>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                <th class="py-2.5 px-3">Zeitpunkt</th>
+                                <th class="py-2.5 px-3">Kategorie</th>
+                                <th class="py-2.5 px-3">Filterregel / Dienst</th>
+                                <th class="py-2.5 px-3">Auf Webseite</th>
+                                <th class="py-2.5 px-3">Blockierte Ressource</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200/70 dark:divide-slate-800">
+                            <?php foreach ($recentBlockLogs as $logRow): ?>
+                                <?php
+                                $cat = (string)$logRow['category'];
+                                $badgeCls = $cat === 'tracker'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                    : ($cat === 'cookie'
+                                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
+                                        : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300');
+                                $catLabel = $cat === 'tracker' ? '🕵️ TRACKER' : ($cat === 'cookie' ? '🍪 COOKIE' : '🚫 WERBUNG');
+                                ?>
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                    <td class="py-2 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                                        <?= e(date('d.m. H:i:s', strtotime((string)$logRow['created_at']))) ?>
+                                    </td>
+                                    <td class="py-2 px-3 whitespace-nowrap">
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold <?= $badgeCls ?>">
+                                            <?= $catLabel ?>
+                                        </span>
+                                    </td>
+                                    <td class="py-2 px-3 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                                        <?= e((string)$logRow['matched_rule']) ?>
+                                    </td>
+                                    <td class="py-2 px-3 font-mono text-brand-600 dark:text-brand-400 whitespace-nowrap">
+                                        <?= e((string)$logRow['source_domain']) ?>
+                                    </td>
+                                    <td class="py-2 px-3 font-mono text-[11px] text-slate-400 truncate max-w-xs" title="<?= e((string)$logRow['blocked_url']) ?>">
+                                        <?= e((string)$logRow['blocked_url']) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 </div>
 
 <script>
 function switchProxyTab(tab) {
-    ['browser', 'reader', 'adblock'].forEach(function(k) {
+    ['browser', 'reader', 'adblock', 'stats'].forEach(function(k) {
         const panel = document.getElementById('proxyTab-' + k);
         const btn   = document.getElementById('tabBtn-' + k);
         if (panel) {
@@ -2077,7 +2457,11 @@ function switchProxyTab(tab) {
         }
         if (btn) {
             if (k === tab) {
-                const activeColor = k === 'reader' ? 'bg-indigo-600 text-white shadow-2xs' : (k === 'adblock' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-brand-600 text-white shadow-2xs');
+                const activeColor = k === 'reader'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : (k === 'adblock'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : (k === 'stats' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-brand-600 text-white shadow-2xs'));
                 btn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer ' + activeColor;
             } else {
                 btn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700';
