@@ -48,7 +48,7 @@ $categoriesMeta = [
     'finance_club' => [
         'label' => 'Finanzen & Verein',
         'icon'  => '💰',
-        'desc'  => 'Haushaltsbuch, Gruppen-Reisekasse (Split) & Vereinsverwaltung',
+        'desc'  => 'Haushaltsbuch, Börse & Krypto-Radar, Gruppen-Reisekasse (Split) & Vereinsverwaltung',
     ],
     'media' => [
         'label' => 'Medien & Kreativ',
@@ -320,6 +320,18 @@ $allModules = [
         'desc'     => 'Mitgliederdatei, Beitragstarife, Jahresbeiträge, Kassenbuch, Arbeitsstunden, Inventar & Vorstands-Rollen.',
         'badge'    => '',
         'badgeCls' => '',
+    ],
+    [
+        'key'      => 'markets',
+        'enabled'  => ($appSettings['enable_markets'] ?? '1') === '1',
+        'title'    => 'Börse, Krypto & KI-Radar',
+        'shortSub' => 'Aktien, ETFs, Depot & Kaufzeitpunkt',
+        'icon'     => '📈',
+        'url'      => 'markets.php',
+        'category' => 'finance_club',
+        'desc'     => 'Echtzeit-Kurse & historische Charts bis zum Börsenstart (MAX), Muster-Depot sowie automatische Wochentags-, Uhrzeiten- & Auffälligkeits-Analyse.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-emerald-600 text-white',
     ],
 
     // --- 4. Medien & Kreativ ---

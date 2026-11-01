@@ -713,6 +713,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_tv_radio'               => '1',
         'enable_radio'                  => '1',
         'enable_news'                   => '1',
+        'enable_markets'                => '1',
         'translator_deepl_api_key'      => '',
         'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
@@ -3249,6 +3250,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_news',
             'color'       => 'bg-sky-600',
         ],
+        'markets' => [
+            'icon'        => '📈',
+            'label'       => 'Börse, Krypto & KI-Kurs-Radar',
+            'url'         => 'markets.php',
+            'setting_key' => 'enable_markets',
+            'color'       => 'bg-emerald-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3306,6 +3314,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'tv_radio.php'     => 'tv_radio',
         'radio.php'        => 'radio',
         'news.php'         => 'news',
+        'markets.php'      => 'markets',
         'webdav.php', 'caldav.php', 'carddav.php' => 'webdav',
         default         => null,
     };
