@@ -1042,13 +1042,14 @@ if ($fileId <= 0) {
         $reqAccountRaw = trim((string)($_POST['account_id'] ?? $_GET['account_id'] ?? ''));
 
         if ($mailAction === 'list') {
-            $folder = trim((string)($_POST['folder'] ?? $_GET['folder'] ?? 'INBOX')) ?: 'INBOX';
-            $page   = max(1, (int)($_POST['page'] ?? $_GET['page'] ?? 1));
+            $folder      = trim((string)($_POST['folder'] ?? $_GET['folder'] ?? 'INBOX')) ?: 'INBOX';
+            $page        = max(1, (int)($_POST['page'] ?? $_GET['page'] ?? 1));
+            $searchQuery = mb_substr(trim((string)($_POST['search'] ?? $_GET['search'] ?? '')), 0, 120);
 
             // Gemeinsame Ansicht über alle Postfächer hinweg („all“ oder 0 bei mehreren Konten)
             $useUnified = ($reqAccountRaw === 'all') || ($reqAccountRaw === '' && count($allMailAccounts) > 1);
             if ($useUnified) {
-                $res = fetchUnifiedMailboxesMessages($allMailAccounts, 12);
+                $res = fetchUnifiedMailboxesMessages($allMailAccounts, $searchQuery !== '' ? 20 : 12, $searchQuery);
                 echo json_encode($res);
                 exit;
             }
@@ -1060,7 +1061,7 @@ if ($fileId <= 0) {
                 exit;
             }
 
-            $res = fetchLiveMailboxMessages($mailCfg, $folder, $page, 20);
+            $res = fetchLiveMailboxMessages($mailCfg, $folder, $page, 20, $searchQuery);
             if (!empty($res['ok']) && isset($res['messages']) && is_array($res['messages'])) {
                 foreach ($res['messages'] as &$mRow) {
                     $mRow['account_id']    = (int)$mailCfg['id'];
@@ -2158,15 +2159,33 @@ if ($fileId <= 0) {
                                     </span>
                                 </div>
 
-                                <div class="flex items-center gap-2">
-                                    <input type="search" id="liveMailFilterInput" oninput="filterVisibleLiveEmails()"
-                                           placeholder="Betreff, Absender oder Postfach filtern…"
-                                           class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <div class="relative flex items-center">
+                                        <input type="search" id="liveMailFilterInput"
+                                               oninput="filterVisibleLiveEmails()"
+                                               onkeydown="if (event.key === 'Enter') { event.preventDefault(); executeLiveServerSearch(); }"
+                                               placeholder="Im Postfach suchen (Enter = Server-Suche)…"
+                                               class="w-56 sm:w-64 px-3 py-1.5 rounded-l-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                                        <button type="button" onclick="executeLiveServerSearch()"
+                                                title="Gesamtes Postfach live auf dem Mailserver durchsuchen (Betreff, Absender & Volltext)"
+                                                class="px-3 py-1.5 rounded-r-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold border border-brand-600 cursor-pointer">
+                                            🔍 Suchen
+                                        </button>
+                                    </div>
                                     <button type="button" onclick="loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage)"
                                             class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-bold text-brand-600 dark:text-brand-400 cursor-pointer">
                                         🔄 Aktualisieren
                                     </button>
                                 </div>
+                            </div>
+
+                            <!-- Aktive Server-Volltextsuche Info-Banner -->
+                            <div id="liveMailActiveSearchBar" class="hidden px-4 py-2 bg-indigo-50/90 dark:bg-indigo-950/50 border-b border-indigo-200 dark:border-indigo-800 flex items-center justify-between gap-2 text-xs text-indigo-900 dark:text-indigo-200">
+                                <span id="liveMailActiveSearchText" class="font-bold truncate"></span>
+                                <button type="button" onclick="clearLiveServerSearch()"
+                                        class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer shrink-0">
+                                    ✕ Suche zurücksetzen
+                                </button>
                             </div>
 
                             <!-- Mehrfach-Aktionsleiste (erscheint automatisch, sobald links mindestens eine E-Mail angehakt ist) -->
@@ -2283,6 +2302,7 @@ if ($fileId <= 0) {
     let currentLiveMailAccount = <?= json_encode(count($userMailAccounts) > 1 ? 'all' : (string)($userMailAccounts[0]['id'] ?? '0')) ?>;
     let currentLiveMailFolder  = 'INBOX';
     let currentLiveMailPage    = 1;
+    let currentLiveMailSearch  = '';
     let currentOpenedMail      = null;
     let currentOpenedMailUid   = '';
     let currentOpenedMailAccId = 0;
@@ -2398,7 +2418,25 @@ if ($fileId <= 0) {
         if (smSsl)  smSsl.value  = preset.smtp_ssl || 'tls';
     }
 
+    function executeLiveServerSearch() {
+        const inp = document.getElementById('liveMailFilterInput');
+        currentLiveMailSearch = (inp?.value || '').trim();
+        loadLiveMailFolder(currentLiveMailFolder, 1);
+    }
+
+    function clearLiveServerSearch() {
+        const inp = document.getElementById('liveMailFilterInput');
+        if (inp) inp.value = '';
+        currentLiveMailSearch = '';
+        loadLiveMailFolder(currentLiveMailFolder, 1);
+    }
+
     async function loadLiveMailFolder(folder, page = 1) {
+        if (folder !== currentLiveMailFolder) {
+            currentLiveMailSearch = '';
+            const inp = document.getElementById('liveMailFilterInput');
+            if (inp) inp.value = '';
+        }
         currentLiveMailFolder = folder;
         currentLiveMailPage   = Math.max(1, page);
         closeLiveMailReader();
@@ -2407,6 +2445,17 @@ if ($fileId <= 0) {
         if (selAllCb) selAllCb.checked = false;
         document.getElementById('liveMailBulkBar')?.classList.add('hidden');
 
+        const sBar  = document.getElementById('liveMailActiveSearchBar');
+        const sText = document.getElementById('liveMailActiveSearchText');
+        if (sBar && sText) {
+            if (currentLiveMailSearch !== '') {
+                sText.textContent = `🔍 Server-Suche im Postfach nach „${currentLiveMailSearch}“ aktiv (Betreff, Absender & Volltext)`;
+                sBar.classList.remove('hidden');
+            } else {
+                sBar.classList.add('hidden');
+            }
+        }
+
         const tbl    = document.getElementById('liveMailMessagesTable');
         const errBox = document.getElementById('liveMailUnifiedErrors');
         if (errBox) {
@@ -2414,7 +2463,9 @@ if ($fileId <= 0) {
             errBox.textContent = '';
         }
         if (tbl) {
-            tbl.innerHTML = '<div class="p-10 text-center text-xs text-slate-400">⏳ Rufe Nachrichten live vom Mailserver ab (ohne lokale Speicherung)…</div>';
+            tbl.innerHTML = currentLiveMailSearch !== ''
+                ? `<div class="p-10 text-center text-xs text-indigo-600 dark:text-indigo-400 font-semibold">🔍 Durchsuche Postfach live auf dem Mailserver nach „${escapeOfficeHtml(currentLiveMailSearch)}“…</div>`
+                : '<div class="p-10 text-center text-xs text-slate-400">⏳ Rufe Nachrichten live vom Mailserver ab (ohne lokale Speicherung)…</div>';
         }
 
         try {
@@ -2424,6 +2475,7 @@ if ($fileId <= 0) {
             fd.append('account_id', currentLiveMailAccount);
             fd.append('folder', currentLiveMailFolder);
             fd.append('page', String(currentLiveMailPage));
+            fd.append('search', currentLiveMailSearch);
 
             const res  = await fetch('office.php', { method: 'POST', body: fd });
             const data = await res.json();
@@ -2626,7 +2678,16 @@ if ($fileId <= 0) {
 
     function filterVisibleLiveEmails() {
         const q = (document.getElementById('liveMailFilterInput')?.value || '').trim().toLowerCase();
+        if (q === '' && currentLiveMailSearch !== '') {
+            clearLiveServerSearch();
+            return;
+        }
+        const isShowingServerResults = currentLiveMailSearch !== '' && q === currentLiveMailSearch.toLowerCase();
         document.querySelectorAll('[data-live-mail-row="1"]').forEach((row) => {
+            if (isShowingServerResults) {
+                row.classList.remove('hidden');
+                return;
+            }
             const hay = row.getAttribute('data-search') || '';
             row.classList.toggle('hidden', q !== '' && !hay.includes(q));
         });

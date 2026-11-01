@@ -506,14 +506,15 @@ function getUserMailAccountConfig(PDO $pdo, int $userId): ?array
  * @param array<int, array<string, mixed>> $accounts
  * @return array{ok: bool, total: int, messages: array<int, array<string, mixed>>, errors: array<int, string>, folders: array<string, string>}
  */
-function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12): array
+function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12, string $searchQuery = ''): array
 {
     $mergedMessages = [];
     $totalCount     = 0;
     $errors         = [];
+    $searchQuery    = trim($searchQuery);
 
     foreach ($accounts as $acc) {
-        $res = fetchLiveMailboxMessages($acc, 'INBOX', 1, $perAccount);
+        $res = fetchLiveMailboxMessages($acc, 'INBOX', 1, $perAccount, $searchQuery);
         if (!$res['ok']) {
             $errors[] = (string)$acc['email_address'] . ': ' . ($res['error'] ?? 'Verbindungsfehler');
             continue;
@@ -524,6 +525,7 @@ function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12): a
             $msg['account_email'] = (string)$acc['email_address'];
             $msg['account_label'] = (string)$acc['account_label'];
             $msg['account_color'] = (string)$acc['badge_color'];
+            $msg['folder']        = 'INBOX';
             $mergedMessages[]     = $msg;
         }
     }
@@ -532,6 +534,7 @@ function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12): a
 
     return [
         'ok'       => !empty($mergedMessages) || empty($errors),
+        'unified'  => true,
         'total'    => $totalCount,
         'messages' => $mergedMessages,
         'errors'   => $errors,
@@ -1017,11 +1020,12 @@ function testMailAccountConnection(array $cfg): array
  *
  * @return array{ok: bool, error?: string, total: int, messages: array<int, array<string, mixed>>, folders: array<string, string>}
  */
-function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $page = 1, int $perPage = 20): array
+function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $page = 1, int $perPage = 20, string $searchQuery = ''): array
 {
-    $proto   = strtolower((string)($cfg['protocol'] ?? 'imap'));
-    $page    = max(1, $page);
-    $perPage = max(5, min(50, $perPage));
+    $proto       = strtolower((string)($cfg['protocol'] ?? 'imap'));
+    $page        = max(1, $page);
+    $perPage     = max(5, min(50, $perPage));
+    $searchQuery = trim(str_replace(["\r", "\n"], ' ', $searchQuery));
 
     if ($proto === 'pop3') {
         $conn = openPop3Connection($cfg);
@@ -1033,27 +1037,57 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
 
         $messages = [];
         if ($total > 0) {
-            $startSeq = max(1, $total - (($page - 1) * $perPage));
-            $endSeq   = max(1, $startSeq - $perPage + 1);
-
-            for ($seq = $startSeq; $seq >= $endSeq; $seq--) {
-                // TOP <msg> 0 liest nur die Header und lässt die Nachricht unberührt auf dem Server!
-                fwrite($fp, "TOP {$seq} 0\r\n");
-                $status = (string)@fgets($fp, 2048);
-                if (!str_starts_with($status, '+OK')) {
-                    continue;
+            if ($searchQuery !== '') {
+                $qLower   = mb_strtolower($searchQuery, 'UTF-8');
+                $scanMax  = min($total, 80);
+                $startSeq = $total;
+                $endSeq   = max(1, $total - $scanMax + 1);
+                for ($seq = $startSeq; $seq >= $endSeq; $seq--) {
+                    fwrite($fp, "TOP {$seq} 0\r\n");
+                    $status = (string)@fgets($fp, 2048);
+                    if (!str_starts_with($status, '+OK')) {
+                        continue;
+                    }
+                    $rawHeaders = readPop3Multiline($fp, 65536);
+                    $parsed     = parseRawEmailMessageInMemory($rawHeaders . "\r\n\r\n");
+                    $hay        = mb_strtolower($parsed['subject'] . ' ' . $parsed['from'] . ' ' . $parsed['to'], 'UTF-8');
+                    if (str_contains($hay, $qLower)) {
+                        $messages[] = [
+                            'uid'     => (string)$seq,
+                            'subject' => $parsed['subject'],
+                            'from'    => $parsed['from'],
+                            'to'      => $parsed['to'],
+                            'date'    => $parsed['date'],
+                            'ts'      => $parsed['timestamp'],
+                            'seen'    => true,
+                        ];
+                    }
                 }
-                $rawHeaders = readPop3Multiline($fp, 65536);
-                $parsed     = parseRawEmailMessageInMemory($rawHeaders . "\r\n\r\n");
-                $messages[] = [
-                    'uid'     => (string)$seq,
-                    'subject' => $parsed['subject'],
-                    'from'    => $parsed['from'],
-                    'to'      => $parsed['to'],
-                    'date'    => $parsed['date'],
-                    'ts'      => $parsed['timestamp'],
-                    'seen'    => true,
-                ];
+                $total    = count($messages);
+                $messages = array_slice($messages, ($page - 1) * $perPage, $perPage);
+            } else {
+                $startSeq = max(1, $total - (($page - 1) * $perPage));
+                $endSeq   = max(1, $startSeq - $perPage + 1);
+
+                for ($seq = $startSeq; $seq >= $endSeq; $seq--) {
+                    // TOP <msg> 0 liest nur die Header und lässt die Nachricht unberührt auf dem Server!
+                    fwrite($fp, "TOP {$seq} 0\r\n");
+                    $status = (string)@fgets($fp, 2048);
+                    if (!str_starts_with($status, '+OK')) {
+                        continue;
+                    }
+                    $rawHeaders = readPop3Multiline($fp, 65536);
+                    $parsed     = parseRawEmailMessageInMemory($rawHeaders . "\r\n\r\n");
+                    $messages[] = [
+                        'uid'     => (string)$seq,
+                        'subject' => $parsed['subject'],
+                        'from'    => $parsed['from'],
+                        'to'      => $parsed['to'],
+                        'date'    => $parsed['date'],
+                        'ts'      => $parsed['timestamp'],
+                        'seen'    => true,
+                    ];
+                }
             }
         }
 
@@ -1076,7 +1110,7 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
     $fp = $conn['fp'];
 
     // Verfügbare Ordner ermitteln (Standard-Systemordner + Archiv + alle eigenen Benutzerordner)
-    $folders      = ['INBOX' => '📥 Posteingang'];
+    $folders       = ['INBOX' => '📥 Posteingang'];
     $customFolders = [];
     fwrite($fp, "A03 LIST \"\" \"*\"\r\n");
     $listResp = readImapTaggedResponse($fp, 'A03');
@@ -1140,44 +1174,90 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
 
     $messages = [];
     if ($total > 0) {
-        $endSeq   = max(1, $total - (($page - 1) * $perPage));
-        $startSeq = max(1, $endSeq - $perPage + 1);
+        $fetchCmd = '';
 
-        fwrite($fp, "A05 FETCH {$startSeq}:{$endSeq} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])\r\n");
-        $fetchResp = readImapTaggedResponse($fp, 'A05', 2097152);
+        if ($searchQuery !== '') {
+            // Live-Serversuche per IMAP UID SEARCH (Betreff, Absender, Empfänger & Nachrichtentext)
+            $safeTerm = '"' . addcslashes($searchQuery, '\\"') . '"';
+            $isAscii  = !preg_match('/[^\x20-\x7E]/', $searchQuery);
 
-        $blocks = preg_split('/^\*\s+\d+\s+FETCH\s+\(/im', $fetchResp['raw']) ?: [];
-        array_shift($blocks);
-
-        foreach ($blocks as $blk) {
-            $uid = '';
-            if (preg_match('/\bUID\s+(\d+)/i', $blk, $mUid)) {
-                $uid = $mUid[1];
-            }
-            if ($uid === '') {
-                continue;
-            }
-            $seen = (bool)preg_match('/\\\\Seen/i', $blk);
-
-            $hdrPart = '';
-            if (preg_match('/\{(\d+)\}\r?\n(.*)$/is', $blk, $mLit)) {
-                $litLen  = (int)$mLit[1];
-                $hdrPart = substr($mLit[2], 0, $litLen);
+            if ($isAscii) {
+                fwrite($fp, "A05S UID SEARCH OR OR OR SUBJECT {$safeTerm} FROM {$safeTerm} TO {$safeTerm} BODY {$safeTerm}\r\n");
+                $sResp = readImapTaggedResponse($fp, 'A05S', 524288);
+            } else {
+                fwrite($fp, "A05S UID SEARCH CHARSET UTF-8 OR OR OR SUBJECT {$safeTerm} FROM {$safeTerm} TO {$safeTerm} BODY {$safeTerm}\r\n");
+                $sResp = readImapTaggedResponse($fp, 'A05S', 524288);
+                if (!$sResp['ok']) {
+                    $asciiFallback = '"' . addcslashes(@iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $searchQuery) ?: $searchQuery, '\\"') . '"';
+                    fwrite($fp, "A05S2 UID SEARCH OR OR SUBJECT {$asciiFallback} FROM {$asciiFallback} BODY {$asciiFallback}\r\n");
+                    $sResp = readImapTaggedResponse($fp, 'A05S2', 524288);
+                }
             }
 
-            $parsed = parseRawEmailMessageInMemory($hdrPart . "\r\n\r\n");
-            $messages[] = [
-                'uid'     => $uid,
-                'subject' => $parsed['subject'],
-                'from'    => $parsed['from'],
-                'to'      => $parsed['to'],
-                'date'    => $parsed['date'],
-                'ts'      => $parsed['timestamp'],
-                'seen'    => $seen,
-            ];
+            $matchedUids = [];
+            if (preg_match_all('/^\*\s+SEARCH\s+([0-9\s]+)/im', $sResp['raw'], $mSrch)) {
+                foreach ($mSrch[1] as $lineNums) {
+                    foreach (preg_split('/\s+/', trim($lineNums)) ?: [] as $numStr) {
+                        $uVal = (int)$numStr;
+                        if ($uVal > 0) {
+                            $matchedUids[$uVal] = $uVal;
+                        }
+                    }
+                }
+            }
+
+            $uidList = array_values($matchedUids);
+            rsort($uidList, SORT_NUMERIC);
+            $total    = count($uidList);
+            $pageUids = array_slice($uidList, ($page - 1) * $perPage, $perPage);
+
+            if (!empty($pageUids)) {
+                $uidCsv   = implode(',', $pageUids);
+                $fetchCmd = "A05 UID FETCH {$uidCsv} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])\r\n";
+            }
+        } else {
+            $endSeq   = max(1, $total - (($page - 1) * $perPage));
+            $startSeq = max(1, $endSeq - $perPage + 1);
+            $fetchCmd = "A05 FETCH {$startSeq}:{$endSeq} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])\r\n";
         }
 
-        usort($messages, static fn(array $a, array $b): int => ((int)$b['ts']) <=> ((int)$a['ts']));
+        if ($fetchCmd !== '') {
+            fwrite($fp, $fetchCmd);
+            $fetchResp = readImapTaggedResponse($fp, 'A05', 2097152);
+
+            $blocks = preg_split('/^\*\s+\d+\s+FETCH\s+\(/im', $fetchResp['raw']) ?: [];
+            array_shift($blocks);
+
+            foreach ($blocks as $blk) {
+                $uid = '';
+                if (preg_match('/\bUID\s+(\d+)/i', $blk, $mUid)) {
+                    $uid = $mUid[1];
+                }
+                if ($uid === '') {
+                    continue;
+                }
+                $seen = (bool)preg_match('/\\\\Seen/i', $blk);
+
+                $hdrPart = '';
+                if (preg_match('/\{(\d+)\}\r?\n(.*)$/is', $blk, $mLit)) {
+                    $litLen  = (int)$mLit[1];
+                    $hdrPart = substr($mLit[2], 0, $litLen);
+                }
+
+                $parsed = parseRawEmailMessageInMemory($hdrPart . "\r\n\r\n");
+                $messages[] = [
+                    'uid'     => $uid,
+                    'subject' => $parsed['subject'],
+                    'from'    => $parsed['from'],
+                    'to'      => $parsed['to'],
+                    'date'    => $parsed['date'],
+                    'ts'      => $parsed['timestamp'],
+                    'seen'    => $seen,
+                ];
+            }
+
+            usort($messages, static fn(array $a, array $b): int => ((int)$b['ts']) <=> ((int)$a['ts']));
+        }
     }
 
     fwrite($fp, "A99 LOGOUT\r\n");
