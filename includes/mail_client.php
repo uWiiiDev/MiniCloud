@@ -29,7 +29,9 @@ function ensureUserMailAccountSchema(PDO $pdo): void
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS user_mail_accounts (
-            user_id INT NOT NULL PRIMARY KEY,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            account_label VARCHAR(120) NOT NULL DEFAULT '',
             email_address VARCHAR(190) NOT NULL DEFAULT '',
             sender_name VARCHAR(150) NOT NULL DEFAULT '',
             provider_key VARCHAR(40) NOT NULL DEFAULT 'auto',
@@ -42,9 +44,24 @@ function ensureUserMailAccountSchema(PDO $pdo): void
             smtp_ssl VARCHAR(12) NOT NULL DEFAULT 'tls',
             username VARCHAR(190) NOT NULL DEFAULT '',
             encrypted_password TEXT NOT NULL,
-            updated_at DATETIME NOT NULL
+            updated_at DATETIME NOT NULL,
+            UNIQUE KEY uniq_user_email (user_id, email_address),
+            KEY idx_user (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    // Auto-Migration falls die Tabelle noch aus der Einzel-Postfach-Version (ohne id-Spalte) stammt
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM user_mail_accounts LIKE 'id'")->fetchAll();
+        if (empty($cols)) {
+            $pdo->exec("ALTER TABLE user_mail_accounts DROP PRIMARY KEY");
+            $pdo->exec("ALTER TABLE user_mail_accounts ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST");
+            $pdo->exec("ALTER TABLE user_mail_accounts ADD COLUMN account_label VARCHAR(120) NOT NULL DEFAULT '' AFTER user_id");
+            $pdo->exec("ALTER TABLE user_mail_accounts ADD UNIQUE KEY uniq_user_email (user_id, email_address)");
+            $pdo->exec("ALTER TABLE user_mail_accounts ADD KEY idx_user (user_id)");
+        }
+    } catch (Throwable) {
+    }
 }
 
 /**
@@ -370,46 +387,155 @@ function decryptMailPassword(string $encoded, int $userId): string
 }
 
 /**
- * Lädt die gespeicherten E-Mail-Verbindungsdaten eines Benutzers (oder aus der aktuellen Sitzung).
+ * Lädt ALLE gespeicherten (und temporären Sitzungs-) E-Mail-Postfächer eines Benutzers.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function getUserMailAccounts(PDO $pdo, int $userId): array
+{
+    ensureUserMailAccountSchema($pdo);
+
+    $palette = [
+        'bg-indigo-600',
+        'bg-emerald-600',
+        'bg-amber-600',
+        'bg-rose-600',
+        'bg-sky-600',
+        'bg-purple-600',
+        'bg-teal-600',
+    ];
+    $accounts = [];
+    $idx = 0;
+
+    // 1. Dauerhaft in den Einstellungen hinterlegte Postfächer
+    $stmt = $pdo->prepare("SELECT * FROM user_mail_accounts WHERE user_id = ? ORDER BY id ASC");
+    $stmt->execute([$userId]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (empty($row['incoming_host']) || empty($row['email_address'])) {
+            continue;
+        }
+        $password = decryptMailPassword((string)$row['encrypted_password'], $userId);
+        if ($password === '') {
+            continue;
+        }
+        $accId = (int)$row['id'];
+        $label = trim((string)($row['account_label'] ?? ''));
+        if ($label === '') {
+            $label = (string)$row['email_address'];
+        }
+        $accounts[] = [
+            'id'            => $accId,
+            'account_label' => $label,
+            'email_address' => (string)$row['email_address'],
+            'sender_name'   => (string)$row['sender_name'],
+            'provider_key'  => (string)$row['provider_key'],
+            'protocol'      => in_array($row['protocol'], ['imap', 'pop3'], true) ? (string)$row['protocol'] : 'imap',
+            'incoming_host' => (string)$row['incoming_host'],
+            'incoming_port' => (int)$row['incoming_port'],
+            'incoming_ssl'  => (string)$row['incoming_ssl'],
+            'smtp_host'     => (string)$row['smtp_host'],
+            'smtp_port'     => (int)$row['smtp_port'],
+            'smtp_ssl'      => (string)$row['smtp_ssl'],
+            'username'      => (string)($row['username'] ?: $row['email_address']),
+            'password'      => $password,
+            'storage_mode'  => 'db',
+            'badge_color'   => $palette[$idx % count($palette)],
+        ];
+        $idx++;
+    }
+
+    // 2. Temporäre Sitzungs-Postfächer (im RAM)
+    $sessionList = $_SESSION['temp_mail_accounts_' . $userId] ?? [];
+    if (!empty($_SESSION['temp_mail_account_' . $userId]) && is_array($_SESSION['temp_mail_account_' . $userId])) {
+        $sessionList[-1] = $_SESSION['temp_mail_account_' . $userId];
+    }
+    if (is_array($sessionList)) {
+        foreach ($sessionList as $sKey => $sAcc) {
+            if (!is_array($sAcc) || empty($sAcc['incoming_host']) || empty($sAcc['email_address'])) {
+                continue;
+            }
+            $negId = ((int)$sKey < 0) ? (int)$sKey : (-100 - $idx);
+            $sAcc['id']            = $negId;
+            $sAcc['account_label'] = trim((string)($sAcc['account_label'] ?? '')) ?: ((string)$sAcc['email_address'] . ' (Sitzung)');
+            $sAcc['storage_mode']  = 'session';
+            $sAcc['badge_color']   = $palette[$idx % count($palette)];
+            $accounts[] = $sAcc;
+            $idx++;
+        }
+    }
+
+    return $accounts;
+}
+
+/**
+ * Liefert ein bestimmtes Postfach anhand seiner ID (oder das erste vorhandene Postfach, falls $accountId === 0).
+ *
+ * @return array<string, mixed>|null
+ */
+function getUserMailAccountById(PDO $pdo, int $userId, int $accountId = 0): ?array
+{
+    $all = getUserMailAccounts($pdo, $userId);
+    if (empty($all)) {
+        return null;
+    }
+    if ($accountId === 0) {
+        return $all[0];
+    }
+    foreach ($all as $acc) {
+        if ((int)$acc['id'] === $accountId) {
+            return $acc;
+        }
+    }
+    return $all[0];
+}
+
+/**
+ * Abwärtskompatibler Wrapper: liefert das Standard-Postfach des Benutzers.
  *
  * @return array<string, mixed>|null
  */
 function getUserMailAccountConfig(PDO $pdo, int $userId): ?array
 {
-    ensureUserMailAccountSchema($pdo);
+    return getUserMailAccountById($pdo, $userId, 0);
+}
 
-    // 1. Falls in der aktuellen Sitzung temporäre Zugangsdaten hinterlegt wurden
-    if (!empty($_SESSION['temp_mail_account_' . $userId]) && is_array($_SESSION['temp_mail_account_' . $userId])) {
-        return $_SESSION['temp_mail_account_' . $userId];
+/**
+ * Ruft für die gemeinsame Ansicht („🌐 Alle Postfächer“) live die neuesten E-Mails
+ * aus allen eingebundenen Konten im Arbeitsspeicher ab und sortiert sie chronologisch.
+ *
+ * @param array<int, array<string, mixed>> $accounts
+ * @return array{ok: bool, total: int, messages: array<int, array<string, mixed>>, errors: array<int, string>, folders: array<string, string>}
+ */
+function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12): array
+{
+    $mergedMessages = [];
+    $totalCount     = 0;
+    $errors         = [];
+
+    foreach ($accounts as $acc) {
+        $res = fetchLiveMailboxMessages($acc, 'INBOX', 1, $perAccount);
+        if (!$res['ok']) {
+            $errors[] = (string)$acc['email_address'] . ': ' . ($res['error'] ?? 'Verbindungsfehler');
+            continue;
+        }
+        $totalCount += (int)($res['total'] ?? 0);
+        foreach ($res['messages'] as $msg) {
+            $msg['account_id']    = (int)$acc['id'];
+            $msg['account_email'] = (string)$acc['email_address'];
+            $msg['account_label'] = (string)$acc['account_label'];
+            $msg['account_color'] = (string)$acc['badge_color'];
+            $mergedMessages[]     = $msg;
+        }
     }
 
-    // 2. Dauerhaft in den Benutzereinstellungen hinterlegte Zugangsdaten
-    $stmt = $pdo->prepare("SELECT * FROM user_mail_accounts WHERE user_id = ? LIMIT 1");
-    $stmt->execute([$userId]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$row || empty($row['incoming_host']) || empty($row['email_address'])) {
-        return null;
-    }
-
-    $password = decryptMailPassword((string)$row['encrypted_password'], $userId);
-    if ($password === '') {
-        return null;
-    }
+    usort($mergedMessages, static fn(array $a, array $b): int => ((int)($b['ts'] ?? 0)) <=> ((int)($a['ts'] ?? 0)));
 
     return [
-        'email_address' => (string)$row['email_address'],
-        'sender_name'   => (string)$row['sender_name'],
-        'provider_key'  => (string)$row['provider_key'],
-        'protocol'      => in_array($row['protocol'], ['imap', 'pop3'], true) ? (string)$row['protocol'] : 'imap',
-        'incoming_host' => (string)$row['incoming_host'],
-        'incoming_port' => (int)$row['incoming_port'],
-        'incoming_ssl'  => (string)$row['incoming_ssl'],
-        'smtp_host'     => (string)$row['smtp_host'],
-        'smtp_port'     => (int)$row['smtp_port'],
-        'smtp_ssl'      => (string)$row['smtp_ssl'],
-        'username'      => (string)($row['username'] ?: $row['email_address']),
-        'password'      => $password,
-        'storage_mode'  => 'db',
+        'ok'       => !empty($mergedMessages) || empty($errors),
+        'total'    => $totalCount,
+        'messages' => $mergedMessages,
+        'errors'   => $errors,
+        'folders'  => ['INBOX' => '🌐 Gemeinsamer Posteingang (' . count($accounts) . ' Postfächer)'],
     ];
 }
 
