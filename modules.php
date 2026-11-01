@@ -446,18 +446,6 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
-        'key'      => 'proxy',
-        'enabled'  => ($appSettings['enable_proxy'] ?? '1') === '1',
-        'title'    => 'Proxy & Werbeblocker',
-        'shortSub' => 'Ad-Free Surfen, Reader & PAC-Schutz',
-        'icon'     => '🛡️',
-        'url'      => 'proxy.php',
-        'category' => 'tools_extra',
-        'desc'     => 'Anonym über runready.cloud surfen, Werbe-/Tracking-Skripte & Cookie-Banner blockieren, Artikel im reinen Lesemodus öffnen oder systemweiten AdBlock-Proxy (PAC) nutzen.',
-        'badge'    => 'NEU',
-        'badgeCls' => 'bg-emerald-600 text-white',
-    ],
-    [
         'key'      => 'toolbox',
         'enabled'  => ($appSettings['enable_toolbox'] ?? '1') === '1',
         'title'    => 'Alltags-Toolbox',

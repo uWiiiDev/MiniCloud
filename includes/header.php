@@ -965,19 +965,6 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
-                    <?php if (($appSettings['enable_proxy'] ?? '1') === '1'): ?>
-                        <a
-                            href="proxy.php"
-                            data-nav-item="proxy"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Proxy-Server, Werbeblocker &amp; Reader-Studio"
-                        >
-                            <span>🛡️</span>
-                            <span class="hidden md:inline">Proxy &amp; AdBlock</span>
-                        </a>
-                    <?php endif; ?>
-
                     <a
                         href="trash.php"
                         data-nav-item="trash"
@@ -1137,7 +1124,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'polls', 'menti', 'forms', 'budget', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'news', 'assistant', 'passwords', 'proxy', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
+                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'polls', 'menti', 'forms', 'budget', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'news', 'assistant', 'passwords', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
 
                     function getPinnedNav() {
                         try {
