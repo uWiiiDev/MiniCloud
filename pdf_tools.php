@@ -357,11 +357,392 @@ function saveGeneratedPdfToCloud(PDO $pdo, int $userId, string $username, string
     ];
 }
 
-$gsBin   = findPdfCliBinary('gs');
-$qpdfBin = findPdfCliBinary('qpdf');
-$hasLocalOcr = is_file(__DIR__ . '/assets/ocr/tesseract.min.js')
+$gsBin        = findPdfCliBinary('gs');
+$qpdfBin      = findPdfCliBinary('qpdf');
+$pdftotextBin = findPdfCliBinary('pdftotext');
+$hasLocalOcr  = is_file(__DIR__ . '/assets/ocr/tesseract.min.js')
     && is_file(__DIR__ . '/assets/ocr/worker.min.js')
     && is_file(__DIR__ . '/assets/ocr/deu.traineddata.gz');
+
+/**
+ * Prüft eine IBAN nach dem offiziellen Modulo-97-Verfahren (ISO 13616).
+ */
+function isValidIbanChecksum(string $iban): bool
+{
+    $clean = strtoupper(preg_replace('/[^A-Z0-9]/', '', $iban) ?? '');
+    if (strlen($clean) < 15 || strlen($clean) > 34 || !preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/', $clean)) {
+        return false;
+    }
+    $rearranged = substr($clean, 4) . substr($clean, 0, 4);
+    $numeric = '';
+    for ($i = 0, $len = strlen($rearranged); $i < $len; $i++) {
+        $ch = $rearranged[$i];
+        if ($ch >= 'A' && $ch <= 'Z') {
+            $numeric .= (string)(ord($ch) - 55);
+        } else {
+            $numeric .= $ch;
+        }
+    }
+    $mod = 0;
+    for ($i = 0, $len = strlen($numeric); $i < $len; $i++) {
+        $mod = ($mod * 10 + (int)$numeric[$i]) % 97;
+    }
+    return $mod === 1;
+}
+
+/**
+ * Extrahiert den Textinhalt aus einer PDF-Datei lokal auf dem Server
+ * (1. pdftotext -layout, 2. Ghostscript txtwrite, 3. nativer PHP FlateDecode-Fallback).
+ */
+function extractTextFromPdfFile(string $pdfPath, ?string $pdftotextBin, ?string $gsBin): string
+{
+    if (!is_file($pdfPath)) {
+        return '';
+    }
+
+    $tmpDir = sys_get_temp_dir() . '/mc_pdf_txt_' . bin2hex(random_bytes(6));
+    if (@mkdir($tmpDir, 0700, true)) {
+        $tmpPdf = $tmpDir . '/in.pdf';
+        $tmpTxt = $tmpDir . '/out.txt';
+        if (@copy($pdfPath, $tmpPdf)) {
+            $errOut = null;
+            if ($pdftotextBin !== null) {
+                $code = runSafeProcess([$pdftotextBin, '-layout', '-enc', 'UTF-8', $tmpPdf, $tmpTxt], $errOut);
+                if ($code === 0 && is_file($tmpTxt)) {
+                    $txt = trim((string)@file_get_contents($tmpTxt));
+                    @unlink($tmpTxt);
+                    @unlink($tmpPdf);
+                    @rmdir($tmpDir);
+                    if ($txt !== '') {
+                        return $txt;
+                    }
+                }
+            }
+            if ($gsBin !== null) {
+                $code = runSafeProcess([$gsBin, '-dBATCH', '-dNOPAUSE', '-dSAFER', '-q', '-sDEVICE=txtwrite', '-sOutputFile=' . $tmpTxt, $tmpPdf], $errOut);
+                if ($code === 0 && is_file($tmpTxt)) {
+                    $txt = trim((string)@file_get_contents($tmpTxt));
+                    @unlink($tmpTxt);
+                    @unlink($tmpPdf);
+                    @rmdir($tmpDir);
+                    if ($txt !== '') {
+                        return $txt;
+                    }
+                }
+            }
+        }
+        foreach (glob($tmpDir . '/*') ?: [] as $f) {
+            @unlink($f);
+        }
+        @rmdir($tmpDir);
+    }
+
+    // 3. Reiner PHP-Fallback für unkomprimierte / FlateDecode PDF-Textstreams (z.B. Strato ohne CLI)
+    $raw = (string)@file_get_contents($pdfPath);
+    if ($raw === '') {
+        return '';
+    }
+    $chunks = [];
+    if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $raw, $matches)) {
+        foreach ($matches[1] as $streamData) {
+            $dec = @gzuncompress($streamData);
+            if ($dec === false) {
+                $dec = @gzinflate($streamData);
+            }
+            $src = is_string($dec) && $dec !== '' ? $dec : $streamData;
+            if (preg_match_all('/\(([^()\\\\]*(?:\\\\.[^()\\\\]*)*)\)\s*Tj/s', $src, $tm)) {
+                foreach ($tm[1] as $t) {
+                    $chunks[] = stripcslashes($t);
+                }
+            }
+            if (preg_match_all('/\[(.*?)\]\s*TJ/s', $src, $tjm)) {
+                foreach ($tjm[1] as $arrStr) {
+                    if (preg_match_all('/\(([^()\\\\]*(?:\\\\.[^()\\\\]*)*)\)/s', $arrStr, $sub)) {
+                        $line = '';
+                        foreach ($sub[1] as $part) {
+                            $line .= stripcslashes($part);
+                        }
+                        if ($line !== '') {
+                            $chunks[] = $line;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return trim(implode("\n", $chunks));
+}
+
+/**
+ * Analysiert den Text einer Rechnung / eines Belegs und extrahiert automatisch:
+ * - Empfänger / Händler
+ * - IBAN (mit Modulo-97-Prüfung) & BIC
+ * - Gesamtbetrag (€)
+ * - Rechnungsnummer, Kundennummer & Verwendungszweck
+ * - Rechnungsdatum (YYYY-MM-DD)
+ * - Passende Haushaltsbuch-Kategorie
+ *
+ * @return array{recipient: string, iban: string, bic: string, amount: float, invoice_no: string, customer_no: string, invoice_date: string, purpose: string, category: string}
+ */
+function parseInvoiceDataFromText(string $rawText, string $fallbackFilename = ''): array
+{
+    $text = str_replace(["\r\n", "\r"], "\n", $rawText);
+
+    // 1. IBAN suchen (DE + europäische IBANs, mit oder ohne Leerzeichen)
+    $foundIban = '';
+    if (preg_match_all('/\b([A-Z]{2}\s*[0-9]{2}(?:\s*[A-Z0-9]{4}){3,7}(?:\s*[A-Z0-9]{1,4})?)\b/', strtoupper($text), $ibanMatches)) {
+        foreach ($ibanMatches[1] as $cand) {
+            $clean = preg_replace('/\s+/', '', $cand) ?? '';
+            if (isValidIbanChecksum($clean)) {
+                // In 4er-Blöcken formatieren
+                $foundIban = trim(chunk_split($clean, 4, ' '));
+                break;
+            }
+        }
+    }
+
+    // 2. BIC suchen (8 oder 11 Zeichen in der Nähe von "BIC" oder "SWIFT")
+    $foundBic = '';
+    if (preg_match('/(?:BIC|SWIFT(?:-Code)?)\s*[:\-]?\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b/i', $text, $bicMatch)) {
+        $foundBic = strtoupper(trim($bicMatch[1]));
+    }
+
+    // 3. Rechnungsbetrag / Zahlbetrag suchen
+    $amount = 0.0;
+    $priorityPatterns = [
+        '/(?:Rechnungsbetrag|Zahlbetrag|Gesamtbetrag|Zu\s+zahlen(?:der\s+Betrag)?|Endbetrag|Bruttobetrag|Gesamtsumme|Summe\s+Brutto|Total\s+EUR|Betrag\s+in\s+EUR)[^\n\d]{0,35}(\d{1,3}(?:\.\d{3})*,\d{2}|\d+\.\d{2})/iu',
+        '/(?:Summe|Gesamt|Total|Brutto)[^\n\d]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)?/iu',
+    ];
+    foreach ($priorityPatterns as $pat) {
+        if (preg_match_all($pat, $text, $amMatches)) {
+            // Letzten Treffer nehmen (Endsumme steht auf Rechnungen meist unten)
+            $lastRaw = (string)end($amMatches[1]);
+            $norm = str_contains($lastRaw, ',')
+                ? str_replace(['.', ','], ['', '.'], $lastRaw)
+                : $lastRaw;
+            $val = (float)$norm;
+            if ($val > 0 && $val < 1000000) {
+                $amount = round($val, 2);
+                break;
+            }
+        }
+    }
+    // Fallback: Alle Geldbeträge mit € / EUR durchsuchen und den größten plausiblen Betrag wählen
+    if ($amount <= 0.0 && preg_match_all('/(?:€|EUR)\s*(\d{1,3}(?:\.\d{3})*,\d{2})|(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)\b/iu', $text, $allEur)) {
+        $candidates = [];
+        foreach ($allEur[0] as $idx => $_full) {
+            $rawNum = $allEur[1][$idx] !== '' ? $allEur[1][$idx] : $allEur[2][$idx];
+            $val = (float)str_replace(['.', ','], ['', '.'], $rawNum);
+            if ($val > 0.0 && $val < 250000) {
+                $candidates[] = $val;
+            }
+        }
+        if (!empty($candidates)) {
+            $amount = round((float)max($candidates), 2);
+        }
+    }
+
+    // 4. Rechnungsnummer & Kundennummer
+    $invoiceNo = '';
+    if (preg_match('/(?:Rechnungs(?:-?nummer|-?nr\.?)|RG-?Nr\.?|Beleg(?:-?nummer|-?nr\.?)|Invoice\s*(?:No\.?|Number|#))\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,28})/iu', $text, $invMatch)) {
+        $candInv = trim($invMatch[1]);
+        if (preg_match('/\d/', $candInv)) {
+            $invoiceNo = $candInv;
+        }
+    }
+
+    $customerNo = '';
+    if (preg_match('/(?:Kunden(?:-?nummer|-?nr\.?)|Kd\.?-?Nr\.?|Vertrags(?:-?nummer|-?nr\.?)|Mitglieds(?:-?nummer|-?nr\.?))\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,24})/iu', $text, $custMatch)) {
+        $candCust = trim($custMatch[1]);
+        if (preg_match('/\d/', $candCust)) {
+            $customerNo = $candCust;
+        }
+    }
+
+    // 5. Rechnungsdatum erkennen (DD.MM.YYYY oder DD.MM.YY)
+    $invoiceDate = date('Y-m-d');
+    $datePatterns = [
+        '/(?:Rechnungsdatum|Belegdatum|Datum|Ausstellungsdatum|Date)\s*[:\-]?\s*(\d{1,2})\.(\d{1,2})\.(20\d{2}|\d{2})\b/iu',
+        '/\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/',
+    ];
+    foreach ($datePatterns as $dPat) {
+        if (preg_match($dPat, $text, $dm)) {
+            $day  = (int)$dm[1];
+            $mon  = (int)$dm[2];
+            $year = (int)$dm[3];
+            if ($year < 100) {
+                $year += 2000;
+            }
+            if (checkdate($mon, $day, $year) && $year >= 2015 && $year <= ((int)date('Y') + 1)) {
+                $invoiceDate = sprintf('%04d-%02d-%02d', $year, $mon, $day);
+                break;
+            }
+        }
+    }
+
+    // 6. Zahlungsempfänger / Firma ermitteln
+    $recipient = '';
+    if (preg_match('/(?:Zahlungsempfänger|Kontoinhaber|Empfänger|Begünstigter)\s*[:\-]\s*([^\n]{3,70})/iu', $text, $recMatch)) {
+        $recipient = trim($recMatch[1]);
+    }
+    if ($recipient === '') {
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $text)), static fn(string $l): bool => mb_strlen($l) >= 3));
+        foreach (array_slice($lines, 0, 35) as $ln) {
+            if (preg_match('/\b(GmbH(?:\s*&\s*Co\.?\s*KG)?|AG|SE|KG|OHG|UG|e\.?\s*V\.?|Stadtwerke|Telekom|Vodafone|1&1|O2|Amazon|PayPal|Allianz|HUK|Sparkasse|Volksbank|IKEA|REWE|ALDI|Lidl|EDEKA|Bauhaus|OBI|Hornbach|MediaMarkt|Saturn|Rossmann|dm-drogerie|Deutsche\s+Post|DHL|Deutsche\s+Bahn|Praxis|Apotheke|Klinik|Finanzamt|Rundfunk)\b/iu', $ln)) {
+                // Postleitzahl / Straße am Ende nach Komma oder Trennstrich abschneiden
+                $cleanLn = preg_split('/\s+[•|·\-–]\s+|\s*,\s*\d{5}\b/', $ln)[0] ?? $ln;
+                $cleanLn = trim($cleanLn);
+                if (mb_strlen($cleanLn) >= 3 && mb_strlen($cleanLn) <= 70) {
+                    $recipient = $cleanLn;
+                    break;
+                }
+            }
+        }
+    }
+    if ($recipient === '' && $fallbackFilename !== '') {
+        $base = preg_replace('/\.(pdf|jpg|jpeg|png|txt)$/i', '', $fallbackFilename) ?: '';
+        $base = str_replace(['_', '-'], ' ', $base);
+        $recipient = mb_substr(trim($base), 0, 70);
+    }
+
+    // 7. Verwendungszweck aufbauen
+    $purposeParts = [];
+    if ($invoiceNo !== '') {
+        $purposeParts[] = 'RG ' . $invoiceNo;
+    }
+    if ($customerNo !== '') {
+        $purposeParts[] = 'KD ' . $customerNo;
+    }
+    if (empty($purposeParts) && preg_match('/(?:Verwendungszweck|Referenz)\s*[:\-]\s*([^\n]{3,80})/iu', $text, $purpMatch)) {
+        $purposeParts[] = trim($purpMatch[1]);
+    }
+    $purpose = !empty($purposeParts)
+        ? implode(' / ', $purposeParts)
+        : ($recipient !== '' ? 'Rechnung ' . $recipient : 'Rechnung vom ' . date('d.m.Y', strtotime($invoiceDate)));
+    $purpose = mb_substr($purpose, 0, 140);
+
+    // 8. Automatische Kategorie-Zuordnung passend zu budget.php
+    $lowerAll = mb_strtolower($text . ' ' . $recipient . ' ' . $fallbackFilename, 'UTF-8');
+    $category = 'Sonstiges';
+    if (preg_match('/(stadtwerke|strom|gas|heizung|wasser|miete|nebenkosten|hausverwaltung|wohnung|schornsteinfeger|grundsteuer)/u', $lowerAll)) {
+        $category = 'Wohnen & Energie';
+    } elseif (preg_match('/(rewe|aldi|lidl|edeka|netto|kaufland|penny|bäckerei|metzgerei|getränke|lebensmittel|supermarkt)/u', $lowerAll)) {
+        $category = 'Lebensmittel';
+    } elseif (preg_match('/(tankstelle|aral|shell|esso|jet|total|werkstatt|kfz|auto|reifen|tüv|dekra|db\s+vertrieb|deutsche\s+bahn|ticket|parken|adac)/u', $lowerAll)) {
+        $category = 'Mobilität & Auto';
+    } elseif (preg_match('/(telekom|vodafone|o2|1&1|mobilfunk|internet|glasfaser|rundfunk|gez|versicherung|allianz|huk|ergo|axa|abo|netflix|spotify|beitrag)/u', $lowerAll)) {
+        $category = 'Verträge & Abos';
+    } elseif (preg_match('/(apotheke|arzt|praxis|zahnarzt|klinik|krankenhaus|optiker|physiotherapie|rezept|medikament|gesundheit)/u', $lowerAll)) {
+        $category = 'Gesundheit';
+    } elseif (preg_match('/(amazon|ikea|bauhaus|obi|hornbach|mediamarkt|saturn|otto|zalando|kleidung|möbel|elektronik|hardware|werkzeug)/u', $lowerAll)) {
+        $category = 'Shopping & Haus';
+    } elseif (preg_match('/(restaurant|hotel|kino|theater|konzert|urlaub|reise|verein|fitness|sport|freizeit)/u', $lowerAll)) {
+        $category = 'Freizeit & Kultur';
+    }
+
+    return [
+        'recipient'    => $recipient,
+        'iban'         => $foundIban,
+        'bic'          => $foundBic,
+        'amount'       => $amount,
+        'invoice_no'   => $invoiceNo,
+        'customer_no'  => $customerNo,
+        'invoice_date' => $invoiceDate,
+        'purpose'      => $purpose,
+        'category'     => $category,
+    ];
+}
+
+/**
+ * Erzeugt den offiziellen EPC069-12 SEPA-Überweisungs-Payload (GiroCode) für Banking-Apps.
+ */
+function buildEpcGiroCodePayload(string $recipient, string $iban, string $bic, float $amount, string $purpose): string
+{
+    $cleanIban = strtoupper(preg_replace('/\s+/', '', $iban) ?? '');
+    if ($cleanIban === '') {
+        return '';
+    }
+    $cleanBic  = strtoupper(preg_replace('/\s+/', '', $bic) ?? '');
+    $cleanRec  = mb_substr(trim($recipient) !== '' ? trim($recipient) : 'Zahlungsempfaenger', 0, 70);
+    $cleanPurp = mb_substr(preg_replace('/[\r\n]+/', ' ', trim($purpose)) ?: 'Rechnung', 0, 140);
+    $eurStr    = $amount > 0 ? sprintf('EUR%.2f', round($amount, 2)) : '';
+
+    $lines = [
+        'BCD',
+        '002',
+        '1',
+        'SCT',
+        $cleanBic,
+        $cleanRec,
+        $cleanIban,
+        $eurStr,
+        '',
+        '',
+        $cleanPurp,
+    ];
+    return implode("\n", $lines);
+}
+
+/**
+ * Stellt sicher, dass die Tabellen des Haushaltsbuchs (budget_books, budget_entries) existieren,
+ * und gibt die für den aktuellen Benutzer verfügbaren Haushaltsbücher zurück (legt bei Bedarf ein Standardbuch an).
+ *
+ * @return list<array<string, mixed>>
+ */
+function getOrInitUserBudgetBooks(PDO $pdo, int $userId): array
+{
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `budget_books` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT NOT NULL,
+            `title` VARCHAR(190) NOT NULL,
+            `currency` VARCHAR(10) NOT NULL DEFAULT '€',
+            `monthly_limit` DECIMAL(12,2) NOT NULL DEFAULT 2000.00,
+            `shared_users` VARCHAR(500) NOT NULL DEFAULT '',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_budget_books_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `budget_entries` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `book_id` INT UNSIGNED NOT NULL,
+            `user_id` INT NOT NULL,
+            `type` VARCHAR(16) NOT NULL DEFAULT 'expense',
+            `category` VARCHAR(60) NOT NULL DEFAULT 'Sonstiges',
+            `title` VARCHAR(190) NOT NULL,
+            `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `entry_date` DATE NOT NULL,
+            `is_shared_split` TINYINT(1) NOT NULL DEFAULT 1,
+            `file_id` INT DEFAULT NULL,
+            `note` VARCHAR(500) NOT NULL DEFAULT '',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_budget_entries_book_date` (`book_id`, `entry_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    $stmt = $pdo->prepare('SELECT * FROM budget_books WHERE user_id = :uid OR FIND_IN_SET(:uid_str, shared_users) > 0 ORDER BY id ASC');
+    $stmt->execute([':uid' => $userId, ':uid_str' => (string)$userId]);
+    $books = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($books)) {
+        $ins = $pdo->prepare("INSERT INTO budget_books (user_id, title, currency, monthly_limit) VALUES (:uid, 'Mein Haushaltsbuch', '€', 2000.00)");
+        $ins->execute([':uid' => $userId]);
+        $newId = (int)$pdo->lastInsertId();
+        $books = [[
+            'id'            => $newId,
+            'user_id'       => $userId,
+            'title'         => 'Mein Haushaltsbuch',
+            'currency'      => '€',
+            'monthly_limit' => 2000.00,
+        ]];
+    }
+
+    return $books;
+}
 
 // ============================================================================
 // POST-Aktionen verarbeiten
@@ -1168,7 +1549,438 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: pdf_tools.php#tab-ocr');
         exit;
     }
+
+    // ------------------------------------------------------------------------
+    // 7a. 💶 AJAX: Rechnung / Beleg (aus Cloud-PDF, Upload oder OCR-Text) analysieren
+    // ------------------------------------------------------------------------
+    if ($action === 'analyze_invoice_ajax') {
+        header('Content-Type: application/json; charset=utf-8');
+        $sourcePdfId  = (int)($_POST['source_pdf_id'] ?? 0);
+        $rawInputText = trim((string)($_POST['raw_text'] ?? ''));
+        $fallbackName = '';
+        $linkedFileId = 0;
+
+        if ($rawInputText === '') {
+            if ($sourcePdfId > 0) {
+                $stmtF = $pdo->prepare("SELECT * FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0 AND mime_type = 'application/pdf' LIMIT 1");
+                $stmtF->execute([':id' => $sourcePdfId, ':uid' => $userId]);
+                $fRow = $stmtF->fetch();
+                if (!$fRow) {
+                    echo json_encode(['ok' => false, 'error' => 'Ausgewählte PDF-Datei wurde nicht gefunden.']);
+                    exit;
+                }
+                $physPath     = UPLOAD_DIR . basename((string)$fRow['filename']);
+                $fallbackName = (string)$fRow['original_name'];
+                $linkedFileId = (int)$fRow['id'];
+                $rawInputText = extractTextFromPdfFile($physPath, $pdftotextBin, $gsBin);
+            } elseif (!empty($_FILES['invoice_pdf']['tmp_name']) && (int)($_FILES['invoice_pdf']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $tmpUp = (string)$_FILES['invoice_pdf']['tmp_name'];
+                $origUpName = sanitizeOriginalFilename((string)($_FILES['invoice_pdf']['name'] ?? 'Rechnung.pdf'));
+                $head = (string)@file_get_contents($tmpUp, false, null, 0, 8);
+                if (!str_starts_with($head, '%PDF-')) {
+                    echo json_encode(['ok' => false, 'error' => 'Die hochgeladene Datei ist kein gültiges PDF-Dokument.']);
+                    exit;
+                }
+                $fallbackName = $origUpName;
+                $rawInputText = extractTextFromPdfFile($tmpUp, $pdftotextBin, $gsBin);
+
+                // Optional direkt im Ordner "Rechnungen" in der Cloud archivieren, damit der Beleg verknüpft werden kann
+                $saveUploadToCloud = !empty($_POST['save_upload_to_cloud']);
+                if ($saveUploadToCloud) {
+                    $pdfBytes = (string)@file_get_contents($tmpUp);
+                    $savedUp  = saveGeneratedPdfToCloud($pdo, $userId, $username, $pdfBytes, $origUpName, 'Rechnungen');
+                    if ($savedUp['ok'] && !empty($savedUp['file_id'])) {
+                        $linkedFileId = (int)$savedUp['file_id'];
+                    }
+                }
+            }
+        }
+
+        $parsed = parseInvoiceDataFromText($rawInputText, $fallbackName);
+        $epcPayload = buildEpcGiroCodePayload(
+            $parsed['recipient'],
+            $parsed['iban'],
+            $parsed['bic'],
+            (float)$parsed['amount'],
+            $parsed['purpose']
+        );
+        $epcSvg = $epcPayload !== '' ? generateQrCodeSvg($epcPayload, 188) : '';
+
+        echo json_encode([
+            'ok'             => true,
+            'has_text_layer' => ($rawInputText !== ''),
+            'extracted_text' => mb_substr($rawInputText, 0, 4000),
+            'fields'         => $parsed,
+            'linked_file_id' => $linkedFileId,
+            'epc_svg'        => $epcSvg,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ------------------------------------------------------------------------
+    // 7b. 📱 AJAX: EPC-GiroCode (SEPA-QR-Code) nach manueller Feldänderung aktualisieren
+    // ------------------------------------------------------------------------
+    if ($action === 'refresh_epc_qr_ajax') {
+        header('Content-Type: application/json; charset=utf-8');
+        $recipient = trim((string)($_POST['recipient'] ?? ''));
+        $iban      = trim((string)($_POST['iban'] ?? ''));
+        $bic       = trim((string)($_POST['bic'] ?? ''));
+        $amountRaw = str_replace(',', '.', trim((string)($_POST['amount'] ?? '0')));
+        $amount    = max(0.0, round((float)$amountRaw, 2));
+        $purpose   = trim((string)($_POST['purpose'] ?? ''));
+
+        $cleanIban = strtoupper(preg_replace('/\s+/', '', $iban) ?? '');
+        $ibanValid = $cleanIban !== '' && isValidIbanChecksum($cleanIban);
+        $payload   = buildEpcGiroCodePayload($recipient, $iban, $bic, $amount, $purpose);
+        $svg       = $payload !== '' ? generateQrCodeSvg($payload, 188) : '';
+
+        echo json_encode([
+            'ok'         => true,
+            'iban_valid' => $ibanValid,
+            'epc_svg'    => $svg,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ------------------------------------------------------------------------
+    // 7c. 📒 Ausgelesene Rechnung direkt ins Haushaltsbuch (budget.php) buchen
+    // ------------------------------------------------------------------------
+    if ($action === 'save_invoice_to_budget') {
+        $books = getOrInitUserBudgetBooks($pdo, $userId);
+        $allowedBookIds = array_map(static fn(array $b): int => (int)$b['id'], $books);
+
+        $bookId = (int)($_POST['book_id'] ?? ($allowedBookIds[0] ?? 0));
+        if (!in_array($bookId, $allowedBookIds, true)) {
+            $bookId = $allowedBookIds[0] ?? 0;
+        }
+
+        $recipient   = trim((string)($_POST['recipient'] ?? ''));
+        $purpose     = trim((string)($_POST['purpose'] ?? ''));
+        $iban        = trim((string)($_POST['iban'] ?? ''));
+        $category    = trim((string)($_POST['category'] ?? 'Sonstiges'));
+        $amountRaw   = str_replace(',', '.', trim((string)($_POST['amount'] ?? '0')));
+        $amount      = round((float)$amountRaw, 2);
+        $invoiceDate = trim((string)($_POST['invoice_date'] ?? date('Y-m-d')));
+        $linkedFid   = (int)($_POST['linked_file_id'] ?? 0);
+
+        if ($amount <= 0) {
+            setFlash('error', 'Bitte gib einen gültigen Rechnungsbetrag größer als 0,00 € ein.');
+            header('Location: pdf_tools.php#tab-invoice');
+            exit;
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $invoiceDate)) {
+            $invoiceDate = date('Y-m-d');
+        }
+
+        // Sicherheitscheck für verknüpfte Cloud-Datei
+        $validFileId = null;
+        if ($linkedFid > 0) {
+            $stmtChk = $pdo->prepare('SELECT id FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL LIMIT 1');
+            $stmtChk->execute([':id' => $linkedFid, ':uid' => $userId]);
+            if ($stmtChk->fetchColumn()) {
+                $validFileId = $linkedFid;
+            }
+        }
+
+        $entryTitle = $recipient !== ''
+            ? ($purpose !== '' ? "{$recipient} ({$purpose})" : $recipient)
+            : ($purpose !== '' ? $purpose : 'Rechnung / Beleg');
+        $entryTitle = mb_substr($entryTitle, 0, 190);
+
+        $noteParts = [];
+        if ($iban !== '') {
+            $noteParts[] = 'IBAN: ' . $iban;
+        }
+        if ($purpose !== '') {
+            $noteParts[] = 'VZ: ' . $purpose;
+        }
+        $noteStr = mb_substr(implode(' | ', $noteParts), 0, 500);
+
+        $stmtIns = $pdo->prepare(
+            "INSERT INTO budget_entries (book_id, user_id, type, category, title, amount, entry_date, is_shared_split, file_id, note)
+             VALUES (:bid, :uid, 'expense', :cat, :title, :amt, :dt, 1, :fid, :note)"
+        );
+        $stmtIns->execute([
+            ':bid'   => $bookId,
+            ':uid'   => $userId,
+            ':cat'   => mb_substr($category !== '' ? $category : 'Sonstiges', 0, 60),
+            ':title' => $entryTitle,
+            ':amt'   => $amount,
+            ':dt'    => $invoiceDate,
+            ':fid'   => $validFileId,
+            ':note'  => $noteStr,
+        ]);
+
+        logAuditEvent($pdo, 'invoice_to_budget', sprintf('Rechnung „%s“ (%.2f €) ins Haushaltsbuch gebucht', $entryTitle, $amount), $userId, $username);
+        setFlash(
+            'success',
+            sprintf(
+                '📒 Rechnung „%s“ (%s €) wurde erfolgreich in dein Haushaltsbuch (Kategorie: %s) eingetragen!',
+                $entryTitle,
+                number_format($amount, 2, ',', '.'),
+                $category
+            )
+        );
+        header('Location: pdf_tools.php#tab-invoice');
+        exit;
+    }
+
+    // ------------------------------------------------------------------------
+    // 8. 🔢 PDF paginieren (Seitenzahlen & optionale Kopf-/Fußzeile einbrennen)
+    // ------------------------------------------------------------------------
+    if ($action === 'paginate_pdf') {
+        $sourceId    = (int)($_POST['source_pdf_id'] ?? 0);
+        $pageFormat  = (string)($_POST['page_format'] ?? 'page_of_total_de');
+        $position    = (string)($_POST['position'] ?? 'bottom_right');
+        $startPage   = max(1, (int)($_POST['start_page'] ?? 1));
+        $startNumber = max(1, (int)($_POST['start_number'] ?? 1));
+        $customPref  = trim((string)($_POST['custom_prefix'] ?? ''));
+        $fontSizeKey = (string)($_POST['font_size'] ?? 'normal');
+        $badgeBg     = !empty($_POST['badge_bg']);
+
+        if ($gsBin === null) {
+            setFlash('error', 'Zum Paginieren bestehender PDFs wird Ghostscript (gs) auf dem Server benötigt.');
+            header('Location: pdf_tools.php#tab-paginate');
+            exit;
+        }
+
+        $srcPath  = '';
+        $origName = 'Dokument.pdf';
+
+        if ($sourceId > 0) {
+            $stmtF = $pdo->prepare("SELECT * FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0 AND mime_type = 'application/pdf' LIMIT 1");
+            $stmtF->execute([':id' => $sourceId, ':uid' => $userId]);
+            $srcRow = $stmtF->fetch();
+            if ($srcRow) {
+                $cand = UPLOAD_DIR . basename((string)$srcRow['filename']);
+                if (is_file($cand)) {
+                    $srcPath  = $cand;
+                    $origName = (string)$srcRow['original_name'];
+                }
+            }
+        } elseif (!empty($_FILES['paginate_upload_pdf']['tmp_name']) && (int)($_FILES['paginate_upload_pdf']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $tmpUp = (string)$_FILES['paginate_upload_pdf']['tmp_name'];
+            $head  = (string)@file_get_contents($tmpUp, false, null, 0, 8);
+            if (str_starts_with($head, '%PDF-')) {
+                $srcPath  = $tmpUp;
+                $origName = sanitizeOriginalFilename((string)($_FILES['paginate_upload_pdf']['name'] ?? 'Dokument.pdf'));
+            }
+        }
+
+        if ($srcPath === '') {
+            setFlash('error', 'Bitte wähle eine gültige PDF-Datei aus deiner Cloud aus oder lade eine PDF-Datei hoch.');
+            header('Location: pdf_tools.php#tab-paginate');
+            exit;
+        }
+
+        if ($outputName === '') {
+            $baseOrig   = preg_replace('/\.pdf$/i', '', $origName) ?: 'Dokument';
+            $outputName = $baseOrig . '_paginiert.pdf';
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/mc_pdf_pag_' . bin2hex(random_bytes(8));
+        if (!@mkdir($tmpDir, 0700, true)) {
+            setFlash('error', 'Temporäres Arbeitsverzeichnis für die Paginierung konnte nicht erstellt werden.');
+            header('Location: pdf_tools.php#tab-paginate');
+            exit;
+        }
+
+        try {
+            $tmpInputPdf = $tmpDir . '/input.pdf';
+            if (!@copy($srcPath, $tmpInputPdf)) {
+                setFlash('error', 'Temporäre PDF-Kopie konnte nicht angelegt werden.');
+                header('Location: pdf_tools.php#tab-paginate');
+                exit;
+            }
+
+            $errOut = null;
+            $cmd = [
+                $gsBin,
+                '-dBATCH',
+                '-dNOPAUSE',
+                '-dSAFER',
+                '-q',
+                '-sDEVICE=jpeg',
+                '-dJPEGQ=92',
+                '-r200',
+                '-dFirstPage=1',
+                '-dLastPage=100',
+                '-sOutputFile=' . $tmpDir . '/page_%03d.jpg',
+                $tmpInputPdf,
+            ];
+            $code = runSafeProcess($cmd, $errOut);
+            $pageFiles = glob($tmpDir . '/page_*.jpg') ?: [];
+            sort($pageFiles, SORT_NATURAL);
+
+            if ($code !== 0 || empty($pageFiles)) {
+                setFlash('error', 'PDF-Seiten konnten für die Paginierung nicht gerendert werden.');
+                header('Location: pdf_tools.php#tab-paginate');
+                exit;
+            }
+
+            $totalPages = count($pageFiles);
+            $fontFile   = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+            if (!is_file($fontFile)) {
+                $fontFile = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+            }
+
+            $relFactor = 0.015;
+            if ($fontSizeKey === 'small') {
+                $relFactor = 0.012;
+            } elseif ($fontSizeKey === 'large') {
+                $relFactor = 0.020;
+            }
+
+            $finalPages   = [];
+            $stampedCount = 0;
+
+            foreach ($pageFiles as $idx => $pFile) {
+                $physPageNo = $idx + 1;
+                $im = @imagecreatefromjpeg($pFile);
+                if ($im === false) {
+                    continue;
+                }
+                imagealphablending($im, true);
+                $w = imagesx($im);
+                $h = imagesy($im);
+
+                if ($physPageNo >= $startPage) {
+                    $numVal   = $startNumber + ($physPageNo - $startPage);
+                    $totalVal = $startNumber + ($totalPages - $startPage);
+
+                    if ($pageFormat === 'page_only_de') {
+                        $numStr = "Seite {$numVal}";
+                    } elseif ($pageFormat === 'slash_total') {
+                        $numStr = "{$numVal} / {$totalVal}";
+                    } elseif ($pageFormat === 'dashes') {
+                        $numStr = "- {$numVal} -";
+                    } elseif ($pageFormat === 'page_of_total_en') {
+                        $numStr = "Page {$numVal} of {$totalVal}";
+                    } elseif ($pageFormat === 'bates') {
+                        $numStr = sprintf('Blatt %03d', $numVal);
+                    } else {
+                        $numStr = "Seite {$numVal} von {$totalVal}";
+                    }
+
+                    $label = $customPref !== '' ? ($customPref . '  •  ' . $numStr) : $numStr;
+                    $ptSize = max(9.0, $h * $relFactor * 0.78);
+                    $marginX = (int)round($w * 0.045);
+                    $marginY = (int)round($h * 0.036);
+
+                    // Textbreite und -höhe messen
+                    $textW = (int)round(mb_strlen($label) * $ptSize * 0.62);
+                    $textH = (int)round($ptSize * 1.25);
+                    if (function_exists('imagettfbbox') && is_file($fontFile)) {
+                        $bbox = @imagettfbbox($ptSize, 0.0, $fontFile, $label);
+                        if (is_array($bbox)) {
+                            $textW = abs($bbox[2] - $bbox[0]);
+                            $textH = abs($bbox[7] - $bbox[1]);
+                        }
+                    }
+
+                    // X-Koordinate nach Position (left / center / right)
+                    if (str_ends_with($position, '_left')) {
+                        $drawX = $marginX;
+                    } elseif (str_ends_with($position, '_center')) {
+                        $drawX = (int)round(($w - $textW) / 2);
+                    } else {
+                        $drawX = max($marginX, $w - $marginX - $textW);
+                    }
+
+                    // Y-Koordinate (Baseline) nach Position (top / bottom)
+                    if (str_starts_with($position, 'top_')) {
+                        $drawY = $marginY + $textH;
+                    } else {
+                        $drawY = $h - $marginY;
+                    }
+
+                    // Optionales helles Hintergrund-Badge zeichnen (perfekter Kontrast auf Scans)
+                    if ($badgeBg) {
+                        $padX = (int)round($ptSize * 0.65);
+                        $padY = (int)round($ptSize * 0.42);
+                        $bx1  = max(0, $drawX - $padX);
+                        $by1  = max(0, $drawY - $textH - $padY);
+                        $bx2  = min($w - 1, $drawX + $textW + $padX);
+                        $by2  = min($h - 1, $drawY + $padY);
+
+                        $colBg     = imagecolorallocatealpha($im, 255, 255, 255, 12);
+                        $colBorder = imagecolorallocate($im, 203, 213, 225);
+                        imagefilledrectangle($im, $bx1, $by1, $bx2, $by2, $colBg);
+                        imagerectangle($im, $bx1, $by1, $bx2, $by2, $colBorder);
+                    }
+
+                    $colText = imagecolorallocate($im, 30, 41, 59);
+                    if (function_exists('imagettftext') && is_file($fontFile)) {
+                        imagettftext($im, $ptSize, 0.0, $drawX, $drawY, $colText, $fontFile, $label);
+                    } else {
+                        imagestring($im, 5, $drawX, $drawY - 14, $label, $colText);
+                    }
+                    $stampedCount++;
+                }
+
+                ob_start();
+                imagejpeg($im, null, 90);
+                $jpegBytes = (string)ob_get_clean();
+                imagedestroy($im);
+
+                if ($jpegBytes !== '') {
+                    $finalPages[] = [
+                        'jpeg_bytes' => $jpegBytes,
+                        'width'      => $w,
+                        'height'     => $h,
+                    ];
+                }
+            }
+
+            if (empty($finalPages)) {
+                setFlash('error', 'Paginiertes PDF konnte nicht erzeugt werden.');
+                header('Location: pdf_tools.php#tab-paginate');
+                exit;
+            }
+
+            $pdfBytes = buildNativePdfFromJpegPages($finalPages, 'original');
+            $saved    = saveGeneratedPdfToCloud($pdo, $userId, $username, $pdfBytes, $outputName, $targetFolder);
+
+            if (!$saved['ok']) {
+                setFlash('error', (string)$saved['error']);
+                header('Location: pdf_tools.php#tab-paginate');
+                exit;
+            }
+
+            setFlash(
+                'success',
+                sprintf(
+                    '🔢 PDF „%s“ (%d von %d Seiten nummeriert, %s) wurde im Ordner „/%s“ gespeichert!',
+                    $saved['filename'],
+                    $stampedCount,
+                    $totalPages,
+                    formatBytes((int)$saved['size']),
+                    $saved['folder']
+                )
+            );
+            header('Location: pdf_tools.php?created=' . (int)$saved['file_id'] . '#tab-paginate');
+            exit;
+        } finally {
+            foreach (glob($tmpDir . '/*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
+    }
 }
+
+$userBudgetBooks = getOrInitUserBudgetBooks($pdo, $userId);
+$budgetCategoryOptions = [
+    'Wohnen & Energie'  => '🏠 Wohnen & Energie',
+    'Lebensmittel'      => '🛒 Lebensmittel',
+    'Mobilität & Auto'  => '🚗 Mobilität & Auto',
+    'Verträge & Abos'   => '📱 Verträge & Abos',
+    'Shopping & Haus'   => '🛍️ Shopping & Haus',
+    'Gesundheit'        => '🩺 Gesundheit',
+    'Freizeit & Kultur' => '🎭 Freizeit & Kultur',
+    'Sparen & Vorsorge' => '🐷 Sparen & Vorsorge',
+    'Sonstiges'         => '📌 Sonstiges',
+];
 
 // Eigene PDF-Dateien und Bilddateien aus der Cloud für die Auswahl laden
 $stmtMyPdfs = $pdo->prepare("
@@ -1271,6 +2083,14 @@ require_once __DIR__ . '/includes/header.php';
             🔎 6. OCR-Texterkennung (Lokal)
         </button>
         <?php endif; ?>
+        <button type="button" data-pdf-tab-btn="tab-invoice" onclick="switchPdfTab('tab-invoice')"
+                class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
+            💶 7. Rechnungs- &amp; Beleg-Ausleser
+        </button>
+        <button type="button" data-pdf-tab-btn="tab-paginate" onclick="switchPdfTab('tab-paginate')"
+                class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
+            🔢 8. PDF paginieren (Seitenzahlen)
+        </button>
     </div>
 
     <!-- =================================================================== -->
@@ -1949,7 +2769,11 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
-                <div class="flex justify-end pt-1">
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <button type="button" onclick="transferOcrToInvoiceAnalyzer()"
+                            class="px-4 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs sm:text-sm transition-colors cursor-pointer">
+                        💶 Erkannten Text als Rechnung/Beleg auswerten &rarr;
+                    </button>
                     <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
                         💾 Erkannten Text jetzt speichern
                     </button>
@@ -1958,6 +2782,333 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </section>
     <?php endif; ?>
+
+    <!-- =================================================================== -->
+    <!-- REITER 7: 💶 INTELLIGENTER RECHNUNGS- & BELEG-AUSLESER (+ GIROCODE) -->
+    <!-- =================================================================== -->
+    <section id="tab-invoice" data-pdf-tab-panel="tab-invoice" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>💶 Intelligenter Rechnungs- &amp; Beleg-Ausleser</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">EPC-GiroCode &amp; Haushaltsbuch</span>
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Liest aus PDF-Rechnungen oder OCR-Scans automatisch <strong>Zahlungsempfänger, IBAN (mit Modulo-97-Prüfung), BIC, Rechnungsbetrag, Datum und Verwendungszweck</strong> aus, erzeugt sofort einen scannbaren <strong>📱 SEPA-GiroCode</strong> für deine Banking-App und übernimmt den Beleg auf Wunsch direkt in dein <strong>📒 Haushaltsbuch</strong>.
+                </p>
+            </div>
+            <a href="budget.php" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold shrink-0">
+                📒 Zum Haushaltsbuch &rarr;
+            </a>
+        </div>
+
+        <!-- Schritt 1: Rechnung auswählen oder hochladen -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- 1a. Aus Cloud-PDF wählen -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1a. 📄 PDF-Rechnung aus deiner Cloud wählen</label>
+                <select id="invCloudPdfSelect" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    <option value="">– Cloud-PDF auswählen –</option>
+                    <?php foreach ($myPdfs as $pdfItem): ?>
+                        <option value="<?= (int)$pdfItem['id'] ?>">
+                            📄 <?= e((string)$pdfItem['original_name']) ?> (/<?= e((string)$pdfItem['folder_path']) ?> · <?= e(formatBytes((int)$pdfItem['file_size'])) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="button" onclick="analyzeInvoiceFromCloudOrUpload('cloud')"
+                        class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                    🔎 Cloud-PDF jetzt auslesen
+                </button>
+            </div>
+
+            <!-- 1b. PDF-Rechnung vom Gerät hochladen -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1b. 📤 Oder PDF-Rechnung vom Gerät wählen</label>
+                <input type="file" id="invUploadPdfInput" accept="application/pdf,.pdf"
+                       class="w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-brand-50 file:text-brand-700">
+                <label class="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="invSaveUploadToCloud" checked class="rounded border-slate-300 text-brand-600">
+                    <span>Im Cloud-Ordner <code>/Rechnungen</code> archivieren &amp; verknüpfen</span>
+                </label>
+                <button type="button" onclick="analyzeInvoiceFromCloudOrUpload('upload')"
+                        class="w-full px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                    📤 Hochladen &amp; Rechnung auslesen
+                </button>
+            </div>
+
+            <!-- 1c. Rechnungstext / OCR-Text direkt einfügen -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1c. 📝 Oder Rechnungstext / OCR-Text einfügen</label>
+                <textarea id="invRawTextInput" rows="3"
+                          placeholder="Kopiere hier Text aus einer E-Mail-Rechnung hinein oder nutze Reiter 6 (OCR) bei abfotografierten Papierbelegen…"
+                          class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-mono"></textarea>
+                <button type="button" onclick="analyzeInvoiceFromText()"
+                        class="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                    ⚡ Text nach Rechnungsdaten durchsuchen
+                </button>
+            </div>
+        </div>
+
+        <!-- Status-Banner nach der Analyse -->
+        <div id="invAnalysisStatusBanner" class="hidden p-3.5 rounded-xl text-xs font-semibold border"></div>
+
+        <!-- Schritt 2: Ausgelesene Rechnungsdaten + Live-GiroCode + Haushaltsbuch-Import -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-2">
+            <!-- Linke Spalte (7 Cols): Editierbare Rechnungsfelder & Haushaltsbuch-Buchung -->
+            <form method="post" action="pdf_tools.php#tab-invoice" class="lg:col-span-7 p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-4">
+                <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+                <input type="hidden" name="action" value="save_invoice_to_budget">
+                <input type="hidden" name="linked_file_id" id="invLinkedFileId" value="0">
+
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2.5">
+                    <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">📋 Erkannte Rechnungs- &amp; Zahlungsdaten</h3>
+                    <span class="text-[11px] text-slate-400">Alle Felder sind vor der Übernahme frei anpassbar</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">🏢 Zahlungsempfänger / Händler / Firma</label>
+                        <input type="text" name="recipient" id="invRecipient" maxlength="140"
+                               oninput="scheduleEpcQrRefresh()"
+                               placeholder="z.B. Stadtwerke Musterstadt GmbH"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">💶 Rechnungsbetrag (Brutto in €)</label>
+                        <input type="number" step="0.01" min="0" name="amount" id="invAmount"
+                               oninput="scheduleEpcQrRefresh()"
+                               placeholder="0.00"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-400 dark:border-emerald-700 text-sm font-extrabold font-mono text-emerald-700 dark:text-emerald-300">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">📅 Rechnungs- / Buchungsdatum</label>
+                        <input type="date" name="invoice_date" id="invDate" value="<?= date('Y-m-d') ?>"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                    </div>
+
+                    <div class="sm:col-span-2">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-xs font-bold text-slate-700 dark:text-slate-300">🏦 IBAN des Empfängers (für SEPA-GiroCode)</label>
+                            <span id="invIbanBadge" class="text-[10px] font-bold text-slate-400">Modulo-97-Prüfung</span>
+                        </div>
+                        <input type="text" name="iban" id="invIban" maxlength="42"
+                               oninput="scheduleEpcQrRefresh()"
+                               placeholder="DE00 0000 0000 0000 0000 00"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white uppercase">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">🌐 BIC / SWIFT (optional)</label>
+                        <input type="text" name="bic" id="invBic" maxlength="15"
+                               oninput="scheduleEpcQrRefresh()"
+                               placeholder="z.B. COBADEFFXXX"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white uppercase">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">🏷️ Kategorie im Haushaltsbuch</label>
+                        <select name="category" id="invCategory"
+                                class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                            <?php foreach ($budgetCategoryOptions as $catVal => $catLbl): ?>
+                                <option value="<?= e($catVal) ?>"><?= e($catLbl) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">🧾 Verwendungszweck / Rechnungs- &amp; Kundennummer</label>
+                        <input type="text" name="purpose" id="invPurpose" maxlength="140"
+                               oninput="scheduleEpcQrRefresh()"
+                               placeholder="z.B. RG 2026-10492 / KD 48190"
+                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                    </div>
+
+                    <div class="sm:col-span-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">📒 Ziel-Haushaltsbuch auswählen</label>
+                            <select name="book_id" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                                <?php foreach ($userBudgetBooks as $bRow): ?>
+                                    <option value="<?= (int)$bRow['id'] ?>">
+                                        📒 <?= e((string)$bRow['title']) ?> (<?= e((string)($bRow['currency'] ?? '€')) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="submit"
+                                class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer shrink-0">
+                            📒 Jetzt ins Haushaltsbuch buchen
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Rechte Spalte (5 Cols): 📱 Live EPC-GiroCode (SEPA-QR-Code) & Ausgelesener Rohtext -->
+            <div class="lg:col-span-5 space-y-4">
+                <div class="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-sky-50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 text-center space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">📱 EPC-GiroCode (SEPA-Überweisung)</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200">ISO / EPC069-12</span>
+                    </div>
+
+                    <div id="invEpcQrContainer" class="min-h-[200px] flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                        <p class="text-xs text-slate-400 px-4">
+                            Sobald oben eine <strong>IBAN</strong> erkannt oder eingetragen wurde, erscheint hier automatisch der fertige <strong>GiroCode-QR-Code</strong> zum Abscannen mit deiner Banking-App.
+                        </p>
+                    </div>
+
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        💡 Öffne auf deinem Smartphone deine Banking-App (Sparkasse, ING, DKB, Volksbank, N26, C24 etc.) und wähle <strong>„Foto-/QR-Überweisung“</strong> – alle Zahlungsdaten werden fehlerfrei übernommen.
+                    </p>
+                </div>
+
+                <details class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-xs">
+                    <summary class="cursor-pointer font-bold text-slate-700 dark:text-slate-200">
+                        📄 Ausgelesenen PDF-Rohtext anzeigen
+                    </summary>
+                    <pre id="invExtractedRawPreview" class="mt-2 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300 max-h-56 overflow-auto whitespace-pre-wrap">Noch kein Dokument analysiert.</pre>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- REITER 8: 🔢 PDF PAGINIEREN (SEITENZAHLEN & KOPF-/FUSSZEILEN)       -->
+    <!-- =================================================================== -->
+    <section id="tab-paginate" data-pdf-tab-panel="tab-paginate" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+        <div>
+            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>🔢 PDF paginieren (Automatische Seitenzahlen &amp; Kopf-/Fußzeile)</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">Bates &amp; Kanzlei-fähig</span>
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Versieht mehrseitige PDF-Dokumente, Verträge, Anlagen oder zusammengefügte Scans automatisch mit durchgehenden <strong>Seitenzahlen</strong> (z. B. <em>„Seite 1 von 12“</em> oder <em>„Anlage K1 • Blatt 001“</em>). Auf Wunsch kann das Deckblatt (Seite 1) übersprungen werden.
+            </p>
+        </div>
+
+        <form action="pdf_tools.php#tab-paginate" method="post" enctype="multipart/form-data" class="space-y-5">
+            <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+            <input type="hidden" name="action" value="paginate_pdf">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Quelle 1: Cloud-PDF -->
+                <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1a. 📄 Bestehendes PDF aus deiner Cloud auswählen</label>
+                    <select name="source_pdf_id" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                        <option value="0">– Cloud-PDF auswählen –</option>
+                        <?php foreach ($myPdfs as $pdfItem): ?>
+                            <option value="<?= (int)$pdfItem['id'] ?>">
+                                📄 <?= e((string)$pdfItem['original_name']) ?> (/<?= e((string)$pdfItem['folder_path']) ?> · <?= e(formatBytes((int)$pdfItem['file_size'])) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Quelle 2: Oder Datei vom Gerät hochladen -->
+                <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">1b. 📤 Oder PDF direkt vom Gerät hochladen</label>
+                    <input type="file" name="paginate_upload_pdf" accept="application/pdf,.pdf"
+                           class="w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-brand-50 file:text-brand-700">
+                </div>
+            </div>
+
+            <!-- Einstellungen für Format, Position, Startseite & Zusatztext -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">2. 🔢 Zahlen-Format</label>
+                    <select name="page_format" id="pagFormatSelect" onchange="updatePaginateFormatPreview()"
+                            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                        <option value="page_of_total_de" selected>Seite 1 von 10 (Standard)</option>
+                        <option value="page_only_de">Seite 1</option>
+                        <option value="slash_total">1 / 10</option>
+                        <option value="dashes">- 1 -</option>
+                        <option value="bates">Blatt 001 (Bates / Kanzlei)</option>
+                        <option value="page_of_total_en">Page 1 of 10 (Englisch)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">3. 📍 Position auf der Seite</label>
+                    <select name="position" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                        <option value="bottom_right" selected>↘️ Unten rechts (Empfohlen)</option>
+                        <option value="bottom_center">⬇️ Unten zentriert</option>
+                        <option value="bottom_left">↙️ Unten links</option>
+                        <option value="top_right">↗️ Oben rechts</option>
+                        <option value="top_center">⬆️ Oben zentriert</option>
+                        <option value="top_left">↖️ Oben links</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">4. 📄 Beginnen ab PDF-Seite</label>
+                    <input type="number" name="start_page" min="1" max="500" value="1"
+                           title="Setze hier 2 ein, wenn Seite 1 ein Deckblatt ohne Seitenzahl bleiben soll"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                    <span class="text-[10px] text-slate-400"><code>2</code> = Deckblatt überspringen</span>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">5. #️⃣ Erste gedruckte Zahl</label>
+                    <input type="number" name="start_number" id="pagStartNumInput" min="1" max="99999" value="1"
+                           oninput="updatePaginateFormatPreview()"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                    <span class="text-[10px] text-slate-400">Standard: <code>1</code> (oder fortlaufend)</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">6. 🏷️ Optionaler Zusatztext vor der Seitenzahl (z. B. Aktenzeichen, Anlagen-Nr. oder Titel)</label>
+                    <input type="text" name="custom_prefix" id="pagPrefixInput" maxlength="80"
+                           oninput="updatePaginateFormatPreview()"
+                           placeholder="z.B. Anlage K1  oder  Vertrag 2026"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">7. 🔠 Schriftgröße &amp; Lesbarkeit</label>
+                    <div class="flex items-center gap-3">
+                        <select name="font_size" class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                            <option value="small">Klein</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="large">Groß</option>
+                        </select>
+                        <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                            <input type="checkbox" name="badge_bg" value="1" checked class="rounded border-slate-300 text-brand-600">
+                            <span>⬜ Weißes Kästchen</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live-Vorschau des Stempels -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs">
+                <span class="text-slate-500 dark:text-slate-400">👁️ <strong>Vorschau des Seitenstempels:</strong></span>
+                <span id="pagStampPreviewBadge" class="px-3 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-bold font-mono text-slate-800 dark:text-slate-100 shadow-2xs">
+                    Seite 1 von 10
+                </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end pt-1">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zielordner in der Cloud</label>
+                    <input type="text" name="target_folder" value="Scans"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Neuer Dateiname (optional)</label>
+                    <input type="text" name="output_name" placeholder="automatisch: Dokument_paginiert.pdf"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <button type="submit" class="w-full px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer">
+                        🔢 Seitenzahlen einbrennen &amp; speichern
+                    </button>
+                </div>
+            </div>
+        </form>
+    </section>
 </div>
 
 <!-- MODAL: TEXT EINGEBEN / BEARBEITEN -->
@@ -3179,9 +4330,208 @@ function copyOcrTextToClipboard() {
     });
 }
 
+// ============================================================================
+// 7. 💶 INTELLIGENTER RECHNUNGS- & BELEG-AUSLESER (+ EPC-GIROCODE)
+// ============================================================================
+function showInvoiceStatus(msg, isError = false) {
+    const el = document.getElementById('invAnalysisStatusBanner');
+    if (!el) return;
+    el.classList.remove('hidden', 'bg-emerald-50', 'dark:bg-emerald-950/40', 'border-emerald-300', 'text-emerald-800', 'dark:text-emerald-200', 'bg-amber-50', 'dark:bg-amber-950/40', 'border-amber-300', 'text-amber-800', 'dark:text-amber-200');
+    if (isError) {
+        el.classList.add('bg-amber-50', 'dark:bg-amber-950/40', 'border-amber-300', 'text-amber-800', 'dark:text-amber-200');
+    } else {
+        el.classList.add('bg-emerald-50', 'dark:bg-emerald-950/40', 'border-emerald-300', 'text-emerald-800', 'dark:text-emerald-200');
+    }
+    el.innerHTML = msg;
+}
+
+function populateInvoiceFieldsFromResponse(data) {
+    const f = data.fields || {};
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val ?? '';
+    };
+    setVal('invRecipient', f.recipient || '');
+    setVal('invAmount', f.amount > 0 ? Number(f.amount).toFixed(2) : '');
+    setVal('invDate', f.invoice_date || '');
+    setVal('invIban', f.iban || '');
+    setVal('invBic', f.bic || '');
+    setVal('invPurpose', f.purpose || '');
+    setVal('invCategory', f.category || 'Sonstiges');
+    setVal('invLinkedFileId', data.linked_file_id || 0);
+
+    const rawPre = document.getElementById('invExtractedRawPreview');
+    if (rawPre) {
+        rawPre.textContent = data.extracted_text || '(Kein eingebetteter Textlayer im PDF gefunden – nutze bei gescannten Bildern Reiter 6 „OCR“)';
+    }
+
+    const qrBox = document.getElementById('invEpcQrContainer');
+    const ibanBadge = document.getElementById('invIbanBadge');
+    if (qrBox) {
+        if (data.epc_svg) {
+            qrBox.innerHTML = data.epc_svg + '<div class="mt-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">✅ Scannbarer SEPA-GiroCode bereit</div>';
+            if (ibanBadge) {
+                ibanBadge.textContent = '✅ IBAN gültig (Modulo-97)';
+                ibanBadge.className = 'text-[10px] font-bold text-emerald-600 dark:text-emerald-400';
+            }
+        } else {
+            qrBox.innerHTML = '<p class="text-xs text-slate-400 px-4">Trage links eine <strong>IBAN</strong> ein, um den SEPA-GiroCode zu erzeugen.</p>';
+            if (ibanBadge) {
+                ibanBadge.textContent = 'Modulo-97-Prüfung';
+                ibanBadge.className = 'text-[10px] font-bold text-slate-400';
+            }
+        }
+    }
+
+    if (!data.has_text_layer) {
+        showInvoiceStatus('⚠️ <strong>Hinweis:</strong> Dieses PDF scheint ein reines Kamera-/Scan-Bild ohne Textebene zu sein. Wechsle einfach zu <strong>🔎 Reiter 6 (OCR-Texterkennung)</strong>, lies das PDF dort aus und klicke auf <em>„💶 Erkannten Text als Rechnung auswerten“</em>!', true);
+    } else {
+        const amtStr = f.amount > 0 ? Number(f.amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : 'bitte prüfen';
+        showInvoiceStatus(`✅ <strong>Rechnung erfolgreich analysiert!</strong> Erkannter Betrag: <strong>${amtStr}</strong> · Empfänger: <strong>${f.recipient || '–'}</strong> · IBAN: <strong>${f.iban || 'keine im Text'}</strong>.`);
+    }
+}
+
+async function analyzeInvoiceFromCloudOrUpload(mode) {
+    const fd = new FormData();
+    fd.append('csrf_token', PDF_CSRF_TOKEN);
+    fd.append('action', 'analyze_invoice_ajax');
+
+    if (mode === 'cloud') {
+        const sel = document.getElementById('invCloudPdfSelect');
+        const fid = sel ? parseInt(sel.value, 10) : 0;
+        if (!fid) {
+            alert('Bitte wähle zuerst eine PDF-Rechnung aus deiner Cloud aus.');
+            return;
+        }
+        fd.append('source_pdf_id', String(fid));
+    } else {
+        const up = document.getElementById('invUploadPdfInput');
+        if (!up || !up.files || !up.files[0]) {
+            alert('Bitte wähle zuerst eine PDF-Datei von deinem Gerät aus.');
+            return;
+        }
+        fd.append('invoice_pdf', up.files[0]);
+        if (document.getElementById('invSaveUploadToCloud')?.checked) {
+            fd.append('save_upload_to_cloud', '1');
+        }
+    }
+
+    showInvoiceStatus('⏳ Analysiere PDF-Rechnung und prüfe IBAN, Betrag & Verwendungszweck…');
+    try {
+        const res = await fetch('pdf_tools.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data || !data.ok) {
+            showInvoiceStatus('❌ ' + (data?.error || 'Rechnung konnte nicht analysiert werden.'), true);
+            return;
+        }
+        populateInvoiceFieldsFromResponse(data);
+    } catch (e) {
+        showInvoiceStatus('❌ Fehler bei der Analyse der Rechnung.', true);
+    }
+}
+
+async function analyzeInvoiceFromText() {
+    const txt = (document.getElementById('invRawTextInput')?.value || '').trim();
+    if (!txt) {
+        alert('Bitte füge zuerst einen Rechnungstext oder OCR-Text in das Textfeld ein.');
+        return;
+    }
+    const fd = new FormData();
+    fd.append('csrf_token', PDF_CSRF_TOKEN);
+    fd.append('action', 'analyze_invoice_ajax');
+    fd.append('raw_text', txt);
+
+    showInvoiceStatus('⏳ Durchsuche Text nach Rechnungsdaten…');
+    try {
+        const res = await fetch('pdf_tools.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data && data.ok) {
+            populateInvoiceFieldsFromResponse(data);
+        }
+    } catch (e) {
+        showInvoiceStatus('❌ Fehler bei der Textanalyse.', true);
+    }
+}
+
+function transferOcrToInvoiceAnalyzer() {
+    const ocrTxt = (document.getElementById('ocrResultTextarea')?.value || '').trim();
+    if (!ocrTxt) {
+        alert('Bitte führe zuerst die OCR-Texterkennung durch, damit Text zum Auswerten vorhanden ist.');
+        return;
+    }
+    const invTxt = document.getElementById('invRawTextInput');
+    if (invTxt) {
+        invTxt.value = ocrTxt;
+    }
+    switchPdfTab('tab-invoice');
+    analyzeInvoiceFromText();
+}
+
+let epcRefreshTimer = null;
+function scheduleEpcQrRefresh() {
+    if (epcRefreshTimer) clearTimeout(epcRefreshTimer);
+    epcRefreshTimer = setTimeout(async () => {
+        const iban = (document.getElementById('invIban')?.value || '').trim();
+        const qrBox = document.getElementById('invEpcQrContainer');
+        const ibanBadge = document.getElementById('invIbanBadge');
+        if (!iban) {
+            if (qrBox) qrBox.innerHTML = '<p class="text-xs text-slate-400 px-4">Trage links eine <strong>IBAN</strong> ein, um den SEPA-GiroCode zu erzeugen.</p>';
+            if (ibanBadge) {
+                ibanBadge.textContent = 'Modulo-97-Prüfung';
+                ibanBadge.className = 'text-[10px] font-bold text-slate-400';
+            }
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('csrf_token', PDF_CSRF_TOKEN);
+        fd.append('action', 'refresh_epc_qr_ajax');
+        fd.append('recipient', document.getElementById('invRecipient')?.value || '');
+        fd.append('iban', iban);
+        fd.append('bic', document.getElementById('invBic')?.value || '');
+        fd.append('amount', document.getElementById('invAmount')?.value || '0');
+        fd.append('purpose', document.getElementById('invPurpose')?.value || '');
+
+        try {
+            const res = await fetch('pdf_tools.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data && data.ok && qrBox) {
+                if (data.epc_svg) {
+                    qrBox.innerHTML = data.epc_svg + '<div class="mt-2 text-[11px] font-bold ' + (data.iban_valid ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') + '">' + (data.iban_valid ? '✅ Scannbarer SEPA-GiroCode bereit' : '⚠️ IBAN-Prüfziffer ungewöhnlich – bitte prüfen') + '</div>';
+                }
+                if (ibanBadge) {
+                    ibanBadge.textContent = data.iban_valid ? '✅ IBAN gültig (Modulo-97)' : '⚠️ Prüfziffer prüfen';
+                    ibanBadge.className = data.iban_valid ? 'text-[10px] font-bold text-emerald-600 dark:text-emerald-400' : 'text-[10px] font-bold text-amber-600 dark:text-amber-400';
+                }
+            }
+        } catch (e) {}
+    }, 280);
+}
+
+// ============================================================================
+// 8. 🔢 PDF PAGINIEREN – LIVE-STEMPEL-VORSCHAU
+// ============================================================================
+function updatePaginateFormatPreview() {
+    const fmt = document.getElementById('pagFormatSelect')?.value || 'page_of_total_de';
+    const startNum = Math.max(1, parseInt(document.getElementById('pagStartNumInput')?.value || '1', 10) || 1);
+    const totalNum = startNum + 9;
+    const prefix = (document.getElementById('pagPrefixInput')?.value || '').trim();
+    const badge = document.getElementById('pagStampPreviewBadge');
+    if (!badge) return;
+
+    let numStr = `Seite ${startNum} von ${totalNum}`;
+    if (fmt === 'page_only_de') numStr = `Seite ${startNum}`;
+    else if (fmt === 'slash_total') numStr = `${startNum} / ${totalNum}`;
+    else if (fmt === 'dashes') numStr = `- ${startNum} -`;
+    else if (fmt === 'bates') numStr = 'Blatt ' + String(startNum).padStart(3, '0');
+    else if (fmt === 'page_of_total_en') numStr = `Page ${startNum} of ${totalNum}`;
+
+    badge.textContent = prefix ? `${prefix}  •  ${numStr}` : numStr;
+}
+
 if (window.location.hash) {
     const h = window.location.hash.replace('#', '');
-    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress', 'tab-redact', 'tab-ocr'].includes(h)) {
+    if (['tab-scan', 'tab-merge', 'tab-split', 'tab-compress', 'tab-redact', 'tab-ocr', 'tab-invoice', 'tab-paginate'].includes(h)) {
         switchPdfTab(h);
     }
 }
