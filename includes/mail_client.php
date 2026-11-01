@@ -1075,28 +1075,49 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
     }
     $fp = $conn['fp'];
 
-    // Verfügbare Ordner ermitteln
-    $folders = ['INBOX' => '📥 Posteingang'];
+    // Verfügbare Ordner ermitteln (Standard-Systemordner + Archiv + alle eigenen Benutzerordner)
+    $folders      = ['INBOX' => '📥 Posteingang'];
+    $customFolders = [];
     fwrite($fp, "A03 LIST \"\" \"*\"\r\n");
     $listResp = readImapTaggedResponse($fp, 'A03');
-    if (preg_match_all('/^\*\s+LIST\s+\(([^)]*)\)\s+"[^"]*"\s+"?([^"\r\n]+)"?/im', $listResp['raw'], $mList, PREG_SET_ORDER)) {
+    if (preg_match_all('/^\*\s+LIST\s+\(([^)]*)\)\s+(?:"[^"]*"|NIL)\s+"?([^"\r\n]+)"?/im', $listResp['raw'], $mList, PREG_SET_ORDER)) {
         foreach ($mList as $row) {
             $flags = strtolower($row[1]);
             $fName = trim($row[2]);
-            if (str_contains($flags, '\\noselect') || $fName === '' || strtoupper($fName) === 'INBOX') {
+            if (str_contains($flags, '\\noselect') || str_contains($flags, '\\nonexistent') || $fName === '' || strtoupper($fName) === 'INBOX') {
                 continue;
             }
-            $fLower = strtolower($fName);
-            if (str_contains($flags, '\\sent') || in_array($fLower, ['sent', 'sent messages', 'gesendet', 'inbox.sent'], true)) {
+
+            // IMAP Modified-UTF-7 Dekodierung für Umlaute (z.B. Entw&APw-rfe -> Entwürfe)
+            $displayPath = $fName;
+            if (function_exists('mb_convert_encoding') && str_contains($displayPath, '&')) {
+                $decodedUtf7 = @mb_convert_encoding($displayPath, 'UTF-8', 'UTF7-IMAP');
+                if (is_string($decodedUtf7) && $decodedUtf7 !== '') {
+                    $displayPath = $decodedUtf7;
+                }
+            }
+            // führendes "INBOX." oder "INBOX/" für schönere Anzeige kürzen
+            $cleanLabel = preg_replace('/^INBOX[\.\/]/i', '', $displayPath) ?? $displayPath;
+            $fLower     = strtolower($cleanLabel);
+            $rawLower   = strtolower($fName);
+
+            if (str_contains($flags, '\\sent') || in_array($fLower, ['sent', 'sent messages', 'sent items', 'gesendet', 'gesendete elemente', 'gesendete Objekte'], true)) {
                 $folders[$fName] = '📤 Gesendet';
-            } elseif (str_contains($flags, '\\drafts') || in_array($fLower, ['drafts', 'entw&apw-rfe', 'entwürfe', 'inbox.drafts'], true)) {
+            } elseif (str_contains($flags, '\\drafts') || in_array($fLower, ['drafts', 'entwürfe', 'entwuerfe'], true) || str_contains($rawLower, 'entw&apw-rfe')) {
                 $folders[$fName] = '📝 Entwürfe';
-            } elseif (str_contains($flags, '\\junk') || in_array($fLower, ['junk', 'spam', 'bulk', 'inbox.spam'], true)) {
+            } elseif (str_contains($flags, '\\archive') || str_contains($flags, '\\all') || in_array($fLower, ['archive', 'archiv', 'archives', 'all mail', 'alle nachrichten'], true)) {
+                $folders[$fName] = '🗄️ ' . ($cleanLabel !== '' ? $cleanLabel : 'Archiv');
+            } elseif (str_contains($flags, '\\junk') || in_array($fLower, ['junk', 'junk e-mail', 'spam', 'spamverdacht', 'bulk', 'unerwünscht'], true)) {
                 $folders[$fName] = '🛡️ Spam';
-            } elseif (str_contains($flags, '\\trash') || in_array($fLower, ['trash', 'deleted', 'papierkorb', 'inbox.trash'], true)) {
+            } elseif (str_contains($flags, '\\trash') || in_array($fLower, ['trash', 'deleted', 'deleted items', 'deleted messages', 'papierkorb', 'gelöscht', 'gelöschte elemente'], true)) {
                 $folders[$fName] = '🗑️ Papierkorb';
+            } else {
+                $customFolders[$fName] = '📁 ' . $cleanLabel;
             }
         }
+    }
+    foreach ($customFolders as $cKey => $cLabel) {
+        $folders[$cKey] = $cLabel;
     }
 
     if (!isset($folders[$folder])) {
