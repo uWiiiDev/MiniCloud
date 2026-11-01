@@ -162,26 +162,46 @@ function fetchCachedMarketJson(PDO $pdo, string $cacheKey, string $url, int $ttl
     }
 
     $raw = null;
-    $ua  = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+    $userAgents = [
+        'YahooFinance/9.32.1 (iPhone; iOS 17.4; Scale/3.00)',
+        'FeedFetcher-Google; (+http://www.google.com/feedfetcher.html)',
+        'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+    ];
+    $candidateUrls = [$url];
+    if (str_contains($url, 'query1.finance.yahoo.com')) {
+        $q2 = str_replace('query1.finance.yahoo.com', 'query2.finance.yahoo.com', $url);
+        $candidateUrls = [$q2, $url];
+    }
+
     if (function_exists('curl_init')) {
-        $ch = curl_init($url);
-        if ($ch !== false) {
-            curl_setopt_array($ch, [
+        foreach ($candidateUrls as $idx => $tryUrl) {
+            $ua = $userAgents[$idx % count($userAgents)];
+            $ch = curl_init($tryUrl);
+            if ($ch === false) {
+                continue;
+            }
+            $opts = [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT        => 6,
                 CURLOPT_CONNECTTIMEOUT => 4,
                 CURLOPT_USERAGENT      => $ua,
                 CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-            ]);
+            ];
+            if (defined('CURL_IPRESOLVE_V4')) {
+                $opts[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+            }
+            curl_setopt_array($ch, $opts);
             $res  = curl_exec($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            if (is_string($res) && $code >= 200 && $code < 300) {
+            if (is_string($res) && $code >= 200 && $code < 300 && strlen($res) > 25) {
                 $raw = $res;
+                break;
             }
         }
     } else {
+        $ua  = $userAgents[0];
         $ctx = stream_context_create([
             'http' => [
                 'method'  => 'GET',
