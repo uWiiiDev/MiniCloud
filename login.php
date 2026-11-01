@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = getDB();
             ensureUserSecurityColumns($pdo);
             $stmt = $pdo->prepare(
-                'SELECT id, username, email, password_hash, two_factor_enabled, totp_secret, is_admin, is_locked, lock_reason, admin_permissions, theme
+                'SELECT id, username, email, password_hash, two_factor_enabled, totp_secret, is_admin, is_locked, lock_reason, admin_permissions, theme, subscription_status
                  FROM users
                  WHERE username = :username
                  LIMIT 1'
@@ -232,6 +232,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hashToVerify = $user ? (string)$user['password_hash'] : $dummyHash;
 
             if ($user && password_verify($password, $hashToVerify)) {
+                $subStat = (string)($user['subscription_status'] ?? 'none');
+                if ((int)($user['is_locked'] ?? 0) === 1 && in_array($subStat, ['pending', 'expired'], true)) {
+                    unset($_SESSION['login_attempts']);
+                    $_SESSION['pending_sub_user_id'] = (int)$user['id'];
+                    header('Location: subscription.php?checkout=1');
+                    exit;
+                }
                 if ((int)($user['is_locked'] ?? 0) === 1) {
                     $reason = trim((string)($user['lock_reason'] ?? ''));
                     logAuditEvent(

@@ -1799,6 +1799,26 @@ $themeGroups = [
             </script>
         </section>
     <?php endif; ?>
+
+    <?php if (($appSettings['registration_paywall_enabled'] ?? '0') === '1' || !empty($userRow['paypal_subscription_id'])): ?>
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-lg">
+                    💳
+                </span>
+                <div>
+                    <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Cloud-Mitgliedschaft &amp; PayPal-Abonnement</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Status Ihres Speicherpakets einsehen oder Ihr Abonnement jederzeit mit 1 Klick verwalten / kündigen.
+                    </p>
+                </div>
+            </div>
+            <a href="subscription.php"
+               class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors">
+                💳 Abo verwalten / kündigen &rarr;
+            </a>
+        </section>
+    <?php endif; ?>
 </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

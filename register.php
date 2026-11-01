@@ -18,6 +18,15 @@ if (($appSettings['allow_registration'] ?? '0') !== '1') {
 
 $requiredInviteCode = trim((string)($appSettings['registration_code'] ?? ''));
 $defaultQuotaMb     = max(1, min(102400, (int)($appSettings['registration_default_quota_mb'] ?? 100)));
+$paywallEnabled     = ($appSettings['registration_paywall_enabled'] ?? '0') === '1';
+$allowInviteBypass  = ($appSettings['paypal_allow_invite_bypass'] ?? '1') === '1';
+$paidQuotaMb        = max(100, min(1024000, (int)($appSettings['paypal_paid_quota_mb'] ?? 1024)));
+$paidQuotaLabel     = $paidQuotaMb >= 1024
+    ? rtrim(rtrim(number_format($paidQuotaMb / 1024, 2, ',', '.'), '0'), ',') . ' GB'
+    : $paidQuotaMb . ' MB';
+$paypalPriceEur     = max(0.50, round((float)str_replace(',', '.', (string)($appSettings['paypal_price_eur'] ?? '1.00')), 2));
+$paypalPriceLabel   = number_format($paypalPriceEur, 2, ',', '.') . ' €';
+$paypalIntervalLbl  = strtoupper(trim((string)($appSettings['paypal_billing_interval'] ?? 'MONTH'))) === 'YEAR' ? 'Jahr' : 'Monat';
 
 $errors             = [];
 $usernameInput      = '';
@@ -56,9 +65,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = sprintf('Zu viele Registrierungsversuche. Bitte warten Sie %d Sekunden.', $waitSecs);
     }
 
-    if ($requiredInviteCode !== '' && !hash_equals($requiredInviteCode, $inviteCodeInput)) {
-        $_SESSION['reg_attempts'][] = time();
-        $errors[] = 'Der eingegebene Einladungs-Code ist ungültig.';
+    // Prüfen, ob ein gültiger Einladungs-Code eingegeben wurde
+    $validInviteBypass = false;
+    if (!$paywallEnabled) {
+        if ($requiredInviteCode !== '' && !hash_equals($requiredInviteCode, $inviteCodeInput)) {
+            $_SESSION['reg_attempts'][] = time();
+            $errors[] = 'Der eingegebene Einladungs-Code ist ungültig.';
+        }
+    } else {
+        // Bei aktiver Bezahlschranke ist der Einladungs-Code ein optionaler Gratis-Gutschein
+        if ($inviteCodeInput !== '') {
+            if ($allowInviteBypass && $requiredInviteCode !== '' && hash_equals($requiredInviteCode, $inviteCodeInput)) {
+                $validInviteBypass = true;
+            } else {
+                $_SESSION['reg_attempts'][] = time();
+                $errors[] = 'Der eingegebene Einladungs-/Gutscheincode ist ungültig.';
+            }
+        }
     }
 
     if (!preg_match('/^[a-zA-Z0-9_.-]{3,32}$/', $usernameInput)) {
@@ -76,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        ensureUserSecurityColumns($pdo);
         $stmtCheck = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
         $stmtCheck->execute([':u' => $usernameInput]);
         if ($stmtCheck->fetch()) {
@@ -83,21 +107,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Dieser Benutzername ist bereits vergeben. Bitte wählen Sie einen anderen Namen.';
         } else {
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+            $needsPaywallCheckout = ($paywallEnabled && !$validInviteBypass);
+
+            $initialQuotaBytes = $needsPaywallCheckout
+                ? ($paidQuotaMb * 1024 * 1024)
+                : ($defaultQuotaMb * 1024 * 1024);
+
             $stmtIns = $pdo->prepare(
-                'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, theme, session_timeout, allow_user_sharing, storage_quota)
-                 VALUES (:u, :em, :h, 0, 0, :theme, 30, :aus, :q)'
+                'INSERT INTO users (username, email, password_hash, two_factor_enabled, is_admin, is_locked, lock_reason, theme, session_timeout, allow_user_sharing, storage_quota, subscription_status)
+                 VALUES (:u, :em, :h, 0, 0, :locked, :reason, :theme, 30, :aus, :q, :sub_stat)'
             );
             $stmtIns->execute([
-                ':u'     => $usernameInput,
-                ':em'    => $emailInput !== '' ? $emailInput : null,
-                ':h'     => $hash,
-                ':theme' => getCurrentTheme(),
-                ':aus'   => $allowSharingInput ? 1 : 0,
-                ':q'     => $defaultQuotaMb * 1024 * 1024,
+                ':u'        => $usernameInput,
+                ':em'       => $emailInput !== '' ? $emailInput : null,
+                ':h'        => $hash,
+                ':locked'   => $needsPaywallCheckout ? 1 : 0,
+                ':reason'   => $needsPaywallCheckout ? 'Ausstehende PayPal-Abo-Freischaltung' : '',
+                ':theme'    => getCurrentTheme(),
+                ':aus'      => $allowSharingInput ? 1 : 0,
+                ':q'        => $initialQuotaBytes,
+                ':sub_stat' => $needsPaywallCheckout ? 'pending' : ($validInviteBypass ? 'free_invite' : 'none'),
             ]);
 
             $newUserId = (int)$pdo->lastInsertId();
             unset($_SESSION['reg_attempts']);
+
+            if ($needsPaywallCheckout) {
+                $_SESSION['pending_sub_user_id'] = $newUserId;
+                header('Location: subscription.php?checkout=1');
+                exit;
+            }
 
             session_regenerate_id(true);
             $_SESSION['user_id']         = $newUserId;
@@ -127,9 +166,31 @@ $headerTitle = $appSettings['app_title'] ?: APP_NAME;
                 Neues Konto erstellen
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Registrieren Sie sich bei <?= e($headerTitle) ?> (<?= $defaultQuotaMb ?> MB persönlicher Cloud-Speicher)
+                <?php if ($paywallEnabled): ?>
+                    Registrieren Sie sich bei <?= e($headerTitle) ?> (<?= e($paidQuotaLabel) ?> Cloud-Speicher &amp; alle Module)
+                <?php else: ?>
+                    Registrieren Sie sich bei <?= e($headerTitle) ?> (<?= $defaultQuotaMb ?> MB persönlicher Cloud-Speicher)
+                <?php endif; ?>
             </p>
         </div>
+
+        <?php if ($paywallEnabled): ?>
+            <div class="mb-5 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 shadow-sm">
+                <div class="flex items-center justify-between gap-2">
+                    <div>
+                        <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-300">💳 Cloud-Mitgliedschaft (PayPal-Abo)</span>
+                        <div class="text-sm font-extrabold mt-0.5"><?= e($paidQuotaLabel) ?> Speicherplatz &amp; alle Module</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-lg font-black text-emerald-400"><?= e($paypalPriceLabel) ?></div>
+                        <div class="text-[10px] text-indigo-200">pro <?= e($paypalIntervalLbl) ?></div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-indigo-200/90 mt-2">
+                    Nach dem Anlegen Ihres Kontos werden Sie direkt zur sicheren PayPal-Freischaltung weitergeleitet. Jederzeit mit 1 Klick kündbar.
+                </p>
+            </div>
+        <?php endif; ?>
 
         <?php if (!empty($errors)): ?>
             <div class="mb-5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-xs sm:text-sm text-red-700 dark:text-red-300 space-y-1">
@@ -148,17 +209,21 @@ $headerTitle = $appSettings['app_title'] ?: APP_NAME;
                 <input type="text" id="website_url" name="website_url" tabindex="-1" autocomplete="off">
             </div>
 
-            <?php if ($requiredInviteCode !== ''): ?>
+            <?php if ($requiredInviteCode !== '' && (!$paywallEnabled || $allowInviteBypass)): ?>
                 <div>
                     <label for="invite_code" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        🔑 Einladungs-Code
+                        <?php if ($paywallEnabled): ?>
+                            🔑 Gutschein- / Einladungs-Code (optional für kostenlose Freischaltung)
+                        <?php else: ?>
+                            🔑 Einladungs-Code
+                        <?php endif; ?>
                     </label>
                     <input
                         type="password"
                         id="invite_code"
                         name="invite_code"
-                        required
-                        placeholder="Vom Administrator erhaltener Code"
+                        <?= !$paywallEnabled ? 'required' : '' ?>
+                        placeholder="<?= $paywallEnabled ? 'Optional: Code für Gratis-Zugang' : 'Vom Administrator erhaltener Code' ?>"
                         class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                 </div>
@@ -250,7 +315,7 @@ $headerTitle = $appSettings['app_title'] ?: APP_NAME;
                 type="submit"
                 class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
             >
-                Benutzerkonto erstellen
+                <?= $paywallEnabled ? ('Weiter zur PayPal-Freischaltung (' . e($paypalPriceLabel) . ' / ' . e($paypalIntervalLbl) . ') &rarr;') : 'Benutzerkonto erstellen' ?>
             </button>
         </form>
 

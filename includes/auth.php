@@ -56,7 +56,7 @@ if (!headers_sent()) {
 function ensureUserSecurityColumns(PDO $pdo): void
 {
     static $checked = false;
-    if ($checked || (!empty($_SESSION['_mc_user_sec_cols_v2_ok']) && $_SESSION['_mc_user_sec_cols_v2_ok'] === 1)) {
+    if ($checked || (!empty($_SESSION['_mc_user_sec_cols_v3_ok']) && $_SESSION['_mc_user_sec_cols_v3_ok'] === 1)) {
         $checked = true;
         return;
     }
@@ -80,8 +80,17 @@ function ensureUserSecurityColumns(PDO $pdo): void
         if (!isset($cols['ui_style'])) {
             $pdo->exec("ALTER TABLE `users` ADD COLUMN `ui_style` VARCHAR(24) NOT NULL DEFAULT 'modern' AFTER `theme`");
         }
+        if (!isset($cols['subscription_status'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `subscription_status` VARCHAR(32) NOT NULL DEFAULT 'none' AFTER `storage_quota`");
+        }
+        if (!isset($cols['paypal_subscription_id'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `paypal_subscription_id` VARCHAR(128) NOT NULL DEFAULT '' AFTER `subscription_status`");
+        }
+        if (!isset($cols['subscription_expires_at'])) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `subscription_expires_at` DATETIME NULL DEFAULT NULL AFTER `paypal_subscription_id`");
+        }
         if (session_status() === PHP_SESSION_ACTIVE) {
-            $_SESSION['_mc_user_sec_cols_v2_ok'] = 1;
+            $_SESSION['_mc_user_sec_cols_v3_ok'] = 1;
         }
     } catch (Throwable) {
         // Ignorieren falls DB noch im Aufbau

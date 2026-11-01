@@ -1618,17 +1618,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // --- 11a. Öffentliche Selbstregistrierung aktualisieren ---
+    // --- 11a. Öffentliche Selbstregistrierung & optionale PayPal-Bezahlschranke aktualisieren ---
     if ($action === 'update_registration_settings') {
         $allowRegistration = isset($_POST['allow_registration']) && $_POST['allow_registration'] === '1' ? '1' : '0';
         $registrationCode  = mb_substr(trim((string)($_POST['registration_code'] ?? '')), 0, 100);
         $regQuotaMb        = max(1, min(102400, (int)($_POST['registration_default_quota_mb'] ?? 100)));
 
+        $paywallEnabled    = isset($_POST['registration_paywall_enabled']) && $_POST['registration_paywall_enabled'] === '1' ? '1' : '0';
+        $paypalMode        = strtolower(trim((string)($_POST['paypal_mode'] ?? 'sandbox'))) === 'live' ? 'live' : 'sandbox';
+        $paypalClientId    = mb_substr(trim((string)($_POST['paypal_client_id'] ?? '')), 0, 255);
+        $paypalSecretInput = trim((string)($_POST['paypal_client_secret'] ?? ''));
+        $clearPaypalSecret = isset($_POST['clear_paypal_secret']) && $_POST['clear_paypal_secret'] === '1';
+        $paypalPlanId      = mb_substr(trim((string)($_POST['paypal_plan_id'] ?? '')), 0, 128);
+        $paypalPriceRaw    = str_replace(',', '.', trim((string)($_POST['paypal_price_eur'] ?? '1.00')));
+        $paypalPriceVal    = max(0.50, min(9999.00, round((float)$paypalPriceRaw, 2)));
+        $paypalPriceStr    = number_format($paypalPriceVal, 2, '.', '');
+        $paypalInterval    = strtoupper(trim((string)($_POST['paypal_billing_interval'] ?? 'MONTH'))) === 'YEAR' ? 'YEAR' : 'MONTH';
+        $paypalPaidQuotaMb = max(100, min(1024000, (int)($_POST['paypal_paid_quota_mb'] ?? 1024)));
+        $allowInviteBypass = isset($_POST['paypal_allow_invite_bypass']) && $_POST['paypal_allow_invite_bypass'] === '1' ? '1' : '0';
+
         saveAppSetting($pdo, 'allow_registration', $allowRegistration);
         saveAppSetting($pdo, 'registration_code', $registrationCode);
         saveAppSetting($pdo, 'registration_default_quota_mb', (string)$regQuotaMb);
+        saveAppSetting($pdo, 'registration_paywall_enabled', $paywallEnabled);
+        saveAppSetting($pdo, 'paypal_mode', $paypalMode);
+        saveAppSetting($pdo, 'paypal_client_id', $paypalClientId);
+        if ($clearPaypalSecret) {
+            saveAppSetting($pdo, 'paypal_client_secret', '');
+        } elseif ($paypalSecretInput !== '') {
+            saveAppSetting($pdo, 'paypal_client_secret', $paypalSecretInput);
+        }
+        saveAppSetting($pdo, 'paypal_plan_id', $paypalPlanId);
+        saveAppSetting($pdo, 'paypal_price_eur', $paypalPriceStr);
+        saveAppSetting($pdo, 'paypal_billing_interval', $paypalInterval);
+        saveAppSetting($pdo, 'paypal_paid_quota_mb', (string)$paypalPaidQuotaMb);
+        saveAppSetting($pdo, 'paypal_allow_invite_bypass', $allowInviteBypass);
 
-        setFlash('success', 'Einstellungen für die öffentliche Selbstregistrierung wurden gespeichert.');
+        // Falls der Button "Speichern & PayPal-Abo-Plan automatisch bei PayPal anlegen" geklickt wurde
+        if (isset($_POST['auto_create_paypal_plan']) && $_POST['auto_create_paypal_plan'] === '1') {
+            require_once __DIR__ . '/includes/paypal_helper.php';
+            $freshSettings = getAppSettings($pdo, true);
+            $planErr = null;
+            $newPlanId = createOrSyncPayPalBillingPlan($pdo, $freshSettings, $planErr);
+            if ($newPlanId !== null) {
+                setFlash('success', sprintf('Einstellungen gespeichert und PayPal-Abo-Plan (%s) erfolgreich automatisch bei PayPal angelegt!', $newPlanId));
+            } else {
+                setFlash('error', 'Einstellungen gespeichert, aber der PayPal-Abo-Plan konnte nicht automatisch angelegt werden: ' . ($planErr ?: 'Unbekannter Fehler.'));
+            }
+            header('Location: admin.php#tab-users');
+            exit;
+        }
+
+        setFlash('success', 'Einstellungen für die öffentliche Selbstregistrierung und Bezahlschranke wurden gespeichert.');
         header('Location: admin.php#tab-users');
         exit;
     }
@@ -2274,7 +2315,7 @@ $localSnapshots  = getLocalAppSnapshots();
 <!-- ======================================================================= -->
 <?php if (hasAdminPermission('users')): ?>
 <div id="tab-users" data-admin-tab-panel="tab-users" class="space-y-6 mb-10">
-    <!-- 1a. Öffentliche Selbstregistrierung -->
+    <!-- 1a. Öffentliche Selbstregistrierung & Optionale PayPal-Bezahlschranke -->
     <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
@@ -2282,72 +2323,211 @@ $localSnapshots  = getLocalAppSnapshots();
                     👤
                 </span>
                 <div>
-                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Öffentliche Selbstregistrierung</h2>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Öffentliche Selbstregistrierung &amp; Bezahlschranke (PayPal-Abo)</h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Legen Sie fest, ob Besucher sich selbst auf der Anmeldeseite ein Benutzerkonto erstellen dürfen (optional geschützt per Einladungs-Code).
+                        Legen Sie fest, ob Besucher sich selbst registrieren dürfen und ob dafür optional ein vollautomatisches PayPal-Abo (z. B. 1,00 € für 1 GB Speicher &amp; alle Module) erforderlich ist.
                     </p>
                 </div>
             </div>
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
-                <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
-            </span>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                    Registrierung: <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                </span>
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase <?= ($currentSettings['registration_paywall_enabled'] ?? '0') === '1' ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                    💳 PayPal-Schranke: <?= ($currentSettings['registration_paywall_enabled'] ?? '0') === '1' ? 'Aktiv' : 'Aus (Kostenlos)' ?>
+                </span>
+            </div>
         </div>
 
-        <form action="admin.php" method="post" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+        <form action="admin.php" method="post" class="space-y-4">
             <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
             <input type="hidden" name="action" value="update_registration_settings">
 
-            <div class="lg:col-span-5">
-                <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+            <!-- Zeile 1: Basis-Registrierung -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+                <div class="lg:col-span-6">
+                    <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="allow_registration"
+                            value="1"
+                            <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'checked' : '' ?>
+                            class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <span>
+                            <strong>Selbstregistrierung auf der Anmeldeseite erlauben</strong><br>
+                            <span class="text-[11px] text-slate-500 dark:text-slate-400">Neue Konten sind aus Datenschutzgründen in der Teilen-Auswahl standardmäßig unsichtbar.</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="lg:col-span-3">
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Einladungs-/Gutscheincode (optional)
+                    </label>
                     <input
-                        type="checkbox"
-                        name="allow_registration"
-                        value="1"
-                        <?= ($currentSettings['allow_registration'] ?? '0') === '1' ? 'checked' : '' ?>
-                        class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        type="text"
+                        name="registration_code"
+                        maxlength="100"
+                        value="<?= e($currentSettings['registration_code'] ?? '') ?>"
+                        placeholder="Leer = ohne Code"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
-                    <span>
-                        <strong>Selbstregistrierung auf der Anmeldeseite erlauben</strong><br>
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Neue Konten sind aus Datenschutzgründen in der Teilen-Auswahl standardmäßig unsichtbar.</span>
-                    </span>
-                </label>
+                </div>
+
+                <div class="lg:col-span-3">
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Gratis-Start-Quota (MB)
+                    </label>
+                    <input
+                        type="number"
+                        name="registration_default_quota_mb"
+                        min="1"
+                        max="102400"
+                        value="<?= e($currentSettings['registration_default_quota_mb'] ?? '100') ?>"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
             </div>
 
-            <div class="lg:col-span-3">
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Einladungs-Code (optional)
-                </label>
-                <input
-                    type="text"
-                    name="registration_code"
-                    maxlength="100"
-                    value="<?= e($currentSettings['registration_code'] ?? '') ?>"
-                    placeholder="Leer = ohne Code"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
+            <!-- Zeile 2: Optionale PayPal-Bezahlschranke (Aufklappbar / Konfigurierbar) -->
+            <div class="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/60 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <label class="flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-100 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="registration_paywall_enabled"
+                            value="1"
+                            <?= ($currentSettings['registration_paywall_enabled'] ?? '0') === '1' ? 'checked' : '' ?>
+                            class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        >
+                        <span>
+                            <strong class="text-sm">💳 Registrierung hinter PayPal-Bezahlschranke (Abo) setzen</strong><br>
+                            <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                                Wenn aktiviert, müssen neue Nutzer bei der Registrierung ein PayPal-Abo abschließen, bevor das Konto automatisch mit dem unten festgelegten Speicherplatz freigeschaltet wird.
+                            </span>
+                        </span>
+                    </label>
 
-            <div class="lg:col-span-2">
-                <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Start-Quota (MB)
-                </label>
-                <input
-                    type="number"
-                    name="registration_default_quota_mb"
-                    min="1"
-                    max="102400"
-                    value="<?= e($currentSettings['registration_default_quota_mb'] ?? '100') ?>"
-                    class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-            </div>
+                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="paypal_allow_invite_bypass"
+                            value="1"
+                            <?= ($currentSettings['paypal_allow_invite_bypass'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        >
+                        <span>🔑 Einladungs-Code schaltet weiterhin kostenlos frei (Familie/Freunde)</span>
+                    </label>
+                </div>
 
-            <div class="lg:col-span-2">
-                <button
-                    type="submit"
-                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
-                >
-                    Speichern
-                </button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-indigo-200/60 dark:border-indigo-800/50">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">PayPal-Modus</label>
+                        <select name="paypal_mode" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="sandbox" <?= ($currentSettings['paypal_mode'] ?? 'sandbox') === 'sandbox' ? 'selected' : '' ?>>🧪 Sandbox (Testmodus / Simulation)</option>
+                            <option value="live" <?= ($currentSettings['paypal_mode'] ?? 'sandbox') === 'live' ? 'selected' : '' ?>>🟢 Live (Echte PayPal-Zahlungen)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Abo-Preis (in EUR)</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0.50"
+                            max="9999.00"
+                            name="paypal_price_eur"
+                            value="<?= e($currentSettings['paypal_price_eur'] ?? '1.00') ?>"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Abrechnungs-Intervall</label>
+                        <select name="paypal_billing_interval" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="MONTH" <?= ($currentSettings['paypal_billing_interval'] ?? 'MONTH') === 'MONTH' ? 'selected' : '' ?>>Monatlich (z. B. 1,00 € / Monat)</option>
+                            <option value="YEAR" <?= ($currentSettings['paypal_billing_interval'] ?? 'MONTH') === 'YEAR' ? 'selected' : '' ?>>Jährlich (spart PayPal-Fixgebühren)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Abo-Speicherplatz (MB, 1024 = 1 GB)</label>
+                        <input
+                            type="number"
+                            min="100"
+                            max="1024000"
+                            name="paypal_paid_quota_mb"
+                            value="<?= e($currentSettings['paypal_paid_quota_mb'] ?? '1024') ?>"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">PayPal Client-ID</label>
+                        <input
+                            type="text"
+                            name="paypal_client_id"
+                            value="<?= e($currentSettings['paypal_client_id'] ?? '') ?>"
+                            placeholder="Aus developer.paypal.com"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            PayPal Secret-Key
+                            <?php if (trim((string)($currentSettings['paypal_client_secret'] ?? '')) !== ''): ?>
+                                <span class="text-emerald-600 dark:text-emerald-400 font-bold">(hinterlegt ✓)</span>
+                            <?php endif; ?>
+                        </label>
+                        <input
+                            type="password"
+                            name="paypal_client_secret"
+                            value=""
+                            autocomplete="new-password"
+                            placeholder="<?= trim((string)($currentSettings['paypal_client_secret'] ?? '')) !== '' ? '•••••••• (Leer lassen zum Behalten)' : 'Geheimer Schlüssel aus PayPal App' ?>"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">PayPal Plan-ID (optional / wird automatisch erzeugt)</label>
+                        <input
+                            type="text"
+                            name="paypal_plan_id"
+                            value="<?= e($currentSettings['paypal_plan_id'] ?? '') ?>"
+                            placeholder="P-XXXXXXXX (oder per Button rechts anlegen)"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div>
+                        🔗 Automatische Webhook-URL für PayPal:
+                        <code class="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-slate-800 dark:text-slate-200 select-all"><?= e(((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'runready.cloud') . rtrim(dirname((string)($_SERVER['SCRIPT_NAME'] ?? '')), '/\\') . '/subscription.php?webhook=1') ?></code>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            type="submit"
+                            name="auto_create_paypal_plan"
+                            value="1"
+                            class="py-2 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+                            title="Legt Produkt &amp; Abo-Plan mit obigem Preis automatisch in Ihrem PayPal-Konto an"
+                        >
+                            ⚡ Speichern &amp; PayPal-Plan automatisch anlegen
+                        </button>
+                        <button
+                            type="submit"
+                            class="py-2 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
+                        >
+                            Einstellungen speichern
+                        </button>
+                    </div>
+                </div>
             </div>
         </form>
     </section>
