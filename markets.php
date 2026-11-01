@@ -45,7 +45,7 @@ function ensureMarketsTables(PDO $pdo): void
     }
     $done = true;
 
-    if (empty($_SESSION['_mc_markets_schema_ok'])) {
+    if (empty($_SESSION['_mc_markets_schema_v2_ok'])) {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS markets_cache (
                 cache_key VARCHAR(160) NOT NULL PRIMARY KEY,
@@ -71,7 +71,37 @@ function ensureMarketsTables(PDO $pdo): void
                 INDEX idx_user_fav (user_id, is_favorite)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
-        $_SESSION['_mc_markets_schema_ok'] = 1;
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS markets_game_accounts (
+                user_id INT NOT NULL PRIMARY KEY,
+                starting_cash DECIMAL(18,2) NOT NULL DEFAULT 10000.00,
+                cash_balance DECIMAL(18,2) NOT NULL DEFAULT 10000.00,
+                realized_pnl DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+                trades_count INT NOT NULL DEFAULT 0,
+                reset_count INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS markets_game_trades (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                symbol VARCHAR(40) NOT NULL,
+                display_name VARCHAR(140) NOT NULL DEFAULT '',
+                side VARCHAR(8) NOT NULL,
+                quantity DECIMAL(18,6) NOT NULL,
+                price DECIMAL(18,4) NOT NULL,
+                total_eur DECIMAL(18,2) NOT NULL,
+                pnl_eur DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+                created_at DATETIME NOT NULL,
+                INDEX idx_user_time (user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $_SESSION['_mc_markets_schema_v2_ok'] = 1;
     }
 
     // Gelegentliche Cache-Bereinigung (Einträge älter als 3 Tage löschen, damit die DB winzig bleibt)
@@ -123,6 +153,45 @@ function seedDefaultWatchlistIfNeeded(PDO $pdo, int $userId): void
 }
 
 seedDefaultWatchlistIfNeeded($pdo, $userId);
+
+/**
+ * Stellt sicher, dass der aktuelle Nutzer ein Börsenspiel-Konto mit 10.000 € Startkapital besitzt,
+ * und gibt den Kontostand zurück.
+ *
+ * @return array{user_id: int, starting_cash: float, cash_balance: float, realized_pnl: float, trades_count: int, reset_count: int}
+ */
+function getOrCreateMarketGameAccount(PDO $pdo, int $userId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM markets_game_accounts WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        return [
+            'user_id'       => (int)$row['user_id'],
+            'starting_cash' => (float)$row['starting_cash'],
+            'cash_balance'  => (float)$row['cash_balance'],
+            'realized_pnl'  => (float)$row['realized_pnl'],
+            'trades_count'  => (int)$row['trades_count'],
+            'reset_count'   => (int)$row['reset_count'],
+        ];
+    }
+
+    $pdo->prepare(
+        'INSERT IGNORE INTO markets_game_accounts (user_id, starting_cash, cash_balance, realized_pnl, trades_count, reset_count, created_at, updated_at)
+         VALUES (?, 10000.00, 10000.00, 0.00, 0, 0, NOW(), NOW())'
+    )->execute([$userId]);
+
+    return [
+        'user_id'       => $userId,
+        'starting_cash' => 10000.00,
+        'cash_balance'  => 10000.00,
+        'realized_pnl'  => 0.00,
+        'trades_count'  => 0,
+        'reset_count'   => 0,
+    ];
+}
+
+$gameAccount = getOrCreateMarketGameAccount($pdo, $userId);
 
 // ============================================================================
 // 2. KURS- & CHART-ABRUF MIT INTELLIGENTEM CACHE
@@ -909,6 +978,182 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: markets.php');
         exit;
     }
+
+    // E) 🎮 BÖRSENSPIEL: WERTPAPIER ZUM ECHTEN LIVE-KURS KAUFEN (BUY)
+    if ($action === 'game_buy') {
+        $sym = strtoupper(trim((string)($_POST['symbol'] ?? '')));
+        $qtyRaw = str_replace(',', '.', trim((string)($_POST['buy_qty'] ?? '0')));
+        $eurRaw = str_replace(',', '.', trim((string)($_POST['buy_amount_eur'] ?? '0')));
+        $reqQty = max(0.0, (float)$qtyRaw);
+        $reqEur = max(0.0, (float)$eurRaw);
+
+        if ($sym !== '' && preg_match('/^[A-Z0-9\^\.\-\=]{1,40}$/', $sym)) {
+            $liveSeries = fetchSymbolChartSeries($pdo, $sym, '5d', '1d', 60, false);
+            $livePrice  = (float)($liveSeries['price'] ?? 0.0);
+            if ($liveSeries['ok'] && $livePrice > 0.0) {
+                $acc = getOrCreateMarketGameAccount($pdo, $userId);
+                $availCash = (float)$acc['cash_balance'];
+
+                // Falls der Nutzer einen Euro-Betrag eingegeben hat, Stückzahl daraus berechnen
+                if ($reqEur > 0.0 && $reqQty <= 0.0) {
+                    $reqQty = round($reqEur / $livePrice, 6);
+                }
+                $totalCost = round($reqQty * $livePrice, 2);
+
+                // Falls minimal über Cash durch Rundung, auf verfügbares Cash deckeln
+                if ($totalCost > $availCash && $totalCost <= $availCash + 0.05) {
+                    $totalCost = $availCash;
+                    $reqQty    = round($totalCost / $livePrice, 6);
+                }
+
+                if ($reqQty <= 0.0 || $totalCost <= 0.0) {
+                    setFlash('error', 'Bitte gib eine gültige Stückzahl oder einen Kaufbetrag in Euro ein.');
+                    header('Location: markets.php?symbol=' . rawurlencode($sym));
+                    exit;
+                }
+
+                if ($totalCost > $availCash) {
+                    setFlash('error', sprintf(
+                        'Nicht genügend Spielgeld verfügbar! Benötigt: %s € • Verfügbares Bargeld: %s €.',
+                        number_format($totalCost, 2, ',', '.'),
+                        number_format($availCash, 2, ',', '.')
+                    ));
+                    header('Location: markets.php?symbol=' . rawurlencode($sym));
+                    exit;
+                }
+
+                // Aktuellen Bestand prüfen und gewichteten Durchschnittskaufkurs berechnen
+                $stmtCur = $pdo->prepare('SELECT quantity, buy_price, display_name FROM markets_watchlist WHERE user_id = ? AND symbol = ?');
+                $stmtCur->execute([$userId, $sym]);
+                $curRow  = $stmtCur->fetch(PDO::FETCH_ASSOC);
+
+                $oldQty   = $curRow ? (float)$curRow['quantity'] : 0.0;
+                $oldPrice = $curRow ? (float)$curRow['buy_price'] : 0.0;
+                $dispName = ($curRow && $curRow['display_name'] !== '') ? (string)$curRow['display_name'] : (string)($liveSeries['short_name'] ?: $sym);
+                $curr     = (string)($liveSeries['currency'] ?: 'EUR');
+
+                $newQty = round($oldQty + $reqQty, 6);
+                $newAvgPrice = $newQty > 0 ? round((($oldQty * $oldPrice) + ($reqQty * $livePrice)) / $newQty, 4) : $livePrice;
+
+                if ($curRow) {
+                    $pdo->prepare('UPDATE markets_watchlist SET quantity = ?, buy_price = ? WHERE user_id = ? AND symbol = ?')
+                        ->execute([$newQty, $newAvgPrice, $userId, $sym]);
+                } else {
+                    $pdo->prepare(
+                        'INSERT INTO markets_watchlist (user_id, symbol, display_name, asset_category, quantity, buy_price, currency, created_at)
+                         VALUES (?, ?, ?, \'stock\', ?, ?, ?, NOW())'
+                    )->execute([$userId, $sym, $dispName, $newQty, $newAvgPrice, $curr]);
+                }
+
+                // Spielgeld abziehen & Trade im Orderbuch speichern
+                $pdo->prepare(
+                    'UPDATE markets_game_accounts
+                     SET cash_balance = cash_balance - ?, trades_count = trades_count + 1, updated_at = NOW()
+                     WHERE user_id = ?'
+                )->execute([$totalCost, $userId]);
+
+                $pdo->prepare(
+                    'INSERT INTO markets_game_trades (user_id, symbol, display_name, side, quantity, price, total_eur, pnl_eur, created_at)
+                     VALUES (?, ?, ?, \'BUY\', ?, ?, ?, 0.00, NOW())'
+                )->execute([$userId, $sym, $dispName, $reqQty, $livePrice, $totalCost]);
+
+                setFlash('success', sprintf(
+                    '🟢 Kauf ausgeführt: %s Stk. %s (%s) zum Live-Kurs von %s € (Gesamt: %s €).',
+                    rtrim(rtrim(number_format($reqQty, 4, ',', '.'), '0'), ','),
+                    $dispName,
+                    $sym,
+                    number_format($livePrice, 2, ',', '.'),
+                    number_format($totalCost, 2, ',', '.')
+                ));
+                header('Location: markets.php?symbol=' . rawurlencode($sym));
+                exit;
+            }
+        }
+        setFlash('error', 'Kauforders konnten wegen fehlender Live-Kursdaten nicht ausgeführt werden.');
+        header('Location: markets.php');
+        exit;
+    }
+
+    // F) 🎮 BÖRSENSPIEL: WERTPAPIER ZUM ECHTEN LIVE-KURS VERKAUFEN (SELL)
+    if ($action === 'game_sell') {
+        $sym    = strtoupper(trim((string)($_POST['symbol'] ?? '')));
+        $qtyRaw = str_replace(',', '.', trim((string)($_POST['sell_qty'] ?? '0')));
+        $reqQty = max(0.0, (float)$qtyRaw);
+
+        $stmtCur = $pdo->prepare('SELECT quantity, buy_price, display_name FROM markets_watchlist WHERE user_id = ? AND symbol = ?');
+        $stmtCur->execute([$userId, $sym]);
+        $curRow  = $stmtCur->fetch(PDO::FETCH_ASSOC);
+
+        if (!$curRow || (float)$curRow['quantity'] <= 0.0) {
+            setFlash('error', 'Du hältst aktuell keine Anteile dieses Wertpapiers im Depot.');
+            header('Location: markets.php?symbol=' . rawurlencode($sym));
+            exit;
+        }
+
+        $ownedQty = (float)$curRow['quantity'];
+        $buyPrice = (float)$curRow['buy_price'];
+        $dispName = (string)($curRow['display_name'] ?: $sym);
+
+        if ($reqQty <= 0.0 || $reqQty > $ownedQty) {
+            $reqQty = $ownedQty; // Komplettverkauf falls >= Bestand
+        }
+
+        $liveSeries = fetchSymbolChartSeries($pdo, $sym, '5d', '1d', 60, false);
+        $livePrice  = (float)($liveSeries['price'] ?? 0.0);
+        if (!$liveSeries['ok'] || $livePrice <= 0.0) {
+            setFlash('error', 'Verkaufsorder konnte wegen fehlender Live-Kursdaten nicht ausgeführt werden.');
+            header('Location: markets.php?symbol=' . rawurlencode($sym));
+            exit;
+        }
+
+        $proceeds = round($reqQty * $livePrice, 2);
+        $costBase = round($reqQty * $buyPrice, 2);
+        $realized = round($proceeds - $costBase, 2);
+        $remQty   = max(0.0, round($ownedQty - $reqQty, 6));
+        $newBuyPr = $remQty > 0.0 ? $buyPrice : 0.0;
+
+        $pdo->prepare('UPDATE markets_watchlist SET quantity = ?, buy_price = ? WHERE user_id = ? AND symbol = ?')
+            ->execute([$remQty, $newBuyPr, $userId, $sym]);
+
+        $pdo->prepare(
+            'UPDATE markets_game_accounts
+             SET cash_balance = cash_balance + ?, realized_pnl = realized_pnl + ?, trades_count = trades_count + 1, updated_at = NOW()
+             WHERE user_id = ?'
+        )->execute([$proceeds, $realized, $userId]);
+
+        $pdo->prepare(
+            'INSERT INTO markets_game_trades (user_id, symbol, display_name, side, quantity, price, total_eur, pnl_eur, created_at)
+             VALUES (?, ?, ?, \'SELL\', ?, ?, ?, ?, NOW())'
+        )->execute([$userId, $sym, $dispName, $reqQty, $livePrice, $proceeds, $realized]);
+
+        $pnlSign = $realized >= 0 ? '+' : '';
+        setFlash('success', sprintf(
+            '🔴 Verkauf ausgeführt: %s Stk. %s (%s) zu %s € = %s € Gutschrift (Realisierter G/V: %s%s €).',
+            rtrim(rtrim(number_format($reqQty, 4, ',', '.'), '0'), ','),
+            $dispName,
+            $sym,
+            number_format($livePrice, 2, ',', '.'),
+            number_format($proceeds, 2, ',', '.'),
+            $pnlSign,
+            number_format($realized, 2, ',', '.')
+        ));
+        header('Location: markets.php?symbol=' . rawurlencode($sym));
+        exit;
+    }
+
+    // G) 🎮 BÖRSENSPIEL: SPIELSTAND AUF 10.000 € STARTKAPITAL ZURÜCKSETZEN
+    if ($action === 'game_reset') {
+        $pdo->prepare('UPDATE markets_watchlist SET quantity = 0, buy_price = 0 WHERE user_id = ?')->execute([$userId]);
+        $pdo->prepare('DELETE FROM markets_game_trades WHERE user_id = ?')->execute([$userId]);
+        $pdo->prepare(
+            'UPDATE markets_game_accounts
+             SET starting_cash = 10000.00, cash_balance = 10000.00, realized_pnl = 0.00, trades_count = 0, reset_count = reset_count + 1, updated_at = NOW()
+             WHERE user_id = ?'
+        )->execute([$userId]);
+        setFlash('success', '🔄 Dein Börsenspiel-Depot wurde auf 10.000,00 € Startkapital zurückgesetzt!');
+        header('Location: markets.php?symbol=' . rawurlencode((string)($_POST['symbol'] ?? '^GDAXI')));
+        exit;
+    }
 }
 
 // ============================================================================
@@ -1019,7 +1264,75 @@ $tfEndPrice   = !empty($chartPts) ? (float)end($chartPts)['close'] : (float)$act
 $tfChangeAbs  = $tfEndPrice - $tfStartPrice;
 $tfChangePct  = $tfStartPrice > 0 ? (($tfChangeAbs / $tfStartPrice) * 100.0) : 0.0;
 
-$pageTitle = 'Börse, Krypto & Depot-Analyse';
+// 🎮 Börsenspiel-Kennzahlen für den aktuellen Nutzer berechnen
+$gameStartingCash = (float)$gameAccount['starting_cash'];
+$gameCashBalance  = (float)$gameAccount['cash_balance'];
+$gameTotalEquity  = $gameCashBalance + $portfolioTotalCurrent;
+$gameTotalReturn  = $gameTotalEquity - $gameStartingCash;
+$gameTotalRetPct  = $gameStartingCash > 0 ? (($gameTotalReturn / $gameStartingCash) * 100.0) : 0.0;
+
+// Letzte 20 Trades des aktuellen Nutzers laden
+$stmtTr = $pdo->prepare('SELECT * FROM markets_game_trades WHERE user_id = ? ORDER BY id DESC LIMIT 20');
+$stmtTr->execute([$userId]);
+$userTrades = $stmtTr->fetchAll(PDO::FETCH_ASSOC);
+
+// 🏆 Cloud-Börsenspiel-Rangliste über alle teilnehmenden Cloud-Nutzer berechnen
+$gameLeaderboard = [];
+try {
+    $stmtAllAcc = $pdo->query("
+        SELECT a.user_id, a.starting_cash, a.cash_balance, a.realized_pnl, a.trades_count, u.username
+        FROM markets_game_accounts a
+        INNER JOIN users u ON u.id = a.user_id
+    ");
+    $allAccounts = $stmtAllAcc ? $stmtAllAcc->fetchAll(PDO::FETCH_ASSOC) : [];
+
+    // Alle offenen Positionen (quantity > 0) aller Spieler abrufen
+    $stmtAllPos = $pdo->query("SELECT user_id, symbol, quantity FROM markets_watchlist WHERE quantity > 0");
+    $allPositions = $stmtAllPos ? $stmtAllPos->fetchAll(PDO::FETCH_ASSOC) : [];
+
+    $priceMap = [];
+    foreach ($watchlistEnriched as $we) {
+        $priceMap[(string)$we['symbol']] = (float)$we['live_price'];
+    }
+
+    $posByUser = [];
+    foreach ($allPositions as $pRow) {
+        $uid = (int)$pRow['user_id'];
+        $sym = (string)$pRow['symbol'];
+        $qty = (float)$pRow['quantity'];
+        if (!isset($priceMap[$sym])) {
+            $sData = fetchSymbolChartSeries($pdo, $sym, '5d', '1d', 600, false);
+            $priceMap[$sym] = (float)($sData['price'] ?? 0.0);
+        }
+        $posByUser[$uid] = ($posByUser[$uid] ?? 0.0) + ($qty * $priceMap[$sym]);
+    }
+
+    foreach ($allAccounts as $accRow) {
+        $uid       = (int)$accRow['user_id'];
+        $startCash = (float)$accRow['starting_cash'];
+        $cashBal   = (float)$accRow['cash_balance'];
+        $depotVal  = (float)($posByUser[$uid] ?? 0.0);
+        $equity    = $cashBal + $depotVal;
+        $retEur    = $equity - $startCash;
+        $retPct    = $startCash > 0 ? (($retEur / $startCash) * 100.0) : 0.0;
+        $gameLeaderboard[] = [
+            'user_id'      => $uid,
+            'username'     => (string)$accRow['username'],
+            'equity'       => $equity,
+            'cash'         => $cashBal,
+            'depot'        => $depotVal,
+            'return_eur'   => $retEur,
+            'return_pct'   => $retPct,
+            'trades_count' => (int)$accRow['trades_count'],
+        ];
+    }
+
+    usort($gameLeaderboard, static fn(array $a, array $b): int => $b['equity'] <=> $a['equity']);
+} catch (Throwable) {
+    $gameLeaderboard = [];
+}
+
+$pageTitle = 'Börse, Krypto & Börsenspiel';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
@@ -1073,40 +1386,84 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- ================================================================== -->
-    <!-- 2. MUSTERDEPOT-ZUSAMMENFASSUNG (FALLS POSITIONEN EINGETRAGEN SIND) -->
+    <!-- 2. 🎮 CLOUD-BÖRSENSPIEL-COCKPIT (10.000,00 € STARTKAPITAL)         -->
     <!-- ================================================================== -->
-    <?php if ($portfolioTotalInvested > 0 || $portfolioTotalCurrent > 0): ?>
-        <?php
-        $totalPnlAbs = $portfolioTotalCurrent - $portfolioTotalInvested;
-        $totalPnlPct = $portfolioTotalInvested > 0 ? (($totalPnlAbs / $portfolioTotalInvested) * 100.0) : 0.0;
-        ?>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">💼 Aktueller Musterdepot-Wert</div>
-                <div class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+    <div class="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl border border-emerald-700/50 shadow-md p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3.5 mb-3.5 border-b border-white/10">
+            <div class="flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-lg">🎮</span>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                            Cloud-Börsenspiel • Dein Live-Depot (Startkapital: <?= number_format($gameStartingCash, 2, ',', '.') ?> €)
+                        </h2>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                            Spielgeld • Echte Börsenkurse
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-300">
+                        Kaufe und verkaufe Aktien, ETFs, Krypto &amp; Gold zum echten Live-Kurs – dein Depot entwickelt sich 1:1 mit dem realen Markt!
+                    </p>
+                </div>
+            </div>
+
+            <form method="post" action="markets.php" onsubmit="return confirm('Möchtest du dein Börsenspiel-Depot wirklich zurücksetzen? Alle Positionen werden aufgelöst und du startest wieder frisch mit 10.000,00 € Spielgeld.');">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="game_reset">
+                <input type="hidden" name="symbol" value="<?= e($selectedSym) ?>">
+                <button type="submit" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 border border-white/15 transition-colors cursor-pointer">
+                    🔄 Auf 10.000 € zurücksetzen
+                </button>
+            </form>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <!-- 1. Gesamtvermögen (Cash + Depot) -->
+            <div class="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-300">🏦 Gesamtvermögen (Cash + Depot)</div>
+                <div class="text-xl sm:text-2xl font-black text-white font-mono mt-1">
+                    <?= number_format($gameTotalEquity, 2, ',', '.') ?> €
+                </div>
+                <div class="text-[11px] mt-0.5 font-semibold <?= $gameTotalReturn >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                    <?= ($gameTotalReturn >= 0 ? '+' : '') . number_format($gameTotalReturn, 2, ',', '.') ?> €
+                    (<?= ($gameTotalRetPct >= 0 ? '+' : '') . number_format($gameTotalRetPct, 2, ',', '.') ?> % seit Start)
+                </div>
+            </div>
+
+            <!-- 2. Verfügbares Bargeld (Spielgeld-Cash) -->
+            <div class="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-300">💶 Verfügbares Bargeld (Cash)</div>
+                <div class="text-xl sm:text-2xl font-black text-emerald-300 font-mono mt-1">
+                    <?= number_format($gameCashBalance, 2, ',', '.') ?> €
+                </div>
+                <div class="text-[11px] text-slate-300 mt-0.5">
+                    Sofort frei für Käufe einsetzbar
+                </div>
+            </div>
+
+            <!-- 3. Aktueller Wertpapier-Depotwert -->
+            <div class="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-300">💼 Wertpapier-Depot (Live-Kurse)</div>
+                <div class="text-xl sm:text-2xl font-black text-white font-mono mt-1">
                     <?= number_format($portfolioTotalCurrent, 2, ',', '.') ?> €
                 </div>
-                <div class="text-xs text-slate-500 mt-0.5">Kaufwert: <?= number_format($portfolioTotalInvested, 2, ',', '.') ?> €</div>
-            </div>
-
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">📊 Gesamt-Gewinn / -Verlust</div>
-                <div class="text-xl sm:text-2xl font-black mt-1 <?= $totalPnlAbs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400' ?>">
-                    <?= ($totalPnlAbs >= 0 ? '+' : '') . number_format($totalPnlAbs, 2, ',', '.') ?> €
-                    <span class="text-sm font-bold">(<?= ($totalPnlPct >= 0 ? '+' : '') . number_format($totalPnlPct, 2, ',', '.') ?> %)</span>
+                <div class="text-[11px] text-slate-300 mt-0.5">
+                    Kaufwert: <?= number_format($portfolioTotalInvested, 2, ',', '.') ?> € • <?= (int)$gameAccount['trades_count'] ?> Orders
                 </div>
-                <div class="text-xs text-slate-500 mt-0.5">Über alle eingetragenen Depot-Positionen</div>
             </div>
 
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">⚡ Heutige Depot-Veränderung</div>
-                <div class="text-xl sm:text-2xl font-black mt-1 <?= $portfolioDayChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400' ?>">
+            <!-- 4. Heutige Depot-Entwicklung & Realisierter Gewinn -->
+            <div class="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-300">⚡ Heutige Depot-Bewegung</div>
+                <div class="text-xl sm:text-2xl font-black font-mono mt-1 <?= $portfolioDayChange >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
                     <?= ($portfolioDayChange >= 0 ? '+' : '') . number_format($portfolioDayChange, 2, ',', '.') ?> €
                 </div>
-                <div class="text-xs text-slate-500 mt-0.5">Verglichen mit dem gestrigen Schlusskurs</div>
+                <div class="text-[11px] text-slate-300 mt-0.5">
+                    Realisiert aus Verkäufen: <?= ((float)$gameAccount['realized_pnl'] >= 0 ? '+' : '') . number_format((float)$gameAccount['realized_pnl'], 2, ',', '.') ?> €
+                </div>
             </div>
         </div>
-    <?php endif; ?>
+    </div>
 
     <!-- ================================================================== -->
     <!-- 3. HAUPTGRID: LINKS WATCHLIST (4 SP.), RECHTS CHART & KI-ANALYSE   -->
@@ -1455,51 +1812,304 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             <?php endif; ?>
 
-            <!-- C) 💼 MUSTERDEPOT-BESTAND FÜR DIESES WERTPAPIER BEARBEITEN -->
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
-                <h3 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white mb-1">
-                    💼 Eigener Musterdepot-Bestand für <?= e((string)$selectedRowMeta['display_name']) ?> (<?= e($selectedSym) ?>)
-                </h3>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                    Trage optional deine gekaufte Stückzahl und deinen Einstandskurs ein, um deinen persönlichen Gewinn / Verlust live zu verfolgen.
-                </p>
-
-                <form method="post" action="markets.php" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                    <input type="hidden" name="action" value="update_holding">
-                    <input type="hidden" name="symbol" value="<?= e($selectedSym) ?>">
-
-                    <div class="sm:col-span-3">
-                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Stückzahl / Anteile</label>
-                        <input type="number" step="0.000001" min="0" name="quantity"
-                               value="<?= (float)($selectedRowMeta['quantity'] ?? 0) > 0 ? e(rtrim(rtrim(number_format((float)$selectedRowMeta['quantity'], 6, '.', ''), '0'), '.')) : '' ?>"
-                               placeholder="z.B. 10"
-                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+            <!-- C) 🎮 BÖRSENSPIEL LIVE-ORDER-TERMINAL (KAUFEN & VERKAUFEN ZUM ECHTEN LIVE-KURS) -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                    <div>
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>⚡</span>
+                            <span>Börsenspiel Order-Terminal: <?= e((string)$selectedRowMeta['display_name']) ?> (<?= e($selectedSym) ?>)</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Aktueller Ausführungskurs: <strong class="text-slate-800 dark:text-slate-200 font-mono"><?= number_format((float)$activeChart['price'], 2, ',', '.') ?> €</strong> •
+                            Verfügbares Spielgeld: <strong class="text-emerald-600 dark:text-emerald-400 font-mono"><?= number_format($gameCashBalance, 2, ',', '.') ?> €</strong>
+                        </p>
                     </div>
+                    <?php if ((float)($selectedRowMeta['quantity'] ?? 0) > 0): ?>
+                        <?php
+                        $curOwnedQty = (float)$selectedRowMeta['quantity'];
+                        $curOwnedVal = $curOwnedQty * (float)$activeChart['price'];
+                        $curOwnedPnl = $curOwnedVal - ($curOwnedQty * (float)$selectedRowMeta['buy_price']);
+                        ?>
+                        <div class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                            📦 Im Depot: <strong><?= rtrim(rtrim(number_format($curOwnedQty, 4, ',', '.'), '0'), ',') ?> Stk.</strong>
+                            (Wert: <strong><?= number_format($curOwnedVal, 2, ',', '.') ?> €</strong> •
+                            <span class="font-bold <?= $curOwnedPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400' ?>">
+                                <?= ($curOwnedPnl >= 0 ? '+' : '') . number_format($curOwnedPnl, 2, ',', '.') ?> €
+                            </span>)
+                        </div>
+                    <?php endif; ?>
+                </div>
 
-                    <div class="sm:col-span-3">
-                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Kaufkurs pro Stück (<?= e((string)$activeChart['currency']) ?>)</label>
-                        <input type="number" step="0.0001" min="0" name="buy_price"
-                               value="<?= (float)($selectedRowMeta['buy_price'] ?? 0) > 0 ? e(rtrim(rtrim(number_format((float)$selectedRowMeta['buy_price'], 4, '.', ''), '0'), '.')) : '' ?>"
-                               placeholder="z.B. <?= number_format((float)$activeChart['price'], 2, '.', '') ?>"
-                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- 1. 🟢 KAUF-ORDER (BUY) -->
+                    <form method="post" action="markets.php" class="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/25 border border-emerald-200/80 dark:border-emerald-800/70 space-y-3">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="game_buy">
+                        <input type="hidden" name="symbol" value="<?= e($selectedSym) ?>">
 
-                    <div class="sm:col-span-4">
-                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notiz / Kursziel (optional)</label>
-                        <input type="text" name="notes" maxlength="255"
-                               value="<?= e((string)($selectedRowMeta['notes'] ?? '')) ?>"
-                               placeholder="z.B. Sparplan monatlich / Nachkauf bei Rücksetzer"
-                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
-                    </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                                🟢 Kaufen (vom Spielgeld-Konto)
+                            </span>
+                            <span class="text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
+                                Max: <?= number_format($gameCashBalance, 2, ',', '.') ?> €
+                            </span>
+                        </div>
 
-                    <div class="sm:col-span-2">
-                        <button type="submit"
-                                class="w-full py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
-                            💾 Speichern
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Anlagebetrag in €</label>
+                                <input type="number" step="0.01" min="1" max="<?= number_format($gameCashBalance, 2, '.', '') ?>"
+                                       id="gameBuyEurInput" name="buy_amount_eur" placeholder="z.B. 1000"
+                                       oninput="syncGameBuyCalc('eur')"
+                                       class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Oder Stückzahl / Anteile</label>
+                                <input type="number" step="0.000001" min="0.000001"
+                                       id="gameBuyQtyInput" name="buy_qty" placeholder="z.B. 5"
+                                       oninput="syncGameBuyCalc('qty')"
+                                       class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                            </div>
+                        </div>
+
+                        <!-- Schnellwahl-Buttons für den Kaufbetrag -->
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <?php foreach ([500 => '500 €', 1000 => '1.000 €', 2500 => '2.500 €'] as $presetEur => $presetLbl): ?>
+                                <?php if ($gameCashBalance >= $presetEur): ?>
+                                    <button type="button" onclick="setGameBuyEur(<?= $presetEur ?>)"
+                                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer">
+                                        <?= $presetLbl ?>
+                                    </button>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                            <?php if ($gameCashBalance > 1): ?>
+                                <button type="button" onclick="setGameBuyEur(<?= round($gameCashBalance * 0.5, 2) ?>)"
+                                        class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer">
+                                    50 % Cash
+                                </button>
+                                <button type="button" onclick="setGameBuyEur(<?= round($gameCashBalance, 2) ?>)"
+                                        class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer">
+                                    Max. Cash
+                                </button>
+                            <?php endif; ?>
+                        </div>
+
+                        <button type="submit" <?= $gameCashBalance < 0.01 ? 'disabled' : '' ?>
+                                class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                            🟢 Jetzt zum Live-Kurs kaufen
                         </button>
+                    </form>
+
+                    <!-- 2. 🔴 VERKAUFS-ORDER (SELL) -->
+                    <form method="post" action="markets.php" class="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/25 border border-rose-200/80 dark:border-rose-800/70 space-y-3 flex flex-col justify-between">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="game_sell">
+                        <input type="hidden" name="symbol" value="<?= e($selectedSym) ?>">
+
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-extrabold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                                    🔴 Verkaufen (Gutschrift aufs Spielgeld-Konto)
+                                </span>
+                                <span class="text-[11px] font-mono text-rose-700 dark:text-rose-300">
+                                    Bestand: <?= rtrim(rtrim(number_format((float)($selectedRowMeta['quantity'] ?? 0), 4, ',', '.'), '0'), ',') ?> Stk.
+                                </span>
+                            </div>
+
+                            <?php if ((float)($selectedRowMeta['quantity'] ?? 0) > 0): ?>
+                                <div class="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Verkaufs-Stückzahl</label>
+                                        <input type="number" step="0.000001" min="0.000001" max="<?= e(rtrim(rtrim(number_format((float)$selectedRowMeta['quantity'], 6, '.', ''), '0'), '.')) ?>"
+                                               id="gameSellQtyInput" name="sell_qty"
+                                               value="<?= e(rtrim(rtrim(number_format((float)$selectedRowMeta['quantity'], 6, '.', ''), '0'), '.')) ?>"
+                                               oninput="syncGameSellCalc()"
+                                               class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Voraussichtlicher Erlös (€)</label>
+                                        <input type="text" id="gameSellEurPreview" readonly
+                                               value="<?= number_format((float)$selectedRowMeta['quantity'] * (float)$activeChart['price'], 2, ',', '.') ?> €"
+                                               class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-700 dark:text-slate-300">
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <?php $ownedQ = (float)$selectedRowMeta['quantity']; ?>
+                                    <button type="button" onclick="setGameSellPct(0.25)"
+                                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-[11px] font-bold text-rose-800 dark:text-rose-300 cursor-pointer">
+                                        25 % verkaufen
+                                    </button>
+                                    <button type="button" onclick="setGameSellPct(0.50)"
+                                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-[11px] font-bold text-rose-800 dark:text-rose-300 cursor-pointer">
+                                        50 % verkaufen
+                                    </button>
+                                    <button type="button" onclick="setGameSellPct(1.0)"
+                                            class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-[11px] font-bold text-rose-800 dark:text-rose-300 cursor-pointer">
+                                        100 % Komplettverkauf
+                                    </button>
+                                </div>
+                            <?php else: ?>
+                                <div class="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-rose-200/50 dark:border-rose-900/40 text-xs text-slate-500 dark:text-slate-400">
+                                    Du hältst aktuell noch keine Anteile von <strong><?= e((string)$selectedRowMeta['display_name']) ?></strong> im Depot. Nutze links das Kauf-Ticket, um Anteile mit deinem Spielgeld ins Depot zu legen.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <button type="submit" <?= (float)($selectedRowMeta['quantity'] ?? 0) <= 0 ? 'disabled' : '' ?>
+                                class="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer">
+                            🔴 Jetzt zum Live-Kurs verkaufen
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Optional aufklappbar: Manuelle Bestandskorrektur (für externes Echt-Depot ohne Spielgeld-Abzug) -->
+                <details class="pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <summary class="cursor-pointer font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
+                        ⚙️ Manuelle Bestands-Eintragung (eigenes Bank-Depot eintragen ohne Spielgeld-Verrechnung)
+                    </summary>
+                    <form method="post" action="markets.php" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end mt-3">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="update_holding">
+                        <input type="hidden" name="symbol" value="<?= e($selectedSym) ?>">
+
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Stückzahl / Anteile</label>
+                            <input type="number" step="0.000001" min="0" name="quantity"
+                                   value="<?= (float)($selectedRowMeta['quantity'] ?? 0) > 0 ? e(rtrim(rtrim(number_format((float)$selectedRowMeta['quantity'], 6, '.', ''), '0'), '.')) : '' ?>"
+                                   placeholder="z.B. 10"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                        </div>
+
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Einstandskurs (<?= e((string)$activeChart['currency']) ?>)</label>
+                            <input type="number" step="0.0001" min="0" name="buy_price"
+                                   value="<?= (float)($selectedRowMeta['buy_price'] ?? 0) > 0 ? e(rtrim(rtrim(number_format((float)$selectedRowMeta['buy_price'], 4, '.', ''), '0'), '.')) : '' ?>"
+                                   placeholder="z.B. <?= number_format((float)$activeChart['price'], 2, '.', '') ?>"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                        </div>
+
+                        <div class="sm:col-span-4">
+                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notiz / Kursziel</label>
+                            <input type="text" name="notes" maxlength="255"
+                                   value="<?= e((string)($selectedRowMeta['notes'] ?? '')) ?>"
+                                   placeholder="z.B. Langfrist-Sparplan"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                        </div>
+
+                        <div class="sm:col-span-2">
+                            <button type="submit"
+                                    class="w-full py-2 px-4 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer">
+                                💾 Speichern
+                            </button>
+                        </div>
+                    </form>
+                </details>
+            </div>
+
+            <!-- D) 🏆 CLOUD-BÖRSENSPIEL-RANGLISTE & 📜 ORDERBUCH (TRANSAKTIONS-HISTORIE) -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 1. 🏆 Cloud-Börsenspiel-Rangliste -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div>
+                            <h3 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">🏆 Börsenspiel-Rangliste</h3>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Live-Gesamtvermögen (Bargeld + aktueller Depotwert)</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                            Start: 10.000 €
+                        </span>
                     </div>
-                </form>
+
+                    <div class="divide-y divide-slate-100 dark:divide-slate-800 max-h-72 overflow-y-auto">
+                        <?php foreach ($gameLeaderboard as $idx => $lb): ?>
+                            <?php
+                            $rank = $idx + 1;
+                            $medal = $rank === 1 ? '🥇' : ($rank === 2 ? '🥈' : ($rank === 3 ? '🥉' : $rank . '.'));
+                            $isMe  = ((int)$lb['user_id'] === $userId);
+                            $lbPos = ((float)$lb['return_eur'] >= 0);
+                            ?>
+                            <div class="py-2.5 px-2 flex items-center justify-between gap-2 rounded-xl <?= $isMe ? 'bg-emerald-50/70 dark:bg-emerald-950/30' : '' ?>">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="w-6 text-center font-extrabold text-xs"><?= $medal ?></span>
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                            <?= e($lb['username']) ?>
+                                            <?php if ($isMe): ?>
+                                                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">(Du)</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="text-[10px] text-slate-500">
+                                            Depot: <?= number_format((float)$lb['depot'], 0, ',', '.') ?> € • Cash: <?= number_format((float)$lb['cash'], 0, ',', '.') ?> € • <?= (int)$lb['trades_count'] ?> Orders
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <div class="text-xs font-black font-mono text-slate-900 dark:text-white">
+                                        <?= number_format((float)$lb['equity'], 2, ',', '.') ?> €
+                                    </div>
+                                    <div class="text-[10px] font-bold font-mono <?= $lbPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400' ?>">
+                                        <?= ($lbPos ? '+' : '') . number_format((float)$lb['return_pct'], 2, ',', '.') ?> %
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- 2. 📜 Mein Orderbuch (Letzte Käufe & Verkäufe) -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div>
+                            <h3 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">📜 Mein Orderbuch</h3>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Deine letzten Käufe &amp; Verkäufe zum Echtzeit-Kurs</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            <?= count($userTrades) ?> Einträge
+                        </span>
+                    </div>
+
+                    <?php if (empty($userTrades)): ?>
+                        <div class="p-6 text-center text-xs text-slate-400">
+                            Noch keine Käufe oder Verkäufe im Börsenspiel ausgeführt. Nutze oben das Order-Terminal, um deine ersten Wertpapiere mit deinen 10.000 € Startkapital zu kaufen!
+                        </div>
+                    <?php else: ?>
+                        <div class="divide-y divide-slate-100 dark:divide-slate-800 max-h-72 overflow-y-auto">
+                            <?php foreach ($userTrades as $tr): ?>
+                                <?php $isBuy = ((string)$tr['side'] === 'BUY'); ?>
+                                <div class="py-2.5 flex items-center justify-between gap-2 text-xs">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold <?= $isBuy ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300' ?>">
+                                                <?= $isBuy ? 'KAUF' : 'VERKAUF' ?>
+                                            </span>
+                                            <a href="markets.php?symbol=<?= rawurlencode((string)$tr['symbol']) ?>" class="font-extrabold text-slate-900 dark:text-white hover:underline truncate">
+                                                <?= e((string)($tr['display_name'] ?: $tr['symbol'])) ?>
+                                            </a>
+                                        </div>
+                                        <div class="text-[10px] text-slate-500 mt-0.5 font-mono">
+                                            <?= date('d.m.Y H:i', (int)strtotime((string)$tr['created_at'])) ?> •
+                                            <?= rtrim(rtrim(number_format((float)$tr['quantity'], 4, ',', '.'), '0'), ',') ?> Stk. à <?= number_format((float)$tr['price'], 2, ',', '.') ?> €
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0 font-mono">
+                                        <div class="font-bold text-slate-900 dark:text-white">
+                                            <?= ($isBuy ? '-' : '+') . number_format((float)$tr['total_eur'], 2, ',', '.') ?> €
+                                        </div>
+                                        <?php if (!$isBuy): ?>
+                                            <?php $trPnl = (float)$tr['pnl_eur']; ?>
+                                            <div class="text-[10px] font-bold <?= $trPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400' ?>">
+                                                G/V: <?= ($trPnl >= 0 ? '+' : '') . number_format($trPnl, 2, ',', '.') ?> €
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
 
         </section>
@@ -1518,6 +2128,8 @@ require_once __DIR__ . '/includes/header.php';
 const CHART_POINTS   = <?= json_encode($activeChart['points'] ?? []) ?>;
 const CHART_CURRENCY = <?= json_encode((string)($activeChart['currency'] ?? 'EUR')) ?>;
 const IS_POSITIVE_TF = <?= $tfChangePct >= 0 ? 'true' : 'false' ?>;
+const LIVE_PRICE     = <?= json_encode((float)($activeChart['price'] ?? 0)) ?>;
+const OWNED_QTY      = <?= json_encode((float)($selectedRowMeta['quantity'] ?? 0)) ?>;
 
 // 1. Interaktiven HTML5-Canvas-Chart mit SMA-20, SMA-50 & Crosshair zeichnen
 (() => {
@@ -1740,6 +2352,57 @@ function quickAddMarketSymbol(sym, name, cat) {
     document.getElementById('quickAddNameInput').value = name;
     document.getElementById('quickAddCatInput').value = cat;
     document.getElementById('quickAddSymbolForm').submit();
+}
+
+// 3. Börsenspiel Order-Rechner (Euro <-> Stückzahl & Schnellwahl-Buttons)
+function syncGameBuyCalc(mode) {
+    const eurInput = document.getElementById('gameBuyEurInput');
+    const qtyInput = document.getElementById('gameBuyQtyInput');
+    if (!eurInput || !qtyInput || LIVE_PRICE <= 0) return;
+
+    if (mode === 'eur') {
+        const eur = parseFloat(eurInput.value);
+        if (!isNaN(eur) && eur > 0) {
+            qtyInput.value = parseFloat((eur / LIVE_PRICE).toFixed(6));
+        } else {
+            qtyInput.value = '';
+        }
+    } else if (mode === 'qty') {
+        const qty = parseFloat(qtyInput.value);
+        if (!isNaN(qty) && qty > 0) {
+            eurInput.value = (qty * LIVE_PRICE).toFixed(2);
+        } else {
+            eurInput.value = '';
+        }
+    }
+}
+
+function setGameBuyEur(eur) {
+    const eurInput = document.getElementById('gameBuyEurInput');
+    if (!eurInput) return;
+    eurInput.value = Number(eur).toFixed(2);
+    syncGameBuyCalc('eur');
+}
+
+function syncGameSellCalc() {
+    const qtyInput = document.getElementById('gameSellQtyInput');
+    const preview  = document.getElementById('gameSellEurPreview');
+    if (!qtyInput || !preview || LIVE_PRICE <= 0) return;
+    const qty = parseFloat(qtyInput.value);
+    if (!isNaN(qty) && qty > 0) {
+        const val = qty * LIVE_PRICE;
+        preview.value = val.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    } else {
+        preview.value = '0,00 €';
+    }
+}
+
+function setGameSellPct(pct) {
+    const qtyInput = document.getElementById('gameSellQtyInput');
+    if (!qtyInput || OWNED_QTY <= 0) return;
+    const targetQty = parseFloat((OWNED_QTY * pct).toFixed(6));
+    qtyInput.value = targetQty;
+    syncGameSellCalc();
 }
 
 document.addEventListener('click', (e) => {
