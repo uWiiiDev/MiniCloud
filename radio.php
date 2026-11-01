@@ -721,14 +721,66 @@ require_once __DIR__ . '/includes/header.php';
 <script>
 const RADIO_CSRF = <?= json_encode($csrfToken) ?>;
 const DEFAULT_RADIO_STATION = <?= json_encode($presetRadioStations[0]) ?>;
+const RADIO_STATE_KEY = 'mc_global_radio_state_v1';
 
 let activeRadioStation = null;
 let icyMetaTimer       = null;
 let sleepTimerInterval = null;
 let sleepEndTimestamp  = 0;
 
+function getSharedRadioHost() {
+    try {
+        if (window.parent && window.parent !== window && window.parent.McGlobalRadio) {
+            return window.parent.McGlobalRadio;
+        }
+    } catch (e) {}
+    return window.McGlobalRadio || null;
+}
+
+function readSavedRadioState() {
+    try {
+        const raw = sessionStorage.getItem(RADIO_STATE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function writeSavedRadioState(patch) {
+    try {
+        const prev = readSavedRadioState() || {};
+        const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
+        sessionStorage.setItem(RADIO_STATE_KEY, JSON.stringify(next));
+        const host = getSharedRadioHost();
+        if (host && typeof host.syncFromState === 'function') {
+            host.syncFromState(next);
+        }
+        return next;
+    } catch (e) {
+        return null;
+    }
+}
+
+function getEffectiveRadioAudio() {
+    const host = getSharedRadioHost();
+    if (host && typeof host.getAudio === 'function') {
+        const hostAudio = host.getAudio();
+        if (hostAudio) return hostAudio;
+    }
+    return document.getElementById('globalRadioAudio');
+}
+
 function playRadioStation(name, streamUrl, genre) {
-    const audio = document.getElementById('globalRadioAudio');
+    const host = getSharedRadioHost();
+    if (host && typeof host.playStation === 'function') {
+        host.playStation(name, streamUrl, genre || 'Live-Radio');
+        syncRadioDockFromState();
+        return;
+    }
+
+    const audio = getEffectiveRadioAudio();
     if (!audio) return;
 
     activeRadioStation = { name, streamUrl, genre: genre || 'Live-Radio' };
@@ -741,21 +793,44 @@ function playRadioStation(name, streamUrl, genre) {
     }
     document.getElementById('radioCurrentSongTitle').textContent = 'Verbinde mit Live-Stream…';
 
+    const volVal = Number(document.getElementById('radioVolumeSlider')?.value || 85);
     audio.src = streamUrl;
-    audio.volume = (Number(document.getElementById('radioVolumeSlider')?.value || 85)) / 100;
+    audio.volume = Math.max(0, Math.min(1, volVal / 100));
     audio.play().then(() => {
+        writeSavedRadioState({
+            playing: true,
+            name: name,
+            streamUrl: streamUrl,
+            genre: genre || 'Live-Radio',
+            volume: volVal,
+            muted: audio.muted,
+            songTitle: 'Live-Übertragung • ' + name
+        });
         updateRadioUiPlaying(true);
         fetchCurrentIcySongTitle();
         if (icyMetaTimer) clearInterval(icyMetaTimer);
         icyMetaTimer = setInterval(fetchCurrentIcySongTitle, 25000);
     }).catch(() => {
         document.getElementById('radioCurrentSongTitle').textContent = 'Stream konnte nicht direkt gestartet werden (bitte erneut auf ▶️ klicken).';
+        writeSavedRadioState({ playing: false });
         updateRadioUiPlaying(false);
     });
 }
 
 function toggleRadioPlayback() {
-    const audio = document.getElementById('globalRadioAudio');
+    const host = getSharedRadioHost();
+    if (host && typeof host.toggle === 'function') {
+        const st = readSavedRadioState();
+        if (!st || !st.streamUrl) {
+            host.playStation(DEFAULT_RADIO_STATION.name, DEFAULT_RADIO_STATION.stream_url, DEFAULT_RADIO_STATION.genre);
+        } else {
+            host.toggle();
+        }
+        syncRadioDockFromState();
+        return;
+    }
+
+    const audio = getEffectiveRadioAudio();
     if (!audio) return;
 
     if (!activeRadioStation) {
@@ -764,9 +839,13 @@ function toggleRadioPlayback() {
     }
 
     if (audio.paused) {
-        audio.play().then(() => updateRadioUiPlaying(true)).catch(() => {});
+        audio.play().then(() => {
+            writeSavedRadioState({ playing: true });
+            updateRadioUiPlaying(true);
+        }).catch(() => {});
     } else {
         audio.pause();
+        writeSavedRadioState({ playing: false });
         updateRadioUiPlaying(false);
     }
 }
@@ -798,39 +877,91 @@ function updateRadioUiPlaying(isPlaying) {
 }
 
 function setRadioVolume(val) {
-    const audio = document.getElementById('globalRadioAudio');
-    if (!audio) return;
-    audio.muted  = false;
-    audio.volume = Math.max(0, Math.min(1, Number(val) / 100));
+    const volNum = Math.max(0, Math.min(100, Number(val)));
+    const host = getSharedRadioHost();
+    if (host && typeof host.setVolume === 'function') {
+        host.setVolume(volNum);
+    } else {
+        const audio = getEffectiveRadioAudio();
+        if (audio) {
+            audio.muted  = false;
+            audio.volume = volNum / 100;
+        }
+        writeSavedRadioState({ volume: volNum, muted: false });
+    }
     const muteBtn = document.getElementById('radioMuteBtn');
-    if (muteBtn) muteBtn.textContent = audio.volume === 0 ? '🔇' : '🔊';
+    if (muteBtn) muteBtn.textContent = volNum === 0 ? '🔇' : '🔊';
 }
 
 function toggleRadioMute() {
-    const audio = document.getElementById('globalRadioAudio');
+    const host = getSharedRadioHost();
+    if (host && typeof host.toggleMute === 'function') {
+        const mutedNow = host.toggleMute();
+        const muteBtn = document.getElementById('radioMuteBtn');
+        if (muteBtn) muteBtn.textContent = mutedNow ? '🔇' : '🔊';
+        return;
+    }
+    const audio = getEffectiveRadioAudio();
     if (!audio) return;
     audio.muted = !audio.muted;
+    writeSavedRadioState({ muted: audio.muted });
     const muteBtn = document.getElementById('radioMuteBtn');
     if (muteBtn) muteBtn.textContent = audio.muted ? '🔇' : '🔊';
 }
 
 async function fetchCurrentIcySongTitle() {
-    const audio = document.getElementById('globalRadioAudio');
+    const audio = getEffectiveRadioAudio();
     if (!audio || audio.paused || !activeRadioStation) return;
 
     try {
         const res  = await fetch('radio.php?action=icy_meta&url=' + encodeURIComponent(activeRadioStation.streamUrl));
         const data = await res.json();
         const lbl  = document.getElementById('radioCurrentSongTitle');
-        if (!lbl) return;
-
-        if (data && data.ok && data.title) {
-            lbl.textContent = data.title;
-        } else {
-            lbl.textContent = 'Live-Übertragung • ' + activeRadioStation.name + ' (' + (activeRadioStation.genre || 'Live') + ')';
-        }
+        const nextTitle = (data && data.ok && data.title)
+            ? data.title
+            : ('Live-Übertragung • ' + activeRadioStation.name + ' (' + (activeRadioStation.genre || 'Live') + ')');
+        if (lbl) lbl.textContent = nextTitle;
+        writeSavedRadioState({ songTitle: nextTitle });
     } catch (e) {}
 }
+
+function syncRadioDockFromState() {
+    const st = readSavedRadioState();
+    if (!st || !st.streamUrl) return;
+    activeRadioStation = {
+        name: st.name || 'Live-Radio',
+        streamUrl: st.streamUrl,
+        genre: st.genre || 'Live'
+    };
+    const stNameEl = document.getElementById('radioCurrentStationName');
+    if (stNameEl && st.name) stNameEl.textContent = st.name;
+
+    const genreBadge = document.getElementById('radioCurrentGenreBadge');
+    if (genreBadge && st.genre) {
+        genreBadge.textContent = st.genre;
+        genreBadge.classList.remove('hidden');
+    }
+    const songEl = document.getElementById('radioCurrentSongTitle');
+    if (songEl && st.songTitle) {
+        songEl.textContent = st.songTitle;
+    }
+    const volSlider = document.getElementById('radioVolumeSlider');
+    if (volSlider && typeof st.volume === 'number') {
+        volSlider.value = String(st.volume);
+    }
+    const muteBtn = document.getElementById('radioMuteBtn');
+    if (muteBtn) {
+        muteBtn.textContent = (st.muted || st.volume === 0) ? '🔇' : '🔊';
+    }
+    const audio = getEffectiveRadioAudio();
+    const isActuallyPlaying = Boolean(st.playing && audio && !audio.paused);
+    updateRadioUiPlaying(isActuallyPlaying || Boolean(st.playing));
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    syncRadioDockFromState();
+    setInterval(syncRadioDockFromState, 2000);
+});
 
 function setRadioSleepTimer(minutes) {
     if (sleepTimerInterval) {
@@ -850,11 +981,17 @@ function setRadioSleepTimer(minutes) {
         const remSec = Math.max(0, Math.floor((sleepEndTimestamp - Date.now()) / 1000));
         if (remSec <= 0) {
             clearInterval(sleepTimerInterval);
-            const audio = document.getElementById('globalRadioAudio');
-            if (audio && !audio.paused) {
-                audio.pause();
-                updateRadioUiPlaying(false);
+            const host = getSharedRadioHost();
+            if (host && typeof host.pause === 'function') {
+                host.pause();
+            } else {
+                const audio = getEffectiveRadioAudio();
+                if (audio && !audio.paused) {
+                    audio.pause();
+                }
+                writeSavedRadioState({ playing: false });
             }
+            updateRadioUiPlaying(false);
             if (cd) cd.textContent = '🌙 Gestoppt';
             return;
         }

@@ -1722,6 +1722,420 @@ if (
     };
 })();
 </script>
+
+<!-- ====================================================================== -->
+<!-- GLOBALER PERSISTENTER WEBRADIO-MINI-PLAYER (MODULÜBERGREIFEND)         -->
+<!-- ====================================================================== -->
+<div id="mcPersistentRadioMiniBar"
+     class="hidden fixed bottom-4 left-4 z-50 max-w-[calc(100vw-5.5rem)] sm:max-w-md rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-3.5 py-2.5 border border-indigo-500/40 shadow-2xl backdrop-blur-md">
+    <div class="flex items-center gap-2.5">
+        <!-- Play / Pause -->
+        <button type="button" id="mcMiniRadioPlayBtn" onclick="window.McGlobalRadio && window.McGlobalRadio.toggle()"
+                class="w-9 h-9 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm flex items-center justify-center shadow-md transition-transform active:scale-95 cursor-pointer shrink-0"
+                title="Webradio abspielen / pausieren">
+            ⏸️
+        </button>
+
+        <!-- Sender & aktueller Song -->
+        <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+                <span id="mcMiniRadioDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                <span id="mcMiniRadioStation" class="text-xs font-extrabold truncate">Live-Webradio</span>
+                <span id="mcMiniRadioGenre" class="hidden sm:inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-white/10 text-indigo-200 truncate max-w-[90px]">Live</span>
+            </div>
+            <div id="mcMiniRadioSong" class="text-[11px] text-indigo-200/90 truncate mt-0.5">
+                🎶 Live-Stream aktiv
+            </div>
+        </div>
+
+        <!-- Lautstärke (Desktop) & Mute -->
+        <div class="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-xl shrink-0">
+            <button type="button" id="mcMiniRadioMuteBtn" onclick="window.McGlobalRadio && window.McGlobalRadio.toggleMute()"
+                    class="text-xs cursor-pointer" title="Stummschalten">🔊</button>
+            <input type="range" id="mcMiniRadioVol" min="0" max="100" value="85"
+                   oninput="window.McGlobalRadio && window.McGlobalRadio.setVolume(this.value)"
+                   aria-label="Radio-Lautstärke"
+                   class="hidden sm:block w-14 accent-emerald-400 cursor-pointer">
+        </div>
+
+        <!-- Zum Radio-Modul öffnen -->
+        <a href="radio.php" id="mcMiniRadioOpenBtn"
+           class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+           title="Webradio-Modul öffnen">
+            📻
+        </a>
+
+        <!-- Radio komplett stoppen & schließen -->
+        <button type="button" onclick="window.McGlobalRadio && window.McGlobalRadio.stopAndClose()"
+                class="w-7 h-7 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+                title="Webradio ausschalten &amp; schließen">
+            ✕
+        </button>
+    </div>
+</div>
+<audio id="mcGlobalPersistentAudio" preload="none" crossorigin="anonymous" class="hidden"></audio>
+
+<script>
+(() => {
+    const STATE_KEY = 'mc_global_radio_state_v1';
+
+    // Falls diese Seite bereits im nahtlosen Radio-Viewport-Iframe läuft,
+    // nutze direkt die Audio-Instanz des Elternfensters (0 ms Unterbrechung).
+    try {
+        if (window.parent && window.parent !== window && window.parent.McGlobalRadio) {
+            window.McGlobalRadio = window.parent.McGlobalRadio;
+            window.parent.McGlobalRadio.notifyChildPageLoaded(window);
+            return;
+        }
+    } catch (e) {}
+
+    let icyTimer = null;
+    let appFrame = null;
+
+    const getState = () => {
+        try {
+            const raw = sessionStorage.getItem(STATE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const saveState = (patch) => {
+        try {
+            const prev = getState() || {};
+            const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
+            sessionStorage.setItem(STATE_KEY, JSON.stringify(next));
+            return next;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const getAudioEl = () => {
+        return document.getElementById('globalRadioAudio') || document.getElementById('mcGlobalPersistentAudio');
+    };
+
+    const isCurrentViewRadioPage = () => {
+        try {
+            if (appFrame && !appFrame.classList.contains('hidden') && appFrame.contentWindow) {
+                const p = appFrame.contentWindow.location.pathname || '';
+                return p.endsWith('/radio.php') || p === 'radio.php';
+            }
+        } catch (e) {}
+        const p = window.location.pathname || '';
+        return p.endsWith('/radio.php') || p === 'radio.php';
+    };
+
+    const updateMiniBarUi = () => {
+        const bar = document.getElementById('mcPersistentRadioMiniBar');
+        if (!bar) return;
+
+        const st = getState();
+        const audio = getAudioEl();
+        const isPlaying = Boolean(audio && !audio.paused && st && st.streamUrl);
+        const shouldShowBar = Boolean(st && st.streamUrl && !st.closed && (isPlaying || st.playing) && !isCurrentViewRadioPage());
+
+        bar.classList.toggle('hidden', !shouldShowBar);
+
+        const playBtn = document.getElementById('mcMiniRadioPlayBtn');
+        const dot     = document.getElementById('mcMiniRadioDot');
+        const stEl    = document.getElementById('mcMiniRadioStation');
+        const gnEl    = document.getElementById('mcMiniRadioGenre');
+        const sgEl    = document.getElementById('mcMiniRadioSong');
+        const volEl   = document.getElementById('mcMiniRadioVol');
+        const muteEl  = document.getElementById('mcMiniRadioMuteBtn');
+
+        if (playBtn) playBtn.textContent = isPlaying ? '⏸️' : '▶️';
+        if (dot) {
+            dot.className = isPlaying
+                ? 'w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0'
+                : 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+        }
+        if (st && stEl) stEl.textContent = st.name || 'Live-Webradio';
+        if (st && gnEl) gnEl.textContent = st.genre || 'Live';
+        if (st && sgEl) sgEl.textContent = '🎶 ' + (st.songTitle || ('Live • ' + (st.name || 'Radio')));
+        if (st && volEl && typeof st.volume === 'number') volEl.value = String(st.volume);
+        if (muteEl) {
+            const muted = Boolean((audio && audio.muted) || (st && (st.muted || st.volume === 0)));
+            muteEl.textContent = muted ? '🔇' : '🔊';
+        }
+    };
+
+    const pollIcyTitle = async () => {
+        const st = getState();
+        const audio = getAudioEl();
+        if (!st || !st.streamUrl || !audio || audio.paused) return;
+        try {
+            const r = await fetch('radio.php?action=icy_meta&url=' + encodeURIComponent(st.streamUrl));
+            const d = await r.json();
+            if (d && d.ok && d.title) {
+                saveState({ songTitle: d.title });
+                updateMiniBarUi();
+            }
+        } catch (e) {}
+    };
+
+    const ensureIcyPolling = () => {
+        if (icyTimer) clearInterval(icyTimer);
+        icyTimer = setInterval(pollIcyTitle, 25000);
+    };
+
+    const openInSeamlessViewport = (targetUrl) => {
+        const parsed = new URL(targetUrl, window.location.href);
+        const hostPath = window.location.pathname;
+        const targetPath = parsed.pathname;
+
+        // Wenn das Ziel exakt die Basis-Host-Seite selbst ist (z.B. Rückkehr zu radio.php),
+        // blende das Viewport-Iframe einfach wieder aus.
+        if (appFrame && targetPath === hostPath && parsed.search === window.location.search) {
+            appFrame.classList.add('hidden');
+            document.documentElement.style.overflow = '';
+            document.body.style.overflow = '';
+            window.history.pushState({ mcRadioShell: true }, '', parsed.href);
+            updateMiniBarUi();
+            return;
+        }
+
+        if (!appFrame) {
+            appFrame = document.createElement('iframe');
+            appFrame.id = 'mcRadioAppFrame';
+            appFrame.className = 'fixed inset-0 w-full h-full border-0 z-40 bg-slate-100 dark:bg-slate-950';
+            appFrame.setAttribute('allow', 'autoplay; clipboard-read; clipboard-write; fullscreen');
+            document.body.appendChild(appFrame);
+        }
+
+        appFrame.classList.remove('hidden');
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+        appFrame.src = parsed.href;
+        updateMiniBarUi();
+    };
+
+    const shouldInterceptLinkClick = (ev, anchor) => {
+        if (!anchor || !anchor.href) return false;
+        if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return false;
+        if (anchor.hasAttribute('download')) return false;
+        const targetAttr = (anchor.getAttribute('target') || '').toLowerCase();
+        if (targetAttr && targetAttr !== '_self') return false;
+        const rawHref = (anchor.getAttribute('href') || '').trim();
+        if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
+            return false;
+        }
+        try {
+            const u = new URL(anchor.href, window.location.href);
+            if (u.origin !== window.location.origin) return false;
+            if (u.pathname.endsWith('/logout.php') || u.pathname.endsWith('/login.php') || u.pathname.endsWith('/download.php')) {
+                return false;
+            }
+            if (u.pathname === window.location.pathname && u.search === window.location.search && u.hash !== '') {
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const api = {
+        getAudio: () => getAudioEl(),
+        isPlaying: () => {
+            const a = getAudioEl();
+            return Boolean(a && !a.paused);
+        },
+        playStation: (name, streamUrl, genre) => {
+            const a = getAudioEl();
+            if (!a || !streamUrl) return;
+            const prev = getState() || {};
+            const vol = typeof prev.volume === 'number' ? prev.volume : 85;
+            a.src = streamUrl;
+            a.volume = Math.max(0, Math.min(1, vol / 100));
+            a.muted = Boolean(prev.muted);
+            saveState({
+                playing: true,
+                closed: false,
+                name: name || 'Live-Webradio',
+                streamUrl: streamUrl,
+                genre: genre || 'Live',
+                volume: vol,
+                muted: a.muted,
+                songTitle: 'Verbinde mit ' + (name || 'Live-Stream') + '…'
+            });
+            updateMiniBarUi();
+            a.play().then(() => {
+                saveState({
+                    playing: true,
+                    closed: false,
+                    songTitle: 'Live-Übertragung • ' + (name || 'Radio')
+                });
+                updateMiniBarUi();
+                pollIcyTitle();
+                ensureIcyPolling();
+            }).catch(() => {
+                saveState({ playing: false });
+                updateMiniBarUi();
+            });
+        },
+        toggle: () => {
+            const a = getAudioEl();
+            const st = getState();
+            if (!a || !st || !st.streamUrl) return;
+            if (a.paused) {
+                if (!a.src || a.src !== st.streamUrl) {
+                    a.src = st.streamUrl;
+                }
+                a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
+                a.muted = Boolean(st.muted);
+                a.play().then(() => {
+                    saveState({ playing: true, closed: false });
+                    updateMiniBarUi();
+                    ensureIcyPolling();
+                }).catch(() => {});
+            } else {
+                a.pause();
+                saveState({ playing: false });
+                updateMiniBarUi();
+            }
+        },
+        pause: () => {
+            const a = getAudioEl();
+            if (a && !a.paused) a.pause();
+            saveState({ playing: false });
+            updateMiniBarUi();
+        },
+        setVolume: (val) => {
+            const v = Math.max(0, Math.min(100, Number(val)));
+            const a = getAudioEl();
+            if (a) {
+                a.muted = false;
+                a.volume = v / 100;
+            }
+            saveState({ volume: v, muted: false });
+            updateMiniBarUi();
+        },
+        toggleMute: () => {
+            const a = getAudioEl();
+            if (!a) return false;
+            a.muted = !a.muted;
+            saveState({ muted: a.muted });
+            updateMiniBarUi();
+            return a.muted;
+        },
+        stopAndClose: () => {
+            const a = getAudioEl();
+            if (a) {
+                a.pause();
+                a.removeAttribute('src');
+                a.load();
+            }
+            if (icyTimer) {
+                clearInterval(icyTimer);
+                icyTimer = null;
+            }
+            saveState({ playing: false, closed: true });
+            updateMiniBarUi();
+            if (typeof updateRadioUiPlaying === 'function') {
+                updateRadioUiPlaying(false);
+            }
+        },
+        syncFromState: () => {
+            updateMiniBarUi();
+        },
+        notifyChildPageLoaded: (childWin) => {
+            try {
+                const childHref = childWin.location.href;
+                const childPath = childWin.location.pathname || '';
+                if (childPath.endsWith('/login.php') || childPath.endsWith('/logout.php')) {
+                    api.stopAndClose();
+                    window.top.location.href = childHref;
+                    return;
+                }
+                if (childWin.document && childWin.document.title) {
+                    document.title = childWin.document.title;
+                }
+                if (window.location.href !== childHref) {
+                    window.history.replaceState({ mcRadioShell: true }, '', childHref);
+                }
+                // Abfangen von Logout-Klicks im Child-Dokument
+                childWin.document.addEventListener('click', (ev) => {
+                    const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+                    if (!a) return;
+                    const href = a.getAttribute('href') || '';
+                    if (href.includes('logout.php')) {
+                        api.stopAndClose();
+                        window.top.location.href = a.href;
+                    }
+                }, true);
+            } catch (e) {}
+            updateMiniBarUi();
+        }
+    };
+
+    window.McGlobalRadio = api;
+
+    // Klick-Interceptor im Hauptfenster: Wenn das Radio aktiv spielt, öffne Modulwechsel
+    // unterbrechungsfrei im Viewport, sodass der Audio-Stream zu 100 % ohne Aussetzer weiterläuft.
+    document.addEventListener('click', (ev) => {
+        const anchor = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+        if (!anchor) return;
+        const href = anchor.getAttribute('href') || '';
+        if (href.includes('logout.php')) {
+            api.stopAndClose();
+            return;
+        }
+        const st = getState();
+        const isRadioActive = api.isPlaying() || Boolean(st && st.playing && st.streamUrl && !st.closed);
+        if (!isRadioActive) return;
+
+        if (shouldInterceptLinkClick(ev, anchor)) {
+            ev.preventDefault();
+            openInSeamlessViewport(anchor.href);
+        }
+    }, true);
+
+    window.addEventListener('popstate', () => {
+        if (appFrame && !appFrame.classList.contains('hidden')) {
+            try {
+                if (appFrame.contentWindow && appFrame.contentWindow.location.href !== window.location.href) {
+                    appFrame.src = window.location.href;
+                }
+            } catch (e) {}
+        }
+        updateMiniBarUi();
+    });
+
+    // Auto-Resume bei vollständigem Seiten-Reload (F5 / direkter Aufruf), falls Radio aktiv war
+    const initAutoResume = () => {
+        const st = getState();
+        if (!st || !st.streamUrl || st.closed) return;
+        updateMiniBarUi();
+        if (st.playing) {
+            const a = getAudioEl();
+            if (a && a.paused) {
+                a.src = st.streamUrl;
+                a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
+                a.muted = Boolean(st.muted);
+                a.play().then(() => {
+                    updateMiniBarUi();
+                    ensureIcyPolling();
+                    if (typeof syncRadioDockFromState === 'function') {
+                        syncRadioDockFromState();
+                    }
+                }).catch(() => {
+                    // Falls der Browser nach F5 einen Klick benötigt, bleibt die Mini-Bar sichtbar (▶️ bereit)
+                    updateMiniBarUi();
+                });
+            }
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAutoResume);
+    } else {
+        initAutoResume();
+    }
+})();
+</script>
 <?php endif; ?>
 </body>
 </html>
