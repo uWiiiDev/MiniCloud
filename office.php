@@ -1911,20 +1911,55 @@ if ($fileId <= 0) {
                 <!-- B) VERBUNDENE LIVE-POSTFÄCHER (UMSCHALTUNG: ALLE IN EINER ANSICHT ODER EINZEL-POSTFACH) -->
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-                    <!-- Linke Spalte: Postfächer-Umschalter, „Neue E-Mail“ & Ordnerliste -->
-                    <div class="lg:col-span-3 space-y-4">
-                        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
+                    <!-- Linke Spalte: Postfächer-Umschalter, „Neue E-Mail“ & Ordnerliste (auf Mobilgeräten kompakt eingeklappt) -->
+                    <div class="lg:col-span-3 space-y-3">
+
+                        <!-- Kompakte Mobil-Steuerleiste (nur auf Smartphone/Tablet < lg sichtbar) -->
+                        <div class="lg:hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2.5 shadow-xs flex items-center gap-2">
+                            <button type="button"
+                                    onclick="toggleMobileMailSidebar()"
+                                    id="btnMobileMailSidebarToggle"
+                                    class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer">
+                                <span>📬</span>
+                                <span>Postfach (<span id="lblMobileAccountCount"><?= count($userMailAccounts) ?></span>)</span>
+                                <span id="iconMobileSidebarChevron" class="text-[10px] transition-transform">▾</span>
+                            </button>
+
+                            <select id="liveMailMobileFolderSelect"
+                                    onchange="loadLiveMailFolder(this.value, 1)"
+                                    aria-label="Ordner wechseln"
+                                    class="flex-1 min-w-0 px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white truncate">
+                                <option value="INBOX">📥 Posteingang</option>
+                            </select>
+
+                            <button type="button" onclick="openOfficeMailComposer()"
+                                    title="Neue E-Mail schreiben"
+                                    class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-xs flex items-center gap-1 shrink-0 cursor-pointer">
+                                <span>✍️</span>
+                                <span class="hidden sm:inline">Schreiben</span>
+                            </button>
+                        </div>
+
+                        <!-- Vollständige Seitenleiste: Auf Desktop (lg:) immer sichtbar, auf Mobilgeräten standardmäßig eingeklappt -->
+                        <div id="liveMailSidebarCollapsible" class="hidden lg:block mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
 
                             <div class="flex items-center justify-between gap-2">
                                 <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
                                     📬 Deine Postfächer (<?= count($userMailAccounts) ?>)
                                 </span>
-                                <button type="button"
-                                        onclick="document.getElementById('officeZeroStorageInfoBox').classList.toggle('hidden')"
-                                        title="Datenschutz-Hinweis: Keine Speicherung von Provider-Daten"
-                                        class="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[11px] font-extrabold cursor-pointer shrink-0">
-                                    !
-                                </button>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button"
+                                            onclick="document.getElementById('officeZeroStorageInfoBox').classList.toggle('hidden')"
+                                            title="Datenschutz-Hinweis: Keine Speicherung von Provider-Daten"
+                                            class="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[11px] font-extrabold cursor-pointer shrink-0">
+                                        !
+                                    </button>
+                                    <button type="button"
+                                            onclick="toggleMobileMailSidebar(false)"
+                                            class="lg:hidden px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold cursor-pointer">
+                                        ✕
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Postfach-Umschalter: Alle Postfächer in einer Ansicht vs. Einzel-Postfach -->
@@ -1984,18 +2019,23 @@ if ($fileId <= 0) {
                                 ➕ Weiteres Postfach hinzufügen
                             </button>
 
-                            <button type="button" onclick="openOfficeMailComposer()"
-                                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                            <button type="button" onclick="openOfficeMailComposer(); toggleMobileMailSidebar(false);"
+                                    class="hidden lg:flex w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs items-center justify-center gap-2 cursor-pointer transition-colors">
                                 <span>✍️</span>
                                 <span>Neue E-Mail schreiben</span>
                             </button>
 
-                            <!-- Ordnerliste -->
-                            <div id="liveMailFolderList" class="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                <button type="button" onclick="loadLiveMailFolder('INBOX', 1)"
-                                        class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 flex items-center justify-between cursor-pointer">
-                                    <span>📥 Posteingang</span>
-                                </button>
+                            <!-- Ordnerliste (mit kompakter Scroll-Höhe bei vielen Ordnern) -->
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                                    📂 Ordner
+                                </div>
+                                <div id="liveMailFolderList" class="space-y-1 max-h-64 overflow-y-auto pr-1">
+                                    <button type="button" onclick="loadLiveMailFolder('INBOX', 1)"
+                                            class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 flex items-center justify-between cursor-pointer">
+                                        <span>📥 Posteingang</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
@@ -2341,6 +2381,17 @@ if ($fileId <= 0) {
         }
     }
 
+    function toggleMobileMailSidebar(forceState) {
+        const panel = document.getElementById('liveMailSidebarCollapsible');
+        const chev  = document.getElementById('iconMobileSidebarChevron');
+        if (!panel) return;
+        const willOpen = (typeof forceState === 'boolean') ? forceState : panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !willOpen);
+        if (chev) {
+            chev.style.transform = willOpen ? 'rotate(180deg)' : '';
+        }
+    }
+
     function switchLiveMailAccount(accIdStr) {
         currentLiveMailAccount = String(accIdStr);
         currentLiveMailFolder  = 'INBOX';
@@ -2365,6 +2416,7 @@ if ($fileId <= 0) {
             if (compSel) compSel.value = currentLiveMailAccount;
         }
 
+        toggleMobileMailSidebar(false);
         loadLiveMailFolder('INBOX', 1);
     }
 
@@ -2492,33 +2544,45 @@ if ($fileId <= 0) {
                 errBox.classList.remove('hidden');
             }
 
-            // Ordnerliste aktualisieren
-            const folderBox = document.getElementById('liveMailFolderList');
-            const titleEl   = document.getElementById('liveMailCurrentFolderTitle');
+            // Ordnerliste & mobiles Schnellwahl-Dropdown aktualisieren
+            const folderBox    = document.getElementById('liveMailFolderList');
+            const mobFolderSel = document.getElementById('liveMailMobileFolderSelect');
+            const titleEl      = document.getElementById('liveMailCurrentFolderTitle');
             if (data.unified) {
                 if (titleEl) titleEl.textContent = '🌐 Alle Postfächer (Gemeinsamer Posteingang)';
                 if (folderBox) {
                     folderBox.innerHTML = `
-                        <button type="button" onclick="loadLiveMailFolder('INBOX', 1)"
+                        <button type="button" onclick="loadLiveMailFolder('INBOX', 1); toggleMobileMailSidebar(false);"
                                 class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 flex items-center justify-between cursor-pointer">
                             <span>🌐 Gemeinsamer Posteingang</span>
                         </button>
                     `;
                 }
+                if (mobFolderSel) {
+                    mobFolderSel.innerHTML = '<option value="INBOX">🌐 Alle Postfächer (Gesamt)</option>';
+                }
             } else if (folderBox && data.folders) {
-                folderBox.innerHTML = Object.entries(data.folders).map(([fKey, fLabel]) => {
+                const entries = Object.entries(data.folders);
+                folderBox.innerHTML = entries.map(([fKey, fLabel]) => {
                     const isAct = fKey === currentLiveMailFolder;
                     if (isAct && titleEl) {
                         const accPrefix = data.account_label ? `${data.account_label}: ` : '';
                         titleEl.textContent = accPrefix + fLabel;
                     }
                     return `
-                        <button type="button" data-f-key="${escapeOfficeHtml(fKey)}" onclick="loadLiveMailFolder(this.getAttribute('data-f-key'), 1)"
+                        <button type="button" data-f-key="${escapeOfficeHtml(fKey)}" onclick="loadLiveMailFolder(this.getAttribute('data-f-key'), 1); toggleMobileMailSidebar(false);"
                                 class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${isAct ? 'bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}">
                             <span class="truncate">${escapeOfficeHtml(fLabel)}</span>
                         </button>
                     `;
                 }).join('');
+
+                if (mobFolderSel) {
+                    mobFolderSel.innerHTML = entries.map(([fKey, fLabel]) => {
+                        const sel = fKey === currentLiveMailFolder ? ' selected' : '';
+                        return `<option value="${escapeOfficeHtml(fKey)}"${sel}>${escapeOfficeHtml(fLabel)}</option>`;
+                    }).join('');
+                }
             }
 
             const total = Number(data.total || 0);
