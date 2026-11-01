@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/sports_api.php';
 
 requireLogin();
 
@@ -22,7 +23,7 @@ $isAdmin = isAdmin();
 
 $appSettings = getAppSettings($pdo);
 if (($appSettings['enable_bundesliga'] ?? '1') !== '1') {
-    setFlash('error', 'Das Modul „Bundesliga & Tippspiel“ ist derzeit deaktiviert.');
+    setFlash('error', 'Das Modul „Sportergebnisse & Tippspiel“ ist derzeit deaktiviert.');
     header('Location: index.php');
     exit;
 }
@@ -197,6 +198,7 @@ $leagues = [
         'name'         => 'DEL2 (2. Eishockey-BL)',
         'short'        => 'DEL2',
         'icon'         => '🥅',
+        'provider'     => 'openliga',
         'max_matchday' => 52,
         'teams_count'  => 14,
         'zones'        => [
@@ -219,6 +221,180 @@ $leagues = [
             ['color' => 'bg-emerald-500', 'label' => 'Platz 1–6: Playoff-Viertelfinale'],
             ['color' => 'bg-sky-500',     'label' => 'Platz 7–10: Pre-Playoffs'],
             ['color' => 'bg-amber-500',   'label' => 'Platz 11–14: Playdowns (Klassenerhalt)'],
+        ],
+    ],
+    'ucl' => [
+        'name'         => 'UEFA Champions League',
+        'short'        => 'UCL',
+        'icon'         => '🌟',
+        'provider'     => 'espn',
+        'espn_sport'   => 'soccer',
+        'espn_league'  => 'uefa.champions',
+        'max_matchday' => 8,
+        'teams_count'  => 36,
+        'zones'        => [],
+        'legend'       => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–8: Direktes Achtelfinale'],
+            ['color' => 'bg-sky-500',     'label' => 'Platz 9–24: K.-o.-Playoffs'],
+        ],
+    ],
+    'epl' => [
+        'name'         => 'Premier League (England)',
+        'short'        => 'Premier League',
+        'icon'         => '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+        'provider'     => 'espn',
+        'espn_sport'   => 'soccer',
+        'espn_league'  => 'eng.1',
+        'max_matchday' => 38,
+        'teams_count'  => 20,
+        'zones'        => [
+            1  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            2  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            18 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            19 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            20 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–4: UEFA Champions League'],
+            ['color' => 'bg-rose-500',    'label' => 'Platz 18–20: Abstieg'],
+        ],
+    ],
+    'laliga' => [
+        'name'         => 'LaLiga (Spanien)',
+        'short'        => 'LaLiga',
+        'icon'         => '🇪🇸',
+        'provider'     => 'espn',
+        'espn_sport'   => 'soccer',
+        'espn_league'  => 'esp.1',
+        'max_matchday' => 38,
+        'teams_count'  => 20,
+        'zones'        => [
+            1  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            2  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            18 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            19 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            20 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–4: UEFA Champions League'],
+            ['color' => 'bg-rose-500',    'label' => 'Platz 18–20: Abstieg'],
+        ],
+    ],
+    'seriea' => [
+        'name'         => 'Serie A (Italien)',
+        'short'        => 'Serie A',
+        'icon'         => '🇮🇹',
+        'provider'     => 'espn',
+        'espn_sport'   => 'soccer',
+        'espn_league'  => 'ita.1',
+        'max_matchday' => 38,
+        'teams_count'  => 20,
+        'zones'        => [
+            1  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            2  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4  => ['label' => 'Champions League', 'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/50 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            18 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            19 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+            20 => ['label' => 'Abstieg',          'color' => 'bg-rose-500',    'row_bg' => 'bg-rose-50/45 dark:bg-rose-950/20',       'badge' => 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–4: UEFA Champions League'],
+            ['color' => 'bg-rose-500',    'label' => 'Platz 18–20: Abstieg'],
+        ],
+    ],
+    'nfl' => [
+        'name'         => 'NFL (American Football)',
+        'short'        => 'NFL',
+        'icon'         => '🏈',
+        'provider'     => 'espn',
+        'espn_sport'   => 'football',
+        'espn_league'  => 'nfl',
+        'max_matchday' => 18,
+        'teams_count'  => 32,
+        'zones'        => [],
+        'legend'       => [
+            ['color' => 'bg-emerald-500', 'label' => 'AFC & NFC Gesamt-Standings nach Siegquote'],
+        ],
+    ],
+    'nba' => [
+        'name'         => 'NBA (Basketball)',
+        'short'        => 'NBA',
+        'icon'         => '🏀',
+        'provider'     => 'espn',
+        'espn_sport'   => 'basketball',
+        'espn_league'  => 'nba',
+        'max_matchday' => 30,
+        'teams_count'  => 30,
+        'zones'        => [],
+        'legend'       => [
+            ['color' => 'bg-emerald-500', 'label' => 'NBA Regular Season Standings nach Siegquote'],
+        ],
+    ],
+    'nhl' => [
+        'name'         => 'NHL (Eishockey USA/Kanada)',
+        'short'        => 'NHL',
+        'icon'         => '🏒',
+        'provider'     => 'espn',
+        'espn_sport'   => 'hockey',
+        'espn_league'  => 'nhl',
+        'max_matchday' => 30,
+        'teams_count'  => 32,
+        'zones'        => [],
+        'legend'       => [
+            ['color' => 'bg-emerald-500', 'label' => 'NHL Standings nach Punkten'],
+        ],
+    ],
+    'atp' => [
+        'name'         => 'ATP Tennis-Weltrangliste (Herren)',
+        'short'        => 'ATP Herren',
+        'icon'         => '🎾',
+        'provider'     => 'tennis',
+        'espn_sport'   => 'tennis',
+        'espn_league'  => 'atp',
+        'max_matchday' => 1,
+        'teams_count'  => 100,
+        'zones'        => [
+            1 => ['label' => 'Weltranglisten-Erster', 'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/50 dark:bg-amber-950/20',     'badge' => 'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+            2 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            5 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            6 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            7 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            8 => ['label' => 'ATP Finals Quali',      'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-amber-500',   'label' => 'Platz 1: Weltranglistenerster'],
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–8: ATP Finals Qualifikation'],
+        ],
+    ],
+    'wta' => [
+        'name'         => 'WTA Tennis-Weltrangliste (Damen)',
+        'short'        => 'WTA Damen',
+        'icon'         => '🎾',
+        'provider'     => 'tennis',
+        'espn_sport'   => 'tennis',
+        'espn_league'  => 'wta',
+        'max_matchday' => 1,
+        'teams_count'  => 100,
+        'zones'        => [
+            1 => ['label' => 'Weltranglisten-Erste', 'color' => 'bg-amber-500',   'row_bg' => 'bg-amber-50/50 dark:bg-amber-950/20',     'badge' => 'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50'],
+            2 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            3 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            4 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            5 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            6 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            7 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+            8 => ['label' => 'WTA Finals Quali',     'color' => 'bg-emerald-500', 'row_bg' => 'bg-emerald-50/40 dark:bg-emerald-950/20', 'badge' => 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'],
+        ],
+        'legend' => [
+            ['color' => 'bg-amber-500',   'label' => 'Platz 1: Weltranglistenerste'],
+            ['color' => 'bg-emerald-500', 'label' => 'Platz 1–8: WTA Finals Qualifikation'],
         ],
     ],
 ];
@@ -613,6 +789,10 @@ function extractMatchScores(array $match): array
 
     $isLive = $isStarted && !$isFinished;
 
+    if (empty($periods) && !empty($match['_periods_custom'])) {
+        $periods[] = (string)$match['_periods_custom'];
+    }
+
     return [
         'has_score'    => ($final1 !== null && $final2 !== null && ($isStarted || $isFinished)),
         'score1'       => $final1,
@@ -653,8 +833,16 @@ function calculateBetPoints(int $bet1, int $bet2, int $real1, int $real2): array
 }
 
 // ============================================================================
-// 3. BENUTZER-EINSTELLUNGEN (Lieblingsverein je Liga) LADEN
+// 3. BENUTZER-EINSTELLUNGEN (Lieblingsliga + Lieblingsverein je Liga) LADEN
 // ============================================================================
+$userFavLeague = '';
+$stmtPrefLg = $pdo->prepare("SELECT fav_league FROM bundesliga_user_prefs WHERE user_id = ? LIMIT 1");
+$stmtPrefLg->execute([$userId]);
+$prefLgVal = $stmtPrefLg->fetchColumn();
+if (is_string($prefLgVal) && isset($leagues[$prefLgVal])) {
+    $userFavLeague = $prefLgVal;
+}
+
 $favsByLeague = [];
 $favStmt = $pdo->prepare("SELECT * FROM bundesliga_user_favs WHERE user_id = ? AND fav_team_id > 0");
 $favStmt->execute([$userId]);
@@ -670,13 +858,17 @@ foreach ($favStmt->fetchAll(PDO::FETCH_ASSOC) as $fRow) {
 // ============================================================================
 // 4. AKTUELLE PARAMETER & POST-AKTIONEN VERARBEITEN
 // ============================================================================
-$defaultLeague = !empty($favsByLeague) ? (string)array_key_first($favsByLeague) : 'bl1';
+$defaultLeague  = $userFavLeague !== '' ? $userFavLeague : (!empty($favsByLeague) ? (string)array_key_first($favsByLeague) : 'bl1');
 $selectedLeague = strtolower(trim((string)($_GET['league'] ?? $_POST['league'] ?? $defaultLeague)));
 if (!isset($leagues[$selectedLeague])) {
     $selectedLeague = 'bl1';
 }
-$leagueMeta   = $leagues[$selectedLeague];
-$userPrefs    = $favsByLeague[$selectedLeague] ?? [
+$leagueMeta     = $leagues[$selectedLeague];
+$leagueProvider = (string)($leagueMeta['provider'] ?? 'openliga');
+$isTennisLeague = ($leagueProvider === 'tennis');
+$isEspnLeague   = ($leagueProvider === 'espn');
+
+$userPrefs = $favsByLeague[$selectedLeague] ?? [
     'fav_team_id'   => 0,
     'fav_team_name' => '',
     'fav_team_icon' => '',
@@ -684,19 +876,23 @@ $userPrefs    = $favsByLeague[$selectedLeague] ?? [
 ];
 $forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] === '1';
 
-// Aktuellen Spieltag & aktuelle Saison von OpenLigaDB ermitteln
-$currentMatchdayRes  = fetchOpenLigaData($pdo, "current_{$selectedLeague}", "getmatchdata/{$selectedLeague}", 300, $forceRefresh);
-$currentMatchdayData = $currentMatchdayRes['data'];
+// Aktuellen Spieltag & aktuelle Saison ermitteln
+$currentMatchdayRes  = ['data' => [], 'cached_at' => date('Y-m-d H:i:s'), 'from_cache' => false];
+$currentMatchdayData = [];
+$detectedSeason      = (int)date('Y');
+$detectedMatchday    = 1;
 
-$detectedSeason   = (int)date('Y');
-$detectedMatchday = 1;
-if (!empty($currentMatchdayData) && is_array($currentMatchdayData)) {
-    $firstMatch = $currentMatchdayData[0] ?? [];
-    if (!empty($firstMatch['leagueSeason'])) {
-        $detectedSeason = (int)$firstMatch['leagueSeason'];
-    }
-    if (!empty($firstMatch['group']['groupOrderID'])) {
-        $detectedMatchday = (int)$firstMatch['group']['groupOrderID'];
+if ($leagueProvider === 'openliga') {
+    $currentMatchdayRes  = fetchOpenLigaData($pdo, "current_{$selectedLeague}", "getmatchdata/{$selectedLeague}", 300, $forceRefresh);
+    $currentMatchdayData = $currentMatchdayRes['data'];
+    if (!empty($currentMatchdayData) && is_array($currentMatchdayData)) {
+        $firstMatch = $currentMatchdayData[0] ?? [];
+        if (!empty($firstMatch['leagueSeason'])) {
+            $detectedSeason = (int)$firstMatch['leagueSeason'];
+        }
+        if (!empty($firstMatch['group']['groupOrderID'])) {
+            $detectedMatchday = (int)$firstMatch['group']['groupOrderID'];
+        }
     }
 }
 
@@ -710,7 +906,7 @@ if ($selectedMatchday < 1 || $selectedMatchday > $leagueMeta['max_matchday']) {
     $selectedMatchday = 1;
 }
 
-// POST-Aktionen (Lieblingsverein speichern / Tippspiel-Tipps speichern)
+// POST-Aktionen (Lieblingsliga speichern / Lieblingsverein speichern / Tippspiel-Tipps speichern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Ungültiges Sicherheits-Token. Bitte versuche es erneut.');
@@ -720,7 +916,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $postAction = (string)($_POST['action'] ?? '');
 
-    // A) Lieblingsverein für die jeweilige Liga festlegen oder entfernen
+    // A0) Lieblingsliga (Start-Liga mit Sternchen) festlegen
+    if ($postAction === 'save_fav_league') {
+        $targetFavLg = strtolower(trim((string)($_POST['fav_league'] ?? $selectedLeague)));
+        if (isset($leagues[$targetFavLg])) {
+            $upLg = $pdo->prepare("
+                INSERT INTO bundesliga_user_prefs (user_id, fav_team_id, fav_team_name, fav_team_icon, fav_league, updated_at)
+                VALUES (?, 0, '', '', ?, NOW())
+                ON DUPLICATE KEY UPDATE fav_league = VALUES(fav_league), updated_at = NOW()
+            ");
+            $upLg->execute([$userId, $targetFavLg]);
+            $lgLbl = $leagues[$targetFavLg]['name'];
+            setFlash('success', "⭐ „{$lgLbl}“ ist jetzt deine Start- & Lieblingsliga!");
+        }
+        header("Location: bundesliga.php?league={$selectedLeague}&season={$selectedSeason}&matchday={$selectedMatchday}");
+        exit;
+    }
+
+    // A) Lieblingsverein / Lieblingsspieler für die jeweilige Liga festlegen oder entfernen
     if ($postAction === 'save_fav_team') {
         $favTeamId   = (int)($_POST['fav_team_id'] ?? 0);
         $favTeamName = mb_substr(trim((string)($_POST['fav_team_name'] ?? '')), 0, 140);
@@ -739,11 +952,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     updated_at    = NOW()
             ");
             $upPref->execute([$userId, $favLeague, $favTeamId, $favTeamName, $favTeamIcon]);
-            setFlash('success', "⭐ „{$favTeamName}“ wurde als dein Lieblingsverein für die {$leagueLabel} gespeichert!");
+            setFlash('success', "⭐ „{$favTeamName}“ wurde als dein Favorit für {$leagueLabel} gespeichert!");
         } else {
             $delPref = $pdo->prepare("DELETE FROM bundesliga_user_favs WHERE user_id = ? AND league = ?");
             $delPref->execute([$userId, $favLeague]);
-            setFlash('success', "Lieblingsverein für die {$leagueLabel} wurde zurückgesetzt.");
+            setFlash('success', "Favorit für {$leagueLabel} wurde zurückgesetzt.");
         }
         header("Location: bundesliga.php?league={$selectedLeague}&season={$selectedSeason}&matchday={$selectedMatchday}");
         exit;
@@ -753,14 +966,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postAction === 'save_bets') {
         $betsInput = $_POST['bets'] ?? [];
         if (is_array($betsInput)) {
-            // Spiele des Spieltags laden, um Anstoßzeiten zu prüfen (Tippabgabe nur vor Anpfiff!)
-            $mdCheckRes = fetchOpenLigaData(
-                $pdo,
-                "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
-                "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
-                300,
-                false
-            );
+            if ($leagueProvider === 'openliga') {
+                $mdCheckRes = fetchOpenLigaData(
+                    $pdo,
+                    "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
+                    "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
+                    300,
+                    false
+                );
+            } else {
+                $mdCheckRes = fetchEspnScoreboardMatches($pdo, $selectedLeague, $leagueMeta, false);
+            }
             $validMatchesById = [];
             foreach ($mdCheckRes['data'] as $m) {
                 $mId = (int)($m['matchID'] ?? 0);
@@ -789,7 +1005,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $matchObj  = $validMatchesById[$matchId];
                 $scoreInfo = extractMatchScores($matchObj);
 
-                // Gesperrt, sobald Spiel angepfiffen oder beendet
                 if ($scoreInfo['is_started'] || $scoreInfo['is_finished']) {
                     $lockedCount++;
                     continue;
@@ -799,20 +1014,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $g2Raw = trim((string)($scores['g2'] ?? ''));
 
                 if ($g1Raw === '' || $g2Raw === '') {
-                    // Leeres Feld löscht einen evtl. zuvor gespeicherten offenen Tipp
                     $delBet->execute([$userId, $matchId]);
                     continue;
                 }
 
-                $g1 = max(0, min(25, (int)$g1Raw));
-                $g2 = max(0, min(25, (int)$g2Raw));
+                $g1 = max(0, min(200, (int)$g1Raw));
+                $g2 = max(0, min(200, (int)$g2Raw));
 
                 $insBet->execute([$userId, $selectedLeague, $selectedSeason, $selectedMatchday, $matchId, $g1, $g2]);
                 $savedCount++;
             }
 
             if ($savedCount > 0) {
-                setFlash('success', "🎯 {$savedCount} Tipp(s) für den {$selectedMatchday}. Spieltag gespeichert!");
+                setFlash('success', "🎯 {$savedCount} Tipp(s) gespeichert!");
             } elseif ($lockedCount > 0) {
                 setFlash('error', 'Spiele wurden bereits angepfiffen – Tipps können nur vor Spielbeginn abgegeben werden.');
             } else {
@@ -825,34 +1039,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ============================================================================
-// 5. TABELLE & SPIELTAG-DATEN LADEN
+// 5. TABELLE / WELTRANGLISTE & SPIELTAG-DATEN LADEN
 // ============================================================================
-$tableRes  = fetchOpenLigaData(
-    $pdo,
-    "table_{$selectedLeague}_{$selectedSeason}",
-    "getbltable/{$selectedLeague}/{$selectedSeason}",
-    600,
-    $forceRefresh
-);
-$tableData = $tableRes['data'];
-
-// Falls gewählter Spieltag = aktueller Spieltag der aktuellen Saison, können wir direkt $currentMatchdayRes nutzen
-if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday && !empty($currentMatchdayData)) {
-    $matchdayRes  = $currentMatchdayRes;
-    $matchdayData = $currentMatchdayData;
+$customRoundLabel = '';
+if ($leagueProvider === 'tennis') {
+    $tableRes         = fetchEspnTennisRankings($pdo, $selectedLeague, $forceRefresh);
+    $tableData        = $tableRes['data'];
+    $matchdayRes      = fetchEspnScoreboardMatches($pdo, $selectedLeague, $leagueMeta, $forceRefresh);
+    $matchdayData     = $matchdayRes['data'];
+    $customRoundLabel = '🎾 Aktuelle Tour-Matches (' . $leagueMeta['short'] . ')';
+    $lastUpdatedStr   = $tableRes['cached_at'] ?: $matchdayRes['cached_at'];
+} elseif ($leagueProvider === 'espn') {
+    $tableRes         = fetchEspnStandingsTable($pdo, $selectedLeague, $leagueMeta, $forceRefresh);
+    $tableData        = $tableRes['data'];
+    $matchdayRes      = fetchEspnScoreboardMatches($pdo, $selectedLeague, $leagueMeta, $forceRefresh);
+    $matchdayData     = $matchdayRes['data'];
+    $customRoundLabel = (string)($matchdayRes['label'] ?? 'Aktuelle Begegnungen');
+    $lastUpdatedStr   = $matchdayRes['cached_at'] ?: $tableRes['cached_at'];
 } else {
-    $matchdayRes  = fetchOpenLigaData(
+    $tableRes  = fetchOpenLigaData(
         $pdo,
-        "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
-        "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
-        300,
+        "table_{$selectedLeague}_{$selectedSeason}",
+        "getbltable/{$selectedLeague}/{$selectedSeason}",
+        600,
         $forceRefresh
     );
-    $matchdayData = $matchdayRes['data'];
-}
+    $tableData = $tableRes['data'];
 
-$matchdayData   = enrichMatchdayWithLiveScoreboard($pdo, $selectedLeague, $matchdayData, $forceRefresh);
-$lastUpdatedStr = $matchdayRes['cached_at'] ?: $tableRes['cached_at'];
+    if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday && !empty($currentMatchdayData)) {
+        $matchdayRes  = $currentMatchdayRes;
+        $matchdayData = $currentMatchdayData;
+    } else {
+        $matchdayRes  = fetchOpenLigaData(
+            $pdo,
+            "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
+            "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
+            300,
+            $forceRefresh
+        );
+        $matchdayData = $matchdayRes['data'];
+    }
+
+    $matchdayData   = enrichMatchdayWithLiveScoreboard($pdo, $selectedLeague, $matchdayData, $forceRefresh);
+    $lastUpdatedStr = $matchdayRes['cached_at'] ?: $tableRes['cached_at'];
+}
 
 // ============================================================================
 // 6. LIEBLINGSVEREIN-SPOTLIGHT AUFBEREITEN
@@ -1002,32 +1232,53 @@ $germanWeekdays = [
     1 => 'Mo.', 2 => 'Di.', 3 => 'Mi.', 4 => 'Do.', 5 => 'Fr.', 6 => 'Sa.', 7 => 'So.',
 ];
 
-$pageTitle = $leagueMeta['name'] . ' – Tabelle & Cloud-Tippspiel';
+$pageTitle = 'Sportergebnisse & Tippspiel – ' . $leagueMeta['name'];
 require_once __DIR__ . '/includes/header.php';
+$isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
 ?>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
     <!-- ================================================================== -->
-    <!-- KOPFBEREICH: Liga-Umschalter, Saison, Spieltag & Live-Refresh      -->
+    <!-- KOPFBEREICH: Sportarten- & Liga-Umschalter, Lieblingsliga & Refresh -->
     <!-- ================================================================== -->
-    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 space-y-4">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div class="flex items-start sm:items-center gap-3.5">
-                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br <?= in_array($selectedLeague, ['del', 'del2'], true) ? 'from-sky-500 to-blue-700' : 'from-emerald-500 to-green-700' ?> text-white flex items-center justify-center text-2xl shadow-sm shrink-0">
-                    <?= in_array($selectedLeague, ['del', 'del2'], true) ? '🏒' : '⚽' ?>
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br <?= $isTennisLeague ? 'from-amber-500 to-orange-600' : (in_array($selectedLeague, ['del', 'del2', 'nhl'], true) ? 'from-sky-500 to-blue-700' : ($isUsSportLeague ? 'from-indigo-600 to-purple-700' : 'from-emerald-500 to-green-700')) ?> text-white flex items-center justify-center text-2xl shadow-sm shrink-0">
+                    <?= $leagueMeta['icon'] ?>
                 </div>
                 <div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                            <?= e($leagueMeta['name']) ?> &amp; Cloud-Tippspiel
-                        </h1>
-                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
-                            Saison <?= (int)$selectedSeason ?>/<?= substr((string)($selectedSeason + 1), -2) ?>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                            🏆 Sportergebnisse &amp; Cloud-Tippspiel
                         </span>
+                        <?php if ($userFavLeague === $selectedLeague): ?>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700">
+                                ⭐ Deine Start-Liga
+                            </span>
+                        <?php endif; ?>
                     </div>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
-                        <span>📡 Datenquelle: OpenLigaDB (Server-Cache)</span>
+                    <div class="flex flex-wrap items-center gap-2 mt-0.5">
+                        <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                            <?= e($leagueMeta['name']) ?>
+                        </h1>
+
+                        <!-- Stern-Button zum Anpinnen der Lieblingsliga als Start-Liga -->
+                        <form method="post" action="bundesliga.php?league=<?= urlencode($selectedLeague) ?>&amp;season=<?= (int)$selectedSeason ?>&amp;matchday=<?= (int)$selectedMatchday ?>" class="inline">
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="save_fav_league">
+                            <input type="hidden" name="fav_league" value="<?= e($selectedLeague) ?>">
+                            <button type="submit"
+                                    title="Diese Liga mit Sternchen als meine Start- &amp; Lieblingsliga festlegen"
+                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer <?= $userFavLeague === $selectedLeague ? 'bg-amber-400/20 border-amber-400 text-amber-800 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-amber-400 hover:text-amber-600' ?>">
+                                <span><?= $userFavLeague === $selectedLeague ? '⭐' : '☆' ?></span>
+                                <span><?= $userFavLeague === $selectedLeague ? 'Lieblingsliga' : 'Als Start-Liga merken' ?></span>
+                            </button>
+                        </form>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                        <span>📡 Datenquelle: <?= $leagueProvider === 'openliga' ? 'OpenLigaDB + Live-Scoreboard' : 'ESPN Global Sports API (Server-Cache)' ?></span>
                         <span>•</span>
                         <span>Stand: <?= date('d.m.Y H:i', (int)strtotime((string)$lastUpdatedStr)) ?> Uhr</span>
                         <a href="bundesliga.php?league=<?= urlencode($selectedLeague) ?>&amp;season=<?= (int)$selectedSeason ?>&amp;matchday=<?= (int)$selectedMatchday ?>&amp;refresh=1"
@@ -1038,20 +1289,8 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </div>
 
-            <!-- Liga-Tabs + Saison-Wähler -->
-            <div class="flex flex-wrap items-center gap-2">
-                <div class="flex flex-wrap rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/70 dark:border-slate-700 gap-1">
-                    <?php foreach ($leagues as $lKey => $lCfg): ?>
-                        <?php $isActiveLeague = ($lKey === $selectedLeague); ?>
-                        <a href="bundesliga.php?league=<?= urlencode($lKey) ?>&amp;season=<?= (int)$selectedSeason ?>"
-                           class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $isActiveLeague ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white' ?>">
-                            <span><?= $lCfg['icon'] ?></span>
-                            <span><?= e($lCfg['name']) ?></span>
-                        </a>
-                    <?php endforeach; ?>
-                </div>
-
-                <form method="get" action="bundesliga.php" class="inline-flex items-center gap-1.5">
+            <?php if ($leagueProvider === 'openliga'): ?>
+                <form method="get" action="bundesliga.php" class="inline-flex items-center gap-1.5 self-start lg:self-center">
                     <input type="hidden" name="league" value="<?= e($selectedLeague) ?>">
                     <select name="season" onchange="this.form.submit()"
                             aria-label="Saison auswählen"
@@ -1063,25 +1302,43 @@ require_once __DIR__ . '/includes/header.php';
                         <?php endfor; ?>
                     </select>
                 </form>
-            </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Sportarten & Ligen-Auswahlleiste -->
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+            <?php foreach ($leagues as $lKey => $lCfg): ?>
+                <?php
+                $isActiveLeague = ($lKey === $selectedLeague);
+                $isStarredLeague = ($lKey === $userFavLeague);
+                ?>
+                <a href="bundesliga.php?league=<?= urlencode($lKey) ?>"
+                   class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border <?= $isActiveLeague ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700' ?>">
+                    <span><?= $lCfg['icon'] ?></span>
+                    <span><?= e($lCfg['short']) ?></span>
+                    <?php if ($isStarredLeague): ?>
+                        <span class="text-amber-300 drop-shadow-2xs" title="Deine Start-/Lieblingsliga">⭐</span>
+                    <?php endif; ?>
+                </a>
+            <?php endforeach; ?>
         </div>
     </div>
 
     <!-- ================================================================== -->
-    <!-- ⭐ LIEBLINGSVEREIN-SPOTLIGHT (je Liga einzeln speicherbar!)        -->
+    <!-- ⭐ LIEBLINGSVEREIN / LIEBLINGSSPIELER-SPOTLIGHT                    -->
     <!-- ================================================================== -->
     <?php if ($favTeamId > 0 || !empty($favsByLeague)): ?>
         <div class="bg-gradient-to-r from-amber-50 via-emerald-50/70 to-teal-50 dark:from-amber-950/30 dark:via-slate-900 dark:to-emerald-950/30 rounded-2xl border border-amber-300/70 dark:border-amber-700/60 p-4 sm:p-5 shadow-sm space-y-3">
             <?php if (count($favsByLeague) > 1 || ($favTeamId === 0 && !empty($favsByLeague))): ?>
-                <!-- Schnellwahl-Leiste über alle Ligen mit gespeichertem Lieblingsverein -->
+                <!-- Schnellwahl-Leiste über alle Ligen mit gespeichertem Favoriten -->
                 <div class="flex flex-wrap items-center gap-1.5 pb-2 border-b border-amber-200/60 dark:border-amber-800/40">
-                    <span class="text-[11px] font-bold text-amber-800 dark:text-amber-300 mr-1">⭐ Meine Vereine:</span>
+                    <span class="text-[11px] font-bold text-amber-800 dark:text-amber-300 mr-1">⭐ Meine Favoriten:</span>
                     <?php foreach ($favsByLeague as $fLgKey => $fLgData): ?>
                         <?php if (!isset($leagues[$fLgKey])) continue; ?>
                         <a href="bundesliga.php?league=<?= urlencode($fLgKey) ?>"
                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all <?= $fLgKey === $selectedLeague ? 'bg-amber-500 text-white shadow-2xs' : 'bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-amber-100 dark:hover:bg-slate-700 border border-amber-300/50 dark:border-slate-700' ?>">
                             <?php if ($fLgData['fav_team_icon'] !== ''): ?>
-                                <img src="<?= e($fLgData['fav_team_icon']) ?>" alt="" class="w-4 h-4 object-contain" loading="lazy" referrerpolicy="no-referrer">
+                                <img src="<?= e($fLgData['fav_team_icon']) ?>" alt="" class="w-4 h-4 object-contain rounded-full" loading="lazy" referrerpolicy="no-referrer">
                             <?php else: ?>
                                 <span><?= $leagues[$fLgKey]['icon'] ?></span>
                             <?php endif; ?>
@@ -1097,33 +1354,37 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="flex items-center gap-3.5">
                         <?php
                         $favIcon = (string)($favStanding['teamIconUrl'] ?? $userPrefs['fav_team_icon'] ?? '');
-                        $favName = (string)($favStanding['teamName'] ?? $userPrefs['fav_team_name'] ?? 'Mein Verein');
+                        $favName = (string)($favStanding['teamName'] ?? $userPrefs['fav_team_name'] ?? 'Mein Favorit');
                         ?>
                         <?php if ($favIcon !== ''): ?>
-                            <img src="<?= e($favIcon) ?>" alt="<?= e($favName) ?>" class="w-12 h-12 object-contain shrink-0 drop-shadow-sm" loading="lazy" referrerpolicy="no-referrer">
+                            <img src="<?= e($favIcon) ?>" alt="<?= e($favName) ?>" class="w-12 h-12 object-contain shrink-0 drop-shadow-sm rounded-lg" loading="lazy" referrerpolicy="no-referrer">
                         <?php else: ?>
                             <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-2xl">⭐</div>
                         <?php endif; ?>
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-200/80 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200">
-                                    ⭐ Dein Lieblingsverein (<?= e($leagueMeta['short']) ?>)
+                                    ⭐ <?= $isTennisLeague ? 'Dein Lieblingsspieler' : 'Dein Lieblingsverein' ?> (<?= e($leagueMeta['short']) ?>)
                                 </span>
                                 <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
                                     <?= e($favName) ?>
                                 </h2>
                             </div>
                             <?php if ($favStanding !== null): ?>
-                                <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                                    Aktuell <strong>Platz <?= (int)$favStanding['rank'] ?></strong> in der <?= e($leagueMeta['name']) ?>
-                                    • <strong><?= (int)($favStanding['points'] ?? 0) ?> Punkte</strong>
-                                    • Torverhältnis <strong><?= (int)($favStanding['goals'] ?? 0) ?>:<?= (int)($favStanding['opponentGoals'] ?? 0) ?></strong> (<?= ((int)($favStanding['goalDiff'] ?? 0) >= 0 ? '+' : '') . (int)($favStanding['goalDiff'] ?? 0) ?>)
-                                    • Bilanz: <?= (int)($favStanding['won'] ?? 0) ?>S / <?= (int)($favStanding['draw'] ?? 0) ?>U / <?= (int)($favStanding['lost'] ?? 0) ?>N
-                                </p>
-                            <?php else: ?>
-                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    In der gewählten Saison <?= (int)$selectedSeason ?>/<?= substr((string)($selectedSeason + 1), -2) ?> nicht in dieser Liga vertreten.
-                                </p>
+                                <?php if ($isTennisLeague): ?>
+                                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                                        Aktuell <strong>Weltranglisten-Platz <?= (int)$favStanding['rank'] ?></strong>
+                                        • <strong><?= number_format((int)($favStanding['points'] ?? 0), 0, ',', '.') ?> Punkte</strong>
+                                        • Vorwoche: Platz <?= (int)($favStanding['_prev_rank'] ?? $favStanding['rank']) ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                                        Aktuell <strong>Platz <?= (int)$favStanding['rank'] ?></strong> in der <?= e($leagueMeta['name']) ?>
+                                        • <strong><?= $isUsSportLeague ? ('Siegquote ' . e((string)($favStanding['_win_pct_str'] ?? ''))) : ((int)($favStanding['points'] ?? 0) . ' Punkte') ?></strong>
+                                        • Verhältnis <strong><?= (int)($favStanding['goals'] ?? 0) ?>:<?= (int)($favStanding['opponentGoals'] ?? 0) ?></strong> (<?= ((int)($favStanding['goalDiff'] ?? 0) >= 0 ? '+' : '') . (int)($favStanding['goalDiff'] ?? 0) ?>)
+                                        • Bilanz: <?= (int)($favStanding['won'] ?? 0) ?>S<?= !$isUsSportLeague ? ' / ' . (int)($favStanding['draw'] ?? 0) . 'U' : '' ?> / <?= (int)($favStanding['lost'] ?? 0) ?>N
+                                    </p>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -1137,7 +1398,7 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="px-3.5 py-2.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between gap-4">
                             <div>
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                    <?= (int)$selectedMatchday ?>. Spieltag <?= $fmScores['is_live'] ? '• 🔴 LIVE' : ($fmScores['is_finished'] ? '• Endstand' : '• Anstoß') ?>
+                                    Aktuelles Spiel <?= $fmScores['is_live'] ? '• 🔴 LIVE' : ($fmScores['is_finished'] ? '• Endstand' : '• Beginn') ?>
                                 </div>
                                 <div class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5">
                                     <?= e($fmT1) ?> <span class="text-slate-400 font-normal">vs.</span> <?= e($fmT2) ?>
@@ -1159,58 +1420,72 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             <?php else: ?>
                 <p class="text-xs text-slate-600 dark:text-slate-300">
-                    💡 Für die <strong><?= e($leagueMeta['name']) ?></strong> hast du noch keinen Lieblingsverein ausgewählt – klicke unten in der Tabelle einfach auf den Stern <kbd class="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold">☆</kbd> neben deinem Wunschverein!
+                    💡 Für <strong><?= e($leagueMeta['name']) ?></strong> hast du noch keinen Favoriten ausgewählt – klicke unten in der Liste einfach auf den Stern <kbd class="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold">☆</kbd>!
                 </p>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 
     <!-- ================================================================== -->
-    <!-- HAUPTGRID: LINKS LIVE-TABELLE (7 Spalten), RECHTS SPIELTAG & TIPPS -->
+    <!-- HAUPTGRID: LINKS TABELLE / WELTRANGLISTE, RECHTS SPIELE & TIPPS    -->
     <!-- ================================================================== -->
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 
         <!-- ============================================================== -->
-        <!-- LINKE SPALTE: OFFIZIELLE LIVE-TABELLE                          -->
+        <!-- LINKE SPALTE: OFFIZIELLE LIVE-TABELLE / TENNIS-WELTRANGLISTE   -->
         <!-- ============================================================== -->
         <section class="xl:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
             <div class="p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>📊 Aktuelle Tabelle</span>
+                        <span><?= $isTennisLeague ? '🎾 Offizielle Weltrangliste (Top 100)' : '📊 Aktuelle Tabelle' ?></span>
                         <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">(<?= e($leagueMeta['name']) ?>)</span>
                     </h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Klicke auf den Stern ⭐ neben einem Verein, um ihn als deinen Lieblingsverein anzupinnen.
+                        Klicke auf den Stern ⭐ neben einem <?= $isTennisLeague ? 'Spieler' : 'Team' ?>, um ihn als persönlichen Favoriten anzupinnen.
                     </p>
                 </div>
             </div>
 
             <?php if (empty($tableData)): ?>
                 <div class="p-8 text-center space-y-2">
-                    <div class="text-3xl">⚽</div>
+                    <div class="text-3xl"><?= $leagueMeta['icon'] ?></div>
                     <p class="text-sm font-bold text-slate-800 dark:text-slate-200">
-                        Für diese Saison liegen aktuell noch keine Tabellendaten vor.
+                        Aktuell liegen noch keine Tabellendaten vor.
                     </p>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Wähle oben eine andere Saison oder klicke auf „Jetzt live aktualisieren“.
+                        Klicke oben auf „Jetzt live aktualisieren“.
                     </p>
                 </div>
             <?php else: ?>
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto max-h-[820px] overflow-y-auto">
                     <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/70 dark:bg-slate-800/40">
-                                <th class="py-2.5 pl-3 pr-1 w-10 text-center">#</th>
-                                <th class="py-2.5 px-2">Verein</th>
-                                <th class="py-2.5 px-1.5 text-center" title="Spiele">Sp</th>
-                                <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Siege">S</th>
-                                <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Unentschieden">U</th>
-                                <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Niederlagen">N</th>
-                                <th class="py-2.5 px-2 text-center hidden md:table-cell" title="Tore : Gegentore">Tore</th>
-                                <th class="py-2.5 px-1.5 text-center" title="Tordifferenz">Diff</th>
-                                <th class="py-2.5 pl-2 pr-4 text-right" title="Punkte">Pkt</th>
-                            </tr>
+                        <thead class="sticky top-0 z-10">
+                            <?php if ($isTennisLeague): ?>
+                                <tr class="border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800">
+                                    <th class="py-2.5 pl-3 pr-1 w-10 text-center">#</th>
+                                    <th class="py-2.5 px-2">Spieler/in</th>
+                                    <th class="py-2.5 px-2 text-center">Land</th>
+                                    <th class="py-2.5 px-1.5 text-center hidden sm:table-cell">Alter</th>
+                                    <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Platzierung der Vorwoche">Vorw.</th>
+                                    <th class="py-2.5 px-1.5 text-center" title="Veränderung zur Vorwoche">Trend</th>
+                                    <th class="py-2.5 pl-2 pr-4 text-right">Punkte</th>
+                                </tr>
+                            <?php else: ?>
+                                <tr class="border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800">
+                                    <th class="py-2.5 pl-3 pr-1 w-10 text-center">#</th>
+                                    <th class="py-2.5 px-2">Team / Verein</th>
+                                    <th class="py-2.5 px-1.5 text-center" title="Spiele">Sp</th>
+                                    <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Siege">S</th>
+                                    <?php if (!$isUsSportLeague): ?>
+                                        <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Unentschieden / OT">U</th>
+                                    <?php endif; ?>
+                                    <th class="py-2.5 px-1.5 text-center hidden sm:table-cell" title="Niederlagen">N</th>
+                                    <th class="py-2.5 px-2 text-center hidden md:table-cell" title="Erzielte : Kassierte Tore/Punkte"><?= $isUsSportLeague ? 'Pkt (PF:PA)' : 'Tore' ?></th>
+                                    <th class="py-2.5 px-1.5 text-center" title="Differenz">Diff</th>
+                                    <th class="py-2.5 pl-2 pr-4 text-right" title="<?= $isUsSportLeague ? 'Siegquote' : 'Punkte' ?>"><?= $isUsSportLeague ? 'Quote' : 'Pkt' ?></th>
+                                </tr>
+                            <?php endif; ?>
                         </thead>
                         <tbody class="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs sm:text-sm">
                             <?php foreach ($tableData as $idx => $team): ?>
@@ -1250,25 +1525,28 @@ require_once __DIR__ . '/includes/header.php';
                                         </span>
                                     </td>
 
-                                    <!-- Vereinswappen + Name + Lieblingsverein-Stern -->
+                                    <!-- Vereinswappen / Spielerfoto + Name + Favoriten-Stern -->
                                     <td class="py-2.5 px-2">
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="flex items-center gap-2.5 min-w-0">
                                                 <?php if ($iconUrl !== ''): ?>
-                                                    <img src="<?= e($iconUrl) ?>" alt="" class="w-6 h-6 object-contain shrink-0" loading="lazy" referrerpolicy="no-referrer">
+                                                    <img src="<?= e($iconUrl) ?>" alt="" class="w-7 h-7 <?= $isTennisLeague ? 'rounded-full object-cover bg-slate-100 dark:bg-slate-800' : 'object-contain' ?> shrink-0" loading="lazy" referrerpolicy="no-referrer">
                                                 <?php else: ?>
-                                                    <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 inline-flex items-center justify-center text-[10px] font-bold shrink-0">⚽</span>
+                                                    <span class="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 inline-flex items-center justify-center text-[10px] font-bold shrink-0"><?= $leagueMeta['icon'] ?></span>
                                                 <?php endif; ?>
                                                 <div class="truncate">
                                                     <span class="font-bold text-slate-900 dark:text-white hidden sm:inline"><?= e($teamName) ?></span>
                                                     <span class="font-bold text-slate-900 dark:text-white sm:hidden"><?= e($shortName) ?></span>
+                                                    <?php if (!empty($team['_group_name']) && $isUsSportLeague): ?>
+                                                        <span class="ml-1 text-[10px] text-slate-400 font-normal hidden md:inline">(<?= e((string)$team['_group_name']) ?>)</span>
+                                                    <?php endif; ?>
                                                     <?php if ($isFav): ?>
-                                                        <span class="ml-1 text-[10px] font-extrabold text-amber-600 dark:text-amber-400 uppercase">Mein Verein</span>
+                                                        <span class="ml-1 text-[10px] font-extrabold text-amber-600 dark:text-amber-400 uppercase">Favorit</span>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
 
-                                            <!-- Stern-Button für Lieblingsverein -->
+                                            <!-- Stern-Button für Favorit -->
                                             <form method="post" action="bundesliga.php?league=<?= urlencode($selectedLeague) ?>&amp;season=<?= (int)$selectedSeason ?>&amp;matchday=<?= (int)$selectedMatchday ?>" class="shrink-0">
                                                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                                                 <input type="hidden" name="action" value="save_fav_team">
@@ -1277,25 +1555,50 @@ require_once __DIR__ . '/includes/header.php';
                                                 <input type="hidden" name="fav_team_icon" value="<?= e($iconUrl) ?>">
                                                 <input type="hidden" name="fav_league" value="<?= e($selectedLeague) ?>">
                                                 <button type="submit"
-                                                        title="<?= $isFav ? 'Als Lieblingsverein entfernen' : e($teamName) . ' als Lieblingsverein markieren' ?>"
-                                                        class="p-1 rounded-lg transition-transform hover:scale-110 <?= $isFav ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400' ?>">
+                                                        title="<?= $isFav ? 'Favorit entfernen' : e($teamName) . ' als Favorit markieren' ?>"
+                                                        class="p-1 rounded-lg transition-transform hover:scale-110 cursor-pointer <?= $isFav ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400' ?>">
                                                     <?= $isFav ? '⭐' : '☆' ?>
                                                 </button>
                                             </form>
                                         </div>
                                     </td>
 
-                                    <td class="py-2.5 px-1.5 text-center font-medium text-slate-600 dark:text-slate-300"><?= $matches ?></td>
-                                    <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $won ?></td>
-                                    <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $draw ?></td>
-                                    <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $lost ?></td>
-                                    <td class="py-2.5 px-2 text-center text-slate-500 dark:text-slate-400 font-mono text-xs hidden md:table-cell"><?= $goals ?>:<?= $oppGoals ?></td>
-                                    <td class="py-2.5 px-1.5 text-center font-mono text-xs font-semibold <?= $goalDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : ($goalDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500') ?>">
-                                        <?= ($goalDiff > 0 ? '+' : '') . $goalDiff ?>
-                                    </td>
-                                    <td class="py-2.5 pl-2 pr-4 text-right font-extrabold text-slate-900 dark:text-white text-sm">
-                                        <?= $points ?>
-                                    </td>
+                                    <?php if ($isTennisLeague): ?>
+                                        <td class="py-2.5 px-2 text-center">
+                                            <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                <?php if (!empty($team['_flag_url'])): ?>
+                                                    <img src="<?= e((string)$team['_flag_url']) ?>" alt="" class="w-4 h-4 object-contain" loading="lazy" referrerpolicy="no-referrer">
+                                                <?php endif; ?>
+                                                <span><?= e((string)($team['_country'] ?? '')) ?></span>
+                                            </span>
+                                        </td>
+                                        <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell">
+                                            <?= (int)($team['_age'] ?? 0) > 0 ? (int)$team['_age'] : '-' ?>
+                                        </td>
+                                        <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell">
+                                            <?= (int)($team['_prev_rank'] ?? $rank) ?>
+                                        </td>
+                                        <td class="py-2.5 px-1.5 text-center font-mono text-xs font-bold <?= $goalDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : ($goalDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400') ?>">
+                                            <?= $goalDiff > 0 ? '▲ +' . $goalDiff : ($goalDiff < 0 ? '▼ ' . $goalDiff : '•') ?>
+                                        </td>
+                                        <td class="py-2.5 pl-2 pr-4 text-right font-extrabold text-slate-900 dark:text-white text-sm font-mono">
+                                            <?= number_format($points, 0, ',', '.') ?>
+                                        </td>
+                                    <?php else: ?>
+                                        <td class="py-2.5 px-1.5 text-center font-medium text-slate-600 dark:text-slate-300"><?= $matches ?></td>
+                                        <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $won ?></td>
+                                        <?php if (!$isUsSportLeague): ?>
+                                            <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $draw ?></td>
+                                        <?php endif; ?>
+                                        <td class="py-2.5 px-1.5 text-center text-slate-500 dark:text-slate-400 hidden sm:table-cell"><?= $lost ?></td>
+                                        <td class="py-2.5 px-2 text-center text-slate-500 dark:text-slate-400 font-mono text-xs hidden md:table-cell"><?= $goals ?>:<?= $oppGoals ?></td>
+                                        <td class="py-2.5 px-1.5 text-center font-mono text-xs font-semibold <?= $goalDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : ($goalDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500') ?>">
+                                            <?= ($goalDiff > 0 ? '+' : '') . $goalDiff ?>
+                                        </td>
+                                        <td class="py-2.5 pl-2 pr-4 text-right font-extrabold text-slate-900 dark:text-white text-sm">
+                                            <?= $isUsSportLeague ? e((string)($team['_win_pct_str'] ?? '')) : $points ?>
+                                        </td>
+                                    <?php endif; ?>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -1303,19 +1606,21 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
 
                 <!-- Tabellen-Legende -->
-                <div class="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                    <?php foreach ($leagueMeta['legend'] as $leg): ?>
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full <?= $leg['color'] ?>"></span>
-                            <span><?= e($leg['label']) ?></span>
-                        </span>
-                    <?php endforeach; ?>
-                </div>
+                <?php if (!empty($leagueMeta['legend'])): ?>
+                    <div class="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                        <?php foreach ($leagueMeta['legend'] as $leg): ?>
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full <?= $leg['color'] ?>"></span>
+                                <span><?= e($leg['label']) ?></span>
+                            </span>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </section>
 
         <!-- ============================================================== -->
-        <!-- RECHTE SPALTE: SPIELTAG, TORSCHÜTZEN & CLOUD-TIPPSPIEL         -->
+        <!-- RECHTE SPALTE: SPIELTAG / LIVE-SCOREBOARD & CLOUD-TIPPSPIEL    -->
         <!-- ============================================================== -->
         <section id="tippspiel" class="xl:col-span-5 space-y-6">
 
@@ -1325,18 +1630,26 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="flex items-center justify-between gap-2">
                         <div>
                             <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                                <span>🗓️ <?= (int)$selectedMatchday ?>. Spieltag</span>
-                                <?php if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday): ?>
+                                <?php if ($leagueProvider === 'openliga'): ?>
+                                    <span>🗓️ <?= (int)$selectedMatchday ?>. Spieltag</span>
+                                    <?php if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday): ?>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                            Aktuell
+                                        </span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span>🗓️ <?= e($customRoundLabel ?: 'Aktuelle Spiele & Ergebnisse') ?></span>
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                        Aktuell
+                                        Live-Scoreboard
                                     </span>
                                 <?php endif; ?>
                             </h2>
                             <p class="text-xs text-slate-500 dark:text-slate-400">
-                                Ergebnisse, Torschützen &amp; deine Tippspiel-Tipps vor Anpfiff.
+                                Live-Ergebnisse &amp; deine Cloud-Tippspiel-Tipps vor Spielbeginn.
                             </p>
                         </div>
 
+                        <?php if ($leagueProvider === 'openliga'): ?>
                         <!-- Spieltag Vor/Zurück + Dropdown -->
                         <div class="flex items-center gap-1">
                             <?php $prevMd = max(1, $selectedMatchday - 1); ?>
@@ -1363,6 +1676,7 @@ require_once __DIR__ . '/includes/header.php';
                                class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 <?= $selectedMatchday >= $leagueMeta['max_matchday'] ? 'opacity-40 pointer-events-none' : '' ?>"
                                title="Nächster Spieltag">▶</a>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -1523,20 +1837,20 @@ require_once __DIR__ . '/includes/header.php';
                                             </div>
                                             <div class="flex items-center gap-1.5">
                                                 <input type="number"
-                                                       min="0" max="25"
+                                                       min="0" max="200"
                                                        name="bets[<?= $mId ?>][g1]"
                                                        value="<?= $myBet !== null ? (int)$myBet['g1'] : '' ?>"
                                                        placeholder="-"
                                                        aria-label="Heimtore Tipp <?= e($t1Name) ?>"
-                                                       class="w-12 px-2 py-1 text-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                                       class="w-14 px-2 py-1 text-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                                 <span class="font-bold text-slate-400">:</span>
                                                 <input type="number"
-                                                       min="0" max="25"
+                                                       min="0" max="200"
                                                        name="bets[<?= $mId ?>][g2]"
                                                        value="<?= $myBet !== null ? (int)$myBet['g2'] : '' ?>"
                                                        placeholder="-"
                                                        aria-label="Gasttore Tipp <?= e($t2Name) ?>"
-                                                       class="w-12 px-2 py-1 text-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                                       class="w-14 px-2 py-1 text-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                             </div>
                                         <?php else: ?>
                                             <div class="flex items-center gap-2">

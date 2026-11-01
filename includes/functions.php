@@ -3222,8 +3222,8 @@ function getModuleStatsCatalog(): array
             'color'       => 'bg-emerald-600',
         ],
         'bundesliga' => [
-            'icon'        => '⚽',
-            'label'       => 'Bundesliga & Cloud-Tippspiel',
+            'icon'        => '🏆',
+            'label'       => 'Sportergebnisse & Tippspiel',
             'url'         => 'bundesliga.php',
             'setting_key' => 'enable_bundesliga',
             'color'       => 'bg-green-600',

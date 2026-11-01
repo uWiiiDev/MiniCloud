@@ -4407,16 +4407,16 @@ foreach ($modList as $mItem) {
                         >
                         <div>
                             <p class="text-sm font-bold text-slate-900 dark:text-white">
-                                ⚽ Bundesliga-Zentrale &amp; Cloud-Tippspiel (<code class="text-xs font-mono">bundesliga.php</code>)
+                                🏆 Sportergebnisse &amp; Tippspiel (<code class="text-xs font-mono">bundesliga.php</code>)
                             </p>
                             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Live-Tabelle (1. &amp; 2. Bundesliga, 3. Liga), Spieltage 1–38 mit Torschützen, Lieblingsverein-Hervorhebung, DSGVO-konformer Server-Cache (OpenLigaDB) sowie integriertes Cloud-Tippspiel mit Bestenliste.
+                                Live-Tabellen &amp; Ergebnisse für Fußball (1.–3. BL, Champions League, Premier League, LaLiga, Serie A), NFL, NBA, Eishockey (DEL, DEL2, NHL), ATP/WTA Tennis-Weltrangliste, Lieblingsliga mit Sternchen sowie Cloud-Tippspiel.
                             </p>
                         </div>
                     </label>
                     <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
                         <a href="bundesliga.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                            ⚽ Bundesliga &amp; Tippspiel öffnen &rarr;
+                            🏆 Sportergebnisse &amp; Tippspiel öffnen &rarr;
                         </a>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_bundesliga'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                             <?= ($currentSettings['enable_bundesliga'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
