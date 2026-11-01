@@ -5,6 +5,7 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/office_functions.php';
+require_once __DIR__ . '/includes/mail_client.php';
 
 requireLogin();
 
@@ -873,6 +874,273 @@ $fileId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($fileId <= 0) {
     // ------------------------------------------------------------------------
+    // STATELESS LIVE-E-MAIL ENDPUNKTE IM OFFICE-MODUL (100 % ZERO-STORAGE)
+    // ------------------------------------------------------------------------
+    $mailAction = (string)($_GET['mail_action'] ?? $_POST['mail_action'] ?? '');
+
+    if ($mailAction !== '') {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+            if (in_array($mailAction, ['list', 'read', 'delete', 'send', 'save_att'], true)) {
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode(['ok' => false, 'error' => 'Ungültiges Sicherheits-Token (CSRF).']);
+                exit;
+            }
+            setFlash('error', 'Ungültiges Sicherheits-Token.');
+            header('Location: office.php?tab=mail');
+            exit;
+        }
+
+        // A) Verbindungsdaten speichern oder nur für aktuelle Sitzung setzen
+        if ($mailAction === 'connect' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            ensureUserMailAccountSchema($pdo);
+            $existingMail = getUserMailAccountConfig($pdo, $userId);
+
+            $emailAddr   = mb_substr(trim((string)($_POST['mail_email'] ?? '')), 0, 185);
+            $senderName  = mb_substr(trim((string)($_POST['mail_sender_name'] ?? '')), 0, 140);
+            $providerKey = mb_substr(trim((string)($_POST['mail_provider'] ?? 'custom')), 0, 35);
+            $protocol    = strtolower(trim((string)($_POST['mail_protocol'] ?? 'imap')));
+            if (!in_array($protocol, ['imap', 'pop3'], true)) {
+                $protocol = 'imap';
+            }
+            $incHost     = mb_substr(trim((string)($_POST['mail_incoming_host'] ?? '')), 0, 185);
+            $incPort     = max(1, min(65535, (int)($_POST['mail_incoming_port'] ?? ($protocol === 'pop3' ? 995 : 993))));
+            $incSsl      = in_array($_POST['mail_incoming_ssl'] ?? 'ssl', ['ssl', 'tls'], true) ? (string)$_POST['mail_incoming_ssl'] : 'ssl';
+            $smtpHost    = mb_substr(trim((string)($_POST['mail_smtp_host'] ?? '')), 0, 185);
+            $smtpPort    = max(1, min(65535, (int)($_POST['mail_smtp_port'] ?? 587)));
+            $smtpSsl     = in_array($_POST['mail_smtp_ssl'] ?? 'tls', ['ssl', 'tls'], true) ? (string)$_POST['mail_smtp_ssl'] : 'tls';
+            $mailUser    = mb_substr(trim((string)($_POST['mail_username'] ?? '')), 0, 185) ?: $emailAddr;
+            $mailPass    = (string)($_POST['mail_password'] ?? '');
+            if ($mailPass === '' && $existingMail !== null) {
+                $mailPass = (string)$existingMail['password'];
+            }
+            $persistMode = (string)($_POST['mail_persist_mode'] ?? 'settings');
+
+            if ($emailAddr === '' || $incHost === '' || $smtpHost === '' || $mailPass === '') {
+                setFlash('error', 'Bitte gib deine E-Mail-Adresse, die Serverdaten und dein Passwort an.');
+                header('Location: office.php?tab=mail');
+                exit;
+            }
+
+            $cfgObj = [
+                'email_address' => $emailAddr,
+                'sender_name'   => $senderName,
+                'provider_key'  => $providerKey,
+                'protocol'      => $protocol,
+                'incoming_host' => $incHost,
+                'incoming_port' => $incPort,
+                'incoming_ssl'  => $incSsl,
+                'smtp_host'     => $smtpHost,
+                'smtp_port'     => $smtpPort,
+                'smtp_ssl'      => $smtpSsl,
+                'username'      => $mailUser,
+                'password'      => $mailPass,
+                'storage_mode'  => $persistMode,
+            ];
+
+            $testRes = testMailAccountConnection($cfgObj);
+            if (!$testRes['ok']) {
+                setFlash('error', $testRes['message']);
+                header('Location: office.php?tab=mail');
+                exit;
+            }
+
+            if ($persistMode === 'session') {
+                $_SESSION['temp_mail_account_' . $userId] = $cfgObj;
+                setFlash('success', '🔓 Live-Verbindung für diese Sitzung hergestellt (0 Bytes in der Datenbank gespeichert).');
+            } else {
+                unset($_SESSION['temp_mail_account_' . $userId]);
+                $encPass = encryptMailPassword($mailPass, $userId);
+                $stmtUp  = $pdo->prepare("
+                    INSERT INTO user_mail_accounts
+                        (user_id, email_address, sender_name, provider_key, protocol, incoming_host, incoming_port, incoming_ssl, smtp_host, smtp_port, smtp_ssl, username, encrypted_password, updated_at)
+                    VALUES
+                        (:uid, :em, :sn, :pk, :pr, :ih, :ip, :is, :sh, :sp, :ss, :un, :pw, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        email_address      = VALUES(email_address),
+                        sender_name        = VALUES(sender_name),
+                        provider_key       = VALUES(provider_key),
+                        protocol           = VALUES(protocol),
+                        incoming_host      = VALUES(incoming_host),
+                        incoming_port      = VALUES(incoming_port),
+                        incoming_ssl       = VALUES(incoming_ssl),
+                        smtp_host          = VALUES(smtp_host),
+                        smtp_port          = VALUES(smtp_port),
+                        smtp_ssl           = VALUES(smtp_ssl),
+                        username           = VALUES(username),
+                        encrypted_password = VALUES(encrypted_password),
+                        updated_at         = NOW()
+                ");
+                $stmtUp->execute([
+                    ':uid' => $userId,
+                    ':em'  => $emailAddr,
+                    ':sn'  => $senderName,
+                    ':pk'  => $providerKey,
+                    ':pr'  => $protocol,
+                    ':ih'  => $incHost,
+                    ':ip'  => $incPort,
+                    ':is'  => $incSsl,
+                    ':sh'  => $smtpHost,
+                    ':sp'  => $smtpPort,
+                    ':ss'  => $smtpSsl,
+                    ':un'  => $mailUser,
+                    ':pw'  => $encPass,
+                ]);
+                setFlash('success', $testRes['message']);
+            }
+            header('Location: office.php?tab=mail');
+            exit;
+        }
+
+        // B) Sitzungs-Verbindung trennen
+        if ($mailAction === 'disconnect' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            unset($_SESSION['temp_mail_account_' . $userId]);
+            if (($_POST['also_delete_saved'] ?? '') === '1') {
+                ensureUserMailAccountSchema($pdo);
+                $pdo->prepare('DELETE FROM user_mail_accounts WHERE user_id = ?')->execute([$userId]);
+                setFlash('success', 'Postfach getrennt und hinterlegte Zugangsdaten gelöscht.');
+            } else {
+                setFlash('success', 'Temporäre Sitzungs-Verbindung getrennt.');
+            }
+            header('Location: office.php?tab=mail');
+            exit;
+        }
+
+        // Für alle Live-AJAX-Operationen: Zugangsdaten im RAM bereitstellen
+        header('Content-Type: application/json; charset=UTF-8');
+        $mailCfg = getUserMailAccountConfig($pdo, $userId);
+        if ($mailCfg === null) {
+            echo json_encode(['ok' => false, 'error' => 'Noch kein E-Mail-Postfach verbunden.']);
+            exit;
+        }
+
+        if ($mailAction === 'list') {
+            $folder = trim((string)($_POST['folder'] ?? $_GET['folder'] ?? 'INBOX')) ?: 'INBOX';
+            $page   = max(1, (int)($_POST['page'] ?? $_GET['page'] ?? 1));
+            $res    = fetchLiveMailboxMessages($mailCfg, $folder, $page, 20);
+            echo json_encode($res);
+            exit;
+        }
+
+        if ($mailAction === 'read') {
+            $folder = trim((string)($_POST['folder'] ?? 'INBOX')) ?: 'INBOX';
+            $uid    = trim((string)($_POST['uid'] ?? ''));
+            $res    = fetchLiveSingleEmail($mailCfg, $folder, $uid);
+            echo json_encode($res);
+            exit;
+        }
+
+        if ($mailAction === 'delete') {
+            $folder = trim((string)($_POST['folder'] ?? 'INBOX')) ?: 'INBOX';
+            $uid    = trim((string)($_POST['uid'] ?? ''));
+            $res    = deleteLiveEmailOnServer($mailCfg, $folder, $uid);
+            echo json_encode($res);
+            exit;
+        }
+
+        if ($mailAction === 'send') {
+            $to          = trim((string)($_POST['to'] ?? ''));
+            $cc          = trim((string)($_POST['cc'] ?? ''));
+            $subject     = trim((string)($_POST['subject'] ?? '(Kein Betreff)'));
+            $bodyText    = (string)($_POST['body'] ?? '');
+            $cloudFileId = (int)($_POST['cloud_file_id'] ?? 0);
+
+            $attachments = [];
+
+            // 1. Optionales Office-/Cloud-Dokument direkt aus der MiniCloud anhängen
+            if ($cloudFileId > 0) {
+                $acc = resolveOfficeFileAccess($pdo, $cloudFileId, $userId, $isAdmin);
+                if ($acc !== null && (int)($acc['file']['is_encrypted'] ?? 0) === 0) {
+                    $phys = UPLOAD_DIR . (string)$acc['file']['filename'];
+                    if (is_file($phys) && filesize($phys) <= 15 * 1024 * 1024) {
+                        $rawBytes = @file_get_contents($phys);
+                        if (is_string($rawBytes)) {
+                            $attachments[] = [
+                                'filename' => (string)$acc['file']['original_name'],
+                                'mime'     => (string)($acc['file']['mime_type'] ?: 'application/octet-stream'),
+                                'content'  => $rawBytes,
+                            ];
+                        }
+                    }
+                }
+            }
+
+            // 2. Optionaler Datei-Upload vom Gerät (nur im RAM gelesen, nicht gespeichert)
+            if (!empty($_FILES['upload_att']['tmp_name']) && is_uploaded_file((string)$_FILES['upload_att']['tmp_name'])) {
+                $upSize = (int)($_FILES['upload_att']['size'] ?? 0);
+                if ($upSize > 0 && $upSize <= 12 * 1024 * 1024) {
+                    $upBytes = @file_get_contents((string)$_FILES['upload_att']['tmp_name']);
+                    if (is_string($upBytes)) {
+                        $attachments[] = [
+                            'filename' => sanitizeOriginalFilename((string)($_FILES['upload_att']['name'] ?? 'Anhang.bin')),
+                            'mime'     => (string)($_FILES['upload_att']['type'] ?: 'application/octet-stream'),
+                            'content'  => $upBytes,
+                        ];
+                    }
+                }
+            }
+
+            $res = sendLiveEmailViaSmtp($mailCfg, $to, $cc, $subject, $bodyText, $attachments);
+            echo json_encode($res);
+            exit;
+        }
+
+        if ($mailAction === 'save_att') {
+            $attName = sanitizeOriginalFilename((string)($_POST['filename'] ?? 'Anhang.bin'));
+            $attMime = trim((string)($_POST['mime'] ?? 'application/octet-stream'));
+            $attB64  = (string)($_POST['content_b64'] ?? '');
+            $rawData = base64_decode($attB64, true);
+
+            if (!is_string($rawData) || $rawData === '') {
+                echo json_encode(['ok' => false, 'error' => 'Ungültige Anhangsdaten.']);
+                exit;
+            }
+            $storage = getUserStorageStats($pdo, $userId);
+            if ($storage['free'] < strlen($rawData)) {
+                echo json_encode(['ok' => false, 'error' => 'Nicht genügend freier Cloud-Speicherplatz.']);
+                exit;
+            }
+            do {
+                $storedFn = generateSafeStoredFilename();
+                $physPath = UPLOAD_DIR . $storedFn;
+            } while (file_exists($physPath));
+
+            if (@file_put_contents($physPath, $rawData) === false) {
+                echo json_encode(['ok' => false, 'error' => 'Datei konnte nicht gespeichert werden.']);
+                exit;
+            }
+
+            $insF = $pdo->prepare("
+                INSERT INTO files (user_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, upload_date)
+                VALUES (:uid, :fn, :orig, '', :sz, :mime, 0, NOW())
+            ");
+            $insF->execute([
+                ':uid'  => $userId,
+                ':fn'   => $storedFn,
+                ':orig' => $attName,
+                ':sz'   => strlen($rawData),
+                ':mime' => $attMime,
+            ]);
+            $newFileId = (int)$pdo->lastInsertId();
+            $canOpenInOffice = getOfficeEditorType($attName) !== null;
+
+            echo json_encode([
+                'ok'        => true,
+                'file_id'   => $newFileId,
+                'name'      => $attName,
+                'office_ok' => $canOpenInOffice,
+                'message'   => "☁️ „{$attName}“ wurde in deinen Cloud-Dateien gespeichert!",
+            ]);
+            exit;
+        }
+    }
+
+    $activeOfficeMainTab = strtolower(trim((string)($_GET['tab'] ?? 'docs')));
+    if (!in_array($activeOfficeMainTab, ['docs', 'mail'], true)) {
+        $activeOfficeMainTab = 'docs';
+    }
+    $mailAccountCfg  = getUserMailAccountConfig($pdo, $userId);
+    $mailPresetsList = getMailProviderPresets();
+    // ------------------------------------------------------------------------
     // OFFICE LIGHT START-ZENTRALE (Modul-Übersicht, Vorlagen & Dokumentenliste)
     // ------------------------------------------------------------------------
     $officeExts = ['docx', 'xlsx', 'csv', 'md', 'txt', 'html', 'htm', 'json', 'xml', 'yml', 'yaml', 'ini', 'sql', 'log'];
@@ -1026,31 +1294,67 @@ if ($fileId <= 0) {
     ?>
     <div class="space-y-6">
         <!-- Kopfbereich -->
-        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-                <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-                    <span class="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 text-2xl shrink-0">📝</span>
-                    <span>MiniCloud Office Light &amp; Bild-Studio</span>
-                </h1>
-                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Word (<code>.docx</code>), Excel (<code>.xlsx</code>), PowerPoint (<code>.pptx</code>), Visio (<code>.drawio</code>), Mind-Maps, Foto-/Bildbearbeitung und Markdown direkt im Browser – 100 % lokal auf deinem Server.
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <span class="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 text-2xl shrink-0">📝</span>
+                        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+                            MiniCloud Office Light, Bild-Studio &amp; Live-E-Mail
+                        </h1>
+                        <!-- Platzsparender Ausrufezeichen-Button für den Zero-Storage-Hinweis -->
+                        <button type="button"
+                                onclick="document.getElementById('officeZeroStorageInfoBox').classList.toggle('hidden')"
+                                title="Datenschutz-Hinweis zum E-Mail-Modul anzeigen (Keine Speicherung von Provider-Daten)"
+                                class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-950/80 hover:bg-amber-200 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-xs font-extrabold cursor-pointer transition-transform hover:scale-105">
+                            !
+                        </button>
+                    </div>
+                    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Word (<code>.docx</code>), Excel (<code>.xlsx</code>), PowerPoint (<code>.pptx</code>), Visio (<code>.drawio</code>), Mind-Maps, Bildbearbeitung sowie Live-E-Mail-Programm (IMAP/POP3/SMTP).
+                    </p>
+                </div>
+
+                <!-- Haupt-Umschalter: Office-Dokumente vs. Live-E-Mail -->
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700">
+                        <button type="button" id="btnOfficeTabDocs" onclick="switchOfficeMainTab('docs')"
+                                class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 <?= $activeOfficeMainTab === 'docs' ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-xs' : 'text-slate-600 dark:text-slate-300' ?>">
+                            <span>📝</span>
+                            <span>Dokumente &amp; Vorlagen</span>
+                        </button>
+                        <button type="button" id="btnOfficeTabMail" onclick="switchOfficeMainTab('mail')"
+                                class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 <?= $activeOfficeMainTab === 'mail' ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-xs' : 'text-slate-600 dark:text-slate-300' ?>">
+                            <span>📧</span>
+                            <span>E-Mail (Live-Postfach)</span>
+                            <?php if ($mailAccountCfg !== null): ?>
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <?php endif; ?>
+                        </button>
+                    </div>
+
+                    <a href="pdf_tools.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 text-xs sm:text-sm font-semibold transition-colors">
+                        📄 PDF &amp; Scan
+                    </a>
+                    <a href="index.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors">
+                        📁 Dateien &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Ausklappbarer Datenschutz-Hinweis (erscheint nur bei Klick auf das "!") -->
+            <div id="officeZeroStorageInfoBox" class="hidden p-3.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800 text-xs text-amber-950 dark:text-amber-200 space-y-1">
+                <div class="font-bold flex items-center justify-between">
+                    <span>🔒 Datenschutz-Garantie: Keine Speicherung von Provider- &amp; E-Mail-Daten (Zero-Storage)</span>
+                    <button type="button" onclick="document.getElementById('officeZeroStorageInfoBox').classList.add('hidden')" class="text-amber-700 dark:text-amber-300 font-bold cursor-pointer">✕</button>
+                </div>
+                <p class="leading-relaxed">
+                    Dieses E-Mail-Programm speichert <strong>keine E-Mails, Texte, Kontakte oder Anhänge</strong> deines Providers auf dem Server oder in der Datenbank. Alle Daten verbleiben zu 100 % bei deinem E-Mail-Provider und werden nur für die Dauer der Anzeige live im flüchtigen Arbeitsspeicher (RAM) abgerufen (bei POP3 werden Nachrichten niemals automatisch vom Server gelöscht).
                 </p>
             </div>
-            <div class="flex flex-wrap items-center gap-2 shrink-0">
-                <a href="gallery.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-50 dark:bg-pink-950/60 hover:bg-pink-100 text-pink-700 dark:text-pink-300 border border-pink-200/80 dark:border-pink-800 text-xs sm:text-sm font-semibold transition-colors">
-                    🖼️ Foto-Galerie
-                </a>
-                <a href="pdf_tools.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 text-xs sm:text-sm font-semibold transition-colors">
-                    📄 PDF &amp; Scan
-                </a>
-                <a href="mindmap.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800 text-xs sm:text-sm font-semibold transition-colors">
-                    🧠 Mind-Map-Editor
-                </a>
-                <a href="index.php" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors">
-                    📁 Dateien &rarr;
-                </a>
-            </div>
         </div>
+
+        <div id="officeDocsWrapper" class="space-y-6 <?= $activeOfficeMainTab === 'docs' ? '' : 'hidden' ?>">
 
         <!-- 1. Neues Dokument oder Vorlage starten -->
         <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
@@ -1329,6 +1633,12 @@ if ($fileId <= 0) {
                                                 <span><?= $doc['can_write'] ? '✏️ Bearbeiten' : '👁️ Öffnen' ?></span>
                                             </a>
                                             <?php if ($doc['editor_type'] !== 'mindmap'): ?>
+                                                <button type="button"
+                                                        onclick="openOfficeMailComposerWithFile(<?= (int)$doc['id'] ?>, <?= htmlspecialchars(json_encode($doc['name']), ENT_QUOTES, 'UTF-8') ?>)"
+                                                        class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs transition-colors cursor-pointer"
+                                                        title="Dieses Dokument per E-Mail versenden">
+                                                    ✉️
+                                                </button>
                                                 <a href="download.php?id=<?= (int)$doc['id'] ?>"
                                                    class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs transition-colors"
                                                    title="Herunterladen">
@@ -1344,6 +1654,380 @@ if ($fileId <= 0) {
                 </div>
             <?php endif; ?>
         </section>
+        </div><!-- /#officeDocsWrapper -->
+
+        <!-- ================================================================== -->
+        <!-- 3. STATELESS LIVE-E-MAIL-PROGRAMM IM OFFICE-MODUL                  -->
+        <!-- ================================================================== -->
+        <div id="officeMailWrapper" class="space-y-5 <?= $activeOfficeMainTab === 'mail' ? '' : 'hidden' ?>">
+
+            <?php if ($mailAccountCfg === null): ?>
+                <!-- A) EINRICHTUNGS- & ANMELDE-MASKE MIT 18 PROVIDER-VORLAGEN -->
+                <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl">📧</span>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                                        E-Mail-Postfach verbinden (IMAP / POP3 / SMTP)
+                                    </h2>
+                                    <button type="button"
+                                            onclick="document.getElementById('officeZeroStorageInfoBox').classList.remove('hidden'); document.getElementById('officeZeroStorageInfoBox').scrollIntoView({behavior:'smooth'});"
+                                            title="Datenschutz-Hinweis: Keine Speicherung von Provider-Daten"
+                                            class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[11px] font-extrabold cursor-pointer">
+                                        !
+                                    </button>
+                                </div>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">
+                                    Gib deine E-Mail-Adresse ein – für GMX, WEB.DE, T-Online, STRATO, IONOS, Gmail, Outlook, iCloud u.v.m. werden Server &amp; Ports automatisch eingetragen.
+                                </p>
+                            </div>
+                        </div>
+                        <a href="settings.php#sec-mail" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            ⚙️ Zu den Benutzereinstellungen &rarr;
+                        </a>
+                    </div>
+
+                    <form action="office.php?tab=mail" method="post" class="space-y-4">
+                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                        <input type="hidden" name="mail_action" value="connect">
+
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                            <div class="sm:col-span-4">
+                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deine E-Mail-Adresse *</label>
+                                <input type="email" name="mail_email" id="ofcMailEmail" required
+                                       oninput="autoDetectOfficeMailProvider(this.value)"
+                                       placeholder="name@gmx.de / name@t-online.de"
+                                       class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                            </div>
+
+                            <div class="sm:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Absendername (optional)</label>
+                                <input type="text" name="mail_sender_name"
+                                       value="<?= e((string)($_SESSION['username'] ?? '')) ?>"
+                                       placeholder="Dein Name"
+                                       class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                            </div>
+
+                            <div class="sm:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">E-Mail-Provider (Vorlage)</label>
+                                <select name="mail_provider" id="ofcMailProvider" onchange="applyOfficeMailPreset()"
+                                        class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white cursor-pointer">
+                                    <?php foreach ($mailPresetsList as $pKey => $pMeta): ?>
+                                        <option value="<?= e($pKey) ?>"><?= e((string)$pMeta['label']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Abruf-Protokoll</label>
+                                <select name="mail_protocol" id="ofcMailProtocol" onchange="applyOfficeMailPreset()"
+                                        class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-900 dark:text-white cursor-pointer">
+                                    <option value="imap">IMAP (Empfohlen)</option>
+                                    <option value="pop3">POP3 (Nur Posteingang)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="ofcMailProviderHint" class="text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/40 px-3 py-1.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800/60"></div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Posteingangsserver (IMAP / POP3) *</label>
+                                <input type="text" name="mail_incoming_host" id="ofcMailIncHost" required placeholder="imap.gmx.net"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Port *</label>
+                                <input type="number" name="mail_incoming_port" id="ofcMailIncPort" required value="993"
+                                       class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Schutz</label>
+                                <select name="mail_incoming_ssl" id="ofcMailIncSsl"
+                                        class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs">
+                                    <option value="ssl">SSL/TLS</option>
+                                    <option value="tls">STARTTLS</option>
+                                </select>
+                            </div>
+
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Postausgangsserver (SMTP) *</label>
+                                <input type="text" name="mail_smtp_host" id="ofcMailSmtpHost" required placeholder="mail.gmx.net"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Port *</label>
+                                <input type="number" name="mail_smtp_port" id="ofcMailSmtpPort" required value="587"
+                                       class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Schutz</label>
+                                <select name="mail_smtp_ssl" id="ofcMailSmtpSsl"
+                                        class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs">
+                                    <option value="tls">STARTTLS</option>
+                                    <option value="ssl">SSL/TLS</option>
+                                </select>
+                            </div>
+
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Benutzername (optional)</label>
+                                <input type="text" name="mail_username" placeholder="Leer = E-Mail-Adresse"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs">
+                            </div>
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">E-Mail-Passwort / App-Passwort *</label>
+                                <input type="password" name="mail_password" required placeholder="Dein Passwort"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs">
+                            </div>
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Speicherung der Zugangsdaten</label>
+                                <select name="mail_persist_mode"
+                                        class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold">
+                                    <option value="settings">💾 Dauerhaft in meinen Einstellungen hinterlegen</option>
+                                    <option value="session">🔓 Nur für diese Sitzung im RAM merken (0 Bytes in DB)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-end">
+                            <button type="submit" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs cursor-pointer">
+                                🔌 Jetzt live verbinden
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            <?php else: ?>
+                <!-- B) VERBUNDENES LIVE-POSTFACH (ORDNER, NACHRICHTENLISTE, LESEN & SCHREIBEN) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+                    <!-- Linke Spalte: Aktives Postfach, „Neue E-Mail“ & Ordnerliste -->
+                    <div class="lg:col-span-3 space-y-4">
+                        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                        <span class="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                            <?= e((string)$mailAccountCfg['email_address']) ?>
+                                        </span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        <?= e(strtoupper((string)$mailAccountCfg['protocol'])) ?> • <?= e((string)$mailAccountCfg['incoming_host']) ?>
+                                    </p>
+                                </div>
+                                <button type="button"
+                                        onclick="document.getElementById('officeZeroStorageInfoBox').classList.toggle('hidden')"
+                                        title="Datenschutz-Hinweis: Keine Speicherung von Provider-Daten"
+                                        class="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[11px] font-extrabold cursor-pointer shrink-0">
+                                    !
+                                </button>
+                            </div>
+
+                            <button type="button" onclick="openOfficeMailComposer()"
+                                    class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                <span>✍️</span>
+                                <span>Neue E-Mail schreiben</span>
+                            </button>
+
+                            <!-- Ordnerliste -->
+                            <div id="liveMailFolderList" class="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <button type="button" onclick="loadLiveMailFolder('INBOX', 1)"
+                                        class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 flex items-center justify-between cursor-pointer">
+                                    <span>📥 Posteingang</span>
+                                </button>
+                            </div>
+
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                                <a href="settings.php#sec-mail" class="font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600">
+                                    ⚙️ Zugangsdaten
+                                </a>
+                                <form action="office.php?tab=mail" method="post" class="inline">
+                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                    <input type="hidden" name="mail_action" value="disconnect">
+                                    <?php if (($mailAccountCfg['storage_mode'] ?? 'db') !== 'session'): ?>
+                                        <input type="hidden" name="also_delete_saved" value="1">
+                                    <?php endif; ?>
+                                    <button type="submit"
+                                            onclick="return confirm('Möchtest du die hinterlegten E-Mail-Zugangsdaten trennen?');"
+                                            class="text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer">
+                                        🔌 Trennen
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rechte Spalte: Nachrichtenliste / E-Mail-Leseansicht / E-Mail-Editor -->
+                    <div class="lg:col-span-9 space-y-4">
+
+                        <!-- 1. E-Mail-Verfassen-Ansicht (ausgeklappt bei Klick auf „Neue E-Mail“ oder „Per E-Mail senden“) -->
+                        <div id="liveMailComposePanel" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-brand-300 dark:border-brand-800 p-5 shadow-sm space-y-4">
+                            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                                <h3 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>✍️</span>
+                                    <span id="composePanelTitle">Neue E-Mail verfassen</span>
+                                </h3>
+                                <button type="button" onclick="closeOfficeMailComposer()" class="text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
+                                    ✕ Schließen
+                                </button>
+                            </div>
+
+                            <form id="liveMailComposeForm" onsubmit="submitLiveMailSend(event)" class="space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                    <div class="sm:col-span-7">
+                                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">An (Empfänger) *</label>
+                                        <input type="text" id="composeTo" required placeholder="empfaenger@beispiel.de"
+                                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                                    </div>
+                                    <div class="sm:col-span-5">
+                                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Kopie (CC, optional)</label>
+                                        <input type="text" id="composeCc" placeholder="cc@beispiel.de"
+                                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Betreff *</label>
+                                    <input type="text" id="composeSubject" required placeholder="Betreff deiner Nachricht"
+                                           class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Nachricht</label>
+                                    <textarea id="composeBody" rows="8" required placeholder="Deine E-Mail-Nachricht…"
+                                              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white leading-relaxed"></textarea>
+                                </div>
+
+                                <!-- Anhänge: Direkt aus Office/Cloud wählen ODER Datei vom Gerät -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">📎 Office-/Cloud-Dokument anhängen</label>
+                                        <select id="composeCloudFileId"
+                                                class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                                            <option value="0">— Kein Cloud-Dokument ausgewählt —</option>
+                                            <?php foreach ($officeDocs as $oDoc): ?>
+                                                <?php if ((int)$oDoc['id'] > 0): ?>
+                                                    <option value="<?= (int)$oDoc['id'] ?>"><?= e($oDoc['name']) ?> (<?= e($oDoc['size']) ?>)</option>
+                                                <?php endif; ?>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">💻 Zusätzliche Datei vom Gerät (max. 12 MB)</label>
+                                        <input type="file" id="composeUploadFile"
+                                               class="w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 dark:file:bg-slate-700 file:text-slate-800 dark:file:text-slate-200">
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between pt-2">
+                                    <span id="composeSendStatus" class="text-xs font-semibold"></span>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" onclick="closeOfficeMailComposer()"
+                                                class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer">
+                                            Abbrechen
+                                        </button>
+                                        <button type="submit" id="btnSendLiveMail"
+                                                class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold shadow-xs cursor-pointer">
+                                            🚀 Jetzt live absenden
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- 2. Einzelne E-Mail-Leseansicht (wird bei Klick auf eine E-Mail eingeblendet) -->
+                        <div id="liveMailReaderPanel" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                                <button type="button" onclick="closeLiveMailReader()"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                                    &larr; Zurück zur Liste
+                                </button>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <button type="button" onclick="replyToCurrentLiveMail()"
+                                            class="px-3 py-1.5 rounded-xl bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 text-brand-700 dark:text-brand-300 text-xs font-bold cursor-pointer">
+                                        ↩️ Antworten
+                                    </button>
+                                    <button type="button" onclick="forwardCurrentLiveMail()"
+                                            class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
+                                        ↪️ Weiterleiten
+                                    </button>
+                                    <button type="button" onclick="deleteCurrentLiveMail()"
+                                            class="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-bold cursor-pointer">
+                                        🗑️ Löschen
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1">
+                                <h3 id="readerMailSubject" class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white"></h3>
+                                <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    <div>
+                                        <span class="font-bold text-slate-700 dark:text-slate-300">Von:</span>
+                                        <span id="readerMailFrom"></span>
+                                    </div>
+                                    <span id="readerMailDate" class="font-mono text-[11px]"></span>
+                                </div>
+                                <div class="text-[11px] text-slate-400">
+                                    <span>An: </span><span id="readerMailTo"></span>
+                                </div>
+                            </div>
+
+                            <!-- Anhänge der geöffneten E-Mail (mit 1-Klick „In Cloud speichern“) -->
+                            <div id="readerMailAttachments" class="hidden pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2"></div>
+
+                            <!-- Nachrichtentext / Sicheres HTML-Iframe -->
+                            <div id="readerMailBodyContainer" class="pt-3 border-t border-slate-100 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words"></div>
+                        </div>
+
+                        <!-- 3. Live-Nachrichtenliste des gewählten Ordners -->
+                        <div id="liveMailListPanel" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+                            <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                                <div class="flex items-center gap-2">
+                                    <h3 id="liveMailCurrentFolderTitle" class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                                        📥 Posteingang
+                                    </h3>
+                                    <span id="liveMailTotalBadge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                        …
+                                    </span>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <input type="search" id="liveMailFilterInput" oninput="filterVisibleLiveEmails()"
+                                           placeholder="Betreff oder Absender filtern…"
+                                           class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                                    <button type="button" onclick="loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage)"
+                                            class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-bold text-brand-600 dark:text-brand-400 cursor-pointer">
+                                        🔄 Aktualisieren
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="liveMailMessagesTable" class="divide-y divide-slate-200/80 dark:divide-slate-800">
+                                <div class="p-10 text-center text-xs text-slate-400">
+                                    ⏳ Verbinde live mit deinem E-Mail-Postfach…
+                                </div>
+                            </div>
+
+                            <!-- Blätter-Navigation -->
+                            <div id="liveMailPagination" class="p-3 bg-slate-50/60 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                                <button type="button" id="btnMailPrevPage" onclick="changeLiveMailPage(-1)"
+                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer">
+                                    &larr; Neuere
+                                </button>
+                                <span id="lblMailPageInfo" class="text-slate-500">Seite 1</span>
+                                <button type="button" id="btnMailNextPage" onclick="changeLiveMailPage(1)"
+                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer">
+                                    Ältere &rarr;
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div><!-- /#officeMailWrapper -->
     </div>
 
     <script>
@@ -1394,6 +2078,442 @@ if ($fileId <= 0) {
             tr.classList.toggle('hidden', !(typeMatch && textMatch));
         });
     }
+
+    // ========================================================================
+    // STATELESS LIVE-E-MAIL STEUERUNG IM OFFICE-MODUL
+    // ========================================================================
+    const OFFICE_MAIL_CSRF    = <?= json_encode(getCsrfToken()) ?>;
+    const OFFICE_MAIL_PRESETS = <?= json_encode($mailPresetsList, JSON_UNESCAPED_UNICODE) ?>;
+    const HAS_OFFICE_MAIL_ACC = <?= $mailAccountCfg !== null ? 'true' : 'false' ?>;
+
+    let currentLiveMailFolder = 'INBOX';
+    let currentLiveMailPage   = 1;
+    let currentOpenedMail     = null;
+    let currentOpenedMailUid  = '';
+    let liveMailInitialized   = false;
+
+    function switchOfficeMainTab(tab) {
+        const docsWrap = document.getElementById('officeDocsWrapper');
+        const mailWrap = document.getElementById('officeMailWrapper');
+        const btnDocs  = document.getElementById('btnOfficeTabDocs');
+        const btnMail  = document.getElementById('btnOfficeTabMail');
+
+        if (tab === 'mail') {
+            docsWrap?.classList.add('hidden');
+            mailWrap?.classList.remove('hidden');
+            if (btnMail) btnMail.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-xs';
+            if (btnDocs) btnDocs.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 text-slate-600 dark:text-slate-300';
+            if (HAS_OFFICE_MAIL_ACC && !liveMailInitialized) {
+                liveMailInitialized = true;
+                loadLiveMailFolder('INBOX', 1);
+            }
+        } else {
+            mailWrap?.classList.add('hidden');
+            docsWrap?.classList.remove('hidden');
+            if (btnDocs) btnDocs.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-xs';
+            if (btnMail) btnMail.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 text-slate-600 dark:text-slate-300';
+        }
+    }
+
+    function autoDetectOfficeMailProvider(emailVal) {
+        const em = (emailVal || '').trim().toLowerCase();
+        if (!em.includes('@')) return;
+        const domain = em.split('@').pop();
+        const sel = document.getElementById('ofcMailProvider');
+        if (!sel) return;
+
+        for (const [key, preset] of Object.entries(OFFICE_MAIL_PRESETS)) {
+            if (Array.isArray(preset.domains) && preset.domains.includes(domain)) {
+                sel.value = key;
+                applyOfficeMailPreset();
+                break;
+            }
+        }
+    }
+
+    function applyOfficeMailPreset() {
+        const provKey = document.getElementById('ofcMailProvider')?.value || 'gmx';
+        const proto   = document.getElementById('ofcMailProtocol')?.value || 'imap';
+        const preset  = OFFICE_MAIL_PRESETS[provKey];
+        if (!preset) return;
+
+        const hintEl = document.getElementById('ofcMailProviderHint');
+        if (hintEl) {
+            hintEl.textContent = preset.hint || '';
+            hintEl.classList.toggle('hidden', !preset.hint);
+        }
+        if (provKey === 'custom') return;
+
+        const incHost = document.getElementById('ofcMailIncHost');
+        const incPort = document.getElementById('ofcMailIncPort');
+        const incSsl  = document.getElementById('ofcMailIncSsl');
+        const smHost  = document.getElementById('ofcMailSmtpHost');
+        const smPort  = document.getElementById('ofcMailSmtpPort');
+        const smSsl   = document.getElementById('ofcMailSmtpSsl');
+
+        if (proto === 'pop3') {
+            if (incHost) incHost.value = preset.pop3_host || '';
+            if (incPort) incPort.value = preset.pop3_port || 995;
+            if (incSsl)  incSsl.value  = preset.pop3_ssl || 'ssl';
+        } else {
+            if (incHost) incHost.value = preset.imap_host || '';
+            if (incPort) incPort.value = preset.imap_port || 993;
+            if (incSsl)  incSsl.value  = preset.imap_ssl || 'ssl';
+        }
+        if (smHost) smHost.value = preset.smtp_host || '';
+        if (smPort) smPort.value = preset.smtp_port || 587;
+        if (smSsl)  smSsl.value  = preset.smtp_ssl || 'tls';
+    }
+
+    async function loadLiveMailFolder(folder, page = 1) {
+        currentLiveMailFolder = folder;
+        currentLiveMailPage   = Math.max(1, page);
+        closeLiveMailReader();
+
+        const tbl = document.getElementById('liveMailMessagesTable');
+        if (tbl) {
+            tbl.innerHTML = '<div class="p-10 text-center text-xs text-slate-400">⏳ Rufe Nachrichten live vom Mailserver ab (ohne lokale Speicherung)…</div>';
+        }
+
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'list');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('folder', currentLiveMailFolder);
+            fd.append('page', String(currentLiveMailPage));
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+
+            if (!data || !data.ok) {
+                if (tbl) {
+                    tbl.innerHTML = `<div class="p-8 text-center text-xs text-rose-600 dark:text-rose-400 font-semibold">${escapeOfficeHtml(data?.error || 'Fehler beim Abruf.')}</div>`;
+                }
+                return;
+            }
+
+            // Ordnerliste aktualisieren
+            const folderBox = document.getElementById('liveMailFolderList');
+            if (folderBox && data.folders) {
+                folderBox.innerHTML = Object.entries(data.folders).map(([fKey, fLabel]) => {
+                    const isAct = fKey === currentLiveMailFolder;
+                    if (isAct) {
+                        const titleEl = document.getElementById('liveMailCurrentFolderTitle');
+                        if (titleEl) titleEl.textContent = fLabel;
+                    }
+                    return `
+                        <button type="button" data-f-key="${escapeOfficeHtml(fKey)}" onclick="loadLiveMailFolder(this.getAttribute('data-f-key'), 1)"
+                                class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${isAct ? 'bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}">
+                            <span class="truncate">${escapeOfficeHtml(fLabel)}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            const total = Number(data.total || 0);
+            const badge = document.getElementById('liveMailTotalBadge');
+            if (badge) badge.textContent = `${total} E-Mails`;
+
+            const pageInfo = document.getElementById('lblMailPageInfo');
+            const maxPage  = Math.max(1, Math.ceil(total / 20));
+            if (pageInfo) pageInfo.textContent = `Seite ${currentLiveMailPage} von ${maxPage}`;
+
+            const prevBtn = document.getElementById('btnMailPrevPage');
+            const nextBtn = document.getElementById('btnMailNextPage');
+            if (prevBtn) prevBtn.disabled = (currentLiveMailPage <= 1);
+            if (nextBtn) nextBtn.disabled = (currentLiveMailPage >= maxPage);
+
+            if (!Array.isArray(data.messages) || data.messages.length === 0) {
+                if (tbl) tbl.innerHTML = '<div class="p-10 text-center text-xs text-slate-400">Keine Nachrichten in diesem Ordner.</div>';
+                return;
+            }
+
+            if (tbl) {
+                tbl.innerHTML = data.messages.map((m) => {
+                    const unseenCls = !m.seen ? 'font-extrabold bg-brand-50/30 dark:bg-brand-950/20' : 'font-medium';
+                    const hay       = escapeOfficeHtml((m.subject + ' ' + m.from).toLowerCase());
+                    return `
+                        <div data-live-mail-row="1" data-search="${hay}" data-uid="${escapeOfficeHtml(m.uid)}"
+                             onclick="openLiveSingleEmail(this.getAttribute('data-uid'))"
+                             class="p-3.5 sm:px-5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 ${unseenCls}">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    ${!m.seen ? '<span class="w-2 h-2 rounded-full bg-brand-600 shrink-0"></span>' : ''}
+                                    <span class="text-xs sm:text-sm text-slate-900 dark:text-white truncate">${escapeOfficeHtml(m.subject)}</span>
+                                </div>
+                                <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                    ${escapeOfficeHtml(m.from)}
+                                </div>
+                            </div>
+                            <div class="text-[11px] font-mono text-slate-400 shrink-0">
+                                ${escapeOfficeHtml(m.date)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        } catch (err) {
+            if (tbl) tbl.innerHTML = '<div class="p-8 text-center text-xs text-rose-500">Verbindungsfehler beim Laden der Nachrichten.</div>';
+        }
+    }
+
+    function changeLiveMailPage(delta) {
+        loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage + delta);
+    }
+
+    function filterVisibleLiveEmails() {
+        const q = (document.getElementById('liveMailFilterInput')?.value || '').trim().toLowerCase();
+        document.querySelectorAll('[data-live-mail-row="1"]').forEach((row) => {
+            const hay = row.getAttribute('data-search') || '';
+            row.classList.toggle('hidden', q !== '' && !hay.includes(q));
+        });
+    }
+
+    async function openLiveSingleEmail(uid) {
+        currentOpenedMailUid = uid;
+        const listPanel   = document.getElementById('liveMailListPanel');
+        const readerPanel = document.getElementById('liveMailReaderPanel');
+        const bodyBox     = document.getElementById('readerMailBodyContainer');
+        const attBox      = document.getElementById('readerMailAttachments');
+
+        listPanel?.classList.add('hidden');
+        readerPanel?.classList.remove('hidden');
+
+        document.getElementById('readerMailSubject').textContent = '⏳ Lade Nachricht live…';
+        document.getElementById('readerMailFrom').textContent    = '';
+        document.getElementById('readerMailTo').textContent      = '';
+        document.getElementById('readerMailDate').textContent    = '';
+        if (bodyBox) bodyBox.textContent = '';
+        if (attBox) {
+            attBox.classList.add('hidden');
+            attBox.innerHTML = '';
+        }
+
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'read');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('folder', currentLiveMailFolder);
+            fd.append('uid', uid);
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+
+            if (!data || !data.ok || !data.mail) {
+                if (bodyBox) bodyBox.textContent = data?.error || 'Nachricht konnte nicht geladen werden.';
+                return;
+            }
+
+            const m = data.mail;
+            currentOpenedMail = m;
+
+            document.getElementById('readerMailSubject').textContent = m.subject || '(Kein Betreff)';
+            document.getElementById('readerMailFrom').textContent    = m.from || '';
+            document.getElementById('readerMailTo').textContent      = m.to || '';
+            document.getElementById('readerMailDate').textContent    = m.date || '';
+
+            if (Array.isArray(m.attachments) && m.attachments.length > 0 && attBox) {
+                attBox.classList.remove('hidden');
+                attBox.innerHTML = '<div class="text-[11px] font-bold text-slate-500 uppercase">📎 Anhänge (' + m.attachments.length + ')</div>' +
+                    '<div class="flex flex-wrap gap-2">' +
+                    m.attachments.map((att, idx) => `
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-xs">
+                            <span class="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[180px]">${escapeOfficeHtml(att.filename)}</span>
+                            <a href="data:${escapeOfficeHtml(att.mime)};base64,${att.content_b64}" download="${escapeOfficeHtml(att.filename)}"
+                               class="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-[11px] font-bold">
+                                ⬇️ Download
+                            </a>
+                            <button type="button" onclick="saveMailAttachmentToCloud(${idx}, this)"
+                                    class="px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold cursor-pointer">
+                                ☁️ In Cloud speichern
+                            </button>
+                        </div>
+                    `).join('') + '</div>';
+            }
+
+            if (bodyBox) {
+                if (m.html_body && m.html_body.trim() !== '') {
+                    bodyBox.innerHTML = `<div class="prose dark:prose-invert max-w-none text-xs sm:text-sm whitespace-normal">${m.html_body}</div>`;
+                } else {
+                    bodyBox.textContent = m.text_body || '(Kein Textinhalt)';
+                }
+            }
+        } catch (err) {
+            if (bodyBox) bodyBox.textContent = 'Fehler beim Laden der E-Mail.';
+        }
+    }
+
+    async function saveMailAttachmentToCloud(attIndex, btnEl) {
+        if (!currentOpenedMail || !Array.isArray(currentOpenedMail.attachments)) return;
+        const att = currentOpenedMail.attachments[attIndex];
+        if (!att) return;
+
+        const orig = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = '⏳ Speichere…';
+
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'save_att');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('filename', att.filename);
+            fd.append('mime', att.mime);
+            fd.append('content_b64', att.content_b64);
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data && data.ok) {
+                if (data.office_ok && data.file_id) {
+                    btnEl.outerHTML = `<a href="office.php?id=${Number(data.file_id)}" class="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">✏️ Im Office öffnen</a>`;
+                } else {
+                    btnEl.textContent = '✅ Gespeichert';
+                }
+            } else {
+                alert(data?.error || 'Fehler beim Speichern.');
+                btnEl.disabled = false;
+                btnEl.textContent = orig;
+            }
+        } catch (e) {
+            btnEl.disabled = false;
+            btnEl.textContent = orig;
+        }
+    }
+
+    function closeLiveMailReader() {
+        document.getElementById('liveMailReaderPanel')?.classList.add('hidden');
+        document.getElementById('liveMailListPanel')?.classList.remove('hidden');
+    }
+
+    function openOfficeMailComposer() {
+        document.getElementById('liveMailComposePanel')?.classList.remove('hidden');
+        document.getElementById('composeTo')?.focus();
+    }
+
+    function closeOfficeMailComposer() {
+        document.getElementById('liveMailComposePanel')?.classList.add('hidden');
+    }
+
+    function openOfficeMailComposerWithFile(fileId, fileName) {
+        switchOfficeMainTab('mail');
+        if (!HAS_OFFICE_MAIL_ACC) return;
+        openOfficeMailComposer();
+        const sel = document.getElementById('composeCloudFileId');
+        if (sel) sel.value = String(fileId);
+        const subj = document.getElementById('composeSubject');
+        if (subj && subj.value.trim() === '') {
+            subj.value = 'Dokument: ' + fileName;
+        }
+    }
+
+    function replyToCurrentLiveMail() {
+        if (!currentOpenedMail) return;
+        openOfficeMailComposer();
+        document.getElementById('composeTo').value = currentOpenedMail.from || '';
+        const s = currentOpenedMail.subject || '';
+        document.getElementById('composeSubject').value = s.toLowerCase().startsWith('re:') ? s : ('Re: ' + s);
+        document.getElementById('composeBody').value = `\n\n--- Ursprüngliche Nachricht von ${currentOpenedMail.from} (${currentOpenedMail.date}) ---\n` + (currentOpenedMail.text_body || '');
+    }
+
+    function forwardCurrentLiveMail() {
+        if (!currentOpenedMail) return;
+        openOfficeMailComposer();
+        document.getElementById('composeTo').value = '';
+        const s = currentOpenedMail.subject || '';
+        document.getElementById('composeSubject').value = s.toLowerCase().startsWith('fwd:') ? s : ('Fwd: ' + s);
+        document.getElementById('composeBody').value = `\n\n--- Weitergeleitete Nachricht von ${currentOpenedMail.from} (${currentOpenedMail.date}) ---\n` + (currentOpenedMail.text_body || '');
+    }
+
+    async function deleteCurrentLiveMail() {
+        if (!currentOpenedMailUid || !confirm('Diese E-Mail wirklich auf dem Mailserver löschen?')) return;
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'delete');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('folder', currentLiveMailFolder);
+            fd.append('uid', currentOpenedMailUid);
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data && data.ok) {
+                loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage);
+            } else {
+                alert(data?.message || 'Konnte nicht gelöscht werden.');
+            }
+        } catch (e) {}
+    }
+
+    async function submitLiveMailSend(ev) {
+        ev.preventDefault();
+        const statusEl = document.getElementById('composeSendStatus');
+        const btnEl    = document.getElementById('btnSendLiveMail');
+        if (statusEl) {
+            statusEl.textContent = '⏳ Sende E-Mail direkt über deinen Provider…';
+            statusEl.className   = 'text-xs font-semibold text-indigo-600 dark:text-indigo-400';
+        }
+        if (btnEl) btnEl.disabled = true;
+
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'send');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('to', document.getElementById('composeTo')?.value || '');
+            fd.append('cc', document.getElementById('composeCc')?.value || '');
+            fd.append('subject', document.getElementById('composeSubject')?.value || '');
+            fd.append('body', document.getElementById('composeBody')?.value || '');
+            fd.append('cloud_file_id', document.getElementById('composeCloudFileId')?.value || '0');
+
+            const upInput = document.getElementById('composeUploadFile');
+            if (upInput && upInput.files && upInput.files[0]) {
+                fd.append('upload_att', upInput.files[0]);
+            }
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+
+            if (data && data.ok) {
+                if (statusEl) {
+                    statusEl.textContent = data.message || '✅ Gesendet!';
+                    statusEl.className   = 'text-xs font-bold text-emerald-600 dark:text-emerald-400';
+                }
+                setTimeout(() => {
+                    closeOfficeMailComposer();
+                    document.getElementById('liveMailComposeForm')?.reset();
+                    if (statusEl) statusEl.textContent = '';
+                }, 1200);
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = data?.message || 'Fehler beim Senden.';
+                    statusEl.className   = 'text-xs font-bold text-rose-600 dark:text-rose-400';
+                }
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.textContent = 'Netzwerkfehler beim Senden.';
+                statusEl.className   = 'text-xs font-bold text-rose-600 dark:text-rose-400';
+            }
+        } finally {
+            if (btnEl) btnEl.disabled = false;
+        }
+    }
+
+    function escapeOfficeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('ofcMailIncHost')) {
+            applyOfficeMailPreset();
+        }
+        if (HAS_OFFICE_MAIL_ACC && <?= json_encode($activeOfficeMainTab === 'mail') ?>) {
+            liveMailInitialized = true;
+            loadLiveMailFolder('INBOX', 1);
+        }
+    });
     </script>
     <?php
     require_once __DIR__ . '/includes/footer.php';

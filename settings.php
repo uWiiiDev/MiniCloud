@@ -5,6 +5,7 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/i18n.php';
+require_once __DIR__ . '/includes/mail_client.php';
 
 $pdo = getDB();
 $loggedIn = isLoggedIn();
@@ -268,7 +269,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
         header('Location: settings.php#app-passwords');
         exit;
     }
+
+    if ($action === 'save_mail_account' || $action === 'test_mail_account') {
+        ensureUserMailAccountSchema($pdo);
+        $uid          = (int)$userRow['id'];
+        $existingMail = getUserMailAccountConfig($pdo, $uid);
+
+        $emailAddr    = mb_substr(trim((string)($_POST['mail_email'] ?? '')), 0, 185);
+        $senderName   = mb_substr(trim((string)($_POST['mail_sender_name'] ?? '')), 0, 140);
+        $providerKey  = mb_substr(trim((string)($_POST['mail_provider'] ?? 'custom')), 0, 35);
+        $protocol     = strtolower(trim((string)($_POST['mail_protocol'] ?? 'imap')));
+        if (!in_array($protocol, ['imap', 'pop3'], true)) {
+            $protocol = 'imap';
+        }
+        $incHost      = mb_substr(trim((string)($_POST['mail_incoming_host'] ?? '')), 0, 185);
+        $incPort      = max(1, min(65535, (int)($_POST['mail_incoming_port'] ?? ($protocol === 'pop3' ? 995 : 993))));
+        $incSsl       = in_array($_POST['mail_incoming_ssl'] ?? 'ssl', ['ssl', 'tls', 'none'], true) ? (string)$_POST['mail_incoming_ssl'] : 'ssl';
+        $smtpHost     = mb_substr(trim((string)($_POST['mail_smtp_host'] ?? '')), 0, 185);
+        $smtpPort     = max(1, min(65535, (int)($_POST['mail_smtp_port'] ?? 587)));
+        $smtpSsl      = in_array($_POST['mail_smtp_ssl'] ?? 'tls', ['ssl', 'tls', 'none'], true) ? (string)$_POST['mail_smtp_ssl'] : 'tls';
+        $mailUser     = mb_substr(trim((string)($_POST['mail_username'] ?? '')), 0, 185);
+        if ($mailUser === '') {
+            $mailUser = $emailAddr;
+        }
+        $mailPass     = (string)($_POST['mail_password'] ?? '');
+        if ($mailPass === '' && $existingMail !== null) {
+            $mailPass = (string)$existingMail['password'];
+        }
+
+        if ($emailAddr === '' || $incHost === '' || $smtpHost === '' || $mailPass === '') {
+            setFlash('error', 'Bitte gib deine E-Mail-Adresse, die Serverdaten und dein E-Mail-Passwort ein.');
+            header('Location: settings.php#sec-mail');
+            exit;
+        }
+
+        $encPass = encryptMailPassword($mailPass, $uid);
+        $stmtUpMail = $pdo->prepare("
+            INSERT INTO user_mail_accounts
+                (user_id, email_address, sender_name, provider_key, protocol, incoming_host, incoming_port, incoming_ssl, smtp_host, smtp_port, smtp_ssl, username, encrypted_password, updated_at)
+            VALUES
+                (:uid, :em, :sn, :pk, :pr, :ih, :ip, :is, :sh, :sp, :ss, :un, :pw, NOW())
+            ON DUPLICATE KEY UPDATE
+                email_address      = VALUES(email_address),
+                sender_name        = VALUES(sender_name),
+                provider_key       = VALUES(provider_key),
+                protocol           = VALUES(protocol),
+                incoming_host      = VALUES(incoming_host),
+                incoming_port      = VALUES(incoming_port),
+                incoming_ssl       = VALUES(incoming_ssl),
+                smtp_host          = VALUES(smtp_host),
+                smtp_port          = VALUES(smtp_port),
+                smtp_ssl           = VALUES(smtp_ssl),
+                username           = VALUES(username),
+                encrypted_password = VALUES(encrypted_password),
+                updated_at         = NOW()
+        ");
+        $stmtUpMail->execute([
+            ':uid' => $uid,
+            ':em'  => $emailAddr,
+            ':sn'  => $senderName,
+            ':pk'  => $providerKey,
+            ':pr'  => $protocol,
+            ':ih'  => $incHost,
+            ':ip'  => $incPort,
+            ':is'  => $incSsl,
+            ':sh'  => $smtpHost,
+            ':sp'  => $smtpPort,
+            ':ss'  => $smtpSsl,
+            ':un'  => $mailUser,
+            ':pw'  => $encPass,
+        ]);
+
+        if ($action === 'test_mail_account') {
+            $testCfg = [
+                'email_address' => $emailAddr,
+                'protocol'      => $protocol,
+                'incoming_host' => $incHost,
+                'incoming_port' => $incPort,
+                'incoming_ssl'  => $incSsl,
+                'username'      => $mailUser,
+                'password'      => $mailPass,
+            ];
+            $testRes = testMailAccountConnection($testCfg);
+            setFlash($testRes['ok'] ? 'success' : 'error', $testRes['message']);
+        } else {
+            setFlash('success', '📧 Deine E-Mail-Verbindungsdaten wurden verschlüsselt hinterlegt (E-Mails selbst werden niemals gespeichert).');
+        }
+
+        header('Location: settings.php#sec-mail');
+        exit;
+    }
+
+    if ($action === 'delete_mail_account') {
+        ensureUserMailAccountSchema($pdo);
+        $uid = (int)$userRow['id'];
+        $pdo->prepare('DELETE FROM user_mail_accounts WHERE user_id = ?')->execute([$uid]);
+        unset($_SESSION['temp_mail_account_' . $uid]);
+        setFlash('success', '🗑️ Deine hinterlegten E-Mail-Zugangsdaten wurden vollständig gelöscht.');
+        header('Location: settings.php#sec-mail');
+        exit;
+    }
 }
+
+$mailAccountCfg  = $loggedIn && $userRow !== null ? getUserMailAccountConfig($pdo, (int)$userRow['id']) : null;
+$mailPresetsList = getMailProviderPresets();
 
 $newAppPasswordPlain = $_SESSION['new_app_password_plain'] ?? null;
 $newAppPasswordLabel = $_SESSION['new_app_password_label'] ?? null;
@@ -1384,6 +1488,260 @@ $themeGroups = [
                     Noch keine separaten App-Passwörter angelegt.
                 </p>
             <?php endif; ?>
+        </section>
+
+        <!-- E-MAIL-POSTFACH FÜR DAS OFFICE-MODUL (ZERO-STORAGE) -->
+        <section id="sec-mail" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                            📧 E-Mail-Postfach für das Office-Modul (IMAP / POP3 / SMTP)
+                        </h2>
+                        <!-- Platzsparender Ausrufezeichen-Button für den Zero-Storage-Hinweis -->
+                        <button type="button"
+                                onclick="document.getElementById('zeroStorageMailNoticeSettings').classList.toggle('hidden')"
+                                title="Datenschutz-Hinweis anzeigen (Keine Speicherung von Provider-Daten)"
+                                class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-950/80 hover:bg-amber-200 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-xs font-extrabold cursor-pointer transition-transform hover:scale-105">
+                            !
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Hinterlege hier deine Zugangsdaten für das Live-E-Mail-Programm im Office-Modul. Für alle gängigen Provider werden Server &amp; Ports automatisch ausgefüllt.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <?php if ($mailAccountCfg !== null): ?>
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                            ✅ <?= e(strtoupper((string)$mailAccountCfg['protocol'])) ?> eingerichtet
+                        </span>
+                    <?php endif; ?>
+                    <a href="office.php?tab=mail" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition-colors">
+                        📧 Office E-Mail öffnen &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Ausklappbarer Datenschutz-Hinweis (nur bei Klick auf "!" sichtbar) -->
+            <div id="zeroStorageMailNoticeSettings" class="hidden p-3.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800 text-xs text-amber-950 dark:text-amber-200 space-y-1">
+                <div class="font-bold flex items-center justify-between">
+                    <span>🔒 Oberste Prämisse: Keine Speicherung von E-Mail- &amp; Provider-Inhalten (Zero-Storage)</span>
+                    <button type="button" onclick="this.closest('#zeroStorageMailNoticeSettings').classList.add('hidden')" class="text-amber-700 dark:text-amber-300 font-bold cursor-pointer">✕</button>
+                </div>
+                <p class="leading-relaxed">
+                    Die MiniCloud speichert <strong>keinerlei E-Mails, Nachrichtentexte, Anhänge oder Ordnerinhalte</strong> deines Providers in der Datenbank oder auf der Festplatte. Alle Nachrichten werden ausschließlich für den Moment der Anzeige live im Arbeitsspeicher (RAM) übertragen. Bei Nutzung von <strong>POP3</strong> bleiben deine Nachrichten grundsätzlich unangetastet auf dem Server deines Providers liegen.
+                </p>
+            </div>
+
+            <form action="settings.php#sec-mail" method="post" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <!-- E-Mail-Adresse -->
+                    <div class="sm:col-span-4">
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deine E-Mail-Adresse *</label>
+                        <input type="email" name="mail_email" id="cfgMailEmail" required
+                               value="<?= e((string)($mailAccountCfg['email_address'] ?? $userRow['email'] ?? '')) ?>"
+                               oninput="autoDetectSettingsMailProvider(this.value)"
+                               placeholder="name@gmx.de / name@t-online.de"
+                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                    </div>
+
+                    <!-- Anzeigename beim Senden -->
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Absendername (optional)</label>
+                        <input type="text" name="mail_sender_name"
+                               value="<?= e((string)($mailAccountCfg['sender_name'] ?? $userRow['username'] ?? '')) ?>"
+                               placeholder="z. B. Uwe Benzelrath"
+                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white">
+                    </div>
+
+                    <!-- Provider-Vorlage -->
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">E-Mail-Provider (Auto-Fill)</label>
+                        <select name="mail_provider" id="cfgMailProvider" onchange="applySettingsMailPreset()"
+                                class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white cursor-pointer">
+                            <?php
+                            $curProv = (string)($mailAccountCfg['provider_key'] ?? detectMailProviderByEmail((string)($mailAccountCfg['email_address'] ?? $userRow['email'] ?? '')));
+                            foreach ($mailPresetsList as $pKey => $pMeta):
+                            ?>
+                                <option value="<?= e($pKey) ?>" <?= $curProv === $pKey ? 'selected' : '' ?>><?= e((string)$pMeta['label']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- Protokoll: IMAP vs. POP3 -->
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Abruf-Protokoll</label>
+                        <select name="mail_protocol" id="cfgMailProtocol" onchange="applySettingsMailPreset()"
+                                class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-900 dark:text-white cursor-pointer">
+                            <option value="imap" <?= ($mailAccountCfg['protocol'] ?? 'imap') === 'imap' ? 'selected' : '' ?>>IMAP (Empfohlen)</option>
+                            <option value="pop3" <?= ($mailAccountCfg['protocol'] ?? 'imap') === 'pop3' ? 'selected' : '' ?>>POP3 (Nur Posteingang)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Provider-Hinweiszeile -->
+                <div id="cfgMailProviderHint" class="text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/40 px-3 py-1.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800/60"></div>
+
+                <!-- Serverdaten & Ports (werden automatisch durch die Provider-Auswahl befüllt, bleiben aber frei editierbar) -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80">
+                    <div class="sm:col-span-4">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1" id="lblIncomingServer">Posteingangsserver (IMAP / POP3) *</label>
+                        <input type="text" name="mail_incoming_host" id="cfgMailIncHost" required
+                               value="<?= e((string)($mailAccountCfg['incoming_host'] ?? '')) ?>"
+                               placeholder="imap.gmx.net"
+                               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white">
+                    </div>
+                    <div class="sm:col-span-1">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Port *</label>
+                        <input type="number" name="mail_incoming_port" id="cfgMailIncPort" required
+                               value="<?= (int)($mailAccountCfg['incoming_port'] ?? 993) ?>"
+                               class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white">
+                    </div>
+                    <div class="sm:col-span-1">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Schutz</label>
+                        <select name="mail_incoming_ssl" id="cfgMailIncSsl"
+                                class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                            <option value="ssl" <?= ($mailAccountCfg['incoming_ssl'] ?? 'ssl') === 'ssl' ? 'selected' : '' ?>>SSL/TLS</option>
+                            <option value="tls" <?= ($mailAccountCfg['incoming_ssl'] ?? 'ssl') === 'tls' ? 'selected' : '' ?>>STARTTLS</option>
+                        </select>
+                    </div>
+
+                    <div class="sm:col-span-4">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Postausgangsserver (SMTP) *</label>
+                        <input type="text" name="mail_smtp_host" id="cfgMailSmtpHost" required
+                               value="<?= e((string)($mailAccountCfg['smtp_host'] ?? '')) ?>"
+                               placeholder="mail.gmx.net"
+                               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white">
+                    </div>
+                    <div class="sm:col-span-1">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Port *</label>
+                        <input type="number" name="mail_smtp_port" id="cfgMailSmtpPort" required
+                               value="<?= (int)($mailAccountCfg['smtp_port'] ?? 587) ?>"
+                               class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white">
+                    </div>
+                    <div class="sm:col-span-1">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Schutz</label>
+                        <select name="mail_smtp_ssl" id="cfgMailSmtpSsl"
+                                class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                            <option value="tls" <?= ($mailAccountCfg['smtp_ssl'] ?? 'tls') === 'tls' ? 'selected' : '' ?>>STARTTLS</option>
+                            <option value="ssl" <?= ($mailAccountCfg['smtp_ssl'] ?? 'tls') === 'ssl' ? 'selected' : '' ?>>SSL/TLS</option>
+                        </select>
+                    </div>
+
+                    <div class="sm:col-span-6">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Benutzername (meist identisch mit der E-Mail-Adresse)</label>
+                        <input type="text" name="mail_username" id="cfgMailUsername"
+                               value="<?= e((string)($mailAccountCfg['username'] ?? '')) ?>"
+                               placeholder="Leer lassen = E-Mail-Adresse verwenden"
+                               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    </div>
+                    <div class="sm:col-span-6">
+                        <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                            E-Mail-Passwort / App-Passwort <?= $mailAccountCfg !== null ? '(leer lassen, um gespeichertes Passwort zu behalten)' : '*' ?>
+                        </label>
+                        <input type="password" name="mail_password"
+                               <?= $mailAccountCfg === null ? 'required' : '' ?>
+                               placeholder="<?= $mailAccountCfg !== null ? '•••••••••••••••• (gespeichert)' : 'Dein E-Mail- oder App-Passwort' ?>"
+                               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="submit" name="action" value="save_mail_account"
+                                class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-xs cursor-pointer">
+                            💾 Zugangsdaten speichern
+                        </button>
+                        <button type="submit" name="action" value="test_mail_account"
+                                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs cursor-pointer">
+                            🔌 Speichern &amp; Verbindung testen
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <?php if ($mailAccountCfg !== null): ?>
+                <form action="settings.php#sec-mail" method="post" onsubmit="return confirm('Hinterlegte E-Mail-Zugangsdaten wirklich löschen?');" class="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                    <input type="hidden" name="action" value="delete_mail_account">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white font-semibold text-xs transition-colors cursor-pointer">
+                        🗑️ Zugangsdaten wieder entfernen
+                    </button>
+                </form>
+            <?php endif; ?>
+
+            <script>
+            const MAIL_PROVIDER_PRESETS = <?= json_encode($mailPresetsList, JSON_UNESCAPED_UNICODE) ?>;
+            const HAS_SAVED_MAIL_CFG    = <?= $mailAccountCfg !== null ? 'true' : 'false' ?>;
+
+            function autoDetectSettingsMailProvider(emailVal) {
+                const em = (emailVal || '').trim().toLowerCase();
+                if (!em.includes('@')) return;
+                const domain = em.split('@').pop();
+                const sel = document.getElementById('cfgMailProvider');
+                if (!sel) return;
+
+                for (const [key, preset] of Object.entries(MAIL_PROVIDER_PRESETS)) {
+                    if (Array.isArray(preset.domains) && preset.domains.includes(domain)) {
+                        sel.value = key;
+                        applySettingsMailPreset();
+                        break;
+                    }
+                }
+            }
+
+            function applySettingsMailPreset() {
+                const provKey = document.getElementById('cfgMailProvider')?.value || 'custom';
+                const proto   = document.getElementById('cfgMailProtocol')?.value || 'imap';
+                const preset  = MAIL_PROVIDER_PRESETS[provKey];
+                if (!preset) return;
+
+                const hintEl = document.getElementById('cfgMailProviderHint');
+                if (hintEl) {
+                    hintEl.textContent = preset.hint || '';
+                    hintEl.classList.toggle('hidden', !preset.hint);
+                }
+
+                if (provKey === 'custom') return;
+
+                const incHost = document.getElementById('cfgMailIncHost');
+                const incPort = document.getElementById('cfgMailIncPort');
+                const incSsl  = document.getElementById('cfgMailIncSsl');
+                const smHost  = document.getElementById('cfgMailSmtpHost');
+                const smPort  = document.getElementById('cfgMailSmtpPort');
+                const smSsl   = document.getElementById('cfgMailSmtpSsl');
+
+                if (proto === 'pop3') {
+                    if (incHost) incHost.value = preset.pop3_host || '';
+                    if (incPort) incPort.value = preset.pop3_port || 995;
+                    if (incSsl)  incSsl.value  = preset.pop3_ssl || 'ssl';
+                } else {
+                    if (incHost) incHost.value = preset.imap_host || '';
+                    if (incPort) incPort.value = preset.imap_port || 993;
+                    if (incSsl)  incSsl.value  = preset.imap_ssl || 'ssl';
+                }
+
+                if (smHost) smHost.value = preset.smtp_host || '';
+                if (smPort) smPort.value = preset.smtp_port || 587;
+                if (smSsl)  smSsl.value  = preset.smtp_ssl || 'tls';
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const incHost = document.getElementById('cfgMailIncHost');
+                if (incHost && incHost.value.trim() === '') {
+                    applySettingsMailPreset();
+                } else {
+                    const provKey = document.getElementById('cfgMailProvider')?.value || 'custom';
+                    const hintEl  = document.getElementById('cfgMailProviderHint');
+                    if (hintEl && MAIL_PROVIDER_PRESETS[provKey]?.hint) {
+                        hintEl.textContent = MAIL_PROVIDER_PRESETS[provKey].hint;
+                    }
+                }
+            });
+            </script>
         </section>
     <?php endif; ?>
 </div>
