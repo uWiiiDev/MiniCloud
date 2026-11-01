@@ -880,7 +880,7 @@ if ($fileId <= 0) {
 
     if ($mailAction !== '') {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !verifyCsrfToken($_POST['csrf_token'] ?? '')) {
-            if (in_array($mailAction, ['list', 'read', 'delete', 'send', 'save_att'], true)) {
+            if (in_array($mailAction, ['list', 'read', 'delete', 'bulk', 'send', 'save_att'], true)) {
                 header('Content-Type: application/json; charset=UTF-8');
                 echo json_encode(['ok' => false, 'error' => 'Ungültiges Sicherheits-Token (CSRF).']);
                 exit;
@@ -1075,6 +1075,20 @@ if ($fileId <= 0) {
             $res['account_id']    = (int)$mailCfg['id'];
             $res['account_email'] = (string)$mailCfg['email_address'];
             $res['account_label'] = (string)($mailCfg['account_label'] ?: $mailCfg['email_address']);
+            echo json_encode($res);
+            exit;
+        }
+
+        // Massen-Aktionen über mehrere ausgewählte E-Mails (Löschen, Als gelesen / ungelesen markieren)
+        if ($mailAction === 'bulk') {
+            $bulkOp    = trim((string)($_POST['bulk_op'] ?? 'delete'));
+            $itemsJson = (string)($_POST['items_json'] ?? '[]');
+            $items     = json_decode($itemsJson, true);
+            if (!is_array($items) || empty($items)) {
+                echo json_encode(['ok' => false, 'message' => 'Keine E-Mails ausgewählt.']);
+                exit;
+            }
+            $res = executeBulkLiveMailAction($pdo, $userId, $bulkOp, $items);
             echo json_encode($res);
             exit;
         }
@@ -2130,7 +2144,12 @@ if ($fileId <= 0) {
                         <!-- 3. Live-Nachrichtenliste des gewählten Postfachs oder aller Postfächer -->
                         <div id="liveMailListPanel" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
                             <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-2.5">
+                                    <label class="inline-flex items-center cursor-pointer" title="Alle sichtbaren E-Mails auswählen / abwählen">
+                                        <input type="checkbox" id="liveMailSelectAllCb"
+                                               onchange="toggleAllLiveMailCheckboxes(this.checked)"
+                                               class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer">
+                                    </label>
                                     <h3 id="liveMailCurrentFolderTitle" class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                                         <?= count($userMailAccounts) > 1 ? '🌐 Alle Postfächer (Gemeinsamer Posteingang)' : '📥 Posteingang' ?>
                                     </h3>
@@ -2146,6 +2165,32 @@ if ($fileId <= 0) {
                                     <button type="button" onclick="loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage)"
                                             class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 text-xs font-bold text-brand-600 dark:text-brand-400 cursor-pointer">
                                         🔄 Aktualisieren
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Mehrfach-Aktionsleiste (erscheint automatisch, sobald links mindestens eine E-Mail angehakt ist) -->
+                            <div id="liveMailBulkBar" class="hidden px-4 py-2.5 bg-brand-50/90 dark:bg-brand-950/50 border-b border-brand-200 dark:border-brand-800/80 flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex items-center gap-2 text-xs font-extrabold text-brand-800 dark:text-brand-200">
+                                    <span>☑️</span>
+                                    <span id="liveMailBulkCountLabel">0 ausgewählt</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <button type="button" onclick="executeLiveMailBulk('mark_seen')"
+                                            class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
+                                        ✉️ Als gelesen
+                                    </button>
+                                    <button type="button" onclick="executeLiveMailBulk('mark_unseen')"
+                                            class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
+                                        📩 Als ungelesen
+                                    </button>
+                                    <button type="button" onclick="executeLiveMailBulk('delete')"
+                                            class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer">
+                                        🗑️ Ausgewählte löschen
+                                    </button>
+                                    <button type="button" onclick="toggleAllLiveMailCheckboxes(false)"
+                                            class="px-2 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white text-xs font-bold cursor-pointer">
+                                        ✕ Aufheben
                                     </button>
                                 </div>
                             </div>
@@ -2358,6 +2403,10 @@ if ($fileId <= 0) {
         currentLiveMailPage   = Math.max(1, page);
         closeLiveMailReader();
 
+        const selAllCb = document.getElementById('liveMailSelectAllCb');
+        if (selAllCb) selAllCb.checked = false;
+        document.getElementById('liveMailBulkBar')?.classList.add('hidden');
+
         const tbl    = document.getElementById('liveMailMessagesTable');
         const errBox = document.getElementById('liveMailUnifiedErrors');
         if (errBox) {
@@ -2449,15 +2498,26 @@ if ($fileId <= 0) {
                     const accBadge  = accLbl !== ''
                         ? `<span class="px-2 py-0.5 rounded-md border text-[10px] font-bold shrink-0 ${bColor}">${escapeOfficeHtml(accLbl)}</span>`
                         : '';
+                    const safeUid   = escapeOfficeHtml(m.uid);
+                    const safeAccId = Number(m.account_id || 0);
+                    const safeFold  = escapeOfficeHtml(m.folder || currentLiveMailFolder);
 
                     return `
                         <div data-live-mail-row="1"
                              data-search="${hay}"
-                             data-uid="${escapeOfficeHtml(m.uid)}"
-                             data-acc-id="${Number(m.account_id || 0)}"
-                             data-folder="${escapeOfficeHtml(m.folder || currentLiveMailFolder)}"
+                             data-uid="${safeUid}"
+                             data-acc-id="${safeAccId}"
+                             data-folder="${safeFold}"
                              onclick="openLiveSingleEmail(this.getAttribute('data-uid'), Number(this.getAttribute('data-acc-id')), this.getAttribute('data-folder'))"
-                             class="p-3.5 sm:px-5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 ${unseenCls}">
+                             class="p-3.5 sm:px-5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer flex items-start sm:items-center justify-between gap-3 ${unseenCls}">
+                            <div class="pt-0.5 sm:pt-0 shrink-0" onclick="event.stopPropagation();">
+                                <input type="checkbox"
+                                       class="live-mail-row-cb w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                       data-uid="${safeUid}"
+                                       data-acc-id="${safeAccId}"
+                                       data-folder="${safeFold}"
+                                       onchange="updateLiveMailBulkBar()">
+                            </div>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2">
                                     ${!m.seen ? '<span class="w-2 h-2 rounded-full bg-brand-600 shrink-0"></span>' : ''}
@@ -2480,6 +2540,86 @@ if ($fileId <= 0) {
         }
     }
 
+    function toggleAllLiveMailCheckboxes(checked) {
+        const masterCb = document.getElementById('liveMailSelectAllCb');
+        if (masterCb) masterCb.checked = !!checked;
+
+        document.querySelectorAll('[data-live-mail-row="1"]').forEach((row) => {
+            if (row.classList.contains('hidden')) return;
+            const cb = row.querySelector('.live-mail-row-cb');
+            if (cb) cb.checked = !!checked;
+        });
+        updateLiveMailBulkBar();
+    }
+
+    function updateLiveMailBulkBar() {
+        const allVisibleCbs = [];
+        const checkedCbs    = [];
+
+        document.querySelectorAll('[data-live-mail-row="1"]').forEach((row) => {
+            if (row.classList.contains('hidden')) return;
+            const cb = row.querySelector('.live-mail-row-cb');
+            if (!cb) return;
+            allVisibleCbs.push(cb);
+            if (cb.checked) checkedCbs.push(cb);
+        });
+
+        const masterCb = document.getElementById('liveMailSelectAllCb');
+        if (masterCb) {
+            masterCb.checked = allVisibleCbs.length > 0 && checkedCbs.length === allVisibleCbs.length;
+        }
+
+        const bulkBar = document.getElementById('liveMailBulkBar');
+        const cntLbl  = document.getElementById('liveMailBulkCountLabel');
+        if (cntLbl) {
+            cntLbl.textContent = `${checkedCbs.length} ausgewählt`;
+        }
+        if (bulkBar) {
+            bulkBar.classList.toggle('hidden', checkedCbs.length === 0);
+        }
+    }
+
+    async function executeLiveMailBulk(bulkOp) {
+        const items = [];
+        document.querySelectorAll('.live-mail-row-cb:checked').forEach((cb) => {
+            items.push({
+                uid:        cb.getAttribute('data-uid') || '',
+                account_id: Number(cb.getAttribute('data-acc-id') || 0),
+                folder:     cb.getAttribute('data-folder') || currentLiveMailFolder
+            });
+        });
+
+        if (items.length === 0) return;
+
+        if (bulkOp === 'delete') {
+            if (!confirm(`Möchtest du die ${items.length} ausgewählten E-Mail(s) wirklich auf dem Mailserver löschen?`)) {
+                return;
+            }
+        }
+
+        const cntLbl = document.getElementById('liveMailBulkCountLabel');
+        if (cntLbl) cntLbl.textContent = `⏳ Führe Aktion für ${items.length} E-Mail(s) aus…`;
+
+        try {
+            const fd = new FormData();
+            fd.append('mail_action', 'bulk');
+            fd.append('csrf_token', OFFICE_MAIL_CSRF);
+            fd.append('bulk_op', bulkOp);
+            fd.append('items_json', JSON.stringify(items));
+
+            const res  = await fetch('office.php', { method: 'POST', body: fd });
+            const data = await res.json();
+
+            if (!data || !data.ok) {
+                alert(data?.message || 'Fehler bei der Massen-Aktion.');
+            }
+            loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage);
+        } catch (err) {
+            alert('Netzwerkfehler bei der Massen-Aktion.');
+            updateLiveMailBulkBar();
+        }
+    }
+
     function changeLiveMailPage(delta) {
         loadLiveMailFolder(currentLiveMailFolder, currentLiveMailPage + delta);
     }
@@ -2490,6 +2630,7 @@ if ($fileId <= 0) {
             const hay = row.getAttribute('data-search') || '';
             row.classList.toggle('hidden', q !== '' && !hay.includes(q));
         });
+        updateLiveMailBulkBar();
     }
 
     async function openLiveSingleEmail(uid, accId = 0, folder = 'INBOX') {

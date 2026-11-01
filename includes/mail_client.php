@@ -1286,6 +1286,147 @@ function deleteLiveEmailOnServer(array $cfg, string $folder, string $uid): array
     ];
 }
 
+/**
+ * Führt eine Massen-Aktion (Massenlöschen, Als gelesen/ungelesen markieren) über eine oder mehrere
+ * ausgewählte E-Mails aus – gebündelt pro Postfach & Ordner in einer einzigen Server-Verbindung.
+ *
+ * @param array<int, array{uid?: mixed, account_id?: mixed, folder?: mixed}> $items
+ * @return array{ok: bool, message: string, affected: int, errors: array<int, string>}
+ */
+function executeBulkLiveMailAction(PDO $pdo, int $userId, string $op, array $items): array
+{
+    if (!in_array($op, ['delete', 'mark_seen', 'mark_unseen'], true)) {
+        return ['ok' => false, 'message' => 'Ungültige Massen-Aktion.', 'affected' => 0, 'errors' => []];
+    }
+
+    // Gruppiere ausgewählte E-Mails nach (account_id, folder)
+    $grouped = [];
+    foreach ($items as $it) {
+        if (!is_array($it)) {
+            continue;
+        }
+        $uidInt = max(0, (int)($it['uid'] ?? 0));
+        if ($uidInt <= 0) {
+            continue;
+        }
+        $accId  = (int)($it['account_id'] ?? 0);
+        $folder = trim((string)($it['folder'] ?? 'INBOX')) ?: 'INBOX';
+        $gKey   = $accId . '|' . $folder;
+        if (!isset($grouped[$gKey])) {
+            $grouped[$gKey] = [
+                'account_id' => $accId,
+                'folder'     => $folder,
+                'uids'       => [],
+            ];
+        }
+        $grouped[$gKey]['uids'][$uidInt] = $uidInt;
+    }
+
+    if (empty($grouped)) {
+        return ['ok' => false, 'message' => 'Keine gültigen E-Mails ausgewählt.', 'affected' => 0, 'errors' => []];
+    }
+
+    $affected = 0;
+    $errors   = [];
+
+    foreach ($grouped as $grp) {
+        $accCfg = getUserMailAccountById($pdo, $userId, (int)$grp['account_id']);
+        if ($accCfg === null) {
+            $errors[] = 'Postfach nicht gefunden.';
+            continue;
+        }
+
+        $uids  = array_values($grp['uids']);
+        $proto = strtolower((string)($accCfg['protocol'] ?? 'imap'));
+        $lbl   = (string)($accCfg['account_label'] ?: $accCfg['email_address']);
+
+        if ($proto === 'pop3') {
+            if ($op !== 'delete') {
+                // POP3 unterstützt technisch keine Server-Flags für gelesen/ungelesen
+                $affected += count($uids);
+                continue;
+            }
+            $conn = openPop3Connection($accCfg);
+            if (!$conn['ok']) {
+                $errors[] = "{$lbl}: " . (string)$conn['error'];
+                continue;
+            }
+            $fp = $conn['fp'];
+            // Bei POP3 absteigend löschen, falls Nummern sich verschieben
+            rsort($uids, SORT_NUMERIC);
+            foreach ($uids as $u) {
+                fwrite($fp, "DELE {$u}\r\n");
+                $r = (string)@fgets($fp, 2048);
+                if (str_starts_with($r, '+OK')) {
+                    $affected++;
+                }
+            }
+            fwrite($fp, "QUIT\r\n");
+            @fclose($fp);
+            continue;
+        }
+
+        // IMAP: Alle UIDs des Ordners in einem einzigen UID STORE Befehl verarbeiten
+        $conn = openImapConnection($accCfg);
+        if (!$conn['ok']) {
+            $errors[] = "{$lbl}: " . (string)$conn['error'];
+            continue;
+        }
+        $fp = $conn['fp'];
+        $quotedFolder = '"' . addcslashes((string)$grp['folder'], '\\"') . '"';
+        fwrite($fp, "A03 SELECT {$quotedFolder}\r\n");
+        $sel = readImapTaggedResponse($fp, 'A03');
+        if (!$sel['ok']) {
+            fwrite($fp, "A99 LOGOUT\r\n");
+            @fclose($fp);
+            $errors[] = "{$lbl}: Ordner „{$grp['folder']}“ konnte nicht geöffnet werden.";
+            continue;
+        }
+
+        $uidSet = implode(',', $uids);
+        if ($op === 'delete') {
+            fwrite($fp, "A04 UID STORE {$uidSet} +FLAGS.SILENT (\\Deleted)\r\n");
+            $st = readImapTaggedResponse($fp, 'A04');
+            fwrite($fp, "A05 EXPUNGE\r\n");
+            $exp = readImapTaggedResponse($fp, 'A05');
+            if ($st['ok'] && $exp['ok']) {
+                $affected += count($uids);
+            } else {
+                $errors[] = "{$lbl}: Löschen fehlgeschlagen.";
+            }
+        } elseif ($op === 'mark_seen') {
+            fwrite($fp, "A04 UID STORE {$uidSet} +FLAGS.SILENT (\\Seen)\r\n");
+            $st = readImapTaggedResponse($fp, 'A04');
+            if ($st['ok']) {
+                $affected += count($uids);
+            }
+        } elseif ($op === 'mark_unseen') {
+            fwrite($fp, "A04 UID STORE {$uidSet} -FLAGS.SILENT (\\Seen)\r\n");
+            $st = readImapTaggedResponse($fp, 'A04');
+            if ($st['ok']) {
+                $affected += count($uids);
+            }
+        }
+
+        fwrite($fp, "A99 LOGOUT\r\n");
+        @fclose($fp);
+    }
+
+    $msg = match ($op) {
+        'delete'      => "{$affected} E-Mail(s) wurden auf dem Mailserver gelöscht.",
+        'mark_seen'   => "{$affected} E-Mail(s) als gelesen markiert.",
+        'mark_unseen' => "{$affected} E-Mail(s) als ungelesen markiert.",
+        default       => "{$affected} E-Mail(s) aktualisiert.",
+    };
+
+    return [
+        'ok'       => $affected > 0 || empty($errors),
+        'message'  => $msg,
+        'affected' => $affected,
+        'errors'   => $errors,
+    ];
+}
+
 // ============================================================================
 // SMTP-VERSAND (PORT 587 STARTTLS / 465 SSL – MIT OPTIONALEM CLOUD-ANHANG)
 // ============================================================================
