@@ -514,9 +514,247 @@ function normalizeClubMatchToken(string $name): string
         'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
         'munich' => 'muenchen', 'cologne' => 'koeln', 'nuremberg' => 'nuernberg',
     ]);
-    $s = preg_replace('/\b(1\.|fc|sv|vfb|vfl|tsg|rb|sc|bv|borussia|bayer|04|05|07|98|1846|1899|eintracht|spvgg|fortuna|hertha|bsc|arminia|dynamo|hans|st\.)\b/u', ' ', $s) ?? $s;
+    $s = preg_replace('/\b(1\.|fc|sv|vfb|vfl|tsg|rb|sc|bv|borussia|bayer|04|05|07|98|1846|1899|eintracht|spvgg|fortuna|hertha|bsc|arminia|dynamo|hans|st\.|ehc|erc|ec|ev|ecdc|esv|ehv|indians|red|bull)\b/u', ' ', $s) ?? $s;
     $s = preg_replace('/[^a-z0-9]+/', ' ', $s) ?? $s;
     return trim($s);
+}
+
+/**
+ * Ergänzt DEL- und DEL2-Spieltage direkt über die offiziellen Liga-Spielpläne (penny-del.org / del-2.org),
+ * falls OpenLigaDB-Moderatoren ein laufendes oder bereits beendetes Eishockey-Spiel noch nicht (oder unvollständig)
+ * eingetragen haben.
+ */
+function enrichHockeyMatchdayFromOfficialLeague(PDO $pdo, string $league, array $matchdayData, bool $forceRefresh = false): array
+{
+    if (empty($matchdayData) || !in_array($league, ['del', 'del2'], true)) {
+        return $matchdayData;
+    }
+
+    $now = time();
+    $needsEnrichment = false;
+    $targetMatchday  = 0;
+
+    foreach ($matchdayData as $m) {
+        if ($targetMatchday <= 0 && !empty($m['group']['groupOrderID'])) {
+            $targetMatchday = (int)$m['group']['groupOrderID'];
+        }
+        $ko = !empty($m['matchDateTime']) ? (int)strtotime((string)$m['matchDateTime']) : 0;
+        if ($ko > 0 && $ko <= $now && (empty($m['matchIsFinished']) || empty($m['matchResults']))) {
+            $needsEnrichment = true;
+        }
+    }
+
+    if (!$needsEnrichment) {
+        return $matchdayData;
+    }
+
+    $cacheKey = "official_hockey_{$league}";
+    $stmt = $pdo->prepare("SELECT json_data, updated_at FROM bundesliga_cache WHERE cache_key = ?");
+    $stmt->execute([$cacheKey]);
+    $cached = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $parsedGames = null;
+    if ($cached && !$forceRefresh && ($now - (int)strtotime((string)$cached['updated_at'])) <= 120) {
+        $dec = json_decode((string)$cached['json_data'], true);
+        if (is_array($dec)) {
+            $parsedGames = $dec;
+        }
+    }
+
+    if ($parsedGames === null) {
+        $url = $league === 'del' ? 'https://www.penny-del.org/spiele' : 'https://www.del-2.org/spielplan';
+        $html = null;
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => 5,
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0 Safari/537.36',
+            ]);
+            $res  = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if (is_string($res) && $code >= 200 && $code < 300) {
+                $html = $res;
+            }
+        } else {
+            $rawRes = @file_get_contents($url);
+            if (is_string($rawRes) && $rawRes !== '') {
+                $html = $rawRes;
+            }
+        }
+
+        if ($html !== null) {
+            $parsedGames = [];
+            if ($league === 'del') {
+                // PENNY DEL offizieller Spielplan
+                if (preg_match_all('/<tr>\s*<td class="team-schedule__date">(.*?)<\/td>\s*<td class="team-schedule__time">(.*?)<\/td>\s*<td class="team-schedule__compet">(\d+)<\/td>(.*?)<\/tr>/is', $html, $rows, PREG_SET_ORDER)) {
+                    foreach ($rows as $r) {
+                        $mdNum = (int)$r[3];
+                        $inner = $r[4];
+                        preg_match_all('/<h6 class="team-meta__name[^"]*">\s*<a[^>]*>(.*?)<\/a>/is', $inner, $tMatches);
+                        preg_match_all('/<td class="team-schedule__status">(.*?)<\/td>/is', $inner, $stMatches);
+                        $homeName = trim(strip_tags((string)($tMatches[1][0] ?? '')));
+                        $awayName = trim(strip_tags((string)($tMatches[1][1] ?? '')));
+                        $scoreRaw = preg_replace('/\s+/', ' ', trim(strip_tags((string)($stMatches[1][1] ?? '')))) ?? '';
+                        if ($homeName === '' || $awayName === '' || $scoreRaw === '') {
+                            continue;
+                        }
+                        if (preg_match('/^(\d+)\s*:\s*(\d+)(?:\s*\((OT|SO|PEN|NV|NP)\))?(?:\s*\(([0-9:,\s]+)\))?/i', $scoreRaw, $sm)) {
+                            $s1      = (int)$sm[1];
+                            $s2      = (int)$sm[2];
+                            $extra   = strtoupper(trim((string)($sm[3] ?? '')));
+                            $perStr  = trim((string)($sm[4] ?? ''));
+                            $perList = array_values(array_filter(array_map('trim', explode(',', $perStr))));
+                            // Wenn mindestens 3 Drittel vorhanden sind (und das 3. Drittel nicht 0:0 nach Toren im 3. Drittel bzw. OT ist)
+                            $isDone = count($perList) >= 3;
+                            if (count($perList) === 3 && $perList[2] === '0:0') {
+                                // Prüfen ob Summe der ersten 2 Drittel schon dem Gesamtstand entspricht
+                                $sum1 = 0;
+                                $sum2 = 0;
+                                foreach ([$perList[0], $perList[1]] as $pp) {
+                                    [$a, $b] = array_pad(explode(':', $pp), 2, 0);
+                                    $sum1 += (int)$a;
+                                    $sum2 += (int)$b;
+                                }
+                                // Falls das Spiel noch läuft (z.B. im 2./3. Drittel bei 0:0 im 3. Drittel und Anstoß < 2,25 Std. her), Status offen lassen
+                                $isDone = ($sum1 === $s1 && $sum2 === $s2);
+                            }
+                            $parsedGames[] = [
+                                'matchday'  => $mdNum,
+                                'home'      => $homeName,
+                                'away'      => $awayName,
+                                's1'        => $s1,
+                                's2'        => $s2,
+                                'extra'     => ($extra === 'OT' || $extra === 'NV') ? 'n.V.' : (($extra === 'SO' || $extra === 'PEN' || $extra === 'NP') ? 'n.P.' : ''),
+                                'periods'   => implode(' • ', $perList),
+                                'completed' => $isDone,
+                            ];
+                        }
+                    }
+                }
+            } else {
+                // DEL2 offizieller Spielplan (del-2.org/spielplan)
+                if (preg_match_all('/<div class="games-row[^"]*" data-gameday="(\d+)" data-status="([^"]+)"[^>]*>(.*?)<\/div>\s*<\/div>\s*<div class="games-actions">/is', $html, $rows2, PREG_SET_ORDER)) {
+                    foreach ($rows2 as $r) {
+                        $mdNum  = (int)$r[1];
+                        $status = strtolower(trim($r[2]));
+                        if (!in_array($status, ['played', 'live'], true)) {
+                            continue;
+                        }
+                        $block = $r[3];
+                        preg_match('/games-team-home[^>]*title="([^"]+)"/i', $block, $hm);
+                        preg_match('/games-team-away[^>]*title="([^"]+)"/i', $block, $aw);
+                        preg_match('/<span class="games-score-value">\s*(\d+)\s*<span[^>]*>:<\/span>\s*(\d+)\s*<\/span>(?:<span class="games-score-extra">([^<]+)<\/span>)?/is', $block, $sc);
+                        preg_match('/title="Drittel:\s*([^"]+)"/i', $block, $pm);
+                        if (empty($hm[1]) || empty($aw[1]) || !isset($sc[1], $sc[2])) {
+                            continue;
+                        }
+                        $extraRaw = strtoupper(trim((string)($sc[3] ?? '')));
+                        $perRaw   = trim((string)($pm[1] ?? ''));
+                        $perParts = array_values(array_filter(array_map('trim', explode(',', $perRaw))));
+                        $parsedGames[] = [
+                            'matchday'  => $mdNum,
+                            'home'      => trim($hm[1]),
+                            'away'      => trim($aw[1]),
+                            's1'        => (int)$sc[1],
+                            's2'        => (int)$sc[2],
+                            'extra'     => ($extraRaw === 'OT' || $extraRaw === 'NV') ? 'n.V.' : (($extraRaw === 'SO' || $extraRaw === 'PEN' || $extraRaw === 'NP') ? 'n.P.' : ''),
+                            'periods'   => implode(' • ', $perParts),
+                            'completed' => ($status === 'played'),
+                        ];
+                    }
+                }
+            }
+
+            $up = $pdo->prepare("
+                INSERT INTO bundesliga_cache (cache_key, json_data, updated_at)
+                VALUES (?, ?, NOW())
+                ON DUPLICATE KEY UPDATE json_data = VALUES(json_data), updated_at = NOW()
+            ");
+            $up->execute([$cacheKey, json_encode($parsedGames, JSON_UNESCAPED_UNICODE)]);
+        } elseif ($cached) {
+            $dec = json_decode((string)$cached['json_data'], true);
+            if (is_array($dec)) {
+                $parsedGames = $dec;
+            }
+        }
+    }
+
+    if (empty($parsedGames)) {
+        return $matchdayData;
+    }
+
+    foreach ($matchdayData as &$m) {
+        $mdNum   = (int)($m['group']['groupOrderID'] ?? $targetMatchday);
+        $koTs    = !empty($m['matchDateTime']) ? (int)strtotime((string)$m['matchDateTime']) : 0;
+        $t1Token = normalizeClubMatchToken((string)($m['team1']['teamName'] ?? '') . ' ' . (string)($m['team1']['shortName'] ?? ''));
+        $t2Token = normalizeClubMatchToken((string)($m['team2']['teamName'] ?? '') . ' ' . (string)($m['team2']['shortName'] ?? ''));
+
+        foreach ($parsedGames as $pg) {
+            if ((int)($pg['matchday'] ?? 0) !== $mdNum) {
+                continue;
+            }
+            $hTok = normalizeClubMatchToken((string)($pg['home'] ?? ''));
+            $aTok = normalizeClubMatchToken((string)($pg['away'] ?? ''));
+            $hWords = array_filter(explode(' ', $hTok), static fn(string $w): bool => strlen($w) >= 3);
+            $aWords = array_filter(explode(' ', $aTok), static fn(string $w): bool => strlen($w) >= 3);
+
+            $mHome = false;
+            foreach ($hWords as $hw) {
+                if (str_contains($t1Token, $hw)) {
+                    $mHome = true;
+                    break;
+                }
+            }
+            $mAway = false;
+            foreach ($aWords as $aw) {
+                if (str_contains($t2Token, $aw)) {
+                    $mAway = true;
+                    break;
+                }
+            }
+            if (!$mHome || !$mAway) {
+                continue;
+            }
+
+            $isComp = !empty($pg['completed']);
+            // Bei PENNY DEL sicherheitshalber prüfen, ob seit Spielbeginn mindestens 115 Min. vergangen sind, bevor "Beendet" gesetzt wird
+            if ($league === 'del' && $isComp && $koTs > 0 && ($now - $koTs) < 6900 && empty($m['matchIsFinished'])) {
+                $isComp = false;
+            }
+
+            // Falls OpenLigaDB noch gar keine Ergebnisse hat ODER noch nicht als beendet markiert ist:
+            if (empty($m['matchResults']) || empty($m['matchIsFinished'])) {
+                $m['matchResults'] = [
+                    [
+                        'resultTypeID'  => 2,
+                        'resultOrderID' => 3,
+                        'pointsTeam1'   => (int)$pg['s1'],
+                        'pointsTeam2'   => (int)$pg['s2'],
+                    ],
+                ];
+                if (!empty($pg['extra'])) {
+                    $m['_extra_suffix'] = (string)$pg['extra'];
+                }
+                if (!empty($pg['periods'])) {
+                    $m['_periods_custom'] = (string)$pg['periods'];
+                }
+                if ($isComp) {
+                    $m['matchIsFinished'] = true;
+                    $m['_live_state']     = 'post';
+                } else {
+                    $m['_live_state']     = 'in';
+                }
+            }
+            break;
+        }
+    }
+    unset($m);
+
+    return $matchdayData;
 }
 
 /**
@@ -525,7 +763,15 @@ function normalizeClubMatchToken(string $name): string
  */
 function enrichMatchdayWithLiveScoreboard(PDO $pdo, string $league, array $matchdayData, bool $forceRefresh = false): array
 {
-    if (empty($matchdayData) || !in_array($league, ['bl1', 'bl2'], true)) {
+    if (empty($matchdayData)) {
+        return $matchdayData;
+    }
+
+    if (in_array($league, ['del', 'del2'], true)) {
+        return enrichHockeyMatchdayFromOfficialLeague($pdo, $league, $matchdayData, $forceRefresh);
+    }
+
+    if (!in_array($league, ['bl1', 'bl2'], true)) {
         return $matchdayData;
     }
 
@@ -733,12 +979,13 @@ function extractMatchScores(array $match): array
     $ht1         = null;
     $ht2         = null;
     $periods     = [];
-    $extraSuffix = '';
+    $extraSuffix = (string)($match['_extra_suffix'] ?? '');
 
     $results = $match['matchResults'] ?? [];
     if (is_array($results) && !empty($results)) {
         usort($results, static fn(array $a, array $b): int => ((int)($a['resultOrderID'] ?? 0)) <=> ((int)($b['resultOrderID'] ?? 0)));
 
+        $rawDrittel = [];
         foreach ($results as $r) {
             $typeId = (int)($r['resultTypeID'] ?? 0);
             $rName  = strtolower(trim((string)($r['resultName'] ?? '')));
@@ -747,7 +994,16 @@ function extractMatchScores(array $match): array
             $p2     = (int)($r['pointsTeam2'] ?? 0);
 
             if (str_contains($rName, 'drittel')) {
-                $periods[] = "{$p1}:{$p2}";
+                // In OpenLigaDB (DEL/DEL2) sind Drittel-Ergebnisse kumulierte Zwischenstände nach dem 1./2./3. Drittel.
+                // Falls bei einem laufenden Spiel das 3. Drittel bereits als 0:0-Platzhalter angelegt wurde,
+                // obwohl im 1./2. Drittel schon Tore gefallen sind, diesen 0:0-Platzhalter ignorieren:
+                if ($p1 === 0 && $p2 === 0 && !empty($rawDrittel)) {
+                    $prev = end($rawDrittel);
+                    if (($prev[0] + $prev[1]) > 0) {
+                        continue;
+                    }
+                }
+                $rawDrittel[] = [$p1, $p2];
                 $final1 = $p1;
                 $final2 = $p2;
             } elseif (str_contains($rName, 'overtime') || str_contains($rName, 'verlängerung') || $rKind === 'afterextratime' || $typeId === 4) {
@@ -767,11 +1023,38 @@ function extractMatchScores(array $match): array
             }
         }
 
-        // Fallback: höchstes Resultat in der Reihenfolge als aktuellen/endgültigen Stand verwenden
-        $last = end($results);
-        if ($last && ($final1 === null || (int)($last['resultOrderID'] ?? 0) > 2)) {
-            $final1 = (int)($last['pointsTeam1'] ?? 0);
-            $final2 = (int)($last['pointsTeam2'] ?? 0);
+        // Kumulierte OpenLigaDB-Drittelstände (z.B. 1:1, 1:2, 5:2) in echte Einzel-Drittel (1:1 • 0:1 • 4:0) umrechnen
+        if (!empty($rawDrittel)) {
+            $isCumulative = true;
+            for ($i = 1, $cnt = count($rawDrittel); $i < $cnt; $i++) {
+                if ($rawDrittel[$i][0] < $rawDrittel[$i - 1][0] || $rawDrittel[$i][1] < $rawDrittel[$i - 1][1]) {
+                    $isCumulative = false;
+                    break;
+                }
+            }
+            if ($isCumulative && count($rawDrittel) >= 2) {
+                $prev1 = 0;
+                $prev2 = 0;
+                foreach ($rawDrittel as [$c1, $c2]) {
+                    $periods[] = ($c1 - $prev1) . ':' . ($c2 - $prev2);
+                    $prev1 = $c1;
+                    $prev2 = $c2;
+                }
+            } else {
+                foreach ($rawDrittel as [$c1, $c2]) {
+                    $periods[] = "{$c1}:{$c2}";
+                }
+            }
+        }
+
+        // Fallback: höchstes Resultat in der Reihenfolge als aktuellen/endgültigen Stand verwenden,
+        // sofern noch kein Spielstand ermittelt wurde
+        if ($final1 === null) {
+            $last = end($results);
+            if ($last) {
+                $final1 = (int)($last['pointsTeam1'] ?? 0);
+                $final2 = (int)($last['pointsTeam2'] ?? 0);
+            }
         }
     }
 
@@ -789,19 +1072,19 @@ function extractMatchScores(array $match): array
     $isStarted  = $kickoffTs > 0 && $now >= $kickoffTs;
     $isFinished = !empty($match['matchIsFinished']);
 
-    // Sicherheits-Fallback: Wenn ein Spiel vor mehr als 150 Minuten (2,5 Std.) angepfiffen wurde
-    // und nicht explizit als laufend (_live_state === 'in') gemeldet ist, gilt es als beendet statt endlos "LIVE".
+    // Sicherheits-Fallback: Wenn ein Spiel vor mehr als 150 Minuten (2,5 Std.) angepfiffen wurde,
+    // ein Ergebnis vorliegt und es nicht explizit als laufend (_live_state === 'in') gemeldet ist, gilt es als beendet.
     $liveState = (string)($match['_live_state'] ?? '');
     if ($liveState === 'post') {
         $isFinished = true;
-    } elseif ($liveState !== 'in' && $isStarted && !$isFinished && ($now - $kickoffTs) > 9000) {
+    } elseif ($liveState !== 'in' && $isStarted && !$isFinished && $final1 !== null && ($now - $kickoffTs) > 9000) {
         $isFinished = true;
     }
 
     $isLive = $isStarted && !$isFinished;
 
-    if (empty($periods) && !empty($match['_periods_custom'])) {
-        $periods[] = (string)$match['_periods_custom'];
+    if (!empty($match['_periods_custom'])) {
+        $periods = [(string)$match['_periods_custom']];
     }
 
     return [
@@ -1077,18 +1360,20 @@ if ($leagueProvider === 'tennis') {
     );
     $tableData = $tableRes['data'];
 
-    if ($selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday && !empty($currentMatchdayData)) {
+    // WICHTIG: Immer den spezifischen Spieltags-Endpunkt (getmatchdata/{league}/{season}/{matchday}) abrufen,
+    // da OpenLigaDB beim allgemeinen Sammel-Endpunkt (getmatchdata/{league}) häufig veraltete Datensätze
+    // ohne matchResults[] ausliefert (insbesondere bei DEL, DEL2 und 3. Liga).
+    $matchdayRes  = fetchOpenLigaData(
+        $pdo,
+        "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
+        "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
+        180,
+        $forceRefresh
+    );
+    $matchdayData = $matchdayRes['data'];
+    if (empty($matchdayData) && $selectedSeason === $detectedSeason && $selectedMatchday === $detectedMatchday && !empty($currentMatchdayData)) {
         $matchdayRes  = $currentMatchdayRes;
         $matchdayData = $currentMatchdayData;
-    } else {
-        $matchdayRes  = fetchOpenLigaData(
-            $pdo,
-            "md_{$selectedLeague}_{$selectedSeason}_{$selectedMatchday}",
-            "getmatchdata/{$selectedLeague}/{$selectedSeason}/{$selectedMatchday}",
-            300,
-            $forceRefresh
-        );
-        $matchdayData = $matchdayRes['data'];
     }
 
     $matchdayData   = enrichMatchdayWithLiveScoreboard($pdo, $selectedLeague, $matchdayData, $forceRefresh);
