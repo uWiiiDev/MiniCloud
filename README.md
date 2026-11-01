@@ -8,7 +8,7 @@
 
 ---
 
-## ✨ Complete Feature Suite (22 Integrated Modules)
+## ✨ Complete Feature Suite (28 Integrated Modules)
 
 ### 1. 📁 File Manager, AES-256 Vault, ZIP Inspector, Duplicate Detection & Smart Sharing (`index.php`, `thumbnail.php`, `vault_action.php`, `share.php`)
 - **Direct Folder Drag & Drop, `Ctrl+V` Clipboard Upload & Action Toolbar:** Drop files or entire folder hierarchies directly onto any subfolder row or onto the page. Paste screenshots straight from your clipboard via `Ctrl+V`.
@@ -101,6 +101,21 @@
 - **🛹 Quiver Gear Management & Cost-per-Session Analytics:** Manage boards, sails, kites, wings, and foils with automatic session counters, total water hours per item, and automatic **cost-per-session amortization** based on purchase price.
 - **📍 Client-Side `.gpx` GPS Track Analyzer & Speed Heatmap:** Drop any `.gpx` file from a Garmin/Coros/Apple Watch to compute distance (`km`), top speed (`km/h` & `knots`), and render a color-coded **GPS speed heatmap track** on an interactive HTML5 canvas.
 - **📸 Cloud Photo/Video Linking & CSV Export:** Link session highlights directly to Cloud photos or edited clips from `video_studio.php`, and export your logbook to `Surftagebuch/` as an Excel-compatible `.csv` file with 1 click.
+
+### 13e. 🏆 Sports Scores, International Leagues, Tennis World Rankings & Prediction Game (`bundesliga.php`, `includes/sports_api.php`)
+- **⚽ German & International Soccer:** Live standings, matchdays, scores, and top scorers for **1. Bundesliga, 2. Bundesliga, 3. Liga**, plus **UEFA Champions League, Premier League (England), LaLiga (Spain), and Serie A (Italy)**.
+- **🏈 US Sports (`NFL`, `NBA`, `NHL`) & 🎾 ATP/WTA Tennis Top 100:** Live standings, win/loss streaks, and scoreboards for **American Football (NFL)**, **Basketball (NBA)**, and **Ice Hockey (NHL)**, plus official **ATP & WTA Tennis World Rankings (Top 100)** with player photos, flags, age, points, and rank delta.
+- **⭐ Starred Favorite Start-League & 🎯 Cloud Prediction Game:** Mark any sport or league with a star (`⭐ Als Start-Liga`) so it opens immediately by default, pick a favorite team per league, and compete with fellow Cloud users in the built-in prediction game.
+
+### 13f. 📈 Stock Market, Crypto, Portfolio Watchlist & AI Timing Radar (`markets.php`)
+- **🌍 Global Symbol Search & Historical Charts Back to IPO (`MAX`):** Track stocks (Xetra `.DE` & US/global exchanges), ETFs (e.g., MSCI World), indices (DAX, S&P 500), cryptocurrencies (Bitcoin, Ethereum), and commodities (Gold, Oil) with interactive HTML5 Canvas charts (`1D`, `5D`, `1M`, `6M`, `1Y`, `5Y`, `MAX` + `SMA 20`/`SMA 50`) and parallel `curl_multi` cache warming.
+- **🧠 Automated Weekday, Hour & Anomaly Timing Radar:** Automatically analyzes the last 365 trading days and 60-minute intraday candles to determine the **statistically best buy weekday (dip day)**, **best sell weekday**, **optimal intraday buy/sell hour window (CET/CEST)**, plus live anomaly detection (**RSI-14 oversold/overbought**, **volume spikes**, **volatility Z-score breakouts**, and **SMA-200 long-term trend distance**).
+- **💼 Virtual Portfolio Tracker:** Optionally record quantity and purchase price per symbol to track live position value and profit/loss in `€` and `%`.
+
+### 13g. 📺 Live TV Guide (`tv_radio.php`), 📻 Persistent Web Radio (`radio.php`), 📰 World News (`news.php`), 🧾 Split Bills (`split.php`) & 💳 Optional PayPal Subscription Paywall (`subscription.php`)
+- **📻 Persistent Cross-Module Web Radio (`radio.php` & `includes/footer.php`):** Stream 40,000+ radio stations worldwide with live ICY song title detection and a **floating Mini-Radio-Bar** that continues playing seamlessly as you navigate across other Cloud modules.
+- **📺 TV Guide & Live EPG (`tv_radio.php`) & 📰 World News Ticker (`news.php`):** Live TV schedule (*Now*, *20:15 Primetime*, *22:00*) and multi-source news headlines with 1-click translation and AI briefing.
+- **💳 Optional PayPal Subscription Paywall (`subscription.php`, `includes/paypal_helper.php`):** Administrators can optionally place user registration and/or cloud access behind a verified **PayPal Subscriptions API v1** paywall (with 1-click PayPal Product & Billing Plan auto-creation in `admin.php` and per-user exemption switches).
 
 ### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
 - 20 ad-free HTML5 games with fullscreen mode, cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:

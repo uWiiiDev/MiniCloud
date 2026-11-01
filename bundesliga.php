@@ -39,6 +39,15 @@ function ensureBundesligaTables(PDO $pdo): void
     }
     $initialized = true;
 
+    if (!empty($_SESSION['_mc_bundesliga_schema_ok'])) {
+        if (random_int(1, 60) === 1) {
+            try {
+                $pdo->exec("DELETE FROM bundesliga_cache WHERE updated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)");
+            } catch (Throwable) {}
+        }
+        return;
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS bundesliga_cache (
             cache_key VARCHAR(140) NOT NULL PRIMARY KEY,
@@ -94,6 +103,8 @@ function ensureBundesligaTables(PDO $pdo): void
             INDEX idx_league_season_md (league, season, matchday)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $_SESSION['_mc_bundesliga_schema_ok'] = 1;
 }
 
 ensureBundesligaTables($pdo);

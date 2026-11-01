@@ -45,34 +45,37 @@ function ensureMarketsTables(PDO $pdo): void
     }
     $done = true;
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS markets_cache (
-            cache_key VARCHAR(160) NOT NULL PRIMARY KEY,
-            json_data MEDIUMTEXT NOT NULL,
-            updated_at DATETIME NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+    if (empty($_SESSION['_mc_markets_schema_ok'])) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS markets_cache (
+                cache_key VARCHAR(160) NOT NULL PRIMARY KEY,
+                json_data MEDIUMTEXT NOT NULL,
+                updated_at DATETIME NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS markets_watchlist (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
-            symbol VARCHAR(40) NOT NULL,
-            display_name VARCHAR(140) NOT NULL DEFAULT '',
-            asset_category VARCHAR(32) NOT NULL DEFAULT 'stock',
-            quantity DECIMAL(18,6) NOT NULL DEFAULT 0,
-            buy_price DECIMAL(18,4) NOT NULL DEFAULT 0,
-            currency VARCHAR(12) NOT NULL DEFAULT 'EUR',
-            notes VARCHAR(255) NOT NULL DEFAULT '',
-            is_favorite TINYINT(1) NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL,
-            UNIQUE KEY uniq_user_symbol (user_id, symbol),
-            INDEX idx_user_fav (user_id, is_favorite)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS markets_watchlist (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                symbol VARCHAR(40) NOT NULL,
+                display_name VARCHAR(140) NOT NULL DEFAULT '',
+                asset_category VARCHAR(32) NOT NULL DEFAULT 'stock',
+                quantity DECIMAL(18,6) NOT NULL DEFAULT 0,
+                buy_price DECIMAL(18,4) NOT NULL DEFAULT 0,
+                currency VARCHAR(12) NOT NULL DEFAULT 'EUR',
+                notes VARCHAR(255) NOT NULL DEFAULT '',
+                is_favorite TINYINT(1) NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL,
+                UNIQUE KEY uniq_user_symbol (user_id, symbol),
+                INDEX idx_user_fav (user_id, is_favorite)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $_SESSION['_mc_markets_schema_ok'] = 1;
+    }
 
     // Gelegentliche Cache-Bereinigung (Einträge älter als 3 Tage löschen, damit die DB winzig bleibt)
-    if ( random_int(1, 25) === 1 ) {
+    if (random_int(1, 50) === 1) {
         try {
             $pdo->exec("DELETE FROM markets_cache WHERE updated_at < DATE_SUB(NOW(), INTERVAL 3 DAY)");
         } catch (Throwable) {}
@@ -86,9 +89,14 @@ ensureMarketsTables($pdo);
  */
 function seedDefaultWatchlistIfNeeded(PDO $pdo, int $userId): void
 {
+    $sessKey = '_mc_markets_seeded_' . $userId;
+    if (!empty($_SESSION[$sessKey])) {
+        return;
+    }
     $stmtCnt = $pdo->prepare('SELECT COUNT(*) FROM markets_watchlist WHERE user_id = ?');
     $stmtCnt->execute([$userId]);
     if ((int)$stmtCnt->fetchColumn() > 0) {
+        $_SESSION[$sessKey] = 1;
         return;
     }
 
@@ -111,6 +119,7 @@ function seedDefaultWatchlistIfNeeded(PDO $pdo, int $userId): void
     foreach ($defaults as $d) {
         $ins->execute([$userId, $d[0], $d[1], $d[2], $d[3], $d[4]]);
     }
+    $_SESSION[$sessKey] = 1;
 }
 
 seedDefaultWatchlistIfNeeded($pdo, $userId);
@@ -183,11 +192,17 @@ function fetchCachedMarketJson(PDO $pdo, string $cacheKey, string $url, int $ttl
             $opts = [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 2,
                 CURLOPT_TIMEOUT        => 6,
                 CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
                 CURLOPT_USERAGENT      => $ua,
                 CURLOPT_HTTPHEADER     => ['Accept: application/json'],
             ];
+            if (defined('CURLPROTO_HTTPS')) {
+                $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+            }
             if (defined('CURL_IPRESOLVE_V4')) {
                 $opts[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
             }
@@ -249,6 +264,112 @@ function fetchCachedMarketJson(PDO $pdo, string $cacheKey, string $url, int $ttl
         'cached_at'  => date('Y-m-d H:i:s'),
         'from_cache' => false,
     ];
+}
+
+/**
+ * Lädt mehrere noch nicht im Cache liegende (oder abgelaufene) Chart-Zeitreihen
+ * parallel per `curl_multi` vorab in `markets_cache`, damit das Laden einer Watchlist
+ * mit 8+ Symbolen inklusive Analyse-Serien unter 250 ms bleibt.
+ *
+ * @param array<int, array{symbol: string, range: string, interval: string, ttl: int, force?: bool}> $specs
+ */
+function warmMarketChartSeriesParallel(PDO $pdo, array $specs): void
+{
+    if (!function_exists('curl_multi_init') || empty($specs)) {
+        return;
+    }
+
+    $pending = [];
+    foreach ($specs as $sp) {
+        $sym   = strtoupper(trim((string)$sp['symbol']));
+        $range = (string)$sp['range'];
+        $intv  = (string)$sp['interval'];
+        $ttl   = (int)$sp['ttl'];
+        $force = !empty($sp['force']);
+        $key   = 'yf_chart_' . md5($sym . '_' . $range . '_' . $intv);
+        $url   = 'https://query2.finance.yahoo.com/v8/finance/chart/' . rawurlencode($sym)
+               . '?range=' . rawurlencode($range) . '&interval=' . rawurlencode($intv) . '&includePrePost=false';
+        $pending[$key] = ['url' => $url, 'ttl' => $ttl, 'force' => $force];
+    }
+
+    $keys = array_keys($pending);
+    $placeholders = implode(',', array_fill(0, count($keys), '?'));
+    $stmt = $pdo->prepare("SELECT cache_key, updated_at FROM markets_cache WHERE cache_key IN ($placeholders)");
+    $stmt->execute($keys);
+    $nowTs = time();
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $k = (string)$row['cache_key'];
+        if (isset($pending[$k]) && !$pending[$k]['force']) {
+            $age = $nowTs - (int)strtotime((string)$row['updated_at']);
+            if ($age >= 0 && $age <= $pending[$k]['ttl']) {
+                unset($pending[$k]);
+            }
+        }
+    }
+
+    if (empty($pending)) {
+        return;
+    }
+
+    $mh = curl_multi_init();
+    $handles = [];
+    $ua = 'YahooFinance/9.32.1 (iPhone; iOS 17.4; Scale/3.00)';
+
+    foreach ($pending as $key => $info) {
+        $ch = curl_init($info['url']);
+        if ($ch === false) {
+            continue;
+        }
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 2,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_USERAGENT      => $ua,
+            CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+        ];
+        if (defined('CURLPROTO_HTTPS')) {
+            $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+        }
+        if (defined('CURL_IPRESOLVE_V4')) {
+            $opts[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+        }
+        curl_setopt_array($ch, $opts);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$key] = $ch;
+    }
+
+    $running = null;
+    do {
+        $status = curl_multi_exec($mh, $running);
+        if ($running > 0) {
+            curl_multi_select($mh, 0.2);
+        }
+    } while ($running > 0 && $status === CURLM_OK);
+
+    $nowStr = date('Y-m-d H:i:s');
+    $up = $pdo->prepare(
+        'INSERT INTO markets_cache (cache_key, json_data, updated_at)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE json_data = VALUES(json_data), updated_at = VALUES(updated_at)'
+    );
+
+    foreach ($handles as $key => $ch) {
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $body = curl_multi_getcontent($ch);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+        if (is_string($body) && $code >= 200 && $code < 300 && strlen($body) > 25) {
+            $dec = json_decode($body, true);
+            if (is_array($dec)) {
+                $up->execute([$key, $body, $nowStr]);
+            }
+        }
+    }
+    curl_multi_close($mh);
 }
 
 /**
@@ -666,6 +787,7 @@ function analyzeMarketSymbolPatterns(PDO $pdo, string $symbol, bool $forceRefres
 // 4. AJAX-SUCHE FÜR WERTPAPIERE, ETFS & KRYPTO (?ajax=search&q=...)
 // ============================================================================
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'search') {
+    session_write_close();
     header('Content-Type: application/json; charset=UTF-8');
     $q = trim((string)($_GET['q'] ?? ''));
     if (mb_strlen($q) < 2) {
@@ -806,6 +928,20 @@ $forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] === '1';
 
 $defaultSymbol = !empty($watchlistRows) ? (string)$watchlistRows[0]['symbol'] : '^GDAXI';
 $selectedSym   = strtoupper(trim((string)($_GET['symbol'] ?? $defaultSymbol)));
+if (!preg_match('/^[A-Z0-9\^\.\-\=]{1,40}$/', $selectedSym)) {
+    $selectedSym = $defaultSymbol;
+}
+
+// Alle benötigten Chart- und Analyse-Zeitreihen bei kaltem Cache in einem einzigen parallelen curl_multi-Durchlauf vorwärmen
+$warmSpecs = [];
+foreach ($watchlistRows as $wRow) {
+    $wSym = (string)$wRow['symbol'];
+    $warmSpecs[] = ['symbol' => $wSym, 'range' => '5d', 'interval' => '1d', 'ttl' => 240, 'force' => ($forceRefresh && $wSym === $selectedSym)];
+}
+$warmSpecs[] = ['symbol' => $selectedSym, 'range' => $tfMeta['range'], 'interval' => $tfMeta['interval'], 'ttl' => $tfMeta['ttl'], 'force' => $forceRefresh];
+$warmSpecs[] = ['symbol' => $selectedSym, 'range' => '1y', 'interval' => '1d', 'ttl' => 1800, 'force' => $forceRefresh];
+$warmSpecs[] = ['symbol' => $selectedSym, 'range' => '60d', 'interval' => '60m', 'ttl' => 1800, 'force' => $forceRefresh];
+warmMarketChartSeriesParallel($pdo, $warmSpecs);
 
 // Live-Kurse für alle Watchlist-Einträge laden + Musterdepot-Summen berechnen
 $watchlistEnriched = [];
@@ -1522,7 +1658,7 @@ const IS_POSITIVE_TF = <?= $tfChangePct >= 0 ? 'true' : 'false' ?>;
 
             if (infoEl) {
                 infoEl.innerHTML = `
-                    <span>📅 <strong>${hp.date} (${hp.time})</strong> • Kurs: <strong>${Number(hp.close).toFixed(2)} ${CHART_CURRENCY}</strong> (Tief: ${Number(hp.low).toFixed(2)} / Hoch: ${Number(hp.high).toFixed(2)})</span>
+                    <span>📅 <strong>${escapeMarketHtml(hp.date)} (${escapeMarketHtml(hp.time)})</strong> • Kurs: <strong>${Number(hp.close).toFixed(2)} ${escapeMarketHtml(CHART_CURRENCY)}</strong> (Tief: ${Number(hp.low).toFixed(2)} / Hoch: ${Number(hp.high).toFixed(2)})</span>
                     <span class="text-[11px]">Volumen: ${Number(hp.volume || 0).toLocaleString('de-DE')}</span>
                 `;
             }
@@ -1550,6 +1686,16 @@ const IS_POSITIVE_TF = <?= $tfChangePct >= 0 ? 'true' : 'false' ?>;
 })();
 
 // 2. Live-Wertpapiersuche
+function escapeMarketHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[m]));
+}
+
 let searchTimer = null;
 function searchMarketSymbols(query) {
     const box = document.getElementById('marketSearchResults');
@@ -1574,11 +1720,11 @@ function searchMarketSymbols(query) {
             }
             box.innerHTML = data.quotes.map(item => `
                 <button type="button"
-                        onclick="quickAddMarketSymbol(${JSON.stringify(item.symbol).replace(/"/g, '&quot;')}, ${JSON.stringify(item.name).replace(/"/g, '&quot;')}, ${JSON.stringify(item.category).replace(/"/g, '&quot;')})"
+                        onclick="quickAddMarketSymbol(${JSON.stringify(String(item.symbol || '')).replace(/"/g, '&quot;')}, ${JSON.stringify(String(item.name || '')).replace(/"/g, '&quot;')}, ${JSON.stringify(String(item.category || 'stock')).replace(/"/g, '&quot;')})"
                         class="w-full p-3 text-left hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center justify-between gap-2 transition-colors cursor-pointer">
                     <div class="min-w-0">
-                        <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">${item.name}</div>
-                        <div class="text-[11px] text-slate-500 font-mono">${item.symbol} • ${item.exchange} (${item.type})</div>
+                        <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">${escapeMarketHtml(item.name)}</div>
+                        <div class="text-[11px] text-slate-500 font-mono">${escapeMarketHtml(item.symbol)} • ${escapeMarketHtml(item.exchange)} (${escapeMarketHtml(item.type)})</div>
                     </div>
                     <span class="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold shrink-0">+ Watchlist</span>
                 </button>

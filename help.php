@@ -1377,6 +1377,27 @@ require_once __DIR__ . '/includes/header.php';
                     </ul>
                 </li>
                 <li><strong>🏄‍♂️ Surftagebuch &amp; Quiver-Log (<a href="surflog.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Surftagebuch</a>):</strong> Persönliches Wassersport-Logbuch für <strong>Windsurfen, Kitesurfen, Wingfoilen, Wellenreiten &amp; SUP</strong> mit <strong>🌬️ Knoten-zu-Beaufort-Automatik (0–12 Bft)</strong>, interaktiver <strong>🧭 16er-Windrose</strong>, Wellenhöhe, Wasser-/Lufttemperatur, Gezeiten, <strong>🛹 Quiver-Materialverwaltung</strong> (berechnet automatisch Einsätze, Wasserstunden und den <em>Preis pro Session</em> Ihrer Boards, Segel, Kites, Wings &amp; Foils), <strong>📍 lokalem GPX-Speed-Tracker</strong> (liest <code>.gpx</code>-Dateien Ihrer GPS-Uhr im Browser aus, berechnet Top-Speed in <code>km/h</code> &amp; <code>kn</code>, Distanz und zeichnet eine farbcodierte Speed-Heatmap), Direktverknüpfung zu Fotos/Videos aus der Cloud sowie <strong>📊 1-Klick-CSV-Export</strong> nach <code>/Surftagebuch</code>.</li>
+                <li><strong>🏆 Sportergebnisse, Internationale Ligen, Tennis-Weltrangliste &amp; Cloud-Tippspiel (<a href="bundesliga.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Sportergebnisse &amp; Tippspiel</a>):</strong>
+                    <ul class="list-disc pl-5 mt-1 space-y-0.5">
+                        <li><strong>⚽ Fußball Deutschland &amp; International:</strong> Live-Tabellen, Spieltage, Ergebnisse und Torjäger für die <strong>1. Bundesliga, 2. Bundesliga, 3. Liga</strong> sowie <strong>UEFA Champions League, Premier League (England), LaLiga (Spanien) und Serie A (Italien)</strong>.</li>
+                        <li><strong>🏈 US-Sport (NFL, NBA &amp; NHL) &amp; 🎾 ATP/WTA Tennis-Weltrangliste:</strong> Aktuelle Tabellen, Playoff-Ränge, Serien und Spieltage für <strong>American Football (NFL)</strong>, <strong>Basketball (NBA)</strong> und <strong>Eishockey (NHL)</strong> sowie die offiziellen <strong>Top 100 der ATP- (Herren) und WTA- (Damen) Tennis-Weltrangliste</strong> mit Spielerfotos, Länderflaggen, Alter, Weltranglistenpunkten und Auf-/Absteiger-Trend.</li>
+                        <li><strong>⭐ Lieblingsliga als Start-Ansicht &amp; 🎯 Cloud-Tippspiel:</strong> Markieren Sie Ihre bevorzugte Sportart/Liga per Klick auf <strong>„☆ Als Start-Liga“</strong> mit einem goldenen Sternchen (<code>⭐</code>), sodass sie beim Öffnen sofort geladen wird, wählen Sie pro Liga Ihren Lieblingsverein und tippen Sie im Cloud-Tippspiel gegen andere Cloud-Mitglieder.</li>
+                    </ul>
+                </li>
+                <li><strong>📈 Börse, Krypto, Muster-Depot &amp; KI-Kurs-Radar (<a href="markets.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Börse &amp; Krypto</a>):</strong>
+                    <ul class="list-disc pl-5 mt-1 space-y-0.5">
+                        <li><strong>🌍 Weltweite Wertpapier-Suche &amp; Langzeit-Charts bis zum Börsenstart (<code>MAX</code>):</strong> Verfolgen Sie Aktien (Xetra <code>.DE</code> &amp; US-Börsen), ETFs (z. B. MSCI World), Indizes (DAX, S&amp;P 500), Kryptowährungen (Bitcoin, Ethereum) und Rohstoffe (Gold, Öl) in Echtzeit. Der interaktive HTML5-Canvas-Chart unterstützt Zeiträume von <strong><code>1T</code> (5-Minuten-Takt)</strong> über <code>5T</code>, <code>1M</code>, <code>6M</code>, <code>1J</code>, <code>5J</code> bis hin zu <strong><code>MAX</code> (komplette Kurshistorie seit Börsengang)</strong> inklusive gleitender Durchschnitte (<code>SMA 20</code> &amp; <code>SMA 50</code>).</li>
+                        <li><strong>🧠 Automatische Wochentags-, Uhrzeiten- &amp; Auffälligkeits-Analyse:</strong> Das integrierte KI-Timing-Radar wertet die letzten 365 Handelstage sowie die 60-Minuten-Intraday-Kerzen vollautomatisch aus und zeigt Ihnen den <strong>statistisch günstigsten Kauftag (Dip-Wochentag Mo–Fr)</strong>, den <strong>stärksten Verkaufstag</strong>, das <strong>optimale Uhrzeiten-Fenster (MEZ/MESZ)</strong> für Tagestiefs/Tageshochs sowie ungewöhnliche <strong>Volumen-Spikes, Volatilitäts-Ausbrüche, RSI-14-Überverkauft/Überkauft-Signale und den SMA-200-Langfristtrend</strong>.</li>
+                        <li><strong>💼 Persönliches Muster-Depot:</strong> Hinterlegen Sie optional Stückzahl und Kaufkurs je Position, um Depotwert sowie Gewinn/Verlust in <code>€</code> und <code>%</code> live zu verfolgen.</li>
+                    </ul>
+                </li>
+                <li><strong>📺 Fernsehprogramm &amp; Live-EPG (<a href="tv_radio.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">TV-Programm</a>), 📻 Live-Webradio (<a href="radio.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Webradio</a>) &amp; 📰 Welt-Nachrichten (<a href="news.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Nachrichten</a>):</strong>
+                    <ul class="list-disc pl-5 mt-1 space-y-0.5">
+                        <li><strong>📺 TV-Programm:</strong> Live-EPG (<em>Jetzt im TV, 20:15 Uhr Primetime, 22:00 Uhr</em>) mit Fortschrittsbalken und Direktlinks zu den Mediatheken.</li>
+                        <li><strong>📻 Persistentes Live-Webradio mit schwebender Mini-Leiste:</strong> Über 40.000 weltweite Radiosender (inkl. WDR, 1LIVE, SWR, BR, Dlf &amp; NRW-Lokalradios) mit Live-Titelanzeige (ICY-Metadaten) und <strong>modulübergreifendem Weiterhören</strong> – beim Wechsel in andere Cloud-Module (Dateien, Office, Börse, Sport) spielt die Musik nahtlos in der kompakten Mini-Radio-Leiste am unteren Bildschirmrand weiter!</li>
+                        <li><strong>📰 Welt-Nachrichten &amp; News-Ticker:</strong> Aktuelle Schlagzeilen aus Deutschland, NRW und aller Welt mit 1-Klick-Übersetzung, KI-Kurzfassung (Briefing), Vorlese-Funktion und Merkliste.</li>
+                    </ul>
+                </li>
                 <li><strong>🎮 Browserspiele &amp; Pausenraum (<a href="games.php" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Spiele</a>):</strong> 20 werbefreie HTML5-Spiele mit <strong>⛶ 1-Klick-Vollbild- &amp; Smartphone-Großansicht</strong>, kategorisierter, einklappbarer Spiele-Bibliothek (<em>🕹️ Retro &amp; Arcade, 🏎️ Rennspiel, Sport &amp; RPG, 🧠 Logik &amp; Duell</em>), Live-Suche, <code>⭐</code> Favoriten-Filter und Cloud-Bestenlisten:
                     <ul class="list-disc pl-5 mt-1 space-y-0.5">
                         <li><strong>🏎️ Gummigeruch Kart-Cup:</strong> Kult-Rennspiel mit Drift-Physik, animierten Vorderrädern, Scheinwerfern, Bremslichtern, 3 KI-Gegnern, <strong>wählbarer Rundenzahl (3, 5, 8 oder 11 Runden)</strong>, <strong>6 Strecken</strong> (3 Klassik-Strecken + 3 anspruchsvolle Profi-Kurse: <em>⛰️ Alpen-Serpentinen, 🏜️ Wüsten-Schikane, 🌋 Vulkan-Höllenring</em>), automatischem <strong>👻 Streckenrekord-Ghost</strong> und direkten <strong>Ghost-Duell-Herausforderungen</strong> gegen andere Cloud-Mitglieder!</li>
@@ -1688,6 +1709,24 @@ require_once __DIR__ . '/includes/header.php';
                         <td class="py-3 px-4"><code>user_id, category, brand, model, size_label, purchase_price</code> / <code>session_date, sport_type, spot_name, wind_kn_min, wind_kn_max, wind_bft, wind_dir, board_gear_id, rig_gear_id, max_speed_kmh, gpx_summary_json, media_file_id</code></td>
                         <td class="py-3 px-4">Surftagebuch &amp; Quiver-Materialverwaltung (<code>surflog.php</code>): Wassersport-Sessions, Spot-/Wind-/Wellen-Logbuch, Quiver-Ausrüstung (inkl. Kosten/Session) und lokale GPX-Track-Zusammenfassung</td>
                         <td class="py-3 px-4">Bis zum Löschen der Session / des Ausrüstungs-Eintrags oder Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">bundesliga_cache, bundesliga_user_prefs, bundesliga_user_favs &amp; bundesliga_bets</td>
+                        <td class="py-3 px-4"><code>cache_key, json_data, updated_at</code> / <code>user_id, fav_league, fav_team_id, fav_team_name</code> / <code>user_id, league, season, matchday, match_id, goals_team1, goals_team2</code></td>
+                        <td class="py-3 px-4">Sportergebnisse &amp; Tippspiel (<code>bundesliga.php</code> &amp; <code>includes/sports_api.php</code>): Kurzzeit-Ergebnis-Cache für Fußball, NFL, NBA, NHL &amp; ATP/WTA-Tennis-Weltrangliste, persönliche Start-Lieblingsliga (<code>⭐</code>), Lieblingsverein je Liga sowie abgegebene Tippspiel-Tipps</td>
+                        <td class="py-3 px-4">Cache-Einträge werden nach 7 Tagen automatisch bereinigt; Tipps &amp; Favoriten bis zur Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">markets_watchlist &amp; markets_cache</td>
+                        <td class="py-3 px-4"><code>user_id, symbol, display_name, asset_category, quantity, buy_price, currency, notes, is_favorite</code> / <code>cache_key, json_data, updated_at</code></td>
+                        <td class="py-3 px-4">Börse, Krypto &amp; KI-Kurs-Radar (<code>markets.php</code>): Persönliche Watchlist &amp; Musterdepot-Bestände sowie kurzlebiger Kurs-/Chart-Cache</td>
+                        <td class="py-3 px-4">Kurs-Cache wird nach 3 Tagen automatisch bereinigt; Watchlist-Einträge jederzeit löschbar oder bei Kontolöschung</td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">subscription_payments</td>
+                        <td class="py-3 px-4"><code>id, user_id, paypal_subscription_id, plan_id, status, amount, currency, valid_until, raw_payload, created_at</code></td>
+                        <td class="py-3 px-4">Optionale PayPal-Bezahlschranke &amp; Mitglieds-Abonnements (<code>subscription.php</code>, <code>includes/paypal_helper.php</code>): Nachweis verifizierter PayPal-Abo-Zahlungen und Laufzeiten</td>
+                        <td class="py-3 px-4">Bis zur Löschung des Benutzerkontos</td>
                     </tr>
                     <tr>
                         <td class="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">game_scores, game_saves &amp; game_matches</td>

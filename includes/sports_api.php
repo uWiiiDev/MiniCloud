@@ -40,14 +40,24 @@ function fetchCachedSportsJson(PDO $pdo, string $cacheKey, string $url, int $ttl
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         if ($ch !== false) {
-            curl_setopt_array($ch, [
+            $opts = [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 2,
                 CURLOPT_TIMEOUT        => 6,
                 CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
                 CURLOPT_USERAGENT      => 'MiniCloud-Sports-Center/2.0',
                 CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-            ]);
+            ];
+            if (defined('CURLPROTO_HTTPS')) {
+                $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+            }
+            if (defined('CURL_IPRESOLVE_V4')) {
+                $opts[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+            }
+            curl_setopt_array($ch, $opts);
             $res  = curl_exec($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
