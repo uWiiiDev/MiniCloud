@@ -1381,20 +1381,28 @@ if ($leagueProvider === 'tennis') {
 }
 
 // ============================================================================
-// 6. LIEBLINGSVEREIN-SPOTLIGHT AUFBEREITEN
+// 6. TABELLEN-INDEX FÜR VORBERICHTE & LIEBLINGSVEREIN-SPOTLIGHT AUFBEREITEN
 // ============================================================================
+$standingsByTeamId = [];
+$standingsByToken  = [];
+foreach ($tableData as $idx => $row) {
+    $rowWithRank         = $row;
+    $rowWithRank['rank'] = $idx + 1;
+    $tid = (int)($row['teamInfoId'] ?? 0);
+    if ($tid > 0) {
+        $standingsByTeamId[$tid] = $rowWithRank;
+    }
+    $tok = normalizeClubMatchToken((string)($row['teamName'] ?? '') . ' ' . (string)($row['shortName'] ?? ''));
+    if ($tok !== '') {
+        $standingsByToken[$tok] = $rowWithRank;
+    }
+}
+
 $favTeamId      = (int)($userPrefs['fav_team_id'] ?? 0);
-$favStanding    = null;
+$favStanding    = $favTeamId > 0 ? ($standingsByTeamId[$favTeamId] ?? null) : null;
 $favMatch       = null;
 
 if ($favTeamId > 0) {
-    foreach ($tableData as $idx => $row) {
-        if ((int)($row['teamInfoId'] ?? 0) === $favTeamId) {
-            $favStanding         = $row;
-            $favStanding['rank'] = $idx + 1;
-            break;
-        }
-    }
     foreach ($matchdayData as $m) {
         $t1Id = (int)($m['team1']['teamId'] ?? 0);
         $t2Id = (int)($m['team2']['teamId'] ?? 0);
@@ -2020,9 +2028,22 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
                                     ? calculateBetPoints($myBet['g1'], $myBet['g2'], (int)$scores['score1'], (int)$scores['score2'])
                                     : null;
                                 $commBets  = $communityBetsByMd[$mId] ?? [];
+
+                                // Tabellen-Standings beider Teams für den klickbaren Vorbericht / Direktvergleich ermitteln
+                                $st1 = ($t1Id > 0 && isset($standingsByTeamId[$t1Id])) ? $standingsByTeamId[$t1Id] : null;
+                                if ($st1 === null) {
+                                    $tok1 = normalizeClubMatchToken($t1Full . ' ' . $t1Name);
+                                    $st1  = $standingsByToken[$tok1] ?? null;
+                                }
+                                $st2 = ($t2Id > 0 && isset($standingsByTeamId[$t2Id])) ? $standingsByTeamId[$t2Id] : null;
+                                if ($st2 === null) {
+                                    $tok2 = normalizeClubMatchToken($t2Full . ' ' . $t2Name);
+                                    $st2  = $standingsByToken[$tok2] ?? null;
+                                }
+                                $hasPreviewStats = ($st1 !== null && $st2 !== null && !$isTennisLeague);
                                 ?>
                                 <div class="p-3.5 sm:p-4 transition-colors <?= $isFavMatch ? 'bg-amber-50/60 dark:bg-amber-950/25' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40' ?>">
-                                    <!-- Kopfzeile des Spiels: Anstoßzeit + Stadion + Status -->
+                                    <!-- Kopfzeile des Spiels: Anstoßzeit + Stadion + Status / Klickbarer Vorbericht -->
                                     <div class="flex items-center justify-between gap-2 text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                                         <span class="font-semibold">
                                             <?php if ($scores['kickoff_ts'] > 0): ?>
@@ -2036,19 +2057,42 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
                                             <?php endif; ?>
                                         </span>
 
-                                        <?php if ($scores['is_live']): ?>
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-rose-600 text-white animate-pulse">
-                                                🔴 LIVE<?= $scores['live_clock'] !== '' ? ' • ' . e($scores['live_clock']) : '' ?>
-                                            </span>
-                                        <?php elseif ($scores['is_finished']): ?>
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                                                Beendet
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                                Vorbericht
-                                            </span>
-                                        <?php endif; ?>
+                                        <div class="flex items-center gap-1.5">
+                                            <?php if ($scores['is_live']): ?>
+                                                <?php if ($hasPreviewStats): ?>
+                                                    <button type="button" onclick="toggleMatchPreview(<?= $mId ?>)"
+                                                            class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer">
+                                                        📊 Vergleich ▾
+                                                    </button>
+                                                <?php endif; ?>
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-rose-600 text-white animate-pulse">
+                                                    🔴 LIVE<?= $scores['live_clock'] !== '' ? ' • ' . e($scores['live_clock']) : '' ?>
+                                                </span>
+                                            <?php elseif ($scores['is_finished']): ?>
+                                                <?php if ($hasPreviewStats): ?>
+                                                    <button type="button" onclick="toggleMatchPreview(<?= $mId ?>)"
+                                                            class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer">
+                                                        📊 Statistik ▾
+                                                    </button>
+                                                <?php endif; ?>
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                                    Beendet
+                                                </span>
+                                            <?php else: ?>
+                                                <?php if ($hasPreviewStats): ?>
+                                                    <button type="button" onclick="toggleMatchPreview(<?= $mId ?>)"
+                                                            title="Klicken für Vorbericht, Form-Vergleich &amp; Tipp-Prognose"
+                                                            class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60 transition-colors cursor-pointer inline-flex items-center gap-1 shadow-2xs">
+                                                        <span>📊 Vorbericht</span>
+                                                        <span id="previewArrow_<?= $mId ?>" class="transition-transform">▾</span>
+                                                    </button>
+                                                <?php else: ?>
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                                        Geplant
+                                                    </span>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
 
                                     <!-- Paarung & Ergebnis -->
@@ -2092,6 +2136,103 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
                                         </div>
                                     </div>
 
+                                    <!-- 📊 KLICKBARER VORBERICHT & DIREKTVERGLEICH (Tabellenplatz, Tore/Spiel, Siegquote & Tipp-Prognose) -->
+                                    <?php if ($hasPreviewStats): ?>
+                                        <?php
+                                        $r1   = (int)($st1['rank'] ?? 0);
+                                        $r2   = (int)($st2['rank'] ?? 0);
+                                        $sp1  = max(1, (int)($st1['matches'] ?? 1));
+                                        $sp2  = max(1, (int)($st2['matches'] ?? 1));
+                                        $pts1 = (int)($st1['points'] ?? 0);
+                                        $pts2 = (int)($st2['points'] ?? 0);
+                                        $gf1  = (int)($st1['goals'] ?? 0);
+                                        $ga1  = (int)($st1['opponentGoals'] ?? 0);
+                                        $gf2  = (int)($st2['goals'] ?? 0);
+                                        $ga2  = (int)($st2['opponentGoals'] ?? 0);
+                                        $avgGf1 = round($gf1 / $sp1, 2);
+                                        $avgGa1 = round($ga1 / $sp1, 2);
+                                        $avgGf2 = round($gf2 / $sp2, 2);
+                                        $avgGa2 = round($ga2 / $sp2, 2);
+
+                                        // Kräfteverhältnis (inkl. kleinem Heimvorteil +8 %)
+                                        $str1 = (($pts1 / $sp1) + 0.35) * 1.08;
+                                        $str2 = ($pts2 / $sp2) + 0.35;
+                                        $winProb1 = (int)round(($str1 / max(0.01, $str1 + $str2)) * 100);
+                                        $winProb1 = max(15, min(85, $winProb1));
+                                        $winProb2 = 100 - $winProb1;
+
+                                        // Statistik-Prognose für das Ergebnis (Torschnitt Offensive vs. Defensive des Gegners + leichter Heimbonus)
+                                        $expG1 = (int)round((($avgGf1 + $avgGa2) / 2.0) * 1.05);
+                                        $expG2 = (int)round((($avgGf2 + $avgGa1) / 2.0) * 0.95);
+                                        if (in_array($selectedLeague, ['del', 'del2', 'nhl'], true) && $expG1 === $expG2) {
+                                            // Im Eishockey gibt es kein Unentschieden (Sieger nach OT/SO)
+                                            if ($winProb1 >= 50) {
+                                                $expG1++;
+                                            } else {
+                                                $expG2++;
+                                            }
+                                        }
+                                        ?>
+                                        <div id="matchPreview_<?= $mId ?>" class="hidden mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-emerald-200/80 dark:border-emerald-800/50 text-[11px] space-y-2.5">
+                                            <div class="flex items-center justify-between font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200/70 dark:border-slate-700/70 pb-1.5">
+                                                <span>📊 Vorbericht &amp; Direktvergleich</span>
+                                                <span class="text-[10px] font-normal text-slate-400">Saison-Formcheck</span>
+                                            </div>
+
+                                            <div class="grid grid-cols-3 items-center text-center gap-1">
+                                                <div class="font-extrabold text-emerald-700 dark:text-emerald-400">
+                                                    Platz #<?= $r1 ?> <span class="font-normal text-slate-500">(<?= $isUsSportLeague ? e((string)($st1['_win_pct_str'] ?? '')) : $pts1 . ' Pkt.' ?>)</span>
+                                                </div>
+                                                <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tabelle</div>
+                                                <div class="font-extrabold text-sky-700 dark:text-sky-400">
+                                                    Platz #<?= $r2 ?> <span class="font-normal text-slate-500">(<?= $isUsSportLeague ? e((string)($st2['_win_pct_str'] ?? '')) : $pts2 . ' Pkt.' ?>)</span>
+                                                </div>
+
+                                                <div class="font-semibold text-slate-700 dark:text-slate-300">
+                                                    <?= (int)($st1['won'] ?? 0) ?>S / <?= (int)($st1['draw'] ?? 0) ?>U / <?= (int)($st1['lost'] ?? 0) ?>N
+                                                </div>
+                                                <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bilanz</div>
+                                                <div class="font-semibold text-slate-700 dark:text-slate-300">
+                                                    <?= (int)($st2['won'] ?? 0) ?>S / <?= (int)($st2['draw'] ?? 0) ?>U / <?= (int)($st2['lost'] ?? 0) ?>N
+                                                </div>
+
+                                                <div class="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                                    Ø <?= number_format($avgGf1, 1, ',', '.') ?> : <?= number_format($avgGa1, 1, ',', '.') ?>
+                                                </div>
+                                                <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Ø Tore/Spiel</div>
+                                                <div class="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                                    Ø <?= number_format($avgGf2, 1, ',', '.') ?> : <?= number_format($avgGa2, 1, ',', '.') ?>
+                                                </div>
+                                            </div>
+
+                                            <!-- Kräfteverhältnis-Balken -->
+                                            <div class="space-y-1">
+                                                <div class="flex justify-between text-[10px] font-bold">
+                                                    <span class="text-emerald-700 dark:text-emerald-400"><?= e($t1Name) ?> (<?= $winProb1 ?> %)</span>
+                                                    <span class="text-slate-400">Form &amp; Heimvorteil</span>
+                                                    <span class="text-sky-700 dark:text-sky-400"><?= e($t2Name) ?> (<?= $winProb2 ?> %)</span>
+                                                </div>
+                                                <div class="w-full h-2 rounded-full bg-sky-500/80 overflow-hidden flex">
+                                                    <div class="h-full bg-emerald-500" style="width: <?= $winProb1 ?>%"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Statistik-Tipp-Prognose -->
+                                            <div class="pt-1.5 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2">
+                                                <span class="text-slate-600 dark:text-slate-300">
+                                                    🤖 <strong>Statistik-Prognose:</strong> <span class="font-mono font-extrabold text-slate-900 dark:text-white"><?= $expG1 ?> : <?= $expG2 ?></span>
+                                                </span>
+                                                <?php if ($canBet): ?>
+                                                    <button type="button"
+                                                            onclick="applySuggestedBet(<?= $mId ?>, <?= $expG1 ?>, <?= $expG2 ?>)"
+                                                            class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-extrabold transition-colors cursor-pointer">
+                                                        ⚡ Prognose (<?= $expG1 ?>:<?= $expG2 ?>) als Tipp eintragen
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <!-- Torschützen (ausklappbar, falls Tore gefallen sind) -->
                                     <?php if (!empty($goals)): ?>
                                         <details class="mt-2 group">
@@ -2133,6 +2274,7 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
                                             </div>
                                             <div class="flex items-center gap-1.5">
                                                 <input type="number"
+                                                       id="betInput_<?= $mId ?>_g1"
                                                        min="0" max="200"
                                                        name="bets[<?= $mId ?>][g1]"
                                                        value="<?= $myBet !== null ? (int)$myBet['g1'] : '' ?>"
@@ -2141,6 +2283,7 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
                                                        class="w-14 px-2 py-1 text-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                                 <span class="font-bold text-slate-400">:</span>
                                                 <input type="number"
+                                                       id="betInput_<?= $mId ?>_g2"
                                                        min="0" max="200"
                                                        name="bets[<?= $mId ?>][g2]"
                                                        value="<?= $myBet !== null ? (int)$myBet['g2'] : '' ?>"
@@ -2266,5 +2409,27 @@ $isUsSportLeague = in_array($selectedLeague, ['nba', 'nfl'], true);
         </section>
     </div>
 </main>
+
+<script>
+function toggleMatchPreview(matchId) {
+    const box = document.getElementById('matchPreview_' + matchId);
+    const arr = document.getElementById('previewArrow_' + matchId);
+    if (!box) return;
+    box.classList.toggle('hidden');
+    if (arr) {
+        arr.style.transform = box.classList.contains('hidden') ? '' : 'rotate(180deg)';
+    }
+}
+
+function applySuggestedBet(matchId, g1, g2) {
+    const i1 = document.getElementById('betInput_' + matchId + '_g1');
+    const i2 = document.getElementById('betInput_' + matchId + '_g2');
+    if (i1 && i2) {
+        i1.value = g1;
+        i2.value = g2;
+        i1.focus();
+    }
+}
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
