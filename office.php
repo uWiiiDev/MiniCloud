@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $groupFolderId  = isset($_POST['group_folder_id']) ? (int)$_POST['group_folder_id'] : 0;
     $sharedFolderId = isset($_POST['shared_folder_id']) ? (int)$_POST['shared_folder_id'] : 0;
 
-    if (!in_array($docType, ['docx', 'xlsx', 'pptx', 'drawio', 'csv', 'txt', 'md'], true)) {
+    if (!in_array($docType, ['docx', 'xlsx', 'pptx', 'drawio', 'png', 'csv', 'txt', 'md'], true)) {
         $docType = 'docx';
     }
 
@@ -148,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             'xlsx'   => 'Neue_Tabelle_' . date('Y-m-d'),
             'pptx'   => 'Neue_Praesentation_' . date('Y-m-d'),
             'drawio' => 'Neues_Diagramm_' . date('Y-m-d'),
+            'png'    => 'Neue_Grafik_' . date('Y-m-d'),
             'csv'    => 'Neue_Liste_' . date('Y-m-d'),
             'txt'    => 'Neue_Notiz_' . date('Y-m-d'),
             'md'     => 'Neues_Protokoll_' . date('Y-m-d'),
@@ -354,6 +355,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             ];
         }
         $createdOk = writeVisioData($starterVisio, $physicalPath);
+    } elseif ($docType === 'png') {
+        if (function_exists('imagecreatetruecolor')) {
+            $im = @imagecreatetruecolor(1280, 720);
+            if ($im !== false) {
+                $white = imagecolorallocate($im, 255, 255, 255);
+                imagefill($im, 0, 0, $white);
+                $createdOk = @imagepng($im, $physicalPath);
+                imagedestroy($im);
+                @chmod($physicalPath, 0640);
+            }
+        }
+        if (!$createdOk) {
+            // Reiner PHP-PNG-Generator (1280x720 weiß) als Fallback ohne GD
+            $w = 1280;
+            $h = 720;
+            $rawScanlines = str_repeat("\x00" . str_repeat("\xFF\xFF\xFF", $w), $h);
+            $ihdrData = pack('NNCCCCC', $w, $h, 8, 2, 0, 0, 0);
+            $idatData = gzcompress($rawScanlines, 6);
+            $pngChunk = static fn(string $type, string $data): string => pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+            $pngBytes = "\x89PNG\r\n\x1a\n" . $pngChunk('IHDR', $ihdrData) . $pngChunk('IDAT', (string)$idatData) . $pngChunk('IEND', '');
+            $createdOk = (@file_put_contents($physicalPath, $pngBytes) !== false);
+            @chmod($physicalPath, 0640);
+        }
     } elseif ($docType === 'md') {
         if ($templateKey === 'md_notes') {
             $starterMd = "# 📝 {$docTitle}\n\n_Erstellt am " . date('d.m.Y') . "_\n\n## 🎯 Ziele & Zusammenfassung\n- Punkt 1\n- Punkt 2\n\n## ✅ Checkliste\n- [ ] Erster Schritt\n- [ ] Zweiter Schritt\n\n## 💡 Notizen\nHier Text eingeben...\n";
@@ -1538,6 +1562,20 @@ if ($fileId <= 0) {
                     <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-violet-700 dark:group-hover:text-violet-300">Mind-Map</div>
                     <div class="text-[10px] text-slate-500">Ideen &amp; Strukturbaum</div>
                 </a>
+
+                <button type="button" onclick="selectOfficePreset('png', 'blank', 'Grafik_' + new Date().toISOString().slice(0,10))"
+                        class="p-3 rounded-xl bg-pink-50/70 dark:bg-pink-950/40 hover:bg-pink-100 dark:hover:bg-pink-900/50 border border-pink-200 dark:border-pink-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">🎨</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-pink-700 dark:group-hover:text-pink-300">Neue Bild-Leinwand</div>
+                    <div class="text-[10px] text-slate-500">.png im Bild-Studio starten</div>
+                </button>
+
+                <button type="button" onclick="filterOfficeHub('image'); const tbl = document.querySelector('[data-office-filter=\'image\']'); if (tbl) tbl.scrollIntoView({behavior: 'smooth', block: 'center'});"
+                        class="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/80 text-left transition-all cursor-pointer group">
+                    <div class="text-xl mb-1">🖼️</div>
+                    <div class="text-xs font-bold text-slate-900 dark:text-white group-hover:text-rose-700 dark:group-hover:text-rose-300">Foto bearbeiten</div>
+                    <div class="text-[10px] text-slate-500">Zuschneiden, Filter &amp; Größe</div>
+                </button>
             </div>
 
             <!-- Erstellungs-Formular -->
@@ -1553,6 +1591,7 @@ if ($fileId <= 0) {
                         <option value="xlsx">📗 Excel-Tabelle (.xlsx)</option>
                         <option value="pptx">📙 PowerPoint-Präsentation (.pptx)</option>
                         <option value="drawio">📐 Visio-Diagramm / Organigramm (.drawio)</option>
+                        <option value="png">🎨 Bild- / Grafik-Leinwand (.png)</option>
                         <option value="csv">📊 CSV-Tabelle (.csv)</option>
                         <option value="md">📒 Markdown (.md)</option>
                         <option value="txt">📄 Textdatei (.txt)</option>
