@@ -222,13 +222,21 @@ require_once __DIR__ . '/includes/header.php';
             </p>
         </div>
 
-        <button
-            type="button"
-            onclick="openPasswordModal()"
-            class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
-        >
-            ➕ Neuer Zugang / Schlüssel
-        </button>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <a
+                href="authenticator.php"
+                class="px-3.5 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/70 font-semibold text-xs sm:text-sm transition-colors"
+            >
+                🔢 2FA-Authenticator &rarr;
+            </a>
+            <button
+                type="button"
+                onclick="openPasswordModal()"
+                class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+            >
+                ➕ Neuer Zugang / Schlüssel
+            </button>
+        </div>
     </div>
 
     <!-- Such- und Kategorie-Filter -->

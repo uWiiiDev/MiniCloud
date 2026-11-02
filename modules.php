@@ -446,6 +446,18 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
+        'key'      => 'authenticator',
+        'enabled'  => ($appSettings['enable_authenticator'] ?? '1') === '1',
+        'title'    => '2FA-Authenticator',
+        'shortSub' => 'TOTP-Einmalcodes (Google Auth)',
+        'icon'     => '🔢',
+        'url'      => 'authenticator.php',
+        'category' => 'tools_extra',
+        'desc'     => 'Erzeugt 6- und 8-stellige 30-Sekunden-Sicherheitscodes (TOTP) für Google, Microsoft, PayPal, Amazon, GitHub & Co. – inkl. QR-Scanner und Handy-Export.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-indigo-600 text-white',
+    ],
+    [
         'key'      => 'toolbox',
         'enabled'  => ($appSettings['enable_toolbox'] ?? '1') === '1',
         'title'    => 'Alltags-Toolbox',
