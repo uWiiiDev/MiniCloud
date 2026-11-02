@@ -247,6 +247,39 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-plum.dark textarea { background-color: #2f273b !important; border-color: #65567b !important; color: #faf5ff !important; }
 
         /* --- Dunkle Themes (Dark, Ocean, Forest & Obsidian/Mitternacht) --- */
+        html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html:not(.dark) select,
+        html:not(.dark) textarea {
+            color: #0f172a !important;
+            background-color: #f8fafc;
+            color-scheme: light;
+        }
+        html:not(.dark) input::placeholder,
+        html:not(.dark) textarea::placeholder {
+            color: #64748b !important;
+            opacity: 1;
+        }
+        html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html.dark select,
+        html.dark textarea,
+        html.theme-dark.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html.theme-dark.dark select,
+        html.theme-dark.dark textarea {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f8fafc !important;
+            color-scheme: dark;
+        }
+        html.dark input::placeholder,
+        html.dark textarea::placeholder {
+            color: #94a3b8 !important;
+            opacity: 1;
+        }
+        html.dark select option,
+        html.dark select optgroup {
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
         html.theme-ocean.dark { --bg-card: #0c2544; --border: #193b66; --text: #e2e8f0; --text-muted: #94a3b8; }
         html.theme-ocean.dark body { background-color: #07192f !important; color: #e2e8f0; }
         html.theme-ocean.dark header,
@@ -256,6 +289,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-ocean.dark .contact-card,
         html.theme-ocean.dark .modal-box,
         html.theme-ocean.dark main .bg-white.rounded-2xl { background-color: #0c2544 !important; border-color: #193b66 !important; }
+        html.theme-ocean.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html.theme-ocean.dark select,
+        html.theme-ocean.dark textarea { background-color: #091e38 !important; border-color: #1e4976 !important; color: #f8fafc !important; color-scheme: dark; }
         html.theme-forest.dark { --bg-card: #0c2e24; --border: #164e3d; --text: #e2e8f0; --text-muted: #94a3b8; }
         html.theme-forest.dark body { background-color: #071f18 !important; color: #e2e8f0; }
         html.theme-forest.dark header,
@@ -265,6 +301,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-forest.dark .contact-card,
         html.theme-forest.dark .modal-box,
         html.theme-forest.dark main .bg-white.rounded-2xl { background-color: #0c2e24 !important; border-color: #164e3d !important; }
+        html.theme-forest.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html.theme-forest.dark select,
+        html.theme-forest.dark textarea { background-color: #08231b !important; border-color: #1b5e49 !important; color: #f8fafc !important; color-scheme: dark; }
         html.theme-obsidian.dark { --bg-card: #16102c; --border: #2e2252; --text: #ede9fe; --text-muted: #a78bfa; }
         html.theme-obsidian.dark body { background-color: #0b0719 !important; color: #ede9fe; }
         html.theme-obsidian.dark header,
@@ -274,9 +313,9 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         html.theme-obsidian.dark .contact-card,
         html.theme-obsidian.dark .modal-box,
         html.theme-obsidian.dark main .bg-white.rounded-2xl { background-color: #16102c !important; border-color: #2e2252 !important; }
-        html.theme-obsidian.dark input:not([type="checkbox"]):not([type="radio"]),
+        html.theme-obsidian.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
         html.theme-obsidian.dark select,
-        html.theme-obsidian.dark textarea { background-color: #110c22 !important; border-color: #36285f !important; color: #f5f3ff !important; }
+        html.theme-obsidian.dark textarea { background-color: #110c22 !important; border-color: #36285f !important; color: #f5f3ff !important; color-scheme: dark; }
 
         /* --- Mobile-Optimierungen (Verhindert ungewollten Auto-Zoom unter iOS/Android & verbessert Touch-Bedienung) --- */
         @media (max-width: 640px) {

@@ -849,7 +849,7 @@ require_once __DIR__ . '/includes/header.php';
                 id="otpauthQuickInput"
                 oninput="parseOtpAuthUriIntoForm(this.value)"
                 placeholder="Oder otpauth://totp/... Link hier einfügen (füllt alle Felder automatisch aus)"
-                class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 text-xs font-mono"
+                class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-indigo-200 dark:border-indigo-800 text-xs font-mono"
             >
         </div>
 
@@ -879,15 +879,15 @@ require_once __DIR__ . '/includes/header.php';
             <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div class="sm:col-span-2">
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Icon</label>
-                    <input type="text" name="icon" id="totpIcon" value="🔐" maxlength="4" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-center text-base">
+                    <input type="text" name="icon" id="totpIcon" value="🔐" maxlength="4" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-center text-base">
                 </div>
                 <div class="sm:col-span-5">
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Dienst / Anbieter *</label>
-                    <input type="text" name="issuer" id="totpIssuer" required placeholder="z. B. Google, PayPal, Contabo" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <input type="text" name="issuer" id="totpIssuer" required placeholder="z. B. Google, PayPal, Contabo" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                 </div>
                 <div class="sm:col-span-5">
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Konto / E-Mail-Adresse</label>
-                    <input type="text" name="account_name" id="totpAccountName" placeholder="z. B. name@beispiel.de" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <input type="text" name="account_name" id="totpAccountName" placeholder="z. B. name@beispiel.de" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                 </div>
             </div>
 
@@ -910,7 +910,7 @@ require_once __DIR__ . '/includes/header.php';
                     name="secret_plain"
                     id="totpSecretPlain"
                     placeholder="z. B. JBSWY3DPEHPK3PXP (Leerzeichen & Bindestriche werden automatisch entfernt)"
-                    class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 font-mono text-xs sm:text-sm uppercase"
+                    class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-mono text-xs sm:text-sm uppercase"
                 >
                 <p id="totpSecretEditHint" class="hidden text-[11px] text-slate-400 mt-1">
                     Leer lassen, um den bereits gespeicherten Geheimschlüssel unverändert beizubehalten.
@@ -920,7 +920,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Kategorie</label>
-                    <select name="category" id="totpCategory" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <select name="category" id="totpCategory" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                         <?php foreach ($categories as $cKey => $cLab): ?>
                             <option value="<?= e($cKey) ?>"><?= e($cLab) ?></option>
                         <?php endforeach; ?>
@@ -929,11 +929,11 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Code-Länge &amp; Intervall</label>
                     <div class="grid grid-cols-2 gap-1.5">
-                        <select name="digits" id="totpDigits" class="px-2 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs">
+                        <select name="digits" id="totpDigits" class="px-2 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs">
                             <option value="6">6 Stellen</option>
                             <option value="8">8 Stellen</option>
                         </select>
-                        <select name="period" id="totpPeriod" class="px-2 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs">
+                        <select name="period" id="totpPeriod" class="px-2 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs">
                             <option value="30">30 Sek.</option>
                             <option value="60">60 Sek.</option>
                         </select>
@@ -941,7 +941,7 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Algorithmus</label>
-                    <select name="algorithm" id="totpAlgorithm" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <select name="algorithm" id="totpAlgorithm" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                         <option value="SHA1">SHA1 (Standard)</option>
                         <option value="SHA256">SHA256</option>
                         <option value="SHA512">SHA512</option>
@@ -952,11 +952,11 @@ require_once __DIR__ . '/includes/header.php';
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notiz / Backup-Codes (optional)</label>
-                    <input type="text" name="notes_plain" id="totpNotes" placeholder="z. B. Notfall-Wiederherstellungscode" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <input type="text" name="notes_plain" id="totpNotes" placeholder="z. B. Notfall-Wiederherstellungscode" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">👥 Mit Familie / Gruppe teilen</label>
-                    <select name="share_target" id="totpShareTarget" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
+                    <select name="share_target" id="totpShareTarget" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 text-xs sm:text-sm">
                         <option value="">🔒 Nur für mich privat</option>
                         <?php if (!empty($userGroups)): ?>
                             <optgroup label="👥 Cloud-Gruppen">
@@ -1015,7 +1015,7 @@ require_once __DIR__ . '/includes/header.php';
                 name="otpauth_batch"
                 rows="4"
                 placeholder="otpauth://totp/Google:user@gmail.com?secret=JBSWY3DPEHPK3PXP&issuer=Google"
-                class="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 font-mono text-xs"
+                class="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-mono text-xs"
             ></textarea>
             <button type="submit" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold cursor-pointer">
                 📥 Jetzt importieren
@@ -1041,7 +1041,7 @@ require_once __DIR__ . '/includes/header.php';
                         id="totpExportTextarea"
                         readonly
                         rows="5"
-                        class="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-[11px]"
+                        class="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-mono text-[11px]"
                     ><?= e(implode("\n", $exportOtpAuthLines)) ?></textarea>
                     <button
                         type="button"
