@@ -151,7 +151,9 @@ function calculateAstronomyOffline(float $lat, float $lng, ?int $ts = null): arr
         'is_day'      => ($ts >= $sunriseTs && $ts <= $sunsetTs),
         'moon_icon'   => $moon['icon'],
         'moon_label'  => $moon['label'],
+        'moon_phase'  => $moon['label'],
         'moon_pct'    => (int)round((1.0 - abs($phaseRatio - 0.5) * 2.0) * 100),
+        'moon_illum'  => (int)round((1.0 - abs($phaseRatio - 0.5) * 2.0) * 100),
     ];
 }
 
@@ -182,6 +184,7 @@ function buildOfflineClimateForecast(float $lat, float $lng): array
             'temp'      => $temp,
             'rain_prob' => ($h >= 15 && $h <= 18) ? 25 : 10,
             'rain_mm'   => 0.0,
+            'rain'      => 0.0,
             'wind_kmh'  => round(11.0 + ($h % 5) * 1.5, 1),
             'wmo'       => $wmo,
         ];
@@ -193,10 +196,14 @@ function buildOfflineClimateForecast(float $lat, float $lng): array
         $tsD = strtotime(sprintf('today +%d days', $d));
         $seed = ((int)abs(crc32(date('Y-m-d', $tsD) . '_' . round($lat, 1))) % 50) / 10.0 - 2.5;
         $wmo  = $wmoCycle[$d % count($wmoCycle)];
+        $tmax = round($baseMax + $seed, 1);
+        $tmin = round($baseMin + $seed * 0.7, 1);
         $daily[] = [
             'date'      => date('Y-m-d', $tsD),
-            't_max'     => round($baseMax + $seed, 1),
-            't_min'     => round($baseMin + $seed * 0.7, 1),
+            't_max'     => $tmax,
+            'tmax'      => $tmax,
+            't_min'     => $tmin,
+            'tmin'      => $tmin,
             'rain_sum'  => $wmo === 61 ? 3.4 : 0.0,
             'rain_prob' => $wmo === 61 ? 65 : 15,
             'wind_max'  => round(16.0 + ($d * 2.3) % 12, 1),
@@ -206,8 +213,10 @@ function buildOfflineClimateForecast(float $lat, float $lng): array
 
     $curTemp = $hourly[$hourNow]['temp'] ?? round(($baseMax + $baseMin) / 2.0, 1);
     return [
-        'source' => 'offline-climate-model',
-        'current' => [
+        'source'     => 'Offline-Klimamodell (Intranet)',
+        'fetched_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('d.m.Y H:i'),
+        'current'    => [
             'temp'       => $curTemp,
             'feels_like' => round($curTemp - 0.8, 1),
             'humidity'   => 68,
@@ -216,8 +225,10 @@ function buildOfflineClimateForecast(float $lat, float $lng): array
             'gusts_kmh'  => 24.0,
             'wind_deg'   => 245,
             'rain_mm'    => 0.0,
+            'clouds'     => 35,
             'uv_index'   => $month >= 5 && $month <= 8 ? 5.5 : 2.0,
             'wmo'        => 2,
+            'is_day'     => ($hourNow >= 7 && $hourNow <= 19),
         ],
         'hourly' => $hourly,
         'daily'  => $daily,
@@ -227,8 +238,9 @@ function buildOfflineClimateForecast(float $lat, float $lng): array
 /**
  * Ruft aktuelle Wetter-, 24h-Stunden- & 7-Tage-Daten ab (mit lokalem Festplatten-Cache & Air-Gap-Fallback).
  */
-function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $allowNetwork = true): array
+function fetchWeatherForCoords(float $lat, float $lng, ?string $cacheDir = null, bool $allowNetwork = true): array
 {
+    $cacheDir  = $cacheDir ?: (__DIR__ . '/uploads/weather_cache');
     $cacheKey  = sprintf('wx_%s_%s.json', number_format($lat, 2, '.', ''), number_format($lng, 2, '.', ''));
     $cacheFile = $cacheDir . '/' . $cacheKey;
 
@@ -236,7 +248,7 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
     if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < 1200) {
         $cached = @json_decode((string)@file_get_contents($cacheFile), true);
         if (is_array($cached) && isset($cached['current'])) {
-            $cached['source'] = 'local-cache';
+            $cached['source'] = 'Lokaler Server-Cache (DWD-ICON)';
             return $cached;
         }
     }
@@ -244,7 +256,7 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
     // 2. Falls Netzwerk erlaubt: Live-Daten vom DWD-ICON / Open-Meteo Modell abrufen
     if ($allowNetwork) {
         $url = sprintf(
-            'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=Europe%%2FBerlin&forecast_days=7',
+            'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=Europe%%2FBerlin&forecast_days=7',
             number_format($lat, 4, '.', ''),
             number_format($lng, 4, '.', '')
         );
@@ -272,11 +284,13 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
                 }
                 for ($i = $startIdx; $i < min($startIdx + 24, count($json['hourly']['time'])); $i++) {
                     $tRaw = (string)($json['hourly']['time'][$i] ?? '');
+                    $rainVal = round((float)($json['hourly']['precipitation'][$i] ?? 0.0), 1);
                     $hourly[] = [
                         'time'      => substr($tRaw, 11, 5) ?: '00:00',
                         'temp'      => round((float)($json['hourly']['temperature_2m'][$i] ?? 0.0), 1),
                         'rain_prob' => (int)($json['hourly']['precipitation_probability'][$i] ?? 0),
-                        'rain_mm'   => round((float)($json['hourly']['precipitation'][$i] ?? 0.0), 1),
+                        'rain_mm'   => $rainVal,
+                        'rain'      => $rainVal,
                         'wind_kmh'  => round((float)($json['hourly']['wind_speed_10m'][$i] ?? 0.0), 1),
                         'wmo'       => (int)($json['hourly']['weather_code'][$i] ?? 1),
                     ];
@@ -286,10 +300,14 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
             $daily = [];
             if (isset($json['daily']['time']) && is_array($json['daily']['time'])) {
                 foreach ($json['daily']['time'] as $i => $dStr) {
+                    $tmax = round((float)($json['daily']['temperature_2m_max'][$i] ?? 0.0), 1);
+                    $tmin = round((float)($json['daily']['temperature_2m_min'][$i] ?? 0.0), 1);
                     $daily[] = [
                         'date'      => (string)$dStr,
-                        't_max'     => round((float)($json['daily']['temperature_2m_max'][$i] ?? 0.0), 1),
-                        't_min'     => round((float)($json['daily']['temperature_2m_min'][$i] ?? 0.0), 1),
+                        't_max'     => $tmax,
+                        'tmax'      => $tmax,
+                        't_min'     => $tmin,
+                        'tmin'      => $tmin,
                         'rain_sum'  => round((float)($json['daily']['precipitation_sum'][$i] ?? 0.0), 1),
                         'rain_prob' => (int)($json['daily']['precipitation_probability_max'][$i] ?? 0),
                         'wind_max'  => round((float)($json['daily']['wind_speed_10m_max'][$i] ?? 0.0), 1),
@@ -300,7 +318,8 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
             }
 
             $result = [
-                'source'     => 'live-dwd-icon',
+                'source'     => 'DWD-ICON Live',
+                'fetched_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('d.m.Y H:i'),
                 'current'    => [
                     'temp'       => round((float)($c['temperature_2m'] ?? 12.0), 1),
@@ -311,8 +330,10 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
                     'gusts_kmh'  => round((float)($c['wind_gusts_10m'] ?? 18.0), 1),
                     'wind_deg'   => (int)($c['wind_direction_10m'] ?? 240),
                     'rain_mm'    => round((float)($c['precipitation'] ?? 0.0), 1),
+                    'clouds'     => (int)($c['cloud_cover'] ?? 40),
                     'uv_index'   => $daily[0]['uv_max'] ?? 2.0,
                     'wmo'        => (int)($c['weather_code'] ?? 1),
+                    'is_day'     => ((int)($c['is_day'] ?? 1)) === 1,
                 ],
                 'hourly' => $hourly,
                 'daily'  => $daily,
@@ -326,7 +347,7 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
     if (is_file($cacheFile)) {
         $cached = @json_decode((string)@file_get_contents($cacheFile), true);
         if (is_array($cached) && isset($cached['current'])) {
-            $cached['source'] = 'offline-disk-cache';
+            $cached['source'] = 'Offline-Festplatten-Cache';
             return $cached;
         }
     }
@@ -336,10 +357,11 @@ function fetchWeatherForCoords(float $lat, float $lng, string $cacheDir, bool $a
 }
 
 /**
- * 16 Referenz-Stationen für die interaktive Deutschland-Wetter- & Warnkarte.
+ * 18 Referenz-Stationen für die interaktive Deutschland-Wetter- & Warnkarte.
  */
-function getGermanyWeatherStations(string $cacheDir, bool $allowNetwork): array
+function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork = true): array
 {
+    $cacheDir = $cacheDir ?: (__DIR__ . '/uploads/weather_cache');
     $stations = [
         ['name' => 'Sylt / Nordsee',     'state' => 'Schleswig-Holstein',     'lat' => 54.91, 'lng' => 8.31],
         ['name' => 'Kiel / Ostsee',      'state' => 'Schleswig-Holstein',     'lat' => 54.32, 'lng' => 10.13],
@@ -472,7 +494,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'offline_search') {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $postAction = (string)($_POST['action'] ?? '');
     if (!verifyCsrfToken((string)($_POST['csrf_token'] ?? ''))) {
         setFlash('error', 'Ungültiges Sicherheits-Token.');
@@ -637,7 +659,7 @@ $stmtObs = $pdo->query('
     SELECT o.*, u.username
     FROM weather_observations o
     LEFT JOIN users u ON u.id = o.user_id
-    ORDER BY o.observed_at DESC, o.id DESC
+    ORDER BY o.recorded_at DESC, o.id DESC
     LIMIT 15
 ');
 $observations = $stmtObs ? $stmtObs->fetchAll() : [];
@@ -919,7 +941,7 @@ require_once __DIR__ . '/includes/header.php';
                     <tbody>
                         <?php foreach ($observations as $ob): ?>
                             <tr>
-                                <td><?= e(date('d.m.Y H:i', strtotime((string)$ob['observed_at']))) ?></td>
+                                <td><?= e(date('d.m.Y H:i', strtotime((string)($ob['recorded_at'] ?? 'now')))) ?></td>
                                 <td><strong><?= e((string)$ob['station_name']) ?></strong></td>
                                 <td><?= number_format((float)$ob['temp_c'], 1, ',', '.') ?> °C</td>
                                 <td><?= (int)$ob['humidity'] ?> %</td>
