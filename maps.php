@@ -459,14 +459,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'tile') {
         exit;
     }
 
-    // 2. Im lokalen Festplatten-Tile-Cache (uploads/map_tiles/{style}/{z}/{x}/{y}.png) suchen
+    // 2. Im lokalen Festplatten-Tile-Cache (uploads/map_tiles/{style}/{z}/{x}/{y}.png)
+    //    sowie im mitgelieferten Offline-Basispaket (assets/maps/tiles_osm/{z}/{x}/{y}.png) suchen
     $cacheStyle = in_array($style, ['osm', 'topo', 'cyclosm'], true) ? $style : 'osm';
     $tilePath = sprintf('%s/%s/%d/%d/%d.png', $tilesCacheDir, $cacheStyle, $z, $x, $y);
+    $bundledTilePath = sprintf('%s/assets/maps/tiles_osm/%d/%d/%d.png', __DIR__, $z, $x, $y);
+
     if (is_file($tilePath) && filesize($tilePath) > 64) {
         header('Content-Type: image/png');
         header('Cache-Control: public, max-age=604800');
         header('X-MiniCloud-Map-Source: local-disk-cache');
         readfile($tilePath);
+        exit;
+    }
+    if ($cacheStyle === 'osm' && is_file($bundledTilePath) && filesize($bundledTilePath) > 64) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=604800');
+        header('X-MiniCloud-Map-Source: bundled-offline-osm');
+        readfile($bundledTilePath);
         exit;
     }
 
@@ -502,11 +512,106 @@ if (isset($_GET['action']) && $_GET['action'] === 'tile') {
         }
     }
 
-    // 4. 100 % Abgeschotteter Intranet-Fallback: Saubere SVG-Kachel ohne Außenverbindung liefern
+    // 4. Smart Offline-Overzoom: Falls für höhere Zoomstufe keine eigene Kachel vorliegt,
+    //    aus der nächsthöheren lokal vorhandenen Eltern-Kachel (z.B. Zoom 8..14) per GD ausschneiden & skalieren!
+    if (in_array($style, ['osm', 'topo'], true) && function_exists('imagecreatetruecolor') && $z > 5) {
+        for ($pz = $z - 1; $pz >= 5; $pz--) {
+            $shift = $z - $pz;
+            if ($shift > 6) {
+                break;
+            }
+            $px = $x >> $shift;
+            $py = $y >> $shift;
+            $parentCache = sprintf('%s/%s/%d/%d/%d.png', $tilesCacheDir, $cacheStyle, $pz, $px, $py);
+            $parentBundled = sprintf('%s/assets/maps/tiles_osm/%d/%d/%d.png', __DIR__, $pz, $px, $py);
+            $srcFile = null;
+            if (is_file($parentCache) && filesize($parentCache) > 64) {
+                $srcFile = $parentCache;
+            } elseif ($cacheStyle === 'osm' && is_file($parentBundled) && filesize($parentBundled) > 64) {
+                $srcFile = $parentBundled;
+            }
+            if ($srcFile !== null) {
+                $srcImg = @imagecreatefrompng($srcFile);
+                if ($srcImg !== false) {
+                    $subDiv = 1 << $shift;
+                    $subSize = 256 / $subDiv;
+                    $srcX = (int)round(($x % $subDiv) * $subSize);
+                    $srcY = (int)round(($y % $subDiv) * $subSize);
+                    $srcW = max(1, (int)round($subSize));
+                    $dstImg = imagecreatetruecolor(256, 256);
+                    imagecopyresampled($dstImg, $srcImg, 0, 0, $srcX, $srcY, 256, 256, $srcW, $srcW);
+                    header('Content-Type: image/png');
+                    header('Cache-Control: public, max-age=86400');
+                    header('X-MiniCloud-Map-Source: offline-overzoom-z' . $pz);
+                    imagepng($dstImg);
+                    imagedestroy($srcImg);
+                    imagedestroy($dstImg);
+                    exit;
+                }
+            }
+        }
+    }
+
+    // 5. 100 % Abgeschotteter Intranet-Fallback: Saubere SVG-Kachel ohne Außenverbindung liefern
     header('Content-Type: image/svg+xml; charset=UTF-8');
     header('Cache-Control: public, max-age=3600');
     header('X-MiniCloud-Map-Source: airgap-vector-tile');
     echo renderOfflineVectorFallbackTileSvg($z, $x, $y, $style);
+    exit;
+}
+
+// 5a-2) Vollständige Offline-Suche in allen ~23.300 deutschen PLZ, Städten, Gemeinden & Landkreisen (?action=offline_search&q=...)
+if (isset($_GET['action']) && $_GET['action'] === 'offline_search') {
+    header('Content-Type: application/json; charset=UTF-8');
+    $q = mb_strtolower(trim((string)($_GET['q'] ?? '')));
+    if (mb_strlen($q) < 2) {
+        echo json_encode(['ok' => true, 'results' => []]);
+        exit;
+    }
+    $plzFile = __DIR__ . '/assets/maps/de_places_plz.json';
+    $results = [];
+    if (is_file($plzFile)) {
+        $rawJson = @file_get_contents($plzFile);
+        $entries = is_string($rawJson) ? @json_decode($rawJson, true) : null;
+        if (is_array($entries)) {
+            $exactMatches = [];
+            $partialMatches = [];
+            foreach ($entries as $row) {
+                // Format: [0 => zip, 1 => name, 2 => state, 3 => kreis, 4 => lat, 5 => lng]
+                $zip   = (string)($row[0] ?? '');
+                $name  = (string)($row[1] ?? '');
+                $state = (string)($row[2] ?? '');
+                $kreis = (string)($row[3] ?? '');
+                $nameLower = mb_strtolower($name);
+                $kreisLower = mb_strtolower($kreis);
+
+                if (str_starts_with($zip, $q) || str_starts_with($nameLower, $q)) {
+                    $exactMatches[] = [
+                        'zip'   => $zip,
+                        'name'  => $name,
+                        'state' => $state,
+                        'kreis' => $kreis,
+                        'lat'   => (float)$row[4],
+                        'lng'   => (float)$row[5],
+                    ];
+                    if (count($exactMatches) >= 18) {
+                        break;
+                    }
+                } elseif (count($partialMatches) < 15 && (str_contains($nameLower, $q) || str_contains($kreisLower, $q))) {
+                    $partialMatches[] = [
+                        'zip'   => $zip,
+                        'name'  => $name,
+                        'state' => $state,
+                        'kreis' => $kreis,
+                        'lat'   => (float)$row[4],
+                        'lng'   => (float)$row[5],
+                    ];
+                }
+            }
+            $results = array_slice(array_merge($exactMatches, $partialMatches), 0, 18);
+        }
+    }
+    echo json_encode(['ok' => true, 'results' => $results], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -1859,21 +1964,37 @@ require_once __DIR__ . '/includes/header.php';
 
         <!-- NACHTRÄGLICHES HERUNTERLADEN / ERHÖHEN DES KACHEL-DETAILGRADS -->
         <div class="space-y-2.5 text-xs">
-            <p class="font-extrabold text-slate-900 dark:text-white">📥 Detailgrad für den aktuellen Kartenausschnitt nachträglich erhöhen</p>
+            <p class="font-extrabold text-slate-900 dark:text-white">📥 Offline-Straßenkacheln für Bundesland oder Ausschnitt vorab speichern</p>
             <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                Wenn der Server kurzzeitig Wartungs-Internet hat, kannst du für den aktuell sichtbaren Kartenausschnitt eine höhere Zoomstufe lokal in <code class="font-mono">uploads/map_tiles/</code> speichern. Alternativ kannst du jederzeit eine <code class="font-mono">.mbtiles</code>-Datei in <code class="font-mono">uploads/maps/</code> ablegen.
+                Bereits ab Werk integriert sind <strong>alle 23.296 deutschen PLZ/Orte</strong>, <strong>alle 400 Landkreise &amp; 16 Bundesländer (Hochauflösendes GeoJSON)</strong> sowie <strong>97 echte OpenStreetMap-Basiskacheln für ganz Deutschland (bis Zoom 8)</strong>. Hier kannst du für beliebige Regionen tiefere Straßen-Detailstufen lokal in <code class="font-mono">uploads/map_tiles/</code> nachladen:
             </p>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select id="prefetchRegionSelect" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700">
+                    <option value="view">🎯 Aktuell sichtbarer Kartenausschnitt</option>
+                    <option value="47.2,55.0,5.8,15.1">🇩🇪 Ganz Deutschland</option>
+                    <option value="50.3,52.5,5.8,9.5">🏭 Nordrhein-Westfalen</option>
+                    <option value="47.5,49.8,7.5,10.5">🦁 Baden-Württemberg</option>
+                    <option value="47.2,50.6,9.0,13.9">🏔️ Bayern</option>
+                    <option value="49.4,51.7,7.7,10.3">🏦 Hessen</option>
+                    <option value="51.3,53.9,6.6,11.6">🐎 Niedersachsen &amp; Bremen</option>
+                    <option value="51.3,53.6,11.2,14.8">🐻 Berlin &amp; Brandenburg</option>
+                    <option value="48.9,50.9,6.1,8.5">🍷 Rheinland-Pfalz &amp; Saarland</option>
+                    <option value="50.1,51.7,11.8,15.0">🏰 Sachsen</option>
+                    <option value="53.3,55.1,8.2,11.4">⚓ Schleswig-Holstein &amp; Hamburg</option>
+                </select>
                 <select id="prefetchZoomSelect" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700">
-                    <option value="6">Detailstufe Zoom 6 (Deutschland-Überblick)</option>
-                    <option value="8">Detailstufe Zoom 8 (Bundesland-Details)</option>
-                    <option value="10" selected>Detailstufe Zoom 10 (Region &amp; Kreisstädte)</option>
+                    <option value="7">Detailstufe Zoom 7 (Länder-Überblick)</option>
+                    <option value="8">Detailstufe Zoom 8 (Bundesland-Basis)</option>
+                    <option value="9">Detailstufe Zoom 9 (Regionen &amp; Landkreise)</option>
+                    <option value="10" selected>Detailstufe Zoom 10 (Kreisstädte &amp; Straßen)</option>
                     <option value="12">Detailstufe Zoom 12 (Stadtplan-Übersicht)</option>
                     <option value="14">Detailstufe Zoom 14 (Einzelne Straßen)</option>
                     <option value="16">Detailstufe Zoom 16 (Gebäude &amp; Wege)</option>
                 </select>
+            </div>
+            <div class="flex items-center gap-2">
                 <button type="button" onclick="prefetchCurrentViewTiles()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer">
-                    📥 Aktuellen Ausschnitt lokal speichern
+                    📥 Region / Detailstufe jetzt lokal speichern
                 </button>
             </div>
             <p id="prefetchStatusMsg" class="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400"></p>
@@ -2080,33 +2201,84 @@ function switchMapBaseStyle(style) {
     mcTileLayer.bringToBack();
 }
 
+let mcGeoJsonEurope = null;
+let mcGeoJsonStates = null;
+let mcGeoJsonKreise = null;
+let mcGeoJsonLoading = false;
+
+async function loadHighResOfflineGeoJson() {
+    if (mcGeoJsonLoading || MC_FLOORPLAN) return;
+    mcGeoJsonLoading = true;
+    try {
+        const [resEu, resSt, resKr] = await Promise.all([
+            fetch('assets/maps/europe.geojson').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('assets/maps/de_bundeslaender.geojson').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('assets/maps/de_landkreise.geojson').then(r => r.ok ? r.json() : null).catch(() => null)
+        ]);
+        mcGeoJsonEurope = resEu;
+        mcGeoJsonStates = resSt;
+        mcGeoJsonKreise = resKr;
+        renderOfflineVectorAtlas();
+    } catch (e) {}
+}
+
 function renderOfflineVectorAtlas() {
     if (!mcMap || MC_FLOORPLAN) return;
+    if (!mcGeoJsonLoading) {
+        loadHighResOfflineGeoJson();
+    }
     layerGroupBaseVector.clearLayers();
     layerGroupInfra.clearLayers();
     layerGroupCities.clearLayers();
 
     const isDark = document.documentElement.classList.contains('dark');
 
-    // 1. Deutschland-Fläche & Grenze
-    L.polygon(OFFLINE_GERMANY_POLY, {
-        color: isDark ? '#38bdf8' : '#0284c7',
-        weight: 2.2,
-        fillColor: isDark ? '#1e293b' : '#f8fafc',
-        fillOpacity: mcAirGapOnly ? 0.55 : 0.08,
-        interactive: false
-    }).addTo(layerGroupBaseVector);
+    // 0. Europäische Nachbarländer (Hochauflösendes GeoJSON)
+    if (mcGeoJsonEurope) {
+        L.geoJSON(mcGeoJsonEurope, {
+            style: {
+                color: isDark ? '#334155' : '#94a3b8',
+                weight: 1.0,
+                fillColor: isDark ? '#0f172a' : '#f1f5f9',
+                fillOpacity: mcAirGapOnly ? 0.35 : 0.03
+            },
+            interactive: false
+        }).addTo(layerGroupBaseVector);
+    }
 
-    // 2. Bundesländer-Grenzen & Namen (ab Detailgrad 2)
+    // 1. Deutschland-Fläche & Grenze (Hochauflösend über de_bundeslaender oder Fallback-Polygon)
+    if (mcGeoJsonStates) {
+        L.geoJSON(mcGeoJsonStates, {
+            style: {
+                color: isDark ? '#38bdf8' : '#0284c7',
+                weight: mcCurrentDetailLvl >= 2 ? 1.8 : 2.2,
+                fillColor: isDark ? '#1e293b' : '#f8fafc',
+                fillOpacity: mcAirGapOnly ? 0.55 : 0.06
+            },
+            interactive: false
+        }).addTo(layerGroupBaseVector);
+    } else {
+        L.polygon(OFFLINE_GERMANY_POLY, {
+            color: isDark ? '#38bdf8' : '#0284c7',
+            weight: 2.2,
+            fillColor: isDark ? '#1e293b' : '#f8fafc',
+            fillOpacity: mcAirGapOnly ? 0.55 : 0.08,
+            interactive: false
+        }).addTo(layerGroupBaseVector);
+    }
+
+    // 2. Bundesländer-Namen (ab Detailgrad 2) & alle 400 Landkreise (ab Detailgrad 4)
     if (mcCurrentDetailLvl >= 2) {
         OFFLINE_BUNDESLAENDER.forEach(bl => {
-            L.polygon(bl.poly, {
-                color: isDark ? '#475569' : '#94a3b8',
-                weight: 1.2,
-                dashArray: '4,4',
-                fillOpacity: 0.02,
-                interactive: false
-            }).addTo(layerGroupBaseVector);
+            if (!mcGeoJsonStates) {
+                L.polygon(bl.poly, {
+                    color: isDark ? '#475569' : '#94a3b8',
+                    weight: 1.2,
+                    dashArray: '4,4',
+                    fillOpacity: 0.02,
+                    interactive: false
+                }).addTo(layerGroupBaseVector);
+            }
 
             if (mcMap.getZoom() <= 8) {
                 L.marker([bl.lat, bl.lng], {
@@ -2120,6 +2292,28 @@ function renderOfflineVectorAtlas() {
                 }).addTo(layerGroupBaseVector);
             }
         });
+    }
+
+    // 2b. Alle 400 deutschen Landkreise & kreisfreien Städte (Hochauflösendes GeoJSON ab Detailgrad 4)
+    if (mcCurrentDetailLvl >= 4 && mcGeoJsonKreise) {
+        L.geoJSON(mcGeoJsonKreise, {
+            style: {
+                color: isDark ? '#475569' : '#64748b',
+                weight: mcMap.getZoom() >= 9 ? 1.2 : 0.65,
+                dashArray: '3,3',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.01
+            },
+            onEachFeature: function(feature, layer) {
+                const p = feature.properties || {};
+                const kName = p.NAME_3 || p.GEN || p.name || '';
+                const kType = p.TYPE_3 || p.BEZ || '';
+                const bLand = p.NAME_1 || '';
+                if (kName) {
+                    layer.bindTooltip(`🏛️ ${kType ? kType + ' ' : ''}${kName}${bLand ? ' (' + bLand + ')' : ''}`, { sticky: true });
+                }
+            }
+        }).addTo(layerGroupBaseVector);
     }
 
     // 3. Flüsse (ab Detailgrad 2) & Autobahnen (ab Detailgrad 3)
@@ -2418,7 +2612,8 @@ function drawQuickRadiusPrompt() {
     }).bindPopup(`⭕ Umkreis-Radius: <strong>${km} km</strong>`).addTo(layerGroupMeasure).openPopup();
 }
 
-// Offline-Suche über Städte, PLZ, eigene Orte, Kontakte & Koordinaten
+// Offline-Suche über alle 23.296 deutschen PLZ/Orte/Landkreise, eigene Orte, Kontakte & Koordinaten
+let offlineSearchTimer = null;
 function onOfflineMapSearch(query) {
     const box = document.getElementById('offlineMapSearchResults');
     if (!box) return;
@@ -2448,33 +2643,47 @@ function onOfflineMapSearch(query) {
         }
     });
 
-    // 3. Offline-Städtedatenbank (Name, PLZ, Bundesland)
-    MC_GAZETTEER.forEach(c => {
-        if (c.name.toLowerCase().includes(q) || c.zip.includes(q) || c.state.toLowerCase().includes(q)) {
-            hits.push({ icon: '🏙️', title: `${c.name} (${c.zip})`, sub: c.state, lat: c.lat, lng: c.lng, zoom: 11 });
-        }
-    });
-
-    // 4. Kontakte
+    // 3. Kontakte
     MC_CONTACTS.forEach(ct => {
         if (ct.name.toLowerCase().includes(q) || ct.address.toLowerCase().includes(q)) {
             hits.push({ icon: '📇', title: ct.name, sub: ct.address, lat: ct.lat, lng: ct.lng, zoom: 13 });
         }
     });
 
-    if (hits.length === 0) {
-        box.innerHTML = `<div class="p-3 text-xs text-slate-500">Kein Offline-Treffer für „${escapeMapHtml(query)}“.</div>`;
-        box.classList.remove('hidden');
-        return;
-    }
+    // 4. Vollständiges deutsches Offline-Orts- & PLZ-Verzeichnis (23.296 Einträge) abfragen
+    if (offlineSearchTimer) clearTimeout(offlineSearchTimer);
+    offlineSearchTimer = setTimeout(async () => {
+        try {
+            const res = await fetch('maps.php?action=offline_search&q=' + encodeURIComponent(q));
+            const d   = await res.json();
+            if (d && d.ok && Array.isArray(d.results)) {
+                d.results.forEach(r => {
+                    hits.push({
+                        icon: '🏙️',
+                        title: `${r.name} (${r.zip})`,
+                        sub: `${r.kreis ? r.kreis + ' · ' : ''}${r.state}`,
+                        lat: r.lat,
+                        lng: r.lng,
+                        zoom: 12
+                    });
+                });
+            }
+        } catch (e) {}
 
-    box.innerHTML = hits.slice(0, 12).map(h => `
-        <button type="button" onclick="flyToMapCoord(${h.lat}, ${h.lng}, ${h.zoom}); document.getElementById('offlineMapSearchResults').classList.add('hidden');" class="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between gap-2 text-xs cursor-pointer">
-            <span class="font-bold text-slate-900 dark:text-white truncate">${escapeMapHtml(h.icon)} ${escapeMapHtml(h.title)}</span>
-            <span class="text-[11px] text-slate-400 truncate shrink-0">${escapeMapHtml(h.sub)}</span>
-        </button>
-    `).join('');
-    box.classList.remove('hidden');
+        if (hits.length === 0) {
+            box.innerHTML = `<div class="p-3 text-xs text-slate-500">Kein Offline-Treffer für „${escapeMapHtml(query)}“.</div>`;
+            box.classList.remove('hidden');
+            return;
+        }
+
+        box.innerHTML = hits.slice(0, 16).map(h => `
+            <button type="button" onclick="flyToMapCoord(${h.lat}, ${h.lng}, ${h.zoom}); document.getElementById('offlineMapSearchResults').classList.add('hidden');" class="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between gap-2 text-xs cursor-pointer">
+                <span class="font-bold text-slate-900 dark:text-white truncate">${escapeMapHtml(h.icon)} ${escapeMapHtml(h.title)}</span>
+                <span class="text-[11px] text-slate-400 truncate shrink-0">${escapeMapHtml(h.sub)}</span>
+            </button>
+        `).join('');
+        box.classList.remove('hidden');
+    }, 90);
 }
 
 function flyToMapCoord(lat, lng, zoom = 12) {
@@ -2614,32 +2823,60 @@ function onPlaceCategoryPick(cat) {
 async function prefetchCurrentViewTiles() {
     if (!mcMap || MC_FLOORPLAN) return;
     const zoom = Number(document.getElementById('prefetchZoomSelect').value) || 10;
+    const regEl = document.getElementById('prefetchRegionSelect');
+    const regVal = regEl ? regEl.value : 'view';
     const msg  = document.getElementById('prefetchStatusMsg');
-    const b    = mcMap.getBounds();
-    if (msg) msg.textContent = `⏳ Lade Offline-Kacheln (Detailstufe Zoom ${zoom}) für aktuellen Kartenausschnitt…`;
 
-    const fd = new URLSearchParams();
-    fd.set('action', 'prefetch_offline_tiles');
-    fd.set('csrf_token', MC_MAP_CSRF);
-    fd.set('zoom', String(zoom));
-    fd.set('lat_min', String(b.getSouth()));
-    fd.set('lat_max', String(b.getNorth()));
-    fd.set('lng_min', String(b.getWest()));
-    fd.set('lng_max', String(b.getEast()));
+    let latMin, latMax, lngMin, lngMax;
+    if (regVal && regVal !== 'view' && regVal.includes(',')) {
+        const parts = regVal.split(',').map(Number);
+        latMin = parts[0];
+        latMax = parts[1];
+        lngMin = parts[2];
+        lngMax = parts[3];
+    } else {
+        const b = mcMap.getBounds();
+        latMin = b.getSouth();
+        latMax = b.getNorth();
+        lngMin = b.getWest();
+        lngMax = b.getEast();
+    }
 
-    try {
-        const res = await fetch('maps.php', { method: 'POST', body: fd });
-        const d   = await res.json();
-        if (d && d.ok) {
-            mcMaxZoomDetail = Math.max(mcMaxZoomDetail, zoom);
-            if (msg) {
-                msg.textContent = `✅ Detailstufe Zoom ${zoom} gespeichert: ${d.fetched} neue Kacheln geladen (${d.already_cached} bereits lokal vorhanden).`;
-            }
-        } else {
-            if (msg) msg.textContent = '⚠️ Hinweis: Im komplett isolierten Netz bitte .mbtiles-Pakete in uploads/maps/ ablegen.';
+    let totalFetched = 0;
+    let lastCached = 0;
+    for (let batch = 1; batch <= 5; batch++) {
+        if (msg) {
+            msg.textContent = `⏳ Lade Offline-Kacheln (Detailstufe Zoom ${zoom}, Durchgang ${batch})…`;
         }
-    } catch (e) {
-        if (msg) msg.textContent = '⚠️ Keine Außenverbindung – nutze die integrierte Offline-Vektorkarte oder lokale .mbtiles-Dateien.';
+        const fd = new URLSearchParams();
+        fd.set('action', 'prefetch_offline_tiles');
+        fd.set('csrf_token', MC_MAP_CSRF);
+        fd.set('zoom', String(zoom));
+        fd.set('lat_min', String(latMin));
+        fd.set('lat_max', String(latMax));
+        fd.set('lng_min', String(lngMin));
+        fd.set('lng_max', String(lngMax));
+
+        try {
+            const res = await fetch('maps.php', { method: 'POST', body: fd });
+            const d   = await res.json();
+            if (d && d.ok) {
+                totalFetched += Number(d.fetched || 0);
+                lastCached    = Number(d.already_cached || 0);
+                mcMaxZoomDetail = Math.max(mcMaxZoomDetail, zoom);
+                if (Number(d.fetched || 0) < 36) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        } catch (e) {
+            break;
+        }
+    }
+
+    if (msg) {
+        msg.textContent = `✅ Detailstufe Zoom ${zoom} lokal gespeichert: ${totalFetched} neue Kacheln geladen (${lastCached + totalFetched} Kacheln in dieser Region offline verfügbar).`;
     }
 }
 
