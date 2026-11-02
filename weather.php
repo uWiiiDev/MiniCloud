@@ -383,7 +383,7 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
         ['name' => 'München / Alpenrand','state' => 'Bayern',                 'lat' => 48.14, 'lng' => 11.58],
     ];
 
-    $gridCacheFile = $cacheDir . '/germany_grid_18.json';
+    $gridCacheFile = $cacheDir . '/germany_grid_18_v2.json';
     if (is_file($gridCacheFile) && (time() - (int)@filemtime($gridCacheFile)) < 1800) {
         $cached = @json_decode((string)@file_get_contents($gridCacheFile), true);
         if (is_array($cached) && count($cached) === count($stations)) {
@@ -394,7 +394,7 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
     if ($allowNetwork) {
         $lats = implode(',', array_map(static fn($s) => number_format($s['lat'], 2, '.', ''), $stations));
         $lngs = implode(',', array_map(static fn($s) => number_format($s['lng'], 2, '.', ''), $stations));
-        $url  = "https://api.open-meteo.com/v1/forecast?latitude={$lats}&longitude={$lngs}&current=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m&timezone=Europe%2FBerlin";
+        $url  = "https://api.open-meteo.com/v1/forecast?latitude={$lats}&longitude={$lngs}&current=temperature_2m,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m&timezone=Europe%2FBerlin";
         $ctx  = stream_context_create(['http' => ['method' => 'GET', 'timeout' => 3.5, 'header' => "User-Agent: MiniCloud-WeatherGrid/1.0\r\n"]]);
         $raw  = @file_get_contents($url, false, $ctx);
         $arr  = is_string($raw) ? @json_decode($raw, true) : null;
@@ -405,6 +405,7 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
                 $meta = getWmoWeatherMeta($wmo, true);
                 $gust = round((float)($c['wind_gusts_10m'] ?? 15.0), 1);
                 $rain = round((float)($c['precipitation'] ?? 0.0), 1);
+                $clouds = (int)($c['cloud_cover'] ?? 40);
                 $warnLvl = (int)$meta['warn'];
                 $warnTxt = (string)($meta['warn_text'] ?? '');
                 if ($gust >= 75.0 && $warnLvl < 3) {
@@ -416,6 +417,7 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
                 }
                 $st['temp']      = round((float)($c['temperature_2m'] ?? 12.0), 1);
                 $st['rain_mm']   = $rain;
+                $st['clouds']    = $clouds;
                 $st['wind_kmh']  = round((float)($c['wind_speed_10m'] ?? 10.0), 1);
                 $st['gusts_kmh'] = $gust;
                 $st['wmo']       = $wmo;
@@ -443,6 +445,7 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
         $meta = getWmoWeatherMeta((int)$fc['current']['wmo'], true);
         $st['temp']      = $fc['current']['temp'];
         $st['rain_mm']   = $fc['current']['rain_mm'];
+        $st['clouds']    = $fc['current']['clouds'] ?? 35;
         $st['wind_kmh']  = $fc['current']['wind_kmh'];
         $st['gusts_kmh'] = $fc['current']['gusts_kmh'];
         $st['wmo']       = $fc['current']['wmo'];
@@ -453,6 +456,192 @@ function getGermanyWeatherStations(?string $cacheDir = null, bool $allowNetwork 
     }
     unset($st);
     return $stations;
+}
+
+/**
+ * 2e) POLARLICHT- & WELTRAUMWETTER-VORHERSAGE (NOAA SWPC / DSCOVR L1 + Lokaler Cache + Offline-Modell)
+ */
+function calculateAuroraForLatitude(float $lat, float $kp, float $bz, float $speedKms, int $cloudsPct, bool $isDay, int $moonIllum): array
+{
+    // Südliche Sichtbarkeitsgrenze (fotografisch am Nordhorizont) in geogr. Breite für Mitteleuropa:
+    // Kp 4 -> ~54.8°N (Sylt/Fehmarn), Kp 5 -> ~53.0°N (Hamburg/Bremen/MV), Kp 6 -> ~51.1°N (NRW/Sachsen/Hessen),
+    // Kp 7 -> ~49.2°N (Mainlinie/Franken/Pfalz), Kp 8 -> ~47.2°N (Alpenrand), Kp 9 -> ~45.0°N (Ganz Mitteleuropa im Zenit)
+    $bzBoost = $bz < 0 ? min(1.2, abs($bz) * 0.06) : 0.0;
+    $spdBoost = $speedKms > 450 ? min(0.6, ($speedKms - 450) / 500.0) : 0.0;
+    $effectiveKp = min(9.5, $kp + $bzBoost + $spdBoost);
+
+    $viewlineLat = round(max(44.5, 62.2 - ($effectiveKp * 1.85)), 1);
+    $zenithLat   = round($viewlineLat + 3.6, 1);
+
+    // Geomagnetische Grundwahrscheinlichkeit am Breitengrad $lat
+    $distFromLine = $lat - $viewlineLat; // positiv = Ort liegt nördlich der Sichtgrenze (im Sichtbereich!)
+    if ($distFromLine >= 3.0) {
+        $geomagProb = min(99, (int)round(75 + ($distFromLine - 3.0) * 6));
+    } elseif ($distFromLine >= 0.0) {
+        $geomagProb = (int)round(35 + ($distFromLine / 3.0) * 40);
+    } elseif ($distFromLine >= -1.8) {
+        // Knapp südlich der Linie: fotografisch tief am Nordhorizont möglich
+        $geomagProb = (int)round(max(2, 35 + ($distFromLine / 1.8) * 33));
+    } else {
+        $geomagProb = max(1, (int)round(5 - abs($distFromLine) * 0.8));
+    }
+
+    // Wolkenlücken-Faktor (0..100 % freier Himmel)
+    $clearSkyPct = max(0, min(100, 100 - $cloudsPct));
+    $cloudFactor = $clearSkyPct / 100.0;
+
+    // Tageslicht- & Mondfaktor
+    $darkFactor = $isDay ? 0.15 : (1.0 - ($moonIllum / 300.0));
+    $localObserveProb = (int)round(min(99, max(0, $geomagProb * (0.25 + 0.75 * $cloudFactor) * ($isDay ? 0.5 : 1.0))));
+
+    $gScale = 0;
+    if ($kp >= 9.0) $gScale = 5;
+    elseif ($kp >= 8.0) $gScale = 4;
+    elseif ($kp >= 7.0) $gScale = 3;
+    elseif ($kp >= 6.0) $gScale = 2;
+    elseif ($kp >= 5.0) $gScale = 1;
+
+    if ($geomagProb >= 65 && $clearSkyPct >= 50 && !$isDay) {
+        $ampelStatus = '🔥 HOHE POLARLICHT-CHANCE (Sichtbar!)';
+        $ampelColor  = '#22c55e';
+    } elseif ($geomagProb >= 35 && $clearSkyPct >= 30) {
+        $ampelStatus = '📸 Fotografisch am Nordhorizont möglich';
+        $ampelColor  = '#a855f7';
+    } elseif ($geomagProb >= 35 && $clearSkyPct < 30) {
+        $ampelStatus = '☁️ Sturm aktiv, aber Wolkenlücke nötig!';
+        $ampelColor  = '#f59e0b';
+    } else {
+        $ampelStatus = '🌙 Ruhiges Erdmagnetfeld (Kein Sturm)';
+        $ampelColor  = '#38bdf8';
+    }
+
+    return [
+        'viewline_lat'       => $viewlineLat,
+        'zenith_lat'         => $zenithLat,
+        'geomag_prob'        => $geomagProb,
+        'clear_sky_pct'      => $clearSkyPct,
+        'local_observe_prob' => $localObserveProb,
+        'g_scale'            => $gScale,
+        'ampel_status'       => $ampelStatus,
+        'ampel_color'        => $ampelColor,
+    ];
+}
+
+function fetchSpaceWeatherAndAurora(?string $cacheDir = null, bool $allowNetwork = true): array
+{
+    $cacheDir  = $cacheDir ?: (__DIR__ . '/uploads/weather_cache');
+    $cacheFile = $cacheDir . '/space_weather_v1.json';
+
+    if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < 600) {
+        $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+        if (is_array($cached) && isset($cached['kp_current'])) {
+            $cached['source'] = 'Lokaler Cache (NOAA / DSCOVR L1)';
+            return $cached;
+        }
+    }
+
+    if ($allowNetwork) {
+        $ctx = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'timeout' => 2.8,
+                'header'  => "User-Agent: MiniCloud-Aurora-Engine/1.0\r\nAccept: application/json\r\n",
+            ],
+        ]);
+
+        $rawMag  = @file_get_contents('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', false, $ctx);
+        $rawSpd  = @file_get_contents('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', false, $ctx);
+        $rawFlux = @file_get_contents('https://services.swpc.noaa.gov/products/summary/10cm-flux.json', false, $ctx);
+        $rawKpFc = @file_get_contents('https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json', false, $ctx);
+
+        $magArr  = is_string($rawMag)  ? @json_decode($rawMag, true)  : null;
+        $spdArr  = is_string($rawSpd)  ? @json_decode($rawSpd, true)  : null;
+        $fluxArr = is_string($rawFlux) ? @json_decode($rawFlux, true) : null;
+        $kpFcArr = is_string($rawKpFc) ? @json_decode($rawKpFc, true) : null;
+
+        if (is_array($kpFcArr) && !empty($kpFcArr)) {
+            $bt = isset($magArr[0]['bt']) ? (float)$magArr[0]['bt'] : 5.0;
+            $bz = isset($magArr[0]['bz_gsm']) ? (float)$magArr[0]['bz_gsm'] : -1.0;
+            $speed = isset($spdArr[0]['proton_speed']) ? (float)$spdArr[0]['proton_speed'] : 410.0;
+            $flux  = isset($fluxArr[0]['flux']) ? (int)$fluxArr[0]['flux'] : 135;
+
+            $kpCurrent = 2.0;
+            $kpMax24h  = 2.0;
+            $kpTimeline = [];
+            $nowTs = time();
+
+            foreach ($kpFcArr as $row) {
+                if (!is_array($row) || !isset($row['time_tag'], $row['kp'])) {
+                    continue;
+                }
+                $tTs = strtotime((string)$row['time_tag'] . ' UTC') ?: 0;
+                $kpVal = round((float)$row['kp'], 2);
+                $obsType = (string)($row['observed'] ?? 'observed');
+                if ($obsType === 'observed' || $obsType === 'estimated') {
+                    $kpCurrent = $kpVal;
+                }
+                if ($tTs >= $nowTs - 10800 && $tTs <= $nowTs + 86400) {
+                    if ($kpVal > $kpMax24h) {
+                        $kpMax24h = $kpVal;
+                    }
+                }
+                if ($tTs >= $nowTs - 43200 && count($kpTimeline) < 16) {
+                    $kpTimeline[] = [
+                        'time' => date('d.m. H:00', $tTs),
+                        'kp'   => $kpVal,
+                        'type' => $obsType,
+                    ];
+                }
+            }
+
+            $data = [
+                'source'       => 'NOAA SWPC / DSCOVR Satellit Live',
+                'updated_at'   => date('H:i'),
+                'kp_current'   => $kpCurrent,
+                'kp_max_24h'   => $kpMax24h,
+                'bt_nt'        => $bt,
+                'bz_nt'        => $bz,
+                'speed_kms'    => $speed,
+                'solar_flux'   => $flux,
+                'kp_timeline'  => $kpTimeline,
+            ];
+            @file_put_contents($cacheFile, json_encode($data, JSON_UNESCAPED_UNICODE), LOCK_EX);
+            return $data;
+        }
+    }
+
+    if (is_file($cacheFile)) {
+        $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+        if (is_array($cached) && isset($cached['kp_current'])) {
+            $cached['source'] = 'Offline-Festplatten-Cache (NOAA)';
+            return $cached;
+        }
+    }
+
+    // 100 % Offline-Fallback (Solar-Cycle-25 Referenzmodell)
+    $fallbackTimeline = [];
+    for ($i = 0; $i < 12; $i++) {
+        $t = time() + ($i - 3) * 10800;
+        $h = (int)date('G', $t);
+        $kpSim = ($h >= 21 || $h <= 3) ? 3.33 : 2.33;
+        $fallbackTimeline[] = [
+            'time' => date('d.m. H:00', $t),
+            'kp'   => $kpSim,
+            'type' => $i <= 3 ? 'observed' : 'predicted',
+        ];
+    }
+
+    return [
+        'source'       => 'Offline-Weltraumwetter-Modell',
+        'updated_at'   => date('H:i'),
+        'kp_current'   => 2.67,
+        'kp_max_24h'   => 3.67,
+        'bt_nt'        => 6.0,
+        'bz_nt'        => -2.5,
+        'speed_kms'    => 425.0,
+        'solar_flux'   => 145,
+        'kp_timeline'  => $fallbackTimeline,
+    ];
 }
 
 // =========================================================================
@@ -600,6 +789,31 @@ $curr        = $weather['current'];
 $currMeta    = getWmoWeatherMeta((int)$curr['wmo'], (bool)$curr['is_day']);
 $astro       = calculateAstronomyOffline($activeLat, $activeLng);
 $deStations  = getGermanyWeatherStations();
+$spaceWx     = fetchSpaceWeatherAndAurora();
+$auroraActive = calculateAuroraForLatitude(
+    $activeLat,
+    (float)$spaceWx['kp_current'],
+    (float)$spaceWx['bz_nt'],
+    (float)$spaceWx['speed_kms'],
+    (int)($curr['clouds'] ?? 40),
+    (bool)$curr['is_day'],
+    (int)$astro['moon_illum']
+);
+foreach ($deStations as &$stItem) {
+    $stAu = calculateAuroraForLatitude(
+        (float)$stItem['lat'],
+        (float)$spaceWx['kp_current'],
+        (float)$spaceWx['bz_nt'],
+        (float)$spaceWx['speed_kms'],
+        (int)($stItem['clouds'] ?? 40),
+        (bool)$curr['is_day'],
+        (int)$astro['moon_illum']
+    );
+    $stItem['clear_sky_pct'] = $stAu['clear_sky_pct'];
+    $stItem['aurora_prob']   = $stAu['local_observe_prob'];
+    $stItem['geomag_prob']   = $stAu['geomag_prob'];
+}
+unset($stItem);
 
 // Warnstufe für aktuellen Standort ermitteln
 $activeWarnLvl = 0;
@@ -730,6 +944,7 @@ require_once __DIR__ . '/includes/header.php';
                 <input type="hidden" name="lng" value="<?= e((string)$activeLng) ?>">
                 <button type="submit" class="btn btn-sm btn-secondary">⭐ Aktuellen Ort merken</button>
             </form>
+            <a href="#auroraCockpit" onclick="setWxMapMode('aurora')" class="btn btn-sm btn-secondary" style="border-color:rgba(168,85,247,0.45);color:#c084fc;">🌌 Polarlicht-Radar</a>
             <a href="maps.php" class="btn btn-sm btn-secondary">🗺️ Zum Karten-Modul</a>
         </div>
     </div>
@@ -840,11 +1055,105 @@ require_once __DIR__ . '/includes/header.php';
                 <button type="button" class="btn btn-sm btn-primary wx-layer-btn" data-mode="temp" onclick="setWxMapMode('temp')">🌡️ Temperatur & Wetter</button>
                 <button type="button" class="btn btn-sm btn-secondary wx-layer-btn" data-mode="wind" onclick="setWxMapMode('wind')">💨 Wind & Spitzenböen</button>
                 <button type="button" class="btn btn-sm btn-secondary wx-layer-btn" data-mode="warn" onclick="setWxMapMode('warn')">⚠️ Warnstufen-Karte</button>
+                <button type="button" class="btn btn-sm btn-secondary wx-layer-btn" data-mode="aurora" onclick="setWxMapMode('aurora')">🌌 Polarlicht & Wolkenlücken</button>
                 <button type="button" class="btn btn-sm btn-secondary" id="btnToggleRadar" onclick="toggleRainRadar()">🌧️ Live-Regenradar</button>
                 <button type="button" class="btn btn-sm btn-secondary" id="btnToggleKreise" onclick="toggleLandkreiseLayer()">🏛️ 400 Landkreise</button>
             </div>
         </div>
         <div id="wxMapCanvas" class="wx-map-box"></div>
+    </div>
+
+    <!-- 🌌 POLARLICHT- & WELTRAUMWETTER-COCKPIT (AURORA BOREALIS, SONNENWIND, KP-INDEX & STURM-SIMULATOR) -->
+    <div id="auroraCockpit" class="wx-card" style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(88,28,135,0.22), rgba(15,23,42,0.88)); border-color:rgba(168,85,247,0.35);">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:14px;">
+            <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <h3 style="margin:0;font-size:1.22rem;">🌌 Polarlicht- &amp; Weltraumwetter-Vorhersage für <?= e($activeName) ?></h3>
+                    <span class="badge" style="background:rgba(168,85,247,0.22);color:#e9d5ff;border:1px solid rgba(168,85,247,0.45);font-size:0.74rem;">
+                        <?= e($spaceWx['source']) ?> (Stand <?= e($spaceWx['updated_at']) ?> Uhr)
+                    </span>
+                </div>
+                <div class="text-muted" style="font-size:0.82rem;margin-top:4px;">
+                    Kombiniert Echtzeit-Sonnenwind vom <strong>DSCOVR-Satelliten (Lagrange-Punkt L1)</strong>, den planetaren <strong>Kp-Index</strong>, lokale <strong>DWD-Wolkenlücken</strong> und die <strong>astronomische Dunkelheit</strong> für <?= number_format($activeLat, 2, ',', '.') ?>° N.
+                </div>
+            </div>
+
+            <div id="auroraAmpelBadge" style="background:rgba(15,23,42,0.65);border:1.5px solid <?= e($auroraActive['ampel_color']) ?>;border-radius:12px;padding:8px 14px;text-align:right;">
+                <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Lokale Sichtbarkeits-Ampel</div>
+                <div id="auroraAmpelText" style="font-weight:800;font-size:0.95rem;color:<?= e($auroraActive['ampel_color']) ?>;margin-top:2px;">
+                    <?= e($auroraActive['ampel_status']) ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8 Polarlicht- & Sonnenwind-KPIs -->
+        <div class="wx-kpi-grid" style="margin-top:14px;">
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🎯 Lokale Chance (<?= e($activeName) ?>)</div>
+                <div class="wx-kpi-val" id="auKpiLocalProb" style="color:#4ade80;font-size:1.2rem;"><?= (int)$auroraActive['local_observe_prob'] ?> % <span class="text-muted" style="font-size:0.76rem;font-weight:500;">(Geomag: <?= (int)$auroraActive['geomag_prob'] ?>%)</span></div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🧲 Erdmagnetfeld Kp-Index</div>
+                <div class="wx-kpi-val" id="auKpiKp">Kp <?= number_format((float)$spaceWx['kp_current'], 2, ',', '.') ?> <span class="text-muted" style="font-size:0.78rem;">(<?= $auroraActive['g_scale'] > 0 ? 'G' . $auroraActive['g_scale'] . '-Sturm' : 'G0 ruhig' ?>)</span></div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🧭 Magnetfeld Bz (Nord/Süd)</div>
+                <div class="wx-kpi-val" id="auKpiBz" style="color:<?= (float)$spaceWx['bz_nt'] < -5 ? '#4ade80' : ((float)$spaceWx['bz_nt'] < 0 ? '#facc15' : '#94a3b8') ?>;">
+                    <?= number_format((float)$spaceWx['bz_nt'], 1, ',', '.') ?> nT <span class="text-muted" style="font-size:0.75rem;">(Bt <?= number_format((float)$spaceWx['bt_nt'], 1, ',', '.') ?> nT)</span>
+                </div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🚀 Sonnenwind-Tempo (L1)</div>
+                <div class="wx-kpi-val" id="auKpiSpeed"><?= (int)round((float)$spaceWx['speed_kms']) ?> km/s</div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">☀️ Solarer Radio-Flux (F10.7)</div>
+                <div class="wx-kpi-val"><?= (int)$spaceWx['solar_flux'] ?> sfu</div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🗺️ Sichtgrenze Deutschland</div>
+                <div class="wx-kpi-val" id="auKpiViewline">ab <?= number_format((float)$auroraActive['viewline_lat'], 1, ',', '.') ?>° N</div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">☁️ Freier Himmel vor Ort</div>
+                <div class="wx-kpi-val" style="color:<?= $auroraActive['clear_sky_pct'] >= 50 ? '#38bdf8' : '#f59e0b' ?>;"><?= (int)$auroraActive['clear_sky_pct'] ?> % wolkenfrei</div>
+            </div>
+            <div class="wx-kpi">
+                <div class="wx-kpi-label">🌑 Dunkelheit &amp; Mondstörung</div>
+                <div class="wx-kpi-val" style="font-size:0.9rem;"><?= $curr['is_day'] ? '☀️ Tag (ab ' . e($astro['sunset']) . ' dunkel)' : '🌌 Nacht · Mond ' . (int)$astro['moon_illum'] . '%' ?></div>
+            </div>
+        </div>
+
+        <!-- Interaktiver Sonnensturm-Simulator & Kamera-Ratgeber -->
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px;">
+            <div style="background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:12px;padding:12px 14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                    <strong style="font-size:0.86rem;">🎛️ Interaktiver Sonnensturm-Simulator (Live-Vorschau auf der Deutschland-Karte oben)</strong>
+                    <button type="button" class="btn btn-sm btn-secondary" style="padding:2px 8px;font-size:0.74rem;" onclick="simulateAuroraStorm('live')">🔄 Live-Werte (Kp <?= number_format((float)$spaceWx['kp_current'], 1, '.', '') ?>)</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button type="button" class="btn btn-sm btn-secondary au-sim-btn" data-kp="5" onclick="simulateAuroraStorm(5, -8, 520)">🟢 Kp 5 (G1 · Küste / Hamburg)</button>
+                    <button type="button" class="btn btn-sm btn-secondary au-sim-btn" data-kp="6" onclick="simulateAuroraStorm(6, -12, 600)">🟡 Kp 6 (G2 · Berlin / NRW / Sachsen)</button>
+                    <button type="button" class="btn btn-sm btn-secondary au-sim-btn" data-kp="7" onclick="simulateAuroraStorm(7, -18, 680)">🟠 Kp 7 (G3 · Frankfurt / Franken)</button>
+                    <button type="button" class="btn btn-sm btn-secondary au-sim-btn" data-kp="8" onclick="simulateAuroraStorm(8, -25, 780)">🔴 Kp 8 (G4 · Stuttgart / München)</button>
+                    <button type="button" class="btn btn-sm btn-secondary au-sim-btn" data-kp="9" onclick="simulateAuroraStorm(9, -35, 920)">🟣 Kp 9 (G5 · Ganz DE im Zenit!)</button>
+                </div>
+                <div class="text-muted" style="font-size:0.76rem;margin-top:8px;">
+                    💡 Klicke auf eine Sturmstufe, um auf der Deutschlandkarte oben live das grüne/violette <strong>Polarlicht-Oval</strong>, die <strong>Sichtbarkeits-Grenzlinie</strong> und die Chancen aller 18 deutschen Stationen zu sehen!
+                </div>
+            </div>
+
+            <div style="background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;">
+                <div>
+                    <strong style="font-size:0.86rem;">📸 Astro- &amp; Smartphone-Kamera-Empfehlung für heute Nacht:</strong>
+                    <div id="auroraCameraGuide" style="font-size:0.8rem;color:var(--text-main);margin-top:6px;line-height:1.45;">
+                        • <strong>Blickrichtung:</strong> Freier Blick nach <strong>Norden / Nordnordwest</strong> (ohne Stadtlichter am Horizont)<br>
+                        • <strong>Systemkamera:</strong> Belichtung <strong>3–6 Sek.</strong> · Blende <strong>f/1.4 – f/2.8</strong> · <strong>ISO 1600–3200</strong> · Fokus manuell auf ∞<br>
+                        • <strong>Smartphone:</strong> <strong>Nachtmodus (3–10 Sek.)</strong> oder Pro-Modus (ISO 1600, 4 Sek.) + Stativ/Auflage
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 24-Stunden Temperatur- & Niederschlagsverlauf -->
@@ -976,9 +1285,20 @@ const WX_ACTIVE = {
 };
 const WX_STATIONS = <?= json_encode($deStations, JSON_UNESCAPED_UNICODE) ?>;
 const WX_HOURLY   = <?= json_encode($weather['hourly'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
+const WX_SPACE_LIVE = {
+    kp: <?= json_encode((float)$spaceWx['kp_current']) ?>,
+    bz: <?= json_encode((float)$spaceWx['bz_nt']) ?>,
+    bt: <?= json_encode((float)$spaceWx['bt_nt']) ?>,
+    speed: <?= json_encode((float)$spaceWx['speed_kms']) ?>,
+    viewline_lat: <?= json_encode((float)$auroraActive['viewline_lat']) ?>,
+    clear_sky_pct: <?= json_encode((int)$auroraActive['clear_sky_pct']) ?>,
+    is_day: <?= !empty($curr['is_day']) ? 'true' : 'false' ?>
+};
+let wxAuroraSim = Object.assign({}, WX_SPACE_LIVE);
 
 let wxMap = null;
 let wxMarkersLayer = null;
+let wxAuroraLayer = null;
 let wxRadarLayer = null;
 let wxKreiseLayer = null;
 let wxMapMode = 'temp';
@@ -1028,6 +1348,7 @@ function initWxMap() {
             }).addTo(wxMap);
         }).catch(() => {});
 
+    wxAuroraLayer = L.layerGroup().addTo(wxMap);
     wxMarkersLayer = L.layerGroup().addTo(wxMap);
     renderWxStationPins();
 
@@ -1039,9 +1360,76 @@ function initWxMap() {
     });
 }
 
+function calcJsAuroraProb(lat, kp, bz, speed, clearSkyPct) {
+    const bzBoost = bz < 0 ? Math.min(1.2, Math.abs(bz) * 0.06) : 0;
+    const spdBoost = speed > 450 ? Math.min(0.6, (speed - 450) / 500) : 0;
+    const effKp = Math.min(9.5, kp + bzBoost + spdBoost);
+    const viewline = Math.max(44.5, Number((62.2 - effKp * 1.85).toFixed(1)));
+    const dist = lat - viewline;
+    let geomag = 2;
+    if (dist >= 3.0) geomag = Math.min(99, Math.round(75 + (dist - 3.0) * 6));
+    else if (dist >= 0) geomag = Math.round(35 + (dist / 3.0) * 40);
+    else if (dist >= -1.8) geomag = Math.max(2, Math.round(35 + (dist / 1.8) * 33));
+    else geomag = Math.max(1, Math.round(5 - Math.abs(dist) * 0.8));
+
+    const cloudFac = Math.max(0, Math.min(100, clearSkyPct)) / 100.0;
+    const localProb = Math.min(99, Math.max(0, Math.round(geomag * (0.25 + 0.75 * cloudFac))));
+    return { viewline, geomag, localProb };
+}
+
+function renderAuroraOverlayOnMap() {
+    if (!wxAuroraLayer) return;
+    wxAuroraLayer.clearLayers();
+    if (wxMapMode !== 'aurora') return;
+
+    const { viewline } = calcJsAuroraProb(WX_ACTIVE.lat, wxAuroraSim.kp, wxAuroraSim.bz, wxAuroraSim.speed, wxAuroraSim.clear_sky_pct);
+
+    // 1. Leuchtendes Polarlicht-Oval (Grün/Violett) nördlich der aktuellen Sichtgrenze
+    L.rectangle([[viewline, 4.0], [58.0, 17.0]], {
+        color: '#22c55e',
+        weight: 0,
+        fillColor: '#22c55e',
+        fillOpacity: wxAuroraSim.kp >= 5 ? 0.24 : 0.11,
+        interactive: false
+    }).addTo(wxAuroraLayer);
+
+    if (wxAuroraSim.kp >= 6) {
+        L.rectangle([[viewline + 1.6, 4.0], [58.0, 17.0]], {
+            color: '#a855f7',
+            weight: 0,
+            fillColor: '#a855f7',
+            fillOpacity: 0.20,
+            interactive: false
+        }).addTo(wxAuroraLayer);
+    }
+
+    // 2. Referenz-Sichtgrenzen für Deutschland (Kp 5, Kp 6, Kp 7, Kp 8)
+    const refLines = [
+        { kp: 5, lat: 53.0, label: 'Kp 5 (G1) Sichtgrenze · Küste / Hamburg / MV', col: '#4ade80' },
+        { kp: 6, lat: 51.1, label: 'Kp 6 (G2) Sichtgrenze · NRW / Mitteldeutschland / Sachsen', col: '#facc15' },
+        { kp: 7, lat: 49.2, label: 'Kp 7 (G3) Sichtgrenze · Mainlinie / Franken / Saarland', col: '#fb923c' },
+        { kp: 8, lat: 47.3, label: 'Kp 8 (G4) Sichtgrenze · Alpenrand / Ganz Deutschland', col: '#f43f5e' }
+    ];
+    refLines.forEach(rl => {
+        L.polyline([[rl.lat, 5.5], [rl.lat, 15.3]], {
+            color: rl.col,
+            weight: 1.4,
+            dashArray: '5,5',
+            opacity: 0.65
+        }).bindTooltip(`🌌 ${rl.label} (${rl.lat.toFixed(1)}° N)`).addTo(wxAuroraLayer);
+    });
+
+    // 3. Aktuelle / Simulierte Haupt-Sichtbarkeits-Grenzlinie (Viewline)
+    L.polyline([[viewline, 5.2], [viewline, 15.5]], {
+        color: '#c084fc',
+        weight: 3.5
+    }).bindTooltip(`🔥 Aktuelle Polarlicht-Sichtgrenze: ${viewline.toFixed(1)}° N (Kp ${Number(wxAuroraSim.kp).toFixed(1)}, Bz ${wxAuroraSim.bz} nT)`, { permanent: false, sticky: true }).addTo(wxAuroraLayer);
+}
+
 function renderWxStationPins() {
     if (!wxMarkersLayer) return;
     wxMarkersLayer.clearLayers();
+    renderAuroraOverlayOnMap();
 
     // Aktueller Standort-Pin
     const activeMarker = L.circleMarker([WX_ACTIVE.lat, WX_ACTIVE.lng], {
@@ -1056,6 +1444,8 @@ function renderWxStationPins() {
     WX_STATIONS.forEach(st => {
         let badgeBg = tempColorHex(st.temp);
         let badgeTxt = `${st.icon} ${Number(st.temp).toFixed(1)}°`;
+        const stClear = Number(st.clear_sky_pct ?? (100 - Number(st.clouds || 40)));
+        const auCalc  = calcJsAuroraProb(Number(st.lat), wxAuroraSim.kp, wxAuroraSim.bz, wxAuroraSim.speed, stClear);
 
         if (wxMapMode === 'wind') {
             badgeBg = st.gusts_kmh >= 65 ? '#ef4444' : (st.gusts_kmh >= 45 ? '#f59e0b' : '#0284c7');
@@ -1063,24 +1453,29 @@ function renderWxStationPins() {
         } else if (wxMapMode === 'warn') {
             badgeBg = st.warn_lvl >= 3 ? '#dc2626' : (st.warn_lvl === 2 ? '#d97706' : (st.warn_lvl === 1 ? '#2563eb' : '#16a34a'));
             badgeTxt = st.warn_lvl > 0 ? `⚠️ Stufe ${st.warn_lvl}` : `✅ Ruhig`;
+        } else if (wxMapMode === 'aurora') {
+            badgeBg = auCalc.localProb >= 60 ? '#16a34a' : (auCalc.localProb >= 30 ? '#9333ea' : '#334155');
+            badgeTxt = `🌌 ${auCalc.localProb}% · ☀️ ${stClear}% frei`;
         }
 
         const icon = L.divIcon({
             className: 'wx-custom-pin',
             html: `<div class="wx-pin-badge" style="background:${badgeBg};">${badgeTxt}</div>`,
-            iconSize: [86, 26],
-            iconAnchor: [43, 13]
+            iconSize: [104, 26],
+            iconAnchor: [52, 13]
         });
 
         const m = L.marker([st.lat, st.lng], { icon: icon });
         m.bindPopup(`
-            <div style="min-width:175px;">
+            <div style="min-width:195px;">
                 <strong>${st.icon} ${st.name}</strong><br>
                 <span style="font-size:0.82rem;color:#64748b;">${st.label}</span>
                 <hr style="margin:6px 0;border:none;border-top:1px solid rgba(148,163,184,0.3);">
                 🌡️ Temperatur: <strong>${Number(st.temp).toFixed(1)} °C</strong><br>
                 💨 Wind / Böen: <strong>${Math.round(st.wind_kmh)} / ${Math.round(st.gusts_kmh)} km/h</strong><br>
                 🌧️ Niederschlag: <strong>${Number(st.rain_mm).toFixed(1)} mm</strong><br>
+                🌌 Polarlicht-Chance: <strong>${auCalc.localProb} %</strong> (Geomag: ${auCalc.geomag}%)<br>
+                ☁️ Freier Himmel: <strong>${stClear} % wolkenfrei</strong><br>
                 ${st.warn_lvl > 0 ? `<div style="margin-top:5px;color:#ef4444;font-weight:700;">⚠️ ${st.warn_text}</div>` : ''}
                 <div style="margin-top:8px;">
                     <a href="weather.php?lat=${st.lat}&lng=${st.lng}&name=${encodeURIComponent(st.name)}&state=${encodeURIComponent(st.state)}" class="btn btn-sm btn-primary" style="color:#fff;text-decoration:none;padding:3px 8px;font-size:0.75rem;">Details öffnen</a>
@@ -1089,6 +1484,59 @@ function renderWxStationPins() {
         `);
         wxMarkersLayer.addLayer(m);
     });
+}
+
+function simulateAuroraStorm(kpOrMode, bzVal, speedVal) {
+    if (kpOrMode === 'live') {
+        wxAuroraSim = Object.assign({}, WX_SPACE_LIVE);
+    } else {
+        wxAuroraSim.kp = Number(kpOrMode);
+        wxAuroraSim.bz = Number(bzVal);
+        wxAuroraSim.speed = Number(speedVal);
+    }
+
+    document.querySelectorAll('.au-sim-btn').forEach(b => {
+        const active = kpOrMode !== 'live' && Number(b.dataset.kp) === Number(kpOrMode);
+        b.classList.toggle('btn-primary', active);
+        b.classList.toggle('btn-secondary', !active);
+    });
+
+    const actCalc = calcJsAuroraProb(WX_ACTIVE.lat, wxAuroraSim.kp, wxAuroraSim.bz, wxAuroraSim.speed, wxAuroraSim.clear_sky_pct);
+    const gScale  = wxAuroraSim.kp >= 9 ? 5 : (wxAuroraSim.kp >= 8 ? 4 : (wxAuroraSim.kp >= 7 ? 3 : (wxAuroraSim.kp >= 6 ? 2 : (wxAuroraSim.kp >= 5 ? 1 : 0))));
+
+    const elProb = document.getElementById('auKpiLocalProb');
+    const elKp   = document.getElementById('auKpiKp');
+    const elBz   = document.getElementById('auKpiBz');
+    const elSpd  = document.getElementById('auKpiSpeed');
+    const elVl   = document.getElementById('auKpiViewline');
+    const elAmpT = document.getElementById('auroraAmpelText');
+    const elAmpB = document.getElementById('auroraAmpelBadge');
+
+    if (elProb) elProb.innerHTML = `${actCalc.localProb} % <span class="text-muted" style="font-size:0.76rem;font-weight:500;">(Geomag: ${actCalc.geomag}%)</span>`;
+    if (elKp)   elKp.innerHTML   = `Kp ${Number(wxAuroraSim.kp).toFixed(2)} <span class="text-muted" style="font-size:0.78rem;">(${gScale > 0 ? 'G' + gScale + '-Sturm' : 'G0 ruhig'}${kpOrMode !== 'live' ? ' · SIM' : ''})</span>`;
+    if (elBz)   elBz.innerHTML   = `${Number(wxAuroraSim.bz).toFixed(1)} nT`;
+    if (elSpd)  elSpd.textContent = `${Math.round(wxAuroraSim.speed)} km/s`;
+    if (elVl)   elVl.textContent  = `ab ${actCalc.viewline.toFixed(1)}° N`;
+
+    if (elAmpT && elAmpB) {
+        let statusTxt = '🌙 Ruhiges Erdmagnetfeld (Kein Sturm)';
+        let statusCol = '#38bdf8';
+        if (actCalc.geomag >= 65 && wxAuroraSim.clear_sky_pct >= 40) {
+            statusTxt = '🔥 HOHE POLARLICHT-CHANCE (Sichtbar!)';
+            statusCol = '#22c55e';
+        } else if (actCalc.geomag >= 35 && wxAuroraSim.clear_sky_pct >= 25) {
+            statusTxt = '📸 Fotografisch am Nordhorizont möglich';
+            statusCol = '#c084fc';
+        } else if (actCalc.geomag >= 35) {
+            statusTxt = '☁️ Sturm stark, aber Wolkenlücke suchen!';
+            statusCol = '#f59e0b';
+        }
+        elAmpT.textContent = statusTxt;
+        elAmpT.style.color = statusCol;
+        elAmpB.style.borderColor = statusCol;
+    }
+
+    setWxMapMode('aurora');
 }
 
 function setWxMapMode(mode) {
