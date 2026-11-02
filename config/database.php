@@ -123,6 +123,7 @@ function getDB(): PDO
 
     try {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        $pdo->exec("SET time_zone = '" . date('P') . "'");
         ensureSchemaUpdated($pdo);
     } catch (PDOException $e) {
         redirectToSetupIfUnconfigured($e->getMessage());

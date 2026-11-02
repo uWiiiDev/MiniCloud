@@ -8,6 +8,8 @@ uploads/*
 .env.local
 config/database.local.php
 config/db_credentials.php
+tools/telegram_bridge/config.json
+tools/telegram_bridge/state.json
 
 # Temporäre Dateien & Logs
 *.log

@@ -518,8 +518,8 @@ require_once __DIR__ . '/includes/header.php';
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 shrink-0">
-            <!-- Live 30s Taktgeber -->
-            <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+            <!-- Live 30s Taktgeber (Server-Atomuhr synchronisiert) -->
+            <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700" title="Synchronisiert mit der NTP/PTB-Atomuhrzeit von runready.cloud (Europe/Berlin)">
                 <div class="relative w-8 h-8 flex items-center justify-center">
                     <svg class="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="15" fill="none" class="stroke-slate-300 dark:stroke-slate-700" stroke-width="3.5"></circle>
@@ -528,8 +528,11 @@ require_once __DIR__ . '/includes/header.php';
                     <span id="globalTotpSec" class="absolute text-[11px] font-mono font-extrabold text-slate-800 dark:text-slate-100"><?= $rem30 ?>s</span>
                 </div>
                 <div class="text-xs">
-                    <div class="font-bold text-slate-800 dark:text-slate-100">Live-Taktung</div>
-                    <div class="text-[10px] text-slate-500 dark:text-slate-400">Auto-Refresh aktiv</div>
+                    <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="globalServerClock"><?= date('H:i:s', $nowTs) ?> Uhr</span>
+                    </div>
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400">PTB-Atomuhr Sync aktiv</div>
                 </div>
             </div>
 
@@ -1059,8 +1062,13 @@ require_once __DIR__ . '/includes/header.php';
 <script>
 // =========================================================================
 // LIVE-COUNTDOWN & AUTOMATISCHER HINTERGRUND-REFRESH ALLER TOTP-CODES
+// (Synchronisiert mit der PTB-Atomuhrzeit des Servers statt Browser-Uhr)
 // =========================================================================
-let lastFetchedSlice = Math.floor(Date.now() / 1000 / 30);
+let serverTimeOffsetMs = (<?= (int)$nowTs ?> * 1000) - Date.now();
+function getSyncedServerUnixSec() {
+    return Math.floor((Date.now() + serverTimeOffsetMs) / 1000);
+}
+let lastFetchedSlice = Math.floor(getSyncedServerUnixSec() / 30);
 let isFetchingTotp   = false;
 
 async function refreshAllTotpCodesAjax() {
@@ -1069,29 +1077,40 @@ async function refreshAllTotpCodesAjax() {
     try {
         const res = await fetch('authenticator.php?ajax=codes', { cache: 'no-store' });
         const data = await res.json();
-        if (data && data.ok && Array.isArray(data.items)) {
-            data.items.forEach(function(item) {
-                const box  = document.querySelector('[data-code-box="' + item.id + '"]');
-                const disp = document.querySelector('[data-code-display="' + item.id + '"]');
-                const next = document.querySelector('[data-next-display="' + item.id + '"]');
-                const rem  = document.querySelector('[data-rem-display="' + item.id + '"]');
-                if (box)  box.setAttribute('data-raw-code', item.code_raw);
-                if (disp) disp.textContent = item.code_fmt;
-                if (next) {
-                    next.textContent = item.next_fmt;
-                    next.setAttribute('data-next-raw', item.next_raw);
-                }
-                if (rem)  rem.textContent = item.remaining + 's';
-            });
+        if (data && data.ok) {
+            if (typeof data.server_time === 'number' && data.server_time > 0) {
+                serverTimeOffsetMs = (data.server_time * 1000) - Date.now();
+            }
+            if (Array.isArray(data.items)) {
+                data.items.forEach(function(item) {
+                    const box  = document.querySelector('[data-code-box="' + item.id + '"]');
+                    const disp = document.querySelector('[data-code-display="' + item.id + '"]');
+                    const next = document.querySelector('[data-next-display="' + item.id + '"]');
+                    const rem  = document.querySelector('[data-rem-display="' + item.id + '"]');
+                    if (box)  box.setAttribute('data-raw-code', item.code_raw);
+                    if (disp) disp.textContent = item.code_fmt;
+                    if (next) {
+                        next.textContent = item.next_fmt;
+                        next.setAttribute('data-next-raw', item.next_raw);
+                    }
+                    if (rem)  rem.textContent = item.remaining + 's';
+                });
+            }
         }
     } catch (e) {}
     isFetchingTotp = false;
 }
 
 setInterval(function() {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const rem30  = 30 - (nowSec % 30);
+    const nowSec   = getSyncedServerUnixSec();
+    const rem30    = 30 - (nowSec % 30);
     const curSlice = Math.floor(nowSec / 30);
+
+    const clockEl = document.getElementById('globalServerClock');
+    if (clockEl) {
+        const d = new Date(nowSec * 1000);
+        clockEl.textContent = d.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin' }) + ' Uhr';
+    }
 
     const secEl  = document.getElementById('globalTotpSec');
     const ringEl = document.getElementById('globalTotpRing');
