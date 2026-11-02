@@ -514,7 +514,7 @@ function fetchUnifiedMailboxesMessages(array $accounts, int $perAccount = 12, st
     $searchQuery    = trim($searchQuery);
 
     foreach ($accounts as $acc) {
-        $res = fetchLiveMailboxMessages($acc, 'INBOX', 1, $perAccount, $searchQuery);
+        $res = fetchLiveMailboxMessages($acc, 'INBOX', 1, $perAccount, $searchQuery, false);
         if (!$res['ok']) {
             $errors[] = (string)$acc['email_address'] . ': ' . ($res['error'] ?? 'Verbindungsfehler');
             continue;
@@ -817,6 +817,45 @@ function normalizeMailAccountPassword(string $pass, string $host = '', string $e
 }
 
 /**
+ * Öffnet einen TLS/TCP-Socket zum Mailserver und bevorzugt dabei IPv4 (mit strikter TLS-SNI & Zertifikatsprüfung
+ * auf den Original-Hostnamen), da u. a. Google Mail (imap.gmail.com) auf IPv6-Verbindungen künstliche
+ * Verzögerungen von mehreren Sekunden pro Befehl anwendet.
+ *
+ * @return resource|false
+ */
+function openFastMailSocket(string $host, int $port, string $ssl, int $timeout = 8, ?int &$errno = null, ?string &$errstr = null)
+{
+    $scheme = ($ssl === 'ssl') ? 'ssl://' : 'tcp://';
+    $ipv4   = @gethostbyname($host);
+    $targetHost = ($ipv4 !== '' && $ipv4 !== $host && filter_var($ipv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4))
+        ? $ipv4
+        : $host;
+
+    $ctx = stream_context_create([
+        'ssl' => [
+            'verify_peer'      => true,
+            'verify_peer_name' => true,
+            'peer_name'        => $host,
+            'SNI_enabled'      => true,
+        ],
+        'socket' => [
+            'tcp_nodelay' => true,
+        ],
+    ]);
+
+    $errno  = 0;
+    $errstr = '';
+    $fp = @stream_socket_client($scheme . $targetHost . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx);
+    if (!$fp && $targetHost !== $host) {
+        $fp = @stream_socket_client($scheme . $host . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx);
+    }
+    if ($fp) {
+        stream_set_timeout($fp, $timeout);
+    }
+    return $fp;
+}
+
+/**
  * Öffnet und authentifiziert eine POP3-Verbindung.
  *
  * @return array{ok: bool, fp?: resource, error?: string, count?: int}
@@ -837,21 +876,12 @@ function openPop3Connection(array $cfg): array
         return ['ok' => false, 'error' => 'Ungültiger POP3-Server oder nicht erlaubter Port.'];
     }
 
-    $remote = ($ssl === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port;
-    $ctx = stream_context_create([
-        'ssl' => [
-            'verify_peer'      => true,
-            'verify_peer_name' => true,
-        ],
-    ]);
-
     $errno = 0;
     $errstr = '';
-    $fp = @stream_socket_client($remote, $errno, $errstr, 8, STREAM_CLIENT_CONNECT, $ctx);
+    $fp = openFastMailSocket($host, $port, $ssl, 8, $errno, $errstr);
     if (!$fp) {
         return ['ok' => false, 'error' => "POP3-Verbindung zu {$host}:{$port} fehlgeschlagen ({$errstr})."];
     }
-    stream_set_timeout($fp, 8);
 
     $greeting = (string)@fgets($fp, 2048);
     if (!str_starts_with($greeting, '+OK')) {
@@ -944,21 +974,12 @@ function openImapConnection(array $cfg): array
         return ['ok' => false, 'error' => 'Ungültiger IMAP-Server oder nicht erlaubter Port.'];
     }
 
-    $remote = ($ssl === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port;
-    $ctx = stream_context_create([
-        'ssl' => [
-            'verify_peer'      => true,
-            'verify_peer_name' => true,
-        ],
-    ]);
-
     $errno = 0;
     $errstr = '';
-    $fp = @stream_socket_client($remote, $errno, $errstr, 8, STREAM_CLIENT_CONNECT, $ctx);
+    $fp = openFastMailSocket($host, $port, $ssl, 8, $errno, $errstr);
     if (!$fp) {
         return ['ok' => false, 'error' => "IMAP-Verbindung zu {$host}:{$port} fehlgeschlagen ({$errstr})."];
     }
-    stream_set_timeout($fp, 8);
 
     $greeting = (string)@fgets($fp, 4096);
     if (!str_starts_with($greeting, '* OK')) {
@@ -1049,13 +1070,12 @@ function testMailAccountConnection(array $cfg): array
     if (!$res['ok']) {
         return ['ok' => false, 'message' => (string)$res['error']];
     }
-    fwrite($res['fp'], "A03 SELECT \"INBOX\"\r\n");
+    fwrite($res['fp'], "A03 EXAMINE \"INBOX\"\r\nA99 LOGOUT\r\n");
     $sel = readImapTaggedResponse($res['fp'], 'A03');
     $msgCount = 0;
     if (preg_match('/\*\s+(\d+)\s+EXISTS/i', $sel['raw'], $mEx)) {
         $msgCount = (int)$mEx[1];
     }
-    fwrite($res['fp'], "A99 LOGOUT\r\n");
     @fclose($res['fp']);
 
     return [
@@ -1069,7 +1089,7 @@ function testMailAccountConnection(array $cfg): array
  *
  * @return array{ok: bool, error?: string, total: int, messages: array<int, array<string, mixed>>, folders: array<string, string>}
  */
-function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $page = 1, int $perPage = 20, string $searchQuery = ''): array
+function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $page = 1, int $perPage = 20, string $searchQuery = '', bool $includeFolderList = true): array
 {
     $proto       = strtolower((string)($cfg['protocol'] ?? 'imap'));
     $page        = max(1, $page);
@@ -1158,58 +1178,95 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
     }
     $fp = $conn['fp'];
 
-    // Verfügbare Ordner ermitteln (Standard-Systemordner + Archiv + alle eigenen Benutzerordner)
-    $folders       = ['INBOX' => '📥 Posteingang'];
-    $customFolders = [];
-    fwrite($fp, "A03 LIST \"\" \"*\"\r\n");
-    $listResp = readImapTaggedResponse($fp, 'A03');
-    if (preg_match_all('/^\*\s+LIST\s+\(([^)]*)\)\s+(?:"[^"]*"|NIL)\s+"?([^"\r\n]+)"?/im', $listResp['raw'], $mList, PREG_SET_ORDER)) {
-        foreach ($mList as $row) {
-            $flags = strtolower($row[1]);
-            $fName = trim($row[2]);
-            if (str_contains($flags, '\\noselect') || str_contains($flags, '\\nonexistent') || $fName === '' || strtoupper($fName) === 'INBOX') {
-                continue;
-            }
+    $folders    = ['INBOX' => '📥 Posteingang'];
+    $cacheKey   = md5(strtolower((string)($cfg['incoming_host'] ?? '') . '|' . (string)($cfg['email_address'] ?? '')));
+    $cachedEntry = ($includeFolderList && isset($_SESSION['mail_folders_ram'][$cacheKey]) && is_array($_SESSION['mail_folders_ram'][$cacheKey]))
+        ? $_SESSION['mail_folders_ram'][$cacheKey]
+        : null;
 
-            // IMAP Modified-UTF-7 Dekodierung für Umlaute (z.B. Entw&APw-rfe -> Entwürfe)
-            $displayPath = $fName;
-            if (function_exists('mb_convert_encoding') && str_contains($displayPath, '&')) {
-                $decodedUtf7 = @mb_convert_encoding($displayPath, 'UTF-8', 'UTF7-IMAP');
-                if (is_string($decodedUtf7) && $decodedUtf7 !== '') {
-                    $displayPath = $decodedUtf7;
+    if (!$includeFolderList) {
+        $quotedFolder = '"' . addcslashes($folder, '\\"') . '"';
+        fwrite($fp, "A04 EXAMINE {$quotedFolder}\r\n");
+        $selResp = readImapTaggedResponse($fp, 'A04');
+    } elseif ($cachedEntry !== null && ((int)($cachedEntry['ts'] ?? 0) >= time() - 900) && !empty($cachedEntry['folders']) && is_array($cachedEntry['folders'])) {
+        // Ordnerbaum bereits im flüchtigen Sitzungs-RAM -> spart kompletten LIST-Roundtrip!
+        $folders = $cachedEntry['folders'];
+        if (!isset($folders[$folder])) {
+            $folder = 'INBOX';
+        }
+        $quotedFolder = '"' . addcslashes($folder, '\\"') . '"';
+        fwrite($fp, "A04 EXAMINE {$quotedFolder}\r\n");
+        $selResp = readImapTaggedResponse($fp, 'A04');
+    } else {
+        // Cold-Start: LIST und EXAMINE für INBOX in einem einzigen Pipelining-Schritt senden, falls INBOX angefordert ist
+        $customFolders = [];
+        if ($folder === 'INBOX') {
+            fwrite($fp, "A03 LIST \"\" \"*\"\r\nA04 EXAMINE \"INBOX\"\r\n");
+            $listResp = readImapTaggedResponse($fp, 'A03');
+            $selResp  = readImapTaggedResponse($fp, 'A04');
+        } else {
+            fwrite($fp, "A03 LIST \"\" \"*\"\r\n");
+            $listResp = readImapTaggedResponse($fp, 'A03');
+            $selResp  = ['ok' => false, 'raw' => '', 'status_line' => ''];
+        }
+
+        if (preg_match_all('/^\*\s+LIST\s+\(([^)]*)\)\s+(?:"[^"]*"|NIL)\s+"?([^"\r\n]+)"?/im', $listResp['raw'], $mList, PREG_SET_ORDER)) {
+            foreach ($mList as $row) {
+                $flags = strtolower($row[1]);
+                $fName = trim($row[2]);
+                if (str_contains($flags, '\\noselect') || str_contains($flags, '\\nonexistent') || $fName === '' || strtoupper($fName) === 'INBOX') {
+                    continue;
+                }
+
+                // IMAP Modified-UTF-7 Dekodierung für Umlaute (z.B. Entw&APw-rfe -> Entwürfe)
+                $displayPath = $fName;
+                if (function_exists('mb_convert_encoding') && str_contains($displayPath, '&')) {
+                    $decodedUtf7 = @mb_convert_encoding($displayPath, 'UTF-8', 'UTF7-IMAP');
+                    if (is_string($decodedUtf7) && $decodedUtf7 !== '') {
+                        $displayPath = $decodedUtf7;
+                    }
+                }
+                // führendes "INBOX." oder "INBOX/" für schönere Anzeige kürzen
+                $cleanLabel = preg_replace('/^INBOX[\.\/]/i', '', $displayPath) ?? $displayPath;
+                $fLower     = strtolower($cleanLabel);
+                $rawLower   = strtolower($fName);
+
+                if (str_contains($flags, '\\sent') || in_array($fLower, ['sent', 'sent messages', 'sent items', 'gesendet', 'gesendete elemente', 'gesendete Objekte'], true)) {
+                    $folders[$fName] = '📤 Gesendet';
+                } elseif (str_contains($flags, '\\drafts') || in_array($fLower, ['drafts', 'entwürfe', 'entwuerfe'], true) || str_contains($rawLower, 'entw&apw-rfe')) {
+                    $folders[$fName] = '📝 Entwürfe';
+                } elseif (str_contains($flags, '\\archive') || str_contains($flags, '\\all') || in_array($fLower, ['archive', 'archiv', 'archives', 'all mail', 'alle nachrichten'], true)) {
+                    $folders[$fName] = '🗄️ ' . ($cleanLabel !== '' ? $cleanLabel : 'Archiv');
+                } elseif (str_contains($flags, '\\junk') || in_array($fLower, ['junk', 'junk e-mail', 'spam', 'spamverdacht', 'bulk', 'unerwünscht'], true)) {
+                    $folders[$fName] = '🛡️ Spam';
+                } elseif (str_contains($flags, '\\trash') || in_array($fLower, ['trash', 'deleted', 'deleted items', 'deleted messages', 'papierkorb', 'gelöscht', 'gelöschte elemente'], true)) {
+                    $folders[$fName] = '🗑️ Papierkorb';
+                } else {
+                    $customFolders[$fName] = '📁 ' . $cleanLabel;
                 }
             }
-            // führendes "INBOX." oder "INBOX/" für schönere Anzeige kürzen
-            $cleanLabel = preg_replace('/^INBOX[\.\/]/i', '', $displayPath) ?? $displayPath;
-            $fLower     = strtolower($cleanLabel);
-            $rawLower   = strtolower($fName);
+        }
+        foreach ($customFolders as $cKey => $cLabel) {
+            $folders[$cKey] = $cLabel;
+        }
 
-            if (str_contains($flags, '\\sent') || in_array($fLower, ['sent', 'sent messages', 'sent items', 'gesendet', 'gesendete elemente', 'gesendete Objekte'], true)) {
-                $folders[$fName] = '📤 Gesendet';
-            } elseif (str_contains($flags, '\\drafts') || in_array($fLower, ['drafts', 'entwürfe', 'entwuerfe'], true) || str_contains($rawLower, 'entw&apw-rfe')) {
-                $folders[$fName] = '📝 Entwürfe';
-            } elseif (str_contains($flags, '\\archive') || str_contains($flags, '\\all') || in_array($fLower, ['archive', 'archiv', 'archives', 'all mail', 'alle nachrichten'], true)) {
-                $folders[$fName] = '🗄️ ' . ($cleanLabel !== '' ? $cleanLabel : 'Archiv');
-            } elseif (str_contains($flags, '\\junk') || in_array($fLower, ['junk', 'junk e-mail', 'spam', 'spamverdacht', 'bulk', 'unerwünscht'], true)) {
-                $folders[$fName] = '🛡️ Spam';
-            } elseif (str_contains($flags, '\\trash') || in_array($fLower, ['trash', 'deleted', 'deleted items', 'deleted messages', 'papierkorb', 'gelöscht', 'gelöschte elemente'], true)) {
-                $folders[$fName] = '🗑️ Papierkorb';
-            } else {
-                $customFolders[$fName] = '📁 ' . $cleanLabel;
-            }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['mail_folders_ram'][$cacheKey] = [
+                'ts'      => time(),
+                'folders' => $folders,
+            ];
+        }
+
+        if (!isset($folders[$folder])) {
+            $folder = 'INBOX';
+        }
+        if (!$selResp['ok']) {
+            $quotedFolder = '"' . addcslashes($folder, '\\"') . '"';
+            fwrite($fp, "A04 EXAMINE {$quotedFolder}\r\n");
+            $selResp = readImapTaggedResponse($fp, 'A04');
         }
     }
-    foreach ($customFolders as $cKey => $cLabel) {
-        $folders[$cKey] = $cLabel;
-    }
 
-    if (!isset($folders[$folder])) {
-        $folder = 'INBOX';
-    }
-
-    $quotedFolder = '"' . addcslashes($folder, '\\"') . '"';
-    fwrite($fp, "A04 EXAMINE {$quotedFolder}\r\n");
-    $selResp = readImapTaggedResponse($fp, 'A04');
     if (!$selResp['ok']) {
         fwrite($fp, "A99 LOGOUT\r\n");
         @fclose($fp);
@@ -1271,7 +1328,8 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
         }
 
         if ($fetchCmd !== '') {
-            fwrite($fp, $fetchCmd);
+            // Pipelining: FETCH + LOGOUT in einem Schritt absenden
+            fwrite($fp, $fetchCmd . "A99 LOGOUT\r\n");
             $fetchResp = readImapTaggedResponse($fp, 'A05', 2097152);
 
             $blocks = preg_split('/^\*\s+\d+\s+FETCH\s+\(/im', $fetchResp['raw']) ?: [];
@@ -1306,6 +1364,13 @@ function fetchLiveMailboxMessages(array $cfg, string $folder = 'INBOX', int $pag
             }
 
             usort($messages, static fn(array $a, array $b): int => ((int)$b['ts']) <=> ((int)$a['ts']));
+            @fclose($fp);
+            return [
+                'ok'       => true,
+                'total'    => $total,
+                'messages' => $messages,
+                'folders'  => $folders,
+            ];
         }
     }
 
@@ -1358,17 +1423,15 @@ function fetchLiveSingleEmail(array $cfg, string $folder, string $uid): array
     $fp = $conn['fp'];
 
     $quotedFolder = '"' . addcslashes($folder, '\\"') . '"';
-    fwrite($fp, "A03 SELECT {$quotedFolder}\r\n");
+    // Post-Login IMAP Pipelining: EXAMINE + UID FETCH + LOGOUT in einem einzigen Netzwerk-Roundtrip!
+    fwrite($fp, "A03 EXAMINE {$quotedFolder}\r\nA04 UID FETCH {$uidInt} (BODY.PEEK[])\r\nA99 LOGOUT\r\n");
     $sel = readImapTaggedResponse($fp, 'A03');
     if (!$sel['ok']) {
-        fwrite($fp, "A99 LOGOUT\r\n");
         @fclose($fp);
         return ['ok' => false, 'error' => 'Ordner konnte nicht geöffnet werden.'];
     }
 
-    fwrite($fp, "A04 UID FETCH {$uidInt} (BODY.PEEK[])\r\n");
     $fetchResp = readImapTaggedResponse($fp, 'A04', 15 * 1024 * 1024);
-    fwrite($fp, "A99 LOGOUT\r\n");
     @fclose($fp);
 
     if (!$fetchResp['ok']) {
@@ -1620,21 +1683,12 @@ function sendLiveEmailViaSmtp(array $cfg, string $to, string $cc, string $subjec
         return ['ok' => false, 'message' => 'Bitte gib mindestens eine gültige Empfänger-E-Mail-Adresse an.'];
     }
 
-    $remote = ($ssl === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port;
-    $ctx = stream_context_create([
-        'ssl' => [
-            'verify_peer'      => true,
-            'verify_peer_name' => true,
-        ],
-    ]);
-
     $errno = 0;
     $errstr = '';
-    $fp = @stream_socket_client($remote, $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $ctx);
+    $fp = openFastMailSocket($host, $port, $ssl, 10, $errno, $errstr);
     if (!$fp) {
         return ['ok' => false, 'message' => "SMTP-Verbindung zu {$host}:{$port} fehlgeschlagen ({$errstr})."];
     }
-    stream_set_timeout($fp, 10);
 
     $readSmtp = static function () use ($fp): array {
         $resp = '';

@@ -1073,6 +1073,7 @@ if ($fileId <= 0) {
             // Gemeinsame Ansicht über alle Postfächer hinweg („all“ oder 0 bei mehreren Konten)
             $useUnified = ($reqAccountRaw === 'all') || ($reqAccountRaw === '' && count($allMailAccounts) > 1);
             if ($useUnified) {
+                session_write_close();
                 $res = fetchUnifiedMailboxesMessages($allMailAccounts, $searchQuery !== '' ? 20 : 12, $searchQuery);
                 echo json_encode($res);
                 exit;
@@ -1085,6 +1086,10 @@ if ($fileId <= 0) {
                 exit;
             }
 
+            $fCacheKey = md5(strtolower((string)($mailCfg['incoming_host'] ?? '') . '|' . (string)($mailCfg['email_address'] ?? '')));
+            if (!empty($_SESSION['mail_folders_ram'][$fCacheKey]['folders'])) {
+                session_write_close();
+            }
             $res = fetchLiveMailboxMessages($mailCfg, $folder, $page, 20, $searchQuery);
             if (!empty($res['ok']) && isset($res['messages']) && is_array($res['messages'])) {
                 foreach ($res['messages'] as &$mRow) {
@@ -1113,6 +1118,7 @@ if ($fileId <= 0) {
                 echo json_encode(['ok' => false, 'message' => 'Keine E-Mails ausgewählt.']);
                 exit;
             }
+            session_write_close();
             $res = executeBulkLiveMailAction($pdo, $userId, $bulkOp, $items);
             echo json_encode($res);
             exit;
@@ -1125,6 +1131,7 @@ if ($fileId <= 0) {
             echo json_encode(['ok' => false, 'error' => 'E-Mail-Postfach nicht gefunden.']);
             exit;
         }
+        session_write_close();
 
         if ($mailAction === 'read') {
             $folder = trim((string)($_POST['folder'] ?? 'INBOX')) ?: 'INBOX';
