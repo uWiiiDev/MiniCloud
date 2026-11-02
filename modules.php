@@ -260,6 +260,18 @@ $allModules = [
         'badgeCls' => 'bg-emerald-600 text-white',
     ],
     [
+        'key'      => 'weather',
+        'enabled'  => ($appSettings['enable_weather'] ?? '1') === '1',
+        'title'    => 'Wetter & Regenradar',
+        'shortSub' => 'DWD-Prognose, Warnkarte & Messbuch',
+        'icon'     => '⛅',
+        'url'      => 'weather.php',
+        'category' => 'org_team',
+        'desc'     => 'Interaktive Deutschland-Wetter-, Landkreis-Warn- & Regenradar-Karte, 24h-Trend, 7-Tage-Vorhersage, 23.296 Orte offline, Outdoor-Ampel & eigenes Wetter-Messbuch.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-sky-600 text-white',
+    ],
+    [
         'key'      => 'polls',
         'enabled'  => ($appSettings['enable_polls'] ?? '1') === '1',
         'title'    => 'Umfragen & Termine',
