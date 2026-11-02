@@ -1228,12 +1228,15 @@ $categoriesConfig = [
     'outdoor'   => ['label' => 'Natur / Ausflugsziel',   'icon' => '🏕️', 'color' => '#16a34a'],
 ];
 
+$hasGermanyPmtiles = is_file(__DIR__ . '/assets/maps/germany_detail.pmtiles') || is_file($mapsBaseDir . '/tiles/germany_detail.pmtiles');
+
 $pageTitle = 'Karten & Intranet-Atlas';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
 <link rel="stylesheet" href="assets/leaflet/leaflet.css">
 <script src="assets/leaflet/leaflet.js"></script>
+<script src="assets/leaflet/protomaps-leaflet.js"></script>
 
 <style>
     #mcMapCanvas {
@@ -2036,10 +2039,12 @@ const MC_CALENDAR       = <?= json_encode($calendarPins, JSON_UNESCAPED_UNICODE)
 const MC_PHOTOS         = <?= json_encode($photoPins, JSON_UNESCAPED_UNICODE) ?>;
 
 let mcAirGapOnly        = <?= $airGapMode ? 'true' : 'false' ?>;
+let mcHasGermanyPmtiles = <?= $hasGermanyPmtiles ? 'true' : 'false' ?>;
 let mcCurrentDetailLvl  = <?= (int)$defaultDetailLevel ?>;
 let mcMaxZoomDetail     = <?= (int)$maxCachedZoomLevel ?>;
 let mcMap               = null;
 let mcTileLayer         = null;
+let mcPmtilesLayer      = null;
 let mcPlaceMarkersById  = {};
 
 // Schicht-Gruppen (LayerGroups)
@@ -2185,6 +2190,10 @@ function switchMapBaseStyle(style) {
         mcMap.removeLayer(mcTileLayer);
         mcTileLayer = null;
     }
+    if (mcPmtilesLayer) {
+        mcMap.removeLayer(mcPmtilesLayer);
+        mcPmtilesLayer = null;
+    }
 
     const tileStyleParam = (style === 'intranet_dark') ? 'intranet_dark' : (style === 'topo' ? 'topo' : 'osm');
     const airParam = (style === 'intranet_vector' || style === 'intranet_dark' || mcAirGapOnly) ? '1' : '0';
@@ -2199,6 +2208,28 @@ function switchMapBaseStyle(style) {
     );
     mcTileLayer.addTo(mcMap);
     mcTileLayer.bringToBack();
+
+    // Wenn das 7,2 GB Deutschland-Vektor-Archiv (germany_detail.pmtiles, 1,16 Mio. Kacheln bis Hausnummern-Ebene) installiert ist:
+    if (mcHasGermanyPmtiles && typeof protomapsL !== 'undefined' && protomapsL.leafletLayer) {
+        const isDarkTheme = document.documentElement.classList.contains('dark');
+        let pmFlavor = 'light';
+        if (style === 'intranet_dark') {
+            pmFlavor = 'dark';
+        } else if (style === 'topo') {
+            pmFlavor = 'grayscale';
+        } else if (style === 'intranet_vector' && isDarkTheme) {
+            pmFlavor = 'dark';
+        }
+        mcPmtilesLayer = protomapsL.leafletLayer({
+            url: 'assets/maps/germany_detail.pmtiles',
+            flavor: pmFlavor,
+            lang: 'de',
+            maxDataZoom: 15,
+            maxZoom: 18,
+            attribution: '🇩🇪 Offline-Deutschland-Vollkarte (1,16 Mio. Vektorkacheln, Zoom 0–18) © OpenStreetMap'
+        });
+        mcPmtilesLayer.addTo(mcMap);
+    }
 }
 
 let mcGeoJsonEurope = null;
@@ -2232,9 +2263,10 @@ function renderOfflineVectorAtlas() {
     layerGroupCities.clearLayers();
 
     const isDark = document.documentElement.classList.contains('dark');
+    const baseFillOpacity = mcHasGermanyPmtiles ? 0.0 : (mcAirGapOnly ? 0.55 : 0.06);
 
     // 0. Europäische Nachbarländer (Hochauflösendes GeoJSON)
-    if (mcGeoJsonEurope) {
+    if (mcGeoJsonEurope && !mcHasGermanyPmtiles) {
         L.geoJSON(mcGeoJsonEurope, {
             style: {
                 color: isDark ? '#334155' : '#94a3b8',
@@ -2251,9 +2283,9 @@ function renderOfflineVectorAtlas() {
         L.geoJSON(mcGeoJsonStates, {
             style: {
                 color: isDark ? '#38bdf8' : '#0284c7',
-                weight: mcCurrentDetailLvl >= 2 ? 1.8 : 2.2,
+                weight: mcMap.getZoom() >= 11 ? 1.0 : (mcCurrentDetailLvl >= 2 ? 1.8 : 2.2),
                 fillColor: isDark ? '#1e293b' : '#f8fafc',
-                fillOpacity: mcAirGapOnly ? 0.55 : 0.06
+                fillOpacity: baseFillOpacity
             },
             interactive: false
         }).addTo(layerGroupBaseVector);
@@ -2262,7 +2294,7 @@ function renderOfflineVectorAtlas() {
             color: isDark ? '#38bdf8' : '#0284c7',
             weight: 2.2,
             fillColor: isDark ? '#1e293b' : '#f8fafc',
-            fillOpacity: mcAirGapOnly ? 0.55 : 0.08,
+            fillOpacity: baseFillOpacity,
             interactive: false
         }).addTo(layerGroupBaseVector);
     }
@@ -2316,8 +2348,8 @@ function renderOfflineVectorAtlas() {
         }).addTo(layerGroupBaseVector);
     }
 
-    // 3. Flüsse (ab Detailgrad 2) & Autobahnen (ab Detailgrad 3)
-    if (mcCurrentDetailLvl >= 2) {
+    // 3. Flüsse (ab Detailgrad 2) & Autobahnen (ab Detailgrad 3) – nur wenn kein Voll-PMTiles aktiv oder im Übersichts-Zoom <= 8
+    if (mcCurrentDetailLvl >= 2 && (!mcHasGermanyPmtiles || mcMap.getZoom() <= 7)) {
         OFFLINE_RIVERS.forEach(rv => {
             L.polyline(rv.pts, {
                 color: '#0ea5e9',
@@ -2326,7 +2358,7 @@ function renderOfflineVectorAtlas() {
             }).bindTooltip('🌊 ' + rv.name).addTo(layerGroupInfra);
         });
     }
-    if (mcCurrentDetailLvl >= 3) {
+    if (mcCurrentDetailLvl >= 3 && (!mcHasGermanyPmtiles || mcMap.getZoom() <= 7)) {
         OFFLINE_AUTOBAHNEN.forEach(ab => {
             L.polyline(ab.pts, {
                 color: '#f59e0b',

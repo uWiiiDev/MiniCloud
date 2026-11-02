@@ -966,7 +966,9 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <script src="assets/leaflet/leaflet.js"></script>
+<script src="assets/leaflet/protomaps-leaflet.js"></script>
 <script>
+const WX_HAS_PMTILES = <?= (is_file(__DIR__ . '/assets/maps/germany_detail.pmtiles') || is_file(__DIR__ . '/uploads/maps/tiles/germany_detail.pmtiles')) ? 'true' : 'false' ?>;
 const WX_ACTIVE = {
     name: <?= json_encode($activeName, JSON_UNESCAPED_UNICODE) ?>,
     lat: <?= json_encode((float)$activeLat) ?>,
@@ -995,14 +997,26 @@ function initWxMap() {
         center: [51.16, 10.45],
         zoom: 6,
         minZoom: 4,
-        maxZoom: 14
+        maxZoom: 18
     });
 
-    // Offline-fähige Hybrid-Kacheln über maps.php Proxy (nutzt lokal gebündelte OSM-Kacheln + Overzoom)
+    // Offline-fähige Hybrid-Kacheln über maps.php Proxy + 7,2 GB Deutschland-Vollvektor-Karte (Zoom 0–18)
     L.tileLayer('maps.php?action=tile&layer=osm&z={z}&x={x}&y={y}', {
-        maxZoom: 14,
+        maxZoom: 18,
         attribution: '© OpenStreetMap · MiniCloud Offline-Hybrid'
     }).addTo(wxMap);
+
+    if (WX_HAS_PMTILES && typeof protomapsL !== 'undefined' && protomapsL.leafletLayer) {
+        const isDark = document.documentElement.classList.contains('dark');
+        protomapsL.leafletLayer({
+            url: 'assets/maps/germany_detail.pmtiles',
+            flavor: isDark ? 'dark' : 'light',
+            lang: 'de',
+            maxDataZoom: 15,
+            maxZoom: 18,
+            attribution: '🇩🇪 Offline-Deutschland-Vollkarte (Zoom 0–18) © OpenStreetMap'
+        }).addTo(wxMap);
+    }
 
     // Bundesländer-Umrisse lokal laden
     fetch('assets/maps/de_bundeslaender.geojson')

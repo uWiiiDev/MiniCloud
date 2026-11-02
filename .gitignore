@@ -18,3 +18,5 @@ tools/telegram_bridge/state.json
 *~
 .DS_Store
 Thumbs.db
+*.pmtiles
+*.mbtiles
