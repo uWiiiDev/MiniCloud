@@ -714,6 +714,10 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_radio'                  => '1',
         'enable_news'                   => '1',
         'enable_markets'                => '1',
+        'enable_maps'                   => '1',
+        'maps_airgap_only'              => '1',
+        'maps_default_detail'           => '4',
+        'maps_max_zoom_detail'          => '14',
         'translator_deepl_api_key'      => '',
         'translator_libretranslate_url' => '',
         'translator_default_target'     => 'en',
@@ -3257,6 +3261,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_markets',
             'color'       => 'bg-emerald-600',
         ],
+        'maps' => [
+            'icon'        => '🗺️',
+            'label'       => 'Karten, Offline-Atlas & Lagepläne',
+            'url'         => 'maps.php',
+            'setting_key' => 'enable_maps',
+            'color'       => 'bg-teal-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3276,7 +3287,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search', 'tile', 'floorplan_img'], true)) {
         return null;
     }
 
@@ -3288,6 +3299,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'tasks.php'     => 'tasks',
         'notes.php'     => 'notes',
         'contacts.php'  => 'contacts',
+        'maps.php'      => 'maps',
         'messages.php'  => 'chat',
         'pdf_tools.php' => 'pdf_tools',
         'projects.php'  => 'projects',

@@ -1710,6 +1710,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableRadio       = isset($_POST['enable_radio']) && $_POST['enable_radio'] === '1' ? '1' : '0';
         $enableNews        = isset($_POST['enable_news']) && $_POST['enable_news'] === '1' ? '1' : '0';
         $enableMarkets     = isset($_POST['enable_markets']) && $_POST['enable_markets'] === '1' ? '1' : '0';
+        $enableMaps        = isset($_POST['enable_maps']) && $_POST['enable_maps'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
         $libreUrl          = '';
@@ -1778,6 +1779,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_radio', $enableRadio);
         saveAppSetting($pdo, 'enable_news', $enableNews);
         saveAppSetting($pdo, 'enable_markets', $enableMarkets);
+        saveAppSetting($pdo, 'enable_maps', $enableMaps);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
         saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
@@ -4538,6 +4540,35 @@ foreach ($modList as $mItem) {
                         </a>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_markets'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                             <?= ($currentSettings['enable_markets'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27h: Karten, Offline-Atlas & Intranet-Lagepläne -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_maps"
+                            value="1"
+                            <?= ($currentSettings['enable_maps'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🗺️ Karten, Offline-Atlas &amp; Intranet-Lagepläne (<code class="text-xs font-mono">maps.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                100 % intranet- &amp; offlinefähiger Kartendienst (Air-Gap-Lock) mit stufenlos änderbarem Detailgrad, lokaler <code class="font-mono">.mbtiles</code>-Unterstützung, eigenen POIs, GPX-Routen &amp; Gebäude-Lageplänen.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="maps.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🗺️ Karten-Modul öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_maps'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_maps'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
                         </span>
                     </div>
                 </div>

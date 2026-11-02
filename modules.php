@@ -248,6 +248,18 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
+        'key'      => 'maps',
+        'enabled'  => ($appSettings['enable_maps'] ?? '1') === '1',
+        'title'    => 'Karten & Intranet-Atlas',
+        'shortSub' => 'Offline-Karten, GPX & Lagepläne',
+        'icon'     => '🗺️',
+        'url'      => 'maps.php',
+        'category' => 'org_team',
+        'desc'     => '100 % intranet- & offlinefähiger Kartendienst mit einstellbarem Detailgrad, eigenen Standorten (POIs), GPX-Touren, Foto-Weltkarte & Gebäude-Lageplänen.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-emerald-600 text-white',
+    ],
+    [
         'key'      => 'polls',
         'enabled'  => ($appSettings['enable_polls'] ?? '1') === '1',
         'title'    => 'Umfragen & Termine',
