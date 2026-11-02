@@ -294,9 +294,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
         if ($mailUser === '') {
             $mailUser = $emailAddr;
         }
-        $mailPass     = (string)($_POST['mail_password'] ?? '');
+        $mailPass     = normalizeMailAccountPassword((string)($_POST['mail_password'] ?? ''), $incHost, $emailAddr);
         if ($mailPass === '' && $existingMail !== null) {
-            $mailPass = (string)$existingMail['password'];
+            $mailPass = normalizeMailAccountPassword((string)$existingMail['password'], $incHost, $emailAddr);
         }
 
         if ($emailAddr === '' || $incHost === '' || $smtpHost === '' || $mailPass === '') {

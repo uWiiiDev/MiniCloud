@@ -934,7 +934,7 @@ if ($fileId <= 0) {
             $smtpPort    = max(1, min(65535, (int)($_POST['mail_smtp_port'] ?? 587)));
             $smtpSsl     = in_array($_POST['mail_smtp_ssl'] ?? 'tls', ['ssl', 'tls'], true) ? (string)$_POST['mail_smtp_ssl'] : 'tls';
             $mailUser    = mb_substr(trim((string)($_POST['mail_username'] ?? '')), 0, 185) ?: $emailAddr;
-            $mailPass    = (string)($_POST['mail_password'] ?? '');
+            $mailPass    = normalizeMailAccountPassword((string)($_POST['mail_password'] ?? ''), $incHost, $emailAddr);
             if ($accLabel === '') {
                 $accLabel = $emailAddr;
             }

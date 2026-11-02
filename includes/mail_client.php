@@ -154,7 +154,7 @@ function getMailProviderPresets(): array
             'smtp_host'  => 'smtp.gmail.com',
             'smtp_port'  => 587,
             'smtp_ssl'   => 'tls',
-            'hint'       => 'Hinweis für Gmail: Google erfordert für IMAP/POP3 ein 16-stelliges „App-Passwort“ (im Google-Konto unter Sicherheit → 2-Faktor-Bestätigung → App-Passwörter).',
+            'hint'       => '⚠️ Wichtig für Gmail: Google blockiert das normale Google-Passwort für IMAP/SMTP! Du musst unter myaccount.google.com/apppasswords ein 16-stelliges „App-Passwort“ erstellen (Leerzeichen werden automatisch entfernt).',
         ],
         'outlook' => [
             'label'      => 'Microsoft Outlook / Hotmail / Live (outlook.de / hotmail.com)',
@@ -788,6 +788,35 @@ function parseRawEmailMessageInMemory(string $rawEmail): array
 // ============================================================================
 
 /**
+ * Bereinigt eingegebene E-Mail-Passwörter automatisch für App-Passwörter
+ * (z. B. Google Gmail „xxxx xxxx xxxx xxxx“ mit kopierten Leerzeichen).
+ */
+function normalizeMailAccountPassword(string $pass, string $host = '', string $email = ''): string
+{
+    $trimmed = trim($pass);
+    $noSpaces = preg_replace('/\s+/', '', $trimmed) ?? $trimmed;
+    $hostLower = strtolower(trim($host));
+    $emailLower = strtolower(trim($email));
+
+    $isGmail = str_contains($hostLower, 'gmail.com')
+        || str_contains($hostLower, 'googlemail.com')
+        || str_ends_with($emailLower, '@gmail.com')
+        || str_ends_with($emailLower, '@googlemail.com');
+
+    // Typisches 16-stelliges Google App-Passwort im 4x4-Blockformat ("abcd efgh ijkl mnop")
+    if (preg_match('/^[a-zA-Z0-9]{4}(?:\s+[a-zA-Z0-9]{4}){3}$/', $trimmed)) {
+        return $noSpaces;
+    }
+
+    // Bei Gmail auch dann Leerzeichen entfernen, wenn ohne Leerzeichen exakt 16 Buchstaben/Ziffern übrig bleiben
+    if ($isGmail && strlen($noSpaces) === 16 && ctype_alnum($noSpaces)) {
+        return $noSpaces;
+    }
+
+    return $pass;
+}
+
+/**
  * Öffnet und authentifiziert eine POP3-Verbindung.
  *
  * @return array{ok: bool, fp?: resource, error?: string, count?: int}
@@ -797,8 +826,12 @@ function openPop3Connection(array $cfg): array
     $host = trim((string)($cfg['incoming_host'] ?? ''));
     $port = (int)($cfg['incoming_port'] ?? 995);
     $ssl  = strtolower((string)($cfg['incoming_ssl'] ?? 'ssl'));
-    $user = (string)($cfg['username'] ?? $cfg['email_address'] ?? '');
-    $pass = (string)($cfg['password'] ?? '');
+    $user = trim((string)($cfg['username'] ?? $cfg['email_address'] ?? ''));
+    $pass = normalizeMailAccountPassword(
+        (string)($cfg['password'] ?? ''),
+        $host,
+        (string)($cfg['email_address'] ?? $user)
+    );
 
     if (!isSafeMailServerHost($host, $port)) {
         return ['ok' => false, 'error' => 'Ungültiger POP3-Server oder nicht erlaubter Port.'];
@@ -846,6 +879,12 @@ function openPop3Connection(array $cfg): array
     $pResp = (string)@fgets($fp, 2048);
     if (!str_starts_with($pResp, '+OK')) {
         @fclose($fp);
+        if (stripos($host, 'gmail.com') !== false || stripos($host, 'googlemail.com') !== false) {
+            return [
+                'ok'    => false,
+                'error' => 'Google Mail hat das Passwort abgelehnt: Google erlaubt für POP3/IMAP KEIN normales Google-Passwort mehr! Bitte erstelle unter myaccount.google.com/apppasswords ein 16-stelliges „App-Passwort“ und trage dieses ein.',
+            ];
+        }
         return ['ok' => false, 'error' => 'Anmeldung fehlgeschlagen (bitte Passwort bzw. POP3-Freigabe beim Provider prüfen).'];
     }
 
@@ -894,8 +933,12 @@ function openImapConnection(array $cfg): array
     $host = trim((string)($cfg['incoming_host'] ?? ''));
     $port = (int)($cfg['incoming_port'] ?? 993);
     $ssl  = strtolower((string)($cfg['incoming_ssl'] ?? 'ssl'));
-    $user = (string)($cfg['username'] ?? $cfg['email_address'] ?? '');
-    $pass = (string)($cfg['password'] ?? '');
+    $user = trim((string)($cfg['username'] ?? $cfg['email_address'] ?? ''));
+    $pass = normalizeMailAccountPassword(
+        (string)($cfg['password'] ?? ''),
+        $host,
+        (string)($cfg['email_address'] ?? $user)
+    );
 
     if (!isSafeMailServerHost($host, $port)) {
         return ['ok' => false, 'error' => 'Ungültiger IMAP-Server oder nicht erlaubter Port.'];
@@ -938,6 +981,12 @@ function openImapConnection(array $cfg): array
     $loginResp = readImapTaggedResponse($fp, 'A02');
     if (!$loginResp['ok']) {
         @fclose($fp);
+        if (stripos($host, 'gmail.com') !== false || stripos($host, 'googlemail.com') !== false || stripos($loginResp['raw'], 'Application-specific password') !== false) {
+            return [
+                'ok'    => false,
+                'error' => 'Google Mail hat das Passwort abgelehnt: Google blockiert das normale Google-Konto-Passwort für IMAP! Du benötigst ein 16-stelliges Google „App-Passwort“ (erstellbar unter myaccount.google.com/apppasswords → Sicherheit → Bestätigung in 2 Schritten → App-Passwörter).',
+            ];
+        }
         return ['ok' => false, 'error' => 'IMAP-Anmeldung fehlgeschlagen (bitte E-Mail/Passwort oder App-Passwort prüfen).'];
     }
 
@@ -1543,9 +1592,9 @@ function sendLiveEmailViaSmtp(array $cfg, string $to, string $cc, string $subjec
     $host      = trim((string)($cfg['smtp_host'] ?? ''));
     $port      = (int)($cfg['smtp_port'] ?? 587);
     $ssl       = strtolower((string)($cfg['smtp_ssl'] ?? 'tls'));
-    $user      = (string)($cfg['username'] ?? $cfg['email_address'] ?? '');
-    $pass      = (string)($cfg['password'] ?? '');
+    $user      = trim((string)($cfg['username'] ?? $cfg['email_address'] ?? ''));
     $fromEmail = trim((string)($cfg['email_address'] ?? $user));
+    $pass      = normalizeMailAccountPassword((string)($cfg['password'] ?? ''), $host, $fromEmail);
     $fromName  = trim((string)($cfg['sender_name'] ?? ''));
 
     if (!isSafeMailServerHost($host, $port)) {
