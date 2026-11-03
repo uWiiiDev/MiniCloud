@@ -1,264 +1,45 @@
-# ☁️ MiniCloud — Fast, Secure & Self-Hosted Cloud Workspace (PHP 8.2+ & MySQL)
+# ☁️ MiniCloud – Files-Only Edition (`files-only` Branch)
 
-**MiniCloud** is a fast, lightweight, and privacy-first self-hosted cloud storage and collaboration suite built with **PHP 8.2+** and **MySQL / MariaDB**. Designed as a zero-bloat alternative to heavy cloud suites, it runs effortlessly on standard shared web hosting (e.g., STRATO, IONOS, All-Inkl, Netcup, cPanel) as well as any Linux VPS or Raspberry Pi — **100% GDPR-compliant**, zero external CDNs, and **Zero-Click Auto-Migration**.
+Willkommen zur **schlanken Datei-Edition (`files-only`)** von **MiniCloud**!
+Dieser Git-Zweig enthält ausschließlich den reinen **Cloud-Dateimanager & File-Server** – komplett befreit von allen Zusatzmodulen (wie Office, Kalender, Spiele, Radio, Wetter, Finanzen oder KI-Assistent).
 
-🌍 **11 Built-in Languages:** 🇩🇪 Deutsch · 🇬🇧 English · 🇫🇷 Français · 🇪🇸 Español · 🇮🇹 Italiano · 🇳🇱 Nederlands · 🇵🇱 Polski · 🇹🇷 Türkçe · 🇺🇦 Українська · 🇸🇦 العربية (RTL) · 🇷🇺 Русский  
-🎨 **13 Eye-Friendly Color Themes:** 5 Soft Light, 4 Balanced Mid-Tone & 4 Dark/Obsidian themes  
-📱 **Installable Progressive Web App (PWA):** Works on Android, iOS (iPhone/iPad), Windows, macOS & Linux
-
----
-
-## ✨ Complete Feature Suite (28 Integrated Modules)
-
-### 1. 📁 File Manager, AES-256 Vault, ZIP Inspector, Duplicate Detection & Smart Sharing (`index.php`, `thumbnail.php`, `vault_action.php`, `share.php`)
-- **Direct Folder Drag & Drop, `Ctrl+V` Clipboard Upload & Action Toolbar:** Drop files or entire folder hierarchies directly onto any subfolder row or onto the page. Paste screenshots straight from your clipboard via `Ctrl+V`.
-- **🖼️ Server-Side WebP/JPEG Thumbnail Cache (`thumbnail.php` & `uploads/.thumbs/`):** Automatically generates lightweight `240×240 px` WebP/JPEG thumbnails for images in the File Manager and Photo Gallery, reducing mobile data usage by ~98% while enforcing full RBAC permissions and instant Zero-Knowledge Vault purge.
-- **⚠️ SHA-256 Duplicate Detection & Top-100 Large Files X-Ray:** Automatically computes `SHA-256` content hashes (`file_hash`) on upload to flag duplicate files (`⚠️ Duplicate`) across folders, plus a fast Top-100 Large Files analyzer (`index.php?large=1`) and 200-file pagination for massive directories.
-- **🔒 AES-256-GCM Zero-Knowledge Vault:** Encrypt sensitive individual files with a personal Vault password (`PBKDF2-HMAC-SHA256`, 100,000 iterations + 96-bit IV + 128-bit Auth Tag). Your encryption password is never stored on the server, and any pre-existing image thumbnails or plaintext hashes are wiped immediately upon encryption.
-- **📦 In-Browser ZIP Inspector & Server-Side Extractor:** Inspect the contents of any `.zip` archive in the preview modal and extract it directly on the server with full Zip-Slip & quota protection.
-- **🕓 Automatic File Versioning ("Time Travel" up to 5 versions), 💬 File Comments & Configurable Trash Retention:** Overwriting files via upload, Office Light, or WebDAV automatically preserves up to 5 previous snapshots, while soft-deleted files remain in `trash.php` for a configurable retention period (**7, 14, 30, 60, or 90 days**).
-- **🔗 Public Share Links with Local SVG QR Code, 🔥 Self-Destruct ("Burn after reading"), 📥 File-Drop Mailbox & Messenger Alerts:** Share files or folders via cryptographically secure links (`random_bytes(16)`), optional BCRYPT password, expiration date, maximum download limit, 3 folder modes (*Download Only*, *Digital Mailbox / Upload Only*, or *Read & Write*), and automatic in-app Messenger notifications whenever a guest uploads a file or triggers a self-destructing link.
-- **👥 3-Tier Internal User & Group Sharing:** Share folders and files with other users or groups using granular permissions (*Read Only*, *Read & Write*, or *Read, Write & Delete*).
-
-### 2. 📄 MiniCloud Office Light 6-in-1 Suite with Live Team Collaboration & Photo Studio (`office.php`, `mindmap.php`)
-- **100% Local 6-in-1 Document & Media Suite:** Create and edit **Word (`.docx`)**, **Excel (`.xlsx` with `=SUM`, `=AVERAGE`, `=MIN`, `=MAX`, `=COUNT`, `=PRODUCT`, `=ROUND`, `=IF`, `=ABS`, `=SQRT`, `=TODAY`)**, **PowerPoint (`.pptx`)**, **Visio Diagrams & Org Charts (`.drawio`)**, **Interactive Mind Maps**, **Photos & Images (`.jpg`, `.png`, `.webp`, `.gif`, `.bmp`)**, **CSV (`.csv`)**, **Markdown (`.md`)**, and **Text (`.txt`)** directly in the browser without external servers (no Microsoft 365 or Google Docs required).
-- **🎨 Built-in Photo & Image Studio (`.jpg`, `.png`, `.webp`, `.gif`, `.bmp`):** Accessible from the File Preview (`🎨 Edit Image`), the Photo Gallery Lightbox (`🎨 Edit`), and the Office Light hub:
-  - **✂️ Crop, Rotate & Flip:** 90° left/right rotation, horizontal/vertical mirroring, and free or fixed aspect-ratio cropping (`1:1`, `16:9`, `4:3`, `3:2`, `DIN A4`).
-  - **📐 Resize & Compress with Live File Size Estimate:** 1-click resolution presets (`75%`, `50%`, `Full-HD 1920px`, `Web 1280px`, `Compact 800px`), format conversion (`JPEG`, `WebP`, `PNG`), and quality slider with real-time `KB/MB` size calculation.
-  - **☀️ Exposure, Color & 1-Click Photo Filters:** Brightness, contrast, saturation, and sepia sliders + 6 one-click presets (*Auto Brilliance*, *Black & White*, *Vintage/Sepia*, *Warm*, *Document Contrast*, *Invert*).
-  - **✏️ Annotations, Watermarks & 🔲 GDPR Pixelation Brush:** Irreversibly pixelate or blur faces, license plates, or private details before sharing, or add arrows, frames, freehand drawings, and text watermarks — with 15-step Undo (`↩️`) and a choice between updating the original file (with automatic `🕓` version snapshot) or saving as a new copy.
-- **📙 PowerPoint Light (`.pptx` Slide Editor & Fullscreen Beamer Mode):** Build 16:9 widescreen presentations with 6 slide layouts (*Title*, *Bullets*, *Two Columns*, *Cloud Image + Text*, *Big Stat / Quote*, *Section Header*), 6 presentation color themes, speaker notes, printable PDF handouts, and a fullscreen presenter view with a built-in laser pointer (`L` key). Generates standards-compliant OpenXML `.pptx` archives compatible with Microsoft PowerPoint, LibreOffice Impress, and Apple Keynote.
-- **📐 Visio Light (`.drawio` Flowcharts, Process Maps & Org Charts):** Interactive vector canvas with 6 shape types (*Rectangle*, *Rounded*, *Decision Diamond*, *Start/End Stadium*, *Person / Org Role*, *Note Card*), smart connector arrows (*curved*, *orthogonal*, or *straight*; solid or dashed with custom labels), 6 color palettes, 1-click hierarchical auto-layout, and standalone SVG vector storage.
-- **🧠 Integrated Mind Map Hub (`mindmap.php`):** Manage and launch all personal and shared Mind Maps directly from the Office Light hub, complete with infinite pan/zoom, cubic Bézier branches, 1-click conversion of nodes into Kanban tasks or sticky notes, and `.svg`/`.md`/`.json` cloud export.
-- **🟢 Real-Time Team Presence & Cell/Paragraph/Slide/Shape Locking:** When multiple users edit a shared document simultaneously, Office Light displays active collaborators in real time, locks currently focused Excel cells, Word paragraphs, PowerPoint slides, or Visio shapes against accidental overwrites, and streams changes live to all screens.
-
-### 3. 📅 Calendar, Recurring Events, 2-Way CalDAV & `.ics` Feed (`calendar.php`, `caldav.php`)
-- Monthly and agenda views, recurring events, file attachments, automatic contact birthdays (`🎂`), 3-tier calendar sharing, personal `.ics` subscription feeds, and a **native 2-way CalDAV server (`caldav.php`)** for iOS, macOS Calendar, Thunderbird, and Android (*DAVx⁵*).
-
-### 4. 💬 Real-Time Messenger, 1:1 & Group Voice Calls (WebRTC + Push-to-Talk) & Notifications (`messages.php`)
-- **📞 1:1 Voice Calls & 🎧 Group Voice Rooms (STRATO-Optimized Hybrid):**
-  - **⚡ Direct WebRTC-Mesh Audio & 🖥️ Screen Sharing:** Zero-latency peer-to-peer voice calls for 1:1 chats, user groups (`👥`), club boards (`🏛️`), and the open Cloud Lounge (`🌐`) with live speaking indicators (`🟢`) and zero audio bandwidth load on your PHP server.
-  - **📻 Push-to-Talk ("Walkie-Talkie") Fallback:** 100% firewall-safe & large-group radio mode (hold button or `Spacebar` to transmit compact Opus audio packets to all room members).
-  - **🔔 Global Incoming Call Ringing Banner:** Piggybacks onto the existing header poll with 0 extra HTTP requests and rings across all pages of MiniCloud.
-- **Instant Chat & Voice Notes:** 1:1 instant chat with visible cloud users, **🎙️ microphone voice message recording** with inline audio playback, `Ctrl+V` screenshot pasting, cloud file attachments, official **Admin Broadcast channel (`📢 Announcements`)**, and native Web/Service-Worker desktop & mobile notifications.
-
-### 5. 🏠 "My Day" Cockpit (`dashboard.php`) & ⊞ Dedicated Module Hub (`modules.php`)
-- **My Day Cockpit (`dashboard.php`):** Customizable daily overview of upcoming appointments, birthdays, open Kanban tasks, active polls, pinned notes, and recent files.
-- **Dedicated Module Hub (`modules.php`):** Full-page app directory (`⊞ Module`) with live search, category filters, **sorting by usage frequency (*🔥 Most used*, *🔤 A–Z*, or *✋ Custom Drag & Drop*)**, and **`⭐` pinning** to keep your favorite modules right in the top navigation bar.
-
-### 6. 📋 Kanban Boards (`tasks.php`) & 🚀 Project Management (`projects.php`)
-- **Multi-Board Kanban (`tasks.php`):** Drag-and-drop columns (*To Do*, *In Progress*, *Done*), priorities, due dates, interactive subtask checklists, cloud file attachments, and public/team board sharing.
-- **Project Management (`projects.php`):** Visual **Gantt timeline**, milestones with progress bars, **time & expense tracking** (`hours` / `cost_amount`) against project budgets, and direct linking to Kanban boards and group folders.
-
-### 7. 🧠 Interactive Mind Map Editor (`mindmap.php`)
-- Infinite pan & zoom canvas with smooth cubic Bézier curves, keyboard shortcuts (`Tab` = child node, `Enter` = sibling node, `Del` = delete, `Space` = collapse/expand branch), 8 color palettes, node notes, **direct links to cloud files**, 4 starter templates, team/guest sharing, and **1-click export as `.svg`, `.md` (outline), or `.json` directly to your cloud storage**.
-
-### 8. 💰 Budget & Household Planner (`budget.php`)
-- Manage personal, family, or shared group budget books (`€`, `CHF`, `$`, `£`), log income and expenses across 13 categories with **direct cloud receipt attachment (`📎 PDF/Photo`)**, track **recurring subscriptions & cancellation notice periods (`🔄`)**, monitor **visual savings goals (`🎯`)**, and export monthly reports to **CSV (Excel)** directly into your cloud folder.
-
-### 9. 🏛️ Club Management, Statistics & Board Role Delegation (`club.php`)
-- Complete digital club & association administration with **granular multi-user board role delegation** (*1st Chairman = Full Access*, *Secretary = Member Directory & Minutes*, *Treasurer = Fee Tiers, Yearly Fee Generator & 1-Click Sync to `budget.php`*, *Equipment Manager = Volunteer Work Hours & Key/Equipment Lending*, *Auditor = Read-Only Inspection*).
-- Manage active/passive/honorary members, SEPA mandate references, yearly fee runs, volunteer work hour quotas, club inventory & key handovers, and cloud-linked board minutes/bylaws with 1-click CSV export to your cloud storage.
-- **📊 Club Statistics & Analytics:** Visual age distribution (7 age brackets + average/min/max age), department sizes, status & fee-tier breakdown, 5-year join/leave balance, and automatic member birthday & jubilee/anniversary lists (5, 10, 25, 40, 50+ years).
-- **📤 Multi-Source Member Import:** Import members via CSV/Excel upload (auto-detects `;`/`,`/tab delimiters, German `Windows-1252` encoding, and `DD.MM.YYYY` dates), direct spreadsheet Copy & Paste (`Ctrl+V`), or 1-click sync from Cloud Contacts (`contacts.php`).
-
-### 10. 🖼️ Photo Albums & Media Gallery (`gallery.php`)
-- **Chronological Photo Wall & Virtual Albums:** Browse all non-encrypted images across your personal folders and shared group folders, and organize them into virtual albums (`gallery_albums` & `gallery_album_items`) without duplicating physical disk usage.
-- **Fullscreen Lightbox, Auto-Slideshow & Local EXIF Inspector:** View photos in fullscreen with zoom, keyboard navigation, configurable automatic slideshow (3s / 5s / 8s), and 100% local PHP EXIF metadata inspection (date taken, camera model, aperture, exposure time, ISO, focal length, resolution).
-- **📱 Public Guest Links, Local SVG QR Code & Party/Club Collection Albums:** Share albums via QR code (optionally password-protected) and optionally enable **📸 Guest Photo Upload (`allow_guest_upload`)** so event guests can upload photos directly from their smartphones into your shared album.
-
-### 11. 📝 Online Forms, Event Registration & Membership Applications (`forms.php`)
-- **Self-Hosted Form Builder (GDPR-Compliant Google/Microsoft Forms Alternative):** Create custom forms with text, multiline, dropdown, checkbox, number, date, and email fields, optional capacity limits (`max_submissions`), and registration deadlines (`closes_at`).
-- **4 One-Click Starter Templates:** *🎉 Event / Club Festival Registration*, *🤝 Volunteer & Shift Sign-Up List*, *🏛️ Online Club Membership Application*, and *💬 Feedback & Survey Form*.
-- **📱 Guest QR Code Participation, CSV Cloud Export & 1-Click Club Import:** Share forms with external guests via link or locally generated SVG QR code (`forms.php?token=...`), export responses to CSV or directly to your cloud (`Formulare/`), and import submitted membership applications into **Club Management (`club.php`)** with a single click!
-
-### 12. 📚 E-Book Library & Built-in Reader (`ebooks.php`)
-- Automatic catalog of all `.epub`, `.pdf`, `.txt`, and `.md` books in your cloud, local **EPUB ZIP/OPF cover & metadata extraction**, distraction-free reader with 4 eye-friendly reading themes (*Light*, *Sepia*, *Dusk*, *Night*), adjustable typography, **cross-device reading progress sync (`%`)**, and personal bookmarks with notes.
-
-### 13. 🎵 Music, Podcast & Audiobook Studio (`music.php`)
-- **Automatic Cloud Audio Library & Local ID3/Cover Parser:** Automatically discovers all non-encrypted audio files (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) across your personal folders and shared folders without duplicating storage, and extracts **ID3v2/v1 tags (Title, Artist, Album, Year, Track/Disc Number, Duration) + embedded Album Cover art (`APIC`)** 100% locally in PHP.
-- **📖 1-Click Audiobook Mode & `1 → 99` Natural Chapter Sorting:** Automatically detects track/disc tags (`TRCK`/`TPOS`) and smart filename numbering patterns (`Kapitel 2` before `Kapitel 10`, `01_Intro.mp3`, `CD 1/2`), offers 4 sort modes (*`1 → 99` Chapter/Track Number*, *`A → Z` Title*, *`👤` Artist & Album*, *`🕒` Recently Added*), switches to the *🎙️ Voice / Audiobook* equalizer, disables shuffle, and displays a 1-click **Audiobook Resume Banner** for your last listened multi-part audiobook.
-- **HTTP `206 Partial Content` Range Streaming, Frequency Visualizer & 4-Band Sound Presets:** Instant seeking across large MP3s/audiobooks, live Web Audio API frequency spectrum visualizer, and 4 sound presets (*🎧 Studio Neutral*, *🔊 Bass Boost*, *🎙️ Voice / Audiobook*, *🎸 Brilliance / Pop*).
-- **🔖 Audiobook Position Memory, Sleep Timer & Lock-Screen MediaSession:** Automatically remembers your playback position (`last_position_sec`) for long tracks, offers `-15s`/`+15s` skip buttons, variable speed (`0.75×`–`2.0×`), a Sleep Timer (`🌙 15/30/45/60 min`), and smartphone lock-screen / Bluetooth car audio integration (`navigator.mediaSession`).
-- **📋 Shareable Playlists:** Create custom playlists, upload new audio files directly into `Musik/` (or a custom audiobook subfolder like `Musik/Krimi`), and share playlists with other Cloud users or externally via public link and local SVG QR code.
-
-### 13b. 🎬 Video Studio & Browser Video Editor (`video_studio.php`)
-- **100% Client-Side HTML5 Canvas + WebAudio + MediaRecorder Engine (Zero Server Load & STRATO-Compatible):**
-  - **🎞️ Visual Filmstrip Timeline & Precision Trim (`[In]` / `[Out]`):** Automatic 10-frame filmstrip thumbnail generator, single-frame stepping (`-1F` / `+1F`), and loop preview.
-  - **📐 Rotate, Flip, Aspect Ratio & Cinema Blur Background:** Rotate sideways smartphone clips (`90°`/`180°`/`270°`), flip horizontally/vertically, and switch between `Original`, `16:9`, `9:16 (Reels/Shorts)`, `1:1`, and `4:3` with automatic **blurred cinema background** or crop/zoom.
-  - **🔤 Lower Thirds, Titles & Watermarks:** Two-line titles with 4 banner styles (*Glass*, *Broadcast*, *Cinema Outline*, *Pill*), custom colors, timed appearance (*from second X to Y*), and corner watermarks.
-  - **🎨 Live Color Grading & 8 Presets:** Brightness, contrast, saturation, sepia/warmth, vignette, plus 1-click presets (*Cinema*, *Summer*, *Nordic*, *Vintage*, *B&W*, *Vivid*, *Retro VHS*).
-  - **🔊 Audio Mixer, Cloud Background Music & Speed (`0.5×–2.0×`):** Mute or adjust original video audio, mix in any `.mp3`/`.wav`/`.m4a` track directly from your MiniCloud, apply fade-in/out, and save rendered videos or **📸 full-resolution frame snapshots** directly back to your Cloud via resilient **2 MB chunked uploads**.
-  - **📹 Built-In Webcam & 🖥️ Screen Recorder:** Record camera clips or desktop screencasts directly inside the studio and edit them immediately.
-
-### 13c. 🍿 Home Cinema & Movie Mediathek (`cinema.php`)
-- **🛋️ Theatre Stage with Real-Time Ambilight & Lights-Out Mode:** Watch any `.mp4`, `.webm`, `.mov`, `.m4v`, `.mkv`, or `.ogv` video from your Cloud or shared folders with a dynamic HTML5 Canvas **Ambilight glow**, 1-click **🌑 Lights-Out theatre dimming**, Picture-in-Picture, and instant HTTP `206 Partial Content` seeking.
-- **⏯️ Netflix-Style "Continue Watching" & 1-Click Poster Capture:** Automatically remembers your playback position (`last_position_sec`) per user, captures movie poster thumbnails directly from the video stream, and supports timestamped **🔖 scene bookmarks**.
-- **🔊 WebAudio Cinema Sound Booster & 💬 `.srt`/`.vtt` Subtitles:** Switch live between *Original*, *🍿 Cinema Subwoofer Bass*, *🗣️ Dialogue Enhancer*, and *🌙 Night Mode Compressor*, load `.srt`/`.vtt` subtitles (with automatic live SRT-to-WebVTT conversion), and share movie nights externally via **🎟️ Guest Cinema Tickets** (with optional password).
-
-### 13d. 🏄‍♂️ Watersports Surf Logbook & Quiver Manager (`surflog.php`)
-- **🌊 Session Logbook for Windsurfing, Kitesurfing, Wingfoiling, Surfing & SUP:** Log date, spot, country/region, water duration, wind range in knots with **automatic Beaufort (`Bft`) calculator**, interactive **16-point wind rose**, wave height/conditions, wetsuit thickness, session rating (`1–5 ⭐`), and maneuver notes.
-- **🛹 Quiver Gear Management & Cost-per-Session Analytics:** Manage boards, sails, kites, wings, and foils with automatic session counters, total water hours per item, and automatic **cost-per-session amortization** based on purchase price.
-- **📍 Client-Side `.gpx` GPS Track Analyzer & Speed Heatmap:** Drop any `.gpx` file from a Garmin/Coros/Apple Watch to compute distance (`km`), top speed (`km/h` & `knots`), and render a color-coded **GPS speed heatmap track** on an interactive HTML5 canvas.
-- **📸 Cloud Photo/Video Linking & CSV Export:** Link session highlights directly to Cloud photos or edited clips from `video_studio.php`, and export your logbook to `Surftagebuch/` as an Excel-compatible `.csv` file with 1 click.
-
-### 13e. 🏆 Sports Scores, International Leagues, Tennis World Rankings & Prediction Game (`bundesliga.php`, `includes/sports_api.php`)
-- **⚽ German & International Soccer:** Live standings, matchdays, scores, and top scorers for **1. Bundesliga, 2. Bundesliga, 3. Liga**, plus **UEFA Champions League, Premier League (England), LaLiga (Spain), and Serie A (Italy)**.
-- **🏈 US Sports (`NFL`, `NBA`, `NHL`) & 🎾 ATP/WTA Tennis Top 100:** Live standings, win/loss streaks, and scoreboards for **American Football (NFL)**, **Basketball (NBA)**, and **Ice Hockey (NHL)**, plus official **ATP & WTA Tennis World Rankings (Top 100)** with player photos, flags, age, points, and rank delta.
-- **⭐ Starred Favorite Start-League & 🎯 Cloud Prediction Game:** Mark any sport or league with a star (`⭐ Als Start-Liga`) so it opens immediately by default, pick a favorite team per league, and compete with fellow Cloud users in the built-in prediction game.
-
-### 13f. 📈 Stock Market, Crypto, Portfolio Watchlist & AI Timing Radar (`markets.php`)
-- **🌍 Global Symbol Search & Historical Charts Back to IPO (`MAX`):** Track stocks (Xetra `.DE` & US/global exchanges), ETFs (e.g., MSCI World), indices (DAX, S&P 500), cryptocurrencies (Bitcoin, Ethereum), and commodities (Gold, Oil) with interactive HTML5 Canvas charts (`1D`, `5D`, `1M`, `6M`, `1Y`, `5Y`, `MAX` + `SMA 20`/`SMA 50`) and parallel `curl_multi` cache warming.
-- **🧠 Automated Weekday, Hour & Anomaly Timing Radar:** Automatically analyzes the last 365 trading days and 60-minute intraday candles to determine the **statistically best buy weekday (dip day)**, **best sell weekday**, **optimal intraday buy/sell hour window (CET/CEST)**, plus live anomaly detection (**RSI-14 oversold/overbought**, **volume spikes**, **volatility Z-score breakouts**, and **SMA-200 long-term trend distance**).
-- **💼 Virtual Portfolio Tracker:** Optionally record quantity and purchase price per symbol to track live position value and profit/loss in `€` and `%`.
-
-### 13g. 📺 Live TV Guide (`tv_radio.php`), 📻 Persistent Web Radio (`radio.php`), 📰 World News (`news.php`), 🧾 Split Bills (`split.php`) & 💳 Optional PayPal Subscription Paywall (`subscription.php`)
-- **📻 Persistent Cross-Module Web Radio (`radio.php` & `includes/footer.php`):** Stream 40,000+ radio stations worldwide with live ICY song title detection and a **floating Mini-Radio-Bar** that continues playing seamlessly as you navigate across other Cloud modules.
-- **📺 TV Guide & Live EPG (`tv_radio.php`) & 📰 World News Ticker (`news.php`):** Live TV schedule (*Now*, *20:15 Primetime*, *22:00*) and multi-source news headlines with 1-click translation and AI briefing.
-- **💳 Optional PayPal Subscription Paywall (`subscription.php`, `includes/paypal_helper.php`):** Administrators can optionally place user registration and/or cloud access behind a verified **PayPal Subscriptions API v1** paywall (with 1-click PayPal Product & Billing Plan auto-creation in `admin.php` and per-user exemption switches).
-
-### 14. 🎮 Browser Games & Multiplayer Break Room (`games.php`)
-- 20 ad-free HTML5 games with fullscreen mode, cloud highscores, automatic save states, and **live turn-based multiplayer matches** against other cloud users:
-  - **Racing, Sports & RPG:** *Gummigeruch Kart-Cup (6 tracks, selectable 3/5/8/11 laps & Ghost Duels)*, *Cloud-Traffic-Racer*, *Cloud-Darts (Master Arena)*, and *Heroes of MiniCloud (Co-Op RPG)*.
-  - **Retro & Arcade Classics:** *Pond-Hopper*, *Secret Agent Zero*, *Cloud-Scramblers*, *Shadow Shinobi*, *Rooftop Sprinter*, *Galaxy Defense*, *Barrel Climber*, *Bomb Flyer*, *Pill Muncher*, *Block Puzzle (Falling Blocks)*, *Retro Snake*, and *Brick Breaker*.
-  - **Logic & Live Multiplayer Duels:** *Cloud-Sudoku*, *Minesweeper*, *Memory*, plus **Connect Four** and **Tic-Tac-Toe** against AI or live cloud opponents.
-
-### 15. 🧮 Calculator & Calculation Studio (`calculator.php`), 📊 Polls (`polls.php`), 🎤 Live Mentimeter (`menti.php`), 📄 PDF Tools (`pdf_tools.php`), 🔐 Password Manager (`passwords.php`), 📌 Notes & Voice Notes (`notes.php`), 📇 Contacts/CardDAV (`contacts.php`, `carddav.php`), 📡 WebDAV (`webdav.php`) & 🤖 Help Assistant (`assistant.php`)
-- **🧮 Calculator & Calculation Studio (`calculator.php`):** 4-in-1 calculation suite featuring a **Standard & Scientific Calculator** (`sin`, `cos`, `tan`, `DEG/RAD`, roots, powers, logarithms, `n!`, memory `MC`/`MR`/`M+`/`M-`, full Numpad/keyboard support), an **interactive Paper-Tape / Receipt Calculator** with editable line labels, automatic **Total ($\Sigma$)**, and **1-click Cloud export** as a sticky note (`notes.php`) or `.txt`/`.csv` file into `Rechnungen/`, a **VAT (19%/7%/custom), Discount & Bill-Splitting Calculator**, a **Universal Unit Converter** (length, weight, area, volume, temperature, data storage, speed), and a **Compound Interest, Savings Plan & Loan Calculator**.
-- **📌 Sticky Notes, Voice Notes & Speech-to-Text Dictation (`notes.php`):** Color-coded pinboard with `#Tags`, **🎙️ live microphone voice note recording** (`MediaRecorder` with live audio level meter, stored in `Notizen/Sprachnotizen/` with inline `1×–2×` player and HTTP `206` range streaming), **🗣️ live Speech-to-Text dictation** (`SpeechRecognition`), user sharing, and 1-click Markdown export.
-- **Polls & Date Finder (`polls.php`):** Self-hosted Doodle alternative with guest voting links and 1-click calendar transfer.
-- **Live Mentimeter (`menti.php`):** Real-time audience voting via QR code & 6-digit PIN (Word Cloud, Bar Chart, Scale, Q&A with Upvoting, Live Quiz Leaderboard).
-- **PDF Toolbox & Document Scanner (`pdf_tools.php`):** Camera/photo-to-PDF scanner with high-contrast B/W filter, PDF Merge, Split, Compression, and **irreversible GDPR Pixel Redaction (`⬛`)**.
-- **Password Keychain (`passwords.php`):** Server-side AES-256-GCM encrypted password vault with password generator, age warnings, and team sharing.
-- **🤖 2-Tier Hybrid AI & Knowledge Assistant (`assistant.php`):**
-  - **⚡ Tier 1 (100% Local PHP + MySQL Engine — runs everywhere including STRATO / Shared Hosting):** Answers questions across all 22 modules plus the **🛡️ IT Security Concept** & **🗂️ Data Dictionary** in **11 languages**, maintains **session conversation memory (`$_SESSION['assistant_context']`)** for natural follow-up questions (*"And how do I share that?"*, *"Can I protect it with a password?"*), executes natural commands (`Note: ...`, `Task: ...`, `Termin: Morgen 15:00 Zahnarzt`), includes built-in **everyday helpers** (**🧮 Safe Math & Percentage Calculator**, **📆 Date/Weekday/Countdown Calculator**, and **🔑 Cryptographic Password & PIN Generator**), searches inside `.txt`/`.md` cloud documents, and queries live account data across Storage, Calendar, Kanban Tasks, **💰 Budget Planner (`budget.php`)**, **🎧 Audiobook & 📚 E-Book progress (`music.php`, `ebooks.php`)**, **🏛️ Club Management (`club.php`)**, **🎂 upcoming Contact Birthdays (`contacts.php`)**, and **🚀 Projects (`projects.php`)**.
-  - **🧠 Tier 2 (Optional Local AI LLM via Ollama on `127.0.0.1:11434` in Dual-Mode + "📄 Ask Your File" Document Chat):** On a VPS or dedicated server (such as `runready.cloud`), MiniCloud optionally connects to a local **Ollama** instance (e.g., `gemma2:2b` or `qwen2.5:3b`) bound strictly to `127.0.0.1:11434` for **100% local, GDPR-compliant Dual-Mode answers** — combining **Hybrid RAG** (Knowledge Base + live account snapshot + conversation history) for MiniCloud questions with **general knowledge, everyday Q&A, translations, text/email drafting**, and **📄 Document Chat & 1-Click Summaries** directly inside the File Preview and **Office Light (`🤖 AI Summary`)** for `.docx`, `.xlsx`, `.pptx`, `.csv`, `.txt`, and `.md` files. On shared web hosting where Ollama is not installed, a non-blocking `< 1 ms` socket check automatically falls back to Tier 1 with zero errors. Configurable in `admin.php` under Module 14 with a live status indicator.
-
-### 15. 🛡️ Enterprise-Grade Administration, User Locking & Delegated Admin Roles (`admin.php`)
-- **Account Lockout (`🔒 Lock / 🔓 Unlock`):** Immediately lock compromised or inactive user accounts (with an optional lock reason). Locked users are blocked in real time across web sessions, login, password reset, `.ics`/`.vcf` feeds, and WebDAV/CardDAV/CalDAV.
-- **🛡️ Delegated Partial Admin Permissions (`admin_permissions`):** Grant trusted non-admin users granular access to specific admin tabs (*👥 Users & Groups*, *🧩 Modules & Registration*, *🎨 Branding & Imprint*, *✉️ Email & SMTP*, or *🔄 Updates, Backup & System*) without granting full root administrator rights.
-- **1-Click GitHub Updater & Instant Rollback Snapshots:** Update directly from GitHub while preserving `uploads/` and `config/database.php`, with automatic local `.zip` snapshots (`uploads/.system_backups/`) for 1-click rollback.
+> 💡 **Hinweis:** Die vollständige All-in-One-Suite mit über 40 Modulen befindet sich weiterhin im Hauptzweig (`main`).
 
 ---
 
-## 🛠️ System Requirements
+## ✨ Enthaltene Kernfunktionen (`files-only`)
 
-MiniCloud is engineered to run smoothly on any affordable shared web hosting plan or Linux server:
-
-| Component | Requirement | Notes |
-| :--- | :--- | :--- |
-| **PHP** | **PHP 8.2** or newer (8.2, 8.3, 8.4) | Standard on modern shared hosting (STRATO, IONOS, cPanel, Plesk) and Linux distributions. |
-| **PHP Extensions** | `pdo_mysql`, `mbstring`, `fileinfo`, `gd`, `zip`, `openssl` | Enabled by default on almost all web hosts. |
-| **Database** | **MySQL 5.7+ / 8.0+** or **MariaDB 10.3+** | A single empty database is sufficient — all tables are created automatically on first run! |
-| **Web Server** | **Apache** (with `.htaccess`) or **Nginx** | HTTPS (e.g., Let's Encrypt) is recommended for PWA installation and Web Notifications. |
-
----
-
-## 🚀 Quickstart & Installation Guide
-
-You do **not** need to manually import any SQL files or edit PHP files by hand. When you open MiniCloud for the first time without configured database credentials, it automatically launches the interactive **Web Installer (`setup.php`)**!
-
-### Option A: Shared Web Hosting (e.g., STRATO, IONOS, All-Inkl, cPanel)
-
-1. **Create a MySQL/MariaDB database** in your hosting control panel and note down your 4 credentials:
-   - **Database Host** *(e.g., `localhost`, `127.0.0.1`, or `rdbms.strato.de`)*
-   - **Database Name**
-   - **Database Username**
-   - **Database Password**
-2. **Download MiniCloud** (`<> Code` $\rightarrow$ `Download ZIP`), extract it, and **upload all files via SFTP** (e.g., using FileZilla) to your webspace (including `uploads/.htaccess` and `config/.htaccess`).
-3. **Open your URL in the browser** — MiniCloud automatically redirects to the **First-Run Web Installer (`setup.php`)**:
-   - Click **🔌 Test Connection**, enter your desired **Cloud Name** and **Administrator username & password**, and click **🚀 Install & Start**.
-   - MiniCloud saves your credentials in `config/db_credentials.php` (protected from web access and future updates), initializes all tables, and locks the installer automatically.
+- 📂 **Hierarchischer Datei- & Ordner-Manager** (`index.php`)
+  - Drag & Drop Multi-File-Upload, Chunked-Uploads für große Dateien & Ordnerstruktur
+  - Datei-Vorschau (Bilder, Audio, Video, PDF, Text/Code), Umbenennen, Verschieben & Kopieren
+  - **ZIP-Archiv-Inspektor** (Inhalte von `.zip`-Archiven direkt im Browser ansehen & entpacken)
+  - **Dateiversionierung** (automatische Historie & Wiederherstellung früherer Dateiversionen)
+  - Favoriten / Sterne, Farb-Tags, Notizen & Kommentare pro Datei
+- 🔗 **Sicheres Teilen & Gast-Abgabe (Dropzone)** (`share.php`, `drop.php`)
+  - Öffentliche Download-Links für Dateien & ganze Ordner
+  - Optionaler Passwortschutz, Ablaufdatum & Download-Limit
+  - **Gäste-Upload-Links (Dropzone)**: Externe Personen können Dateien per Browser in einen freigegebenen Ordner hochladen, ohne ein eigenes Benutzerkonto zu benötigen
+- 📡 **WebDAV-Netzlaufwerk** (`webdav.php`)
+  - Einbindung der Cloud als direktes Netzlaufwerk unter Windows (Explorer), macOS (Finder), Linux (GNOME Files / Dolphin) sowie iOS & Android
+- 🔍 **Blitzschnelle Dateisuche (`Strg + K`)** (`search_api.php`)
+  - Globale Suche über Dateinamen, Ordner, Tags und den Volltext-Dokumentenindex
+- 🗑️ **Papierkorb & Wiederherstellung** (`trash.php`)
+  - Gelöschte Dateien wiederherstellen oder endgültig bereinigen
+- 👥 **Benutzer-, Gruppen- & Quotenverwaltung** (`admin.php`, `settings.php`)
+  - Rollen (`admin` / `user`), Speicherplatz-Kontingente (Quotas) pro Benutzer, Gruppen-Ordnerfreigaben
+  - **2-Faktor-Authentifizierung (TOTP)**, Passkeys / WebAuthn & App-Passwörter für WebDAV
+  - Audit-Log & Sicherheits-Protokollierung
 
 ---
 
-### Option B: Linux VPS / Dedicated Server (Debian 12/13 or Ubuntu 22.04/24.04)
+## 🚀 Installation & Anforderungen
 
-#### 1. Install Required Packages
-```bash
-apt update && apt install -y nginx mariadb-server git \
-  php-fpm php-mysql php-mbstring php-gd php-zip php-xml php-curl qpdf ghostscript
-```
-
-#### 2. Create Database & User
-*(Replace `StrongPasswordHere!` with your own secure password)*
-```bash
-mysql -e "CREATE DATABASE minicloud CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -e "CREATE USER 'minicloud_user'@'localhost' IDENTIFIED BY 'StrongPasswordHere!';"
-mysql -e "GRANT ALL PRIVILEGES ON minicloud.* TO 'minicloud_user'@'localhost'; FLUSH PRIVILEGES;"
-```
-
-#### 3. Clone Repository & Set Permissions
-```bash
-cd /var/www/html
-git clone https://github.com/uWiiiDev/MiniCloud.git cloud
-chown -R www-data:www-data /var/www/html/cloud
-chmod 750 /var/www/html/cloud/uploads
-```
-
-#### 4. Configure `config/database.php`
-Edit `/var/www/html/cloud/config/database.php` and set `DB_NAME`, `DB_USER`, and `DB_PASS`.
-
-#### 5. Nginx Configuration (Protect `uploads/` & Enable `PATH_INFO` for WebDAV/CardDAV/CalDAV)
-If you use **Nginx** instead of Apache, add these two blocks inside your `server { ... }` block:
-```nginx
-# 1. Block direct web access to uploaded binary files, config directory & hidden dotfiles (.git, .env)
-location ^~ /cloud/uploads/ {
-    deny all;
-    return 403;
-}
-location ^~ /cloud/config/ {
-    deny all;
-    return 403;
-}
-location ~ /\.(?!well-known) {
-    deny all;
-    return 403;
-}
-
-# 2. Pass PATH_INFO and HTTP_AUTHORIZATION for WebDAV, CardDAV & CalDAV
-location ~ [^/]\.php(/|$) {
-    fastcgi_split_path_info ^(.+?\.php)(/.*)$;
-    if (!-f $document_root$fastcgi_script_name) {
-        return 404;
-    }
-    include fastcgi_params;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-    fastcgi_param PATH_INFO $fastcgi_path_info;
-    fastcgi_param HTTP_AUTHORIZATION $http_authorization;
-    fastcgi_pass unix:/run/php/php-fpm.sock; # Adjust socket path if needed (e.g. php8.2-fpm.sock)
-}
-```
-*(On Apache, the included `.htaccess` and `uploads/.htaccess` files handle both automatically.)*
-
----
-
-## 🔐 First Steps After Installation
-
-1. **Sign in with the initial Administrator account:**
-   - **Username:** `admin`
-   - **Initial Password:** `Admin1234!`
-2. **Change the Admin Password Immediately:**
-   - Open **Admin** in the top navigation bar $\rightarrow$ tab **👥 Users & Groups**, enter a strong new password for `admin`, and click **Save**.
-3. **Enable Two-Factor Authentication (2FA):**
-   - Go to **Settings (`⚙️`)** to enable **TOTP Authenticator App 2FA** (Google Authenticator, Authy, Bitwarden, etc. via locally generated SVG QR code) or **Email 2FA**.
-4. **Customize Language, Theme & Modules:**
-   - Switch between **11 languages** and **13 color themes** in the header or user settings, and click **`⊞ Module`** (`modules.php`) to pin your favorite tools to the top bar with a star (`⭐`).
-
----
-
-## 🔒 Security & Performance Architecture
-
-- **Strict SQL Injection Prevention:** 100% native PDO prepared statements (`PDO::ATTR_EMULATE_PREPARES => false`).
-- **Pseudonymized Storage & Zero-Knowledge Vault:** Uploaded files are stored outside direct web reach as `uploads/mc_<uniqid>_<hex16>.bin` (`0640`) protected by `.htaccess` (`Require all denied`), with optional AES-256-GCM encryption.
-- **Hardened Security Headers & CSRF Tokens:** Every state-changing request verifies a 256-bit session CSRF token; responses enforce `Content-Security-Policy: frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`.
-- **Real-Time Lockout & Rate Limiting:** IP-based brute-force protection (`login_attempts`, max 5 failed attempts per 5 minutes) across web login, 2FA, Mentimeter PINs, and WebDAV/CardDAV/CalDAV endpoints, plus instant account lockout enforcement (`is_locked`).
-- **High-Performance Request & Session Caching:** Global settings (`getAppSettings()`) are cached per request, and schema migration checks are cached per session so AJAX polling endpoints execute with minimal database overhead.
-
-For full technical details, see [`IT-Sicherheitskonzept.md`](IT-Sicherheitskonzept.md), [`Datenverzeichnis.md`](Datenverzeichnis.md), and [`sql/schema.sql`](sql/schema.sql).
-
----
-
-## 📜 License
-
-Released under the **[MIT License](LICENSE)** — Copyright (c) 2026 Uwe Benzelrath.
+- **Webserver:** Nginx oder Apache mit PHP 8.1+ (`pdo_mysql` oder `pdo_sqlite`, `mbstring`, `zip`, `gd`)
+- **Datenbank:** MariaDB / MySQL oder SQLite
+- **Installation:**
+  1. Repository im Zweig `files-only` klonen:
+     ```bash
+     git clone -b files-only https://github.com/uWiiiDev/MiniCloud.git
+     ```
+  2. Schreibrechte für `uploads/` und `includes/` setzen (`chown -R www-data:www-data uploads includes`).
+  3. Im Browser `setup.php` aufrufen und den Datenbank- & Admin-Assistenten abschließen.

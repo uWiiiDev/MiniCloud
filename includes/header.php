@@ -539,581 +539,26 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
         <nav class="flex items-center gap-1 sm:gap-2 shrink-0 relative">
             <?php if (isLoggedIn()): ?>
                 <?php
-                $headerUnreadChat = (($appSettings['enable_chat'] ?? '1') === '1')
-                    ? getUnreadMessagesCount(getDB(), (int)$_SESSION['user_id'])
-                    : 0;
-                $trashCountBadge = ($headerStorageStats !== null) ? (int)($headerStorageStats['trash_count'] ?? 0) : 0;
+                $trashCountBadge = ($headerStorageStats !== null) ? (int)($headerStorageStats[trash_count] ?? 0) : 0;
                 ?>
 
-                <!-- Dynamisch angepinnte Favoriten-Module in der Kopfzeile -->
+                <!-- Kopfzeilen-Navigation (Files-Only Edition) -->
                 <div id="headerPinnedNav" class="flex items-center gap-1 sm:gap-1.5">
                     <a
                         href="index.php"
                         data-nav-item="files"
-                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Meine Dateien"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Meine Dateien &amp; Ordner"
                     >
                         <span>📁</span>
                         <span class="hidden md:inline">Dateien</span>
                     </a>
 
-                    <?php if (($appSettings['enable_calendar'] ?? '1') === '1'): ?>
-                        <a
-                            href="calendar.php"
-                            data-nav-item="calendar"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Kalender &amp; Termine"
-                        >
-                            <span>📅</span>
-                            <span class="hidden md:inline">Kalender</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_chat'] ?? '1') === '1'): ?>
-                        <a
-                            href="messages.php"
-                            data-nav-item="chat"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
-                            title="Chat &amp; Nachrichten"
-                        >
-                            <span>💬</span>
-                            <span class="hidden md:inline">Chat</span>
-                            <span
-                                id="headerUnreadChatBadge"
-                                class="<?= $headerUnreadChat > 0 ? 'inline-flex' : 'hidden' ?> items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-2xs"
-                            >
-                                <?= $headerUnreadChat ?>
-                            </span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_tasks'] ?? '1') === '1'): ?>
-                        <a
-                            href="tasks.php"
-                            data-nav-item="tasks"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Aufgaben &amp; Kanban-Board"
-                        >
-                            <span>📋</span>
-                            <span class="hidden md:inline">Aufgaben</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_notes'] ?? '1') === '1'): ?>
-                        <a
-                            href="notes.php"
-                            data-nav-item="notes"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Notizwand &amp; Pinboard"
-                        >
-                            <span>📌</span>
-                            <span class="hidden md:inline">Notizen</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_contacts'] ?? '1') === '1'): ?>
-                        <a
-                            href="contacts.php"
-                            data-nav-item="contacts"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Adressbuch &amp; Kontakte"
-                        >
-                            <span>📇</span>
-                            <span class="hidden md:inline">Kontakte</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_maps'] ?? '1') === '1'): ?>
-                        <a
-                            href="maps.php"
-                            data-nav-item="maps"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Karten, Offline-Atlas &amp; Intranet-Lagepläne"
-                        >
-                            <span>🗺️</span>
-                            <span class="hidden md:inline">Karten</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_weather'] ?? '1') === '1'): ?>
-                        <a
-                            href="weather.php"
-                            data-nav-item="weather"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Wetter, Regenradar &amp; Polarlicht-Vorhersage"
-                        >
-                            <span>⛅</span>
-                            <span class="hidden md:inline">Wetter</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_traffic'] ?? '1') === '1'): ?>
-                        <a
-                            href="traffic.php"
-                            data-nav-item="traffic"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Verkehrszentrale, Autobahn-Staumelder &amp; Radio-Verkehrsfunk"
-                        >
-                            <span>🚗</span>
-                            <span class="hidden md:inline">Verkehr</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_fuel'] ?? '1') === '1'): ?>
-                        <a
-                            href="fuel.php"
-                            data-nav-item="fuel"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Tankstellen, Spritpreis-Radar &amp; Fahrtenbuch"
-                        >
-                            <span>⛽</span>
-                            <span class="hidden md:inline">Tanken</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_transit'] ?? '1') === '1'): ?>
-                        <a
-                            href="transit.php"
-                            data-nav-item="transit"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="ÖPNV-Abfahrtsmonitor &amp; Bahn-Radar"
-                        >
-                            <span>🚆</span>
-                            <span class="hidden md:inline">Bahn/Bus</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_alerts'] ?? '1') === '1'): ?>
-                        <a
-                            href="alerts.php"
-                            data-nav-item="alerts"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Bevölkerungsschutz, NINA/Pegel &amp; Erdbeben"
-                        >
-                            <span>🚨</span>
-                            <span class="hidden md:inline">Warnungen</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_podcasts'] ?? '1') === '1'): ?>
-                        <a
-                            href="podcasts.php"
-                            data-nav-item="podcasts"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Podcast-Studio &amp; Offline-Catcher"
-                        >
-                            <span>🎙️</span>
-                            <span class="hidden md:inline">Podcasts</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_dashboard'] ?? '1') === '1'): ?>
-                        <a
-                            href="dashboard.php"
-                            data-nav-item="dashboard"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Persönliches Tages-Cockpit (Mein Tag)"
-                        >
-                            <span>🏠</span>
-                            <span class="hidden md:inline">Cockpit</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_polls'] ?? '1') === '1'): ?>
-                        <a
-                            href="polls.php"
-                            data-nav-item="polls"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Terminfinder &amp; Umfragen"
-                        >
-                            <span>📊</span>
-                            <span class="hidden md:inline">Umfragen</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_menti'] ?? '1') === '1'): ?>
-                        <a
-                            href="menti.php"
-                            data-nav-item="menti"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Live-Mentimeter &amp; Interaktive Präsentationen"
-                        >
-                            <span>🎤</span>
-                            <span class="hidden md:inline">Mentimeter</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_passwords'] ?? '1') === '1'): ?>
-                        <a
-                            href="passwords.php"
-                            data-nav-item="passwords"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Passwort-Manager &amp; Schlüsselbund"
-                        >
-                            <span>🔐</span>
-                            <span class="hidden md:inline">Schlüsselbund</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_authenticator'] ?? '1') === '1'): ?>
-                        <a
-                            href="authenticator.php"
-                            data-nav-item="authenticator"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="2FA-Authenticator &amp; TOTP-Einmalcodes (Google Authenticator kompatibel)"
-                        >
-                            <span>🔢</span>
-                            <span class="hidden md:inline">Authenticator</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_pdf_tools'] ?? '1') === '1'): ?>
-                        <a
-                            href="pdf_tools.php"
-                            data-nav-item="pdf_tools"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="PDF-Werkzeugkasten &amp; Dokumenten-Scanner"
-                        >
-                            <span>📄</span>
-                            <span class="hidden md:inline">PDF &amp; Scan</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_projects'] ?? '1') === '1'): ?>
-                        <a
-                            href="projects.php"
-                            data-nav-item="projects"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Projektmanagement (Meilensteine, Gantt-Zeitstrahl &amp; Zeiterfassung)"
-                        >
-                            <span>🚀</span>
-                            <span class="hidden md:inline">Projekte</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_office'] ?? '1') === '1'): ?>
-                        <a
-                            href="office.php"
-                            data-nav-item="office"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="MiniCloud Office Light (Word, Excel, PowerPoint, Visio &amp; Mind-Maps)"
-                        >
-                            <span>📝</span>
-                            <span class="hidden md:inline">Office Light</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_assistant'] ?? '1') === '1'): ?>
-                        <a
-                            href="assistant.php"
-                            data-nav-item="assistant"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Lokaler KI- &amp; Wissens-Assistent"
-                        >
-                            <span>🤖</span>
-                            <span class="hidden md:inline">Assistent</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_ebooks'] ?? '1') === '1'): ?>
-                        <a
-                            href="ebooks.php"
-                            data-nav-item="ebooks"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="E-Book-Reader &amp; Bibliothek (.epub)"
-                        >
-                            <span>📚</span>
-                            <span class="hidden md:inline">E-Books</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_games'] ?? '1') === '1'): ?>
-                        <a
-                            href="games.php"
-                            data-nav-item="games"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Browserspiele &amp; Pausenraum"
-                        >
-                            <span>🎮</span>
-                            <span class="hidden md:inline">Spiele</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_mindmap'] ?? '1') === '1'): ?>
-                        <a
-                            href="mindmap.php"
-                            data-nav-item="mindmap"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Mind-Map-Editor &amp; Ideensammler"
-                        >
-                            <span>🧠</span>
-                            <span class="hidden md:inline">Mind-Maps</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_budget'] ?? '1') === '1'): ?>
-                        <a
-                            href="budget.php"
-                            data-nav-item="budget"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Haushaltsplaner &amp; Finanz-Übersicht"
-                        >
-                            <span>💰</span>
-                            <span class="hidden md:inline">Haushalt</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_split'] ?? '1') === '1'): ?>
-                        <a
-                            href="split.php"
-                            data-nav-item="split"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Kostenaufteilung &amp; Reisekasse (Gruppen-Kostenabrechnung)"
-                        >
-                            <span>🧾</span>
-                            <span class="hidden md:inline">Reisekasse</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_bundesliga'] ?? '1') === '1'): ?>
-                        <a
-                            href="bundesliga.php"
-                            data-nav-item="bundesliga"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Sportergebnisse, Live-Tabellen, Tennis-Weltrangliste &amp; Cloud-Tippspiel"
-                        >
-                            <span>🏆</span>
-                            <span class="hidden md:inline">Sportergebnisse &amp; Tippspiel</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_tv_radio'] ?? '1') === '1'): ?>
-                        <a
-                            href="tv_radio.php"
-                            data-nav-item="tv_radio"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Fernsehprogramm &amp; Live-EPG"
-                        >
-                            <span>📺</span>
-                            <span class="hidden md:inline">TV-Programm</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_radio'] ?? '1') === '1'): ?>
-                        <a
-                            href="radio.php"
-                            data-nav-item="radio"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Live-Webradio &amp; Weltweite Sendersuche"
-                        >
-                            <span>📻</span>
-                            <span class="hidden md:inline">Webradio</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_news'] ?? '1') === '1'): ?>
-                        <a
-                            href="news.php"
-                            data-nav-item="news"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Welt-Nachrichten &amp; News-Ticker"
-                        >
-                            <span>📰</span>
-                            <span class="hidden md:inline">Nachrichten</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_markets'] ?? '1') === '1'): ?>
-                        <a
-                            href="markets.php"
-                            data-nav-item="markets"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Börse, Krypto, Depot-Watchlist &amp; KI-Timing-Radar"
-                        >
-                            <span>📈</span>
-                            <span class="hidden md:inline">Börse &amp; Krypto</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_club'] ?? '1') === '1'): ?>
-                        <a
-                            href="club.php"
-                            data-nav-item="club"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Vereinsverwaltung &amp; Vorstands-Portal"
-                        >
-                            <span>🏛️</span>
-                            <span class="hidden md:inline">Verein</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_gallery'] ?? '1') === '1'): ?>
-                        <a
-                            href="gallery.php"
-                            data-nav-item="gallery"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Foto-Alben &amp; Medien-Galerie"
-                        >
-                            <span>🖼️</span>
-                            <span class="hidden md:inline">Galerie</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_forms'] ?? '1') === '1'): ?>
-                        <a
-                            href="forms.php"
-                            data-nav-item="forms"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Online-Formulare &amp; Veranstaltungs-Anmeldung"
-                        >
-                            <span>📝</span>
-                            <span class="hidden md:inline">Formulare</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_music'] ?? '1') === '1'): ?>
-                        <a
-                            href="music.php"
-                            data-nav-item="music"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Musik-, Podcast- &amp; Hörbuch-Studio"
-                        >
-                            <span>🎵</span>
-                            <span class="hidden md:inline">Musik</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_calculator'] ?? '1') === '1'): ?>
-                        <a
-                            href="calculator.php"
-                            data-nav-item="calculator"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Taschenrechner &amp; Rechen-Studio"
-                        >
-                            <span>🧮</span>
-                            <span class="hidden md:inline">Rechner</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_toolbox'] ?? '1') === '1'): ?>
-                        <a
-                            href="toolbox.php"
-                            data-nav-item="toolbox"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Alltags-Werkzeuge &amp; Toolbox (WLAN-QR, GiroCode, Glücksrad, Stoppuhr, Text-Diff &amp; Farben)"
-                        >
-                            <span>🧰</span>
-                            <span class="hidden md:inline">Toolbox</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_video_studio'] ?? '1') === '1'): ?>
-                        <a
-                            href="video_studio.php"
-                            data-nav-item="video_studio"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Video-Studio &amp; Schnittplatz (Trimmen, Drehen, Bauchbinden, Filter &amp; Musik)"
-                        >
-                            <span>🎬</span>
-                            <span class="hidden md:inline">Video-Studio</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_surflog'] ?? '1') === '1'): ?>
-                        <a
-                            href="surflog.php"
-                            data-nav-item="surflog"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Surftagebuch &amp; Quiver-Log (Windsurfen, Kiten, Wingfoilen, Wellenreiten &amp; SUP)"
-                        >
-                            <span>🏄‍♂️</span>
-                            <span class="hidden md:inline">Surftagebuch</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_cinema'] ?? '1') === '1'): ?>
-                        <a
-                            href="cinema.php"
-                            data-nav-item="cinema"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Heimkino &amp; Film-Mediathek (Kinosaal, Echtzeit-Ambilight, Weiterschauen &amp; Gäste-Ticket)"
-                        >
-                            <span>🍿</span>
-                            <span class="hidden md:inline">Heimkino</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_whiteboard'] ?? '1') === '1'): ?>
-                        <a
-                            href="whiteboard.php"
-                            data-nav-item="whiteboard"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Kollaboratives Whiteboard &amp; Skizzenbuch"
-                        >
-                            <span>🎨</span>
-                            <span class="hidden md:inline">Whiteboard</span>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (($appSettings['enable_translator'] ?? '1') === '1'): ?>
-                        <a
-                            href="translate.php"
-                            data-nav-item="translator"
-                            style="display:none;"
-                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Übersetzungs-Studio &amp; Dokument-Übersetzer (18 Sprachen)"
-                        >
-                            <span>🌐</span>
-                            <span class="hidden md:inline">Übersetzer</span>
-                        </a>
-                    <?php endif; ?>
-
                     <a
                         href="trash.php"
                         data-nav-item="trash"
-                        style="display:none;"
-                        class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Papierkorb (30 Tage Aufbewahrung)"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Papierkorb"
                     >
                         <span>🗑️</span>
                         <span class="hidden md:inline">Papierkorb</span>
@@ -1125,34 +570,20 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     </a>
                 </div>
 
-                <!-- 🔍 Globale Spotlight-Schnellsuche (Strg+K / Cmd+K) -->
+                <!-- 🔍 Globale Datei- & Volltextsuche (Strg+K / Cmd+K) -->
                 <button
                     type="button"
                     onclick="openGlobalSearchModal()"
                     class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
-                    title="Globale Schnellsuche über Dateien, Module, Notizen, Termine &amp; Kontakte (Strg+K)"
-                    aria-label="Schnellsuche"
+                    title="Dateien, Ordner &amp; Dokument-Inhalte durchsuchen (Strg+K)"
+                    aria-label="Dateisuche"
                 >
                     <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
-                    <span class="hidden lg:inline text-xs font-medium text-slate-500 dark:text-slate-400">Suche…</span>
+                    <span class="hidden lg:inline text-xs font-medium text-slate-500 dark:text-slate-400">Dateisuche…</span>
                     <kbd class="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded border border-slate-300 dark:border-slate-700">Strg+K</kbd>
                 </button>
-
-                <!-- ⊞ Modul-Übersicht (eigene Seite modules.php + ⭐ Favoriten-Pin für die Kopfzeile) -->
-                <a
-                    href="modules.php"
-                    id="appLauncherBtn"
-                    class="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl <?= $currentScript === 'modules.php' ? 'bg-brand-600 text-white shadow-2xs border border-brand-600' : 'text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80' ?> transition-colors"
-                    title="Alle Cloud-Module anzeigen &amp; Kopfzeilen-Favoriten (⭐) verwalten"
-                    aria-label="Alle Module"
-                >
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                    </svg>
-                    <span class="hidden sm:inline text-xs font-semibold">Module</span>
-                </a>
 
                 <!-- 👤 Konto, Speicherplatz, Einstellungen, Admin & Abmelden -->
                 <div class="relative">
@@ -1266,8 +697,8 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                 (function() {
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
-                    const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'maps', 'weather', 'traffic', 'fuel', 'transit', 'alerts', 'polls', 'menti', 'forms', 'budget', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'podcasts', 'news', 'assistant', 'passwords', 'authenticator', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
+                    const defaultPinned = ['files', 'trash'];
+                    const defaultOrder  = ['files', 'trash'];
 
                     function getPinnedNav() {
                         try {
@@ -1804,7 +1235,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                 type="text"
                                 id="globalSearchInput"
                                 oninput="onGlobalSearchInput(this.value)"
-                                placeholder="Dateien & Dokument-Inhalte (Volltext), Ordner, Module, Notizen oder Kontakte suchen…"
+                                placeholder="Dateien, Dokument-Inhalte (Volltext) oder Ordner suchen…"
                                 class="flex-1 bg-transparent border-0 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
                                 autocomplete="off"
                             >
