@@ -70,6 +70,11 @@ if ((int)$stmtCnt->fetchColumn() === 0) {
     foreach ($defStops as $ds) {
         $ins->execute([':u' => $userId, ':sid' => $ds[0], ':sn' => $ds[1], ':lat' => $ds[2], ':lng' => $ds[3]]);
     }
+} else {
+    // Migration alter BVG-HAFAS-Standard-IDs auf bundesweite DELFI-IDs
+    $pdo->prepare("UPDATE `transit_favorites` SET `stop_id` = 'de:08111:6115', `stop_name` = 'Stuttgart, Hauptbahnhof' WHERE `user_id` = :u AND `stop_id` = '900550405'")->execute([':u' => $userId]);
+    $pdo->prepare("UPDATE `transit_favorites` SET `stop_id` = 'de:06412:10', `stop_name` = 'Frankfurt (Main), Hauptbahnhof' WHERE `user_id` = :u AND `stop_id` = '8000105'")->execute([':u' => $userId]);
+    $pdo->prepare("UPDATE `transit_favorites` SET `stop_id` = 'de:09162:100', `stop_name` = 'München, Hbf' WHERE `user_id` = :u AND `stop_id` = '8000261'")->execute([':u' => $userId]);
 }
 
 $cacheDir = __DIR__ . '/uploads/transit_cache';
@@ -457,11 +462,11 @@ if (isset($_GET['ajax_action']) && $_GET['ajax_action'] === 'station_suggest') {
     header('Content-Type: application/json; charset=UTF-8');
     $q = trim((string)($_GET['q'] ?? ''));
     if (mb_strlen($q, 'UTF-8') < 2) {
-        echo json_encode(['ok' => true, 'results' => []]);
+        echo json_encode(['ok' => true, 'items' => [], 'results' => []]);
         exit;
     }
     $matches = searchTransitStationsList($q, $cacheDir, 10);
-    echo json_encode(['ok' => true, 'results' => $matches], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => true, 'items' => $matches, 'results' => $matches], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
