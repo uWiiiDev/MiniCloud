@@ -717,6 +717,11 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_maps'                   => '1',
         'enable_weather'                => '1',
         'enable_traffic'                => '1',
+        'enable_fuel'                   => '1',
+        'enable_transit'                => '1',
+        'enable_alerts'                 => '1',
+        'enable_podcasts'               => '1',
+        'tankerkoenig_api_key'          => '',
         'maps_airgap_only'              => '1',
         'maps_default_detail'           => '4',
         'maps_max_zoom_detail'          => '14',
@@ -3284,6 +3289,34 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_traffic',
             'color'       => 'bg-rose-600',
         ],
+        'fuel' => [
+            'icon'        => '⛽',
+            'label'       => 'Tankstellen & Fahrtenbuch',
+            'url'         => 'fuel.php',
+            'setting_key' => 'enable_fuel',
+            'color'       => 'bg-emerald-600',
+        ],
+        'transit' => [
+            'icon'        => '🚆',
+            'label'       => 'ÖPNV-Abfahrtsmonitor & Bahn-Radar',
+            'url'         => 'transit.php',
+            'setting_key' => 'enable_transit',
+            'color'       => 'bg-blue-600',
+        ],
+        'alerts' => [
+            'icon'        => '🚨',
+            'label'       => 'Bevölkerungsschutz & Pegel',
+            'url'         => 'alerts.php',
+            'setting_key' => 'enable_alerts',
+            'color'       => 'bg-red-600',
+        ],
+        'podcasts' => [
+            'icon'        => '🎙️',
+            'label'       => 'Podcast-Studio & Offline-Catcher',
+            'url'         => 'podcasts.php',
+            'setting_key' => 'enable_podcasts',
+            'color'       => 'bg-violet-600',
+        ],
         'webdav' => [
             'icon'        => '📡',
             'label'       => 'WebDAV / CalDAV / CardDAV Sync',
@@ -3303,7 +3336,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search', 'tile', 'floorplan_img', 'offline_search', 'rain_radar_meta', 'rain_radar_tile', 'poi_radius_search', 'security_map_data', 'radio_bulletin'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search', 'tile', 'floorplan_img', 'offline_search', 'rain_radar_meta', 'rain_radar_tile', 'poi_radius_search', 'security_map_data', 'radio_bulletin', 'stream_local'], true)) {
         return null;
     }
 
@@ -3318,6 +3351,10 @@ function detectCurrentModuleKeyForStats(): ?string
         'maps.php'      => 'maps',
         'weather.php'   => 'weather',
         'traffic.php'   => 'traffic',
+        'fuel.php'      => 'fuel',
+        'transit.php'   => 'transit',
+        'alerts.php'    => 'alerts',
+        'podcasts.php'  => 'podcasts',
         'messages.php'  => 'chat',
         'pdf_tools.php' => 'pdf_tools',
         'projects.php'  => 'projects',

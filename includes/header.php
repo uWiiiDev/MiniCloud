@@ -666,6 +666,58 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_fuel'] ?? '1') === '1'): ?>
+                        <a
+                            href="fuel.php"
+                            data-nav-item="fuel"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Tankstellen, Spritpreis-Radar &amp; Fahrtenbuch"
+                        >
+                            <span>⛽</span>
+                            <span class="hidden md:inline">Tanken</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_transit'] ?? '1') === '1'): ?>
+                        <a
+                            href="transit.php"
+                            data-nav-item="transit"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="ÖPNV-Abfahrtsmonitor &amp; Bahn-Radar"
+                        >
+                            <span>🚆</span>
+                            <span class="hidden md:inline">Bahn/Bus</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_alerts'] ?? '1') === '1'): ?>
+                        <a
+                            href="alerts.php"
+                            data-nav-item="alerts"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Bevölkerungsschutz, NINA/Pegel &amp; Erdbeben"
+                        >
+                            <span>🚨</span>
+                            <span class="hidden md:inline">Warnungen</span>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (($appSettings['enable_podcasts'] ?? '1') === '1'): ?>
+                        <a
+                            href="podcasts.php"
+                            data-nav-item="podcasts"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Podcast-Studio &amp; Offline-Catcher"
+                        >
+                            <span>🎙️</span>
+                            <span class="hidden md:inline">Podcasts</span>
+                        </a>
+                    <?php endif; ?>
+
                     <?php if (($appSettings['enable_dashboard'] ?? '1') === '1'): ?>
                         <a
                             href="dashboard.php"
@@ -1215,7 +1267,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'maps', 'weather', 'traffic', 'polls', 'menti', 'forms', 'budget', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'news', 'assistant', 'passwords', 'authenticator', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
+                    const defaultOrder  = ['files', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'maps', 'weather', 'traffic', 'fuel', 'transit', 'alerts', 'polls', 'menti', 'forms', 'budget', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'podcasts', 'news', 'assistant', 'passwords', 'authenticator', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
 
                     function getPinnedNav() {
                         try {

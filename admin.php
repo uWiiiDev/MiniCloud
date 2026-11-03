@@ -1713,6 +1713,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableMaps        = isset($_POST['enable_maps']) && $_POST['enable_maps'] === '1' ? '1' : '0';
         $enableWeather     = isset($_POST['enable_weather']) && $_POST['enable_weather'] === '1' ? '1' : '0';
         $enableTraffic     = isset($_POST['enable_traffic']) && $_POST['enable_traffic'] === '1' ? '1' : '0';
+        $enableFuel        = isset($_POST['enable_fuel']) && $_POST['enable_fuel'] === '1' ? '1' : '0';
+        $enableTransit     = isset($_POST['enable_transit']) && $_POST['enable_transit'] === '1' ? '1' : '0';
+        $enableAlerts      = isset($_POST['enable_alerts']) && $_POST['enable_alerts'] === '1' ? '1' : '0';
+        $enablePodcasts    = isset($_POST['enable_podcasts']) && $_POST['enable_podcasts'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
         $libreUrl          = '';
@@ -1784,6 +1788,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_maps', $enableMaps);
         saveAppSetting($pdo, 'enable_weather', $enableWeather);
         saveAppSetting($pdo, 'enable_traffic', $enableTraffic);
+        saveAppSetting($pdo, 'enable_fuel', $enableFuel);
+        saveAppSetting($pdo, 'enable_transit', $enableTransit);
+        saveAppSetting($pdo, 'enable_alerts', $enableAlerts);
+        saveAppSetting($pdo, 'enable_podcasts', $enablePodcasts);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
         saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
@@ -4631,6 +4639,122 @@ foreach ($modList as $mItem) {
                         </a>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_traffic'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                             <?= ($currentSettings['enable_traffic'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27k: Tankstellen, Spritpreis-Radar & Fahrtenbuch -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_fuel"
+                            value="1"
+                            <?= ($currentSettings['enable_fuel'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                ⛽ Tankstellen, Spritpreis-Radar &amp; Fahrtenbuch (<code class="text-xs font-mono">fuel.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Deutschlandweites Tankstellen- &amp; Spritpreis-Radar (E5, E10, Diesel) auf der Offline-Karte, 24h-Tankzeitpunkt-Kurve sowie Fahrzeug- &amp; Tank-Logbuch (l/100km, €/km &amp; TÜV).
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="fuel.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            ⛽ Tankstellen-Radar öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_fuel'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_fuel'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27l: ÖPNV-Abfahrtsmonitor & Bahn-Radar -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_transit"
+                            value="1"
+                            <?= ($currentSettings['enable_transit'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🚆 ÖPNV-Abfahrtsmonitor &amp; Bahn-Radar (<code class="text-xs font-mono">transit.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Digitale Echtzeit-Abfahrtstafel für Bahnhöfe &amp; Haltestellen in ganz Deutschland (ICE/IC, RE/RB, S-Bahn, U-Bahn, Tram &amp; Bus) mit Verspätungen, Gleiswechseln &amp; Radio-Bahnhofsansage.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="transit.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🚆 Abfahrtsmonitor öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_transit'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_transit'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27m: Bevölkerungsschutz, NINA/Pegel & Erdbeben-Zentrale -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_alerts"
+                            value="1"
+                            <?= ($currentSettings['enable_alerts'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🚨 Bevölkerungsschutz, NINA/Pegel &amp; Erdbeben (<code class="text-xs font-mono">alerts.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Amtliche Gefahrenmeldungen (BBK NINA / MoWaS / KATWARN / Hochwasser), Live-Flusspegelstände (PegelOnline WSV), Erdbeben-Monitor &amp; BBK-Notfall-Checkliste.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="alerts.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🚨 Warnzentrale öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_alerts'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_alerts'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27n: Podcast-Studio & Offline-Episoden-Catcher -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_podcasts"
+                            value="1"
+                            <?= ($currentSettings['enable_podcasts'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🎙️ Podcast-Studio &amp; Offline-Catcher (<code class="text-xs font-mono">podcasts.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Podcast-Verzeichnissuche &amp; RSS-Catcher ohne Tracking mit 1-Klick-Offline-Speicherung in der Cloud, Sekundengedächtnis („Weiterhören“) &amp; Tempo-Wahl.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="podcasts.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🎙️ Podcast-Studio öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_podcasts'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_podcasts'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
                         </span>
                     </div>
                 </div>
