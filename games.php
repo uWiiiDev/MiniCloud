@@ -177,6 +177,15 @@ function getGamesCatalog(): array
             'desc'     => 'Hüpfe über den 5-spurigen Highway, reite auf Baumstämmen & Tauch-Schildkröten über den reißenden Fluss in die 5 Seerosen-Häuser!',
             'color'    => 'from-green-500 to-emerald-800',
         ],
+        'flappy' => [
+            'key'      => 'flappy',
+            'title'    => 'Flappy Cloud (Flappy Bird)',
+            'icon'     => '🐦',
+            'category' => 'Retro-Arcade',
+            'group'    => 'arcade',
+            'desc'     => 'Der weltberühmte Ein-Tasten-Klassiker: Flattere durch die grünen Röhren, sammle Goldmünzen, schalte Tag/Nacht-Wechsel & Medaillen (Bronze bis Platin) frei!',
+            'color'    => 'from-sky-400 to-emerald-600',
+        ],
         'lastninja' => [
             'key'      => 'lastninja',
             'title'    => 'Schatten-Shinobi',
@@ -2880,6 +2889,62 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 21. SPIEL: FLAPPY CLOUD / FLAPPY BIRD (RETRO-ARCADE) -->
+            <div id="gamePanel-flappy" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🐦 Flappy Cloud (Flappy Bird)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300">🟢 Grüne Röhren • 🪙 Bonus-Münzen • 🥇 Medaillen</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Flattere mit <strong>Leertaste, Klick oder Touch</strong> durch die Röhren-Lücken! Ab 10/20/40/80 Punkten warten 🥉 Bronze-, 🥈 Silber-, 🥇 Gold- und 💎 Platin-Medaillen.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="flappyModeSelect" onchange="flappyChangeMode(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            <option value="classic" selected>🎮 Klassisch (Original)</option>
+                            <option value="relaxed">🌤️ Entspannt (Größere Lücke)</option>
+                            <option value="turbo">🔥 Turbo-Hardcore (Schnell &amp; Eng)</option>
+                        </select>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
+                            Punkte: <span id="flappyScore">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+                            Rekord: <span id="flappyBest">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 text-xs font-extrabold" id="flappyMedalBadge">
+                            🎯 Bereit
+                        </span>
+                        <button type="button" onclick="flappyToggleSound()" id="flappySoundBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold cursor-pointer"
+                                title="8-Bit Arcade-Sound ein-/ausschalten">
+                            🔊 Ton
+                        </button>
+                        <button type="button" onclick="flappyNewGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold cursor-pointer shadow-xs">
+                            ▶ Neues Spiel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="flappyCanvas" width="480" height="560"
+                            class="rounded-2xl bg-sky-950 border-2 border-sky-500/80 shadow-xl max-w-full h-auto select-none touch-none cursor-pointer"></canvas>
+
+                    <div class="flex flex-col items-center gap-1.5 select-none">
+                        <button type="button" onmousedown="flappyFlap()" ontouchstart="event.preventDefault();flappyFlap();"
+                                class="px-8 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-extrabold text-sm shadow-md cursor-pointer">
+                            🪽 FLATTERN! (Leertaste / Klick / Touch)
+                        </button>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">
+                            Steuerung: <strong>Leertaste / Pfeil hoch / W / Mausklick / Tippen</strong> direkt auf dem Spielfeld • Goldmünzen bringen <strong>+2 Zusatzpunkte</strong>!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -3148,6 +3213,11 @@ function selectCloudGame(gameKey) {
             froggerInit();
         }
         froggerDraw();
+    } else if (gameKey === 'flappy') {
+        if (!flappyInitialized) {
+            flappyInit();
+        }
+        flappyDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -15716,6 +15786,557 @@ function froggerLoop(ts) {
     froggerRafId = requestAnimationFrame(froggerLoop);
 }
 
+// =============================================================================
+// 21. FLAPPY CLOUD / FLAPPY BIRD (RETRO-ARCADE)
+// =============================================================================
+let flappyInitialized = false;
+let flappySoundOn     = true;
+let flappyAudioCtx    = null;
+let flappyMode        = 'classic'; // classic | relaxed | turbo
+let flappyState       = 'ready';   // ready | playing | gameover
+let flappyScore       = 0;
+let flappyBest        = 0;
+let flappyPipesPassed = 0;
+let flappyStartTs     = 0;
+let flappyLastTs      = 0;
+let flappyGroundScroll = 0;
+let flappyFlashAlpha  = 0;
+
+const flappyBird = {
+    x: 118,
+    y: 250,
+    vy: 0,
+    radius: 15,
+    wingPhase: 0,
+    rot: 0
+};
+
+let flappyPipes = [];
+let flappyPopups = [];
+const flappyClouds = [
+    { x: 40,  y: 70,  s: 1.0 },
+    { x: 210, y: 115, s: 0.8 },
+    { x: 370, y: 60,  s: 1.15 }
+];
+
+function flappyPlayTone(type) {
+    if (!flappySoundOn) return;
+    try {
+        if (!flappyAudioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) flappyAudioCtx = new AC();
+        }
+        if (!flappyAudioCtx) return;
+        if (flappyAudioCtx.state === 'suspended') flappyAudioCtx.resume();
+        const now = flappyAudioCtx.currentTime;
+        const osc = flappyAudioCtx.createOscillator();
+        const gain = flappyAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(flappyAudioCtx.destination);
+
+        if (type === 'flap') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(310, now);
+            osc.frequency.exponentialRampToValueAtTime(540, now + 0.08);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+            osc.start(now);
+            osc.stop(now + 0.09);
+        } else if (type === 'score') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(660, now);
+            osc.frequency.setValueAtTime(990, now + 0.06);
+            gain.gain.setValueAtTime(0.11, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+            osc.start(now);
+            osc.stop(now + 0.22);
+        } else if (type === 'coin') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(1320, now + 0.05);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            osc.start(now);
+            osc.stop(now + 0.18);
+        } else if (type === 'crash') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(190, now);
+            osc.frequency.exponentialRampToValueAtTime(55, now + 0.26);
+            gain.gain.setValueAtTime(0.14, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+            osc.start(now);
+            osc.stop(now + 0.28);
+        }
+    } catch (e) {}
+}
+
+function flappyToggleSound() {
+    flappySoundOn = !flappySoundOn;
+    const btn = document.getElementById('flappySoundBtn');
+    if (btn) btn.textContent = flappySoundOn ? '🔊 Ton' : '🔇 Stumm';
+}
+
+function flappyGetMedal(score) {
+    if (score >= 80) return { icon: '💎', name: 'Platin-Medaille', color: '#38bdf8' };
+    if (score >= 40) return { icon: '🥇', name: 'Gold-Medaille',   color: '#facc15' };
+    if (score >= 20) return { icon: '🥈', name: 'Silber-Medaille', color: '#e2e8f0' };
+    if (score >= 10) return { icon: '🥉', name: 'Bronze-Medaille', color: '#fb923c' };
+    return { icon: '🐦', name: 'Flugschüler', color: '#94a3b8' };
+}
+
+function flappyUpdateHud() {
+    const scEl = document.getElementById('flappyScore');
+    if (scEl) scEl.textContent = String(flappyScore);
+    const bsEl = document.getElementById('flappyBest');
+    if (bsEl) bsEl.textContent = String(flappyBest);
+    const mdEl = document.getElementById('flappyMedalBadge');
+    if (mdEl) {
+        const m = flappyGetMedal(flappyScore);
+        mdEl.textContent = `${m.icon} ${m.name}`;
+    }
+}
+
+function flappyChangeMode(mode) {
+    flappyMode = ['classic', 'relaxed', 'turbo'].includes(mode) ? mode : 'classic';
+    flappyNewGame();
+}
+
+function flappyNewGame() {
+    flappyState = 'ready';
+    flappyScore = 0;
+    flappyPipesPassed = 0;
+    flappyBird.x = 118;
+    flappyBird.y = 240;
+    flappyBird.vy = 0;
+    flappyBird.rot = 0;
+    flappyPipes = [];
+    flappyPopups = [];
+    flappyFlashAlpha = 0;
+    flappyUpdateHud();
+    flappyDraw();
+}
+
+function flappySpawnPipe(startX) {
+    const groundY = 496;
+    const gap = flappyMode === 'relaxed' ? 148 : (flappyMode === 'turbo' ? 112 : 126);
+    const minTop = 58;
+    const maxTop = groundY - gap - 68;
+    const topH = minTop + Math.random() * (maxTop - minTop);
+    const moving = (flappyPipesPassed >= 8 && Math.random() < 0.42);
+    const hasCoin = Math.random() < 0.55;
+
+    flappyPipes.push({
+        x: startX,
+        w: 62,
+        topH: topH,
+        gap: gap,
+        passed: false,
+        moving: moving,
+        vy: moving ? (Math.random() < 0.5 ? 42 : -42) : 0,
+        coinCollected: !hasCoin
+    });
+}
+
+function flappyFlap() {
+    if (flappyState === 'gameover') {
+        flappyNewGame();
+        return;
+    }
+    if (flappyState === 'ready') {
+        flappyState = 'playing';
+        flappyStartTs = performance.now();
+        flappyPipes = [];
+        flappySpawnPipe(520);
+        flappySpawnPipe(520 + 230);
+    }
+    const jumpImpulse = flappyMode === 'turbo' ? -335 : -315;
+    flappyBird.vy = jumpImpulse;
+    flappyBird.wingPhase = 1.0;
+    flappyPlayTone('flap');
+}
+
+function flappyDie() {
+    if (flappyState === 'gameover') return;
+    flappyState = 'gameover';
+    flappyFlashAlpha = 0.75;
+    flappyPlayTone('crash');
+    if (flappyScore > flappyBest) {
+        flappyBest = flappyScore;
+        try { localStorage.setItem('mc_flappy_best', String(flappyBest)); } catch (e) {}
+    }
+    flappyUpdateHud();
+    if (flappyScore > 0) {
+        const dur = Math.max(1, Math.round((performance.now() - flappyStartTs) / 1000));
+        const medal = flappyGetMedal(flappyScore);
+        submitCloudScore('flappy', flappyScore, dur, `${medal.icon} ${medal.name} (${flappyPipesPassed} Röhren)`);
+    }
+}
+
+function flappyUpdate(dt) {
+    const groundY = 496;
+    const speedX = flappyMode === 'turbo' ? 195 : (flappyMode === 'relaxed' ? 142 : 162);
+
+    // Wolken & Boden im Ready- und Playing-Modus bewegen
+    if (flappyState !== 'gameover') {
+        flappyGroundScroll = (flappyGroundScroll + speedX * dt) % 24;
+        flappyClouds.forEach(c => {
+            c.x -= 22 * c.s * dt;
+            if (c.x < -80) c.x = 530;
+        });
+    }
+
+    if (flappyFlashAlpha > 0) {
+        flappyFlashAlpha = Math.max(0, flappyFlashAlpha - dt * 2.4);
+    }
+
+    for (let i = flappyPopups.length - 1; i >= 0; i--) {
+        flappyPopups[i].y -= 35 * dt;
+        flappyPopups[i].ttl -= dt;
+        if (flappyPopups[i].ttl <= 0) flappyPopups.splice(i, 1);
+    }
+
+    if (flappyState === 'ready') {
+        flappyBird.y = 240 + Math.sin(performance.now() * 0.005) * 9;
+        flappyBird.wingPhase = (Math.sin(performance.now() * 0.015) + 1) * 0.5;
+        flappyBird.rot = 0;
+        return;
+    }
+
+    if (flappyState !== 'playing') return;
+
+    const gravity = flappyMode === 'turbo' ? 980 : 910;
+    flappyBird.vy += gravity * dt;
+    flappyBird.y += flappyBird.vy * dt;
+    flappyBird.wingPhase = Math.max(0, flappyBird.wingPhase - dt * 3.2);
+    flappyBird.rot = Math.max(-0.48, Math.min(1.25, flappyBird.vy / 380));
+
+    // Decke & Boden prüfen
+    if (flappyBird.y - flappyBird.radius < 0) {
+        flappyBird.y = flappyBird.radius;
+        flappyBird.vy = 0;
+    }
+    if (flappyBird.y + flappyBird.radius >= groundY) {
+        flappyBird.y = groundY - flappyBird.radius;
+        flappyDie();
+        return;
+    }
+
+    // Röhren bewegen & Kollision prüfen
+    for (let i = flappyPipes.length - 1; i >= 0; i--) {
+        const p = flappyPipes[i];
+        p.x -= speedX * dt;
+
+        if (p.moving) {
+            p.topH += p.vy * dt;
+            if (p.topH < 52 || p.topH > groundY - p.gap - 58) {
+                p.vy = -p.vy;
+            }
+        }
+
+        // Goldmünze in der Röhrenlücke einsammeln?
+        if (!p.coinCollected) {
+            const cx = p.x + p.w / 2;
+            const cy = p.topH + p.gap / 2;
+            const dist = Math.hypot(flappyBird.x - cx, flappyBird.y - cy);
+            if (dist < flappyBird.radius + 11) {
+                p.coinCollected = true;
+                flappyScore += 2;
+                flappyPlayTone('coin');
+                flappyPopups.push({ x: cx, y: cy - 10, text: '+2 🪙', ttl: 0.85, col: '#fde047' });
+                flappyUpdateHud();
+            }
+        }
+
+        // Punkt beim Durchfliegen der Röhre
+        if (!p.passed && p.x + p.w < flappyBird.x) {
+            p.passed = true;
+            flappyScore += 1;
+            flappyPipesPassed += 1;
+            flappyPlayTone('score');
+            flappyPopups.push({ x: flappyBird.x, y: flappyBird.y - 22, text: '+1', ttl: 0.7, col: '#ffffff' });
+            flappyUpdateHud();
+        }
+
+        // Kollision mit oberer oder unterer Röhre
+        const hitX = (flappyBird.x + flappyBird.radius - 3 > p.x) && (flappyBird.x - flappyBird.radius + 3 < p.x + p.w);
+        if (hitX) {
+            const hitTop = (flappyBird.y - flappyBird.radius + 3) < p.topH;
+            const hitBot = (flappyBird.y + flappyBird.radius - 3) > (p.topH + p.gap);
+            if (hitTop || hitBot) {
+                flappyDie();
+                return;
+            }
+        }
+
+        if (p.x + p.w < -40) {
+            flappyPipes.splice(i, 1);
+        }
+    }
+
+    // Neue Röhre nachschieben
+    const lastPipe = flappyPipes[flappyPipes.length - 1];
+    if (!lastPipe || lastPipe.x < 480 - 225) {
+        flappySpawnPipe(495);
+    }
+}
+
+function flappyDraw() {
+    const canvas = document.getElementById('flappyCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const groundY = 496;
+
+    // 1. Himmel (wechselt alle 15 Röhren zwischen Tag, Abendrot & Sternennacht)
+    const phase = Math.floor(flappyPipesPassed / 15) % 3;
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+    if (phase === 0) {
+        skyGrad.addColorStop(0, '#0284c7');
+        skyGrad.addColorStop(1, '#bae6fd');
+    } else if (phase === 1) {
+        skyGrad.addColorStop(0, '#4c1d95');
+        skyGrad.addColorStop(0.6, '#ea580c');
+        skyGrad.addColorStop(1, '#fde047');
+    } else {
+        skyGrad.addColorStop(0, '#020617');
+        skyGrad.addColorStop(1, '#1e1b4b');
+    }
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, groundY);
+
+    // Wolken
+    ctx.fillStyle = phase === 2 ? 'rgba(148,163,184,0.22)' : 'rgba(255,255,255,0.78)';
+    flappyClouds.forEach(c => {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 20 * c.s, 0, Math.PI * 2);
+        ctx.arc(c.x + 18 * c.s, c.y - 6 * c.s, 24 * c.s, 0, Math.PI * 2);
+        ctx.arc(c.x + 38 * c.s, c.y, 18 * c.s, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Dezente Skyline am Horizont
+    ctx.fillStyle = phase === 2 ? '#0f172a' : 'rgba(15, 23, 42, 0.14)';
+    for (let sx = 0; sx < W; sx += 44) {
+        const bh = 35 + ((sx * 17) % 55);
+        ctx.fillRect(sx, groundY - bh, 38, bh);
+    }
+
+    // 2. Grüne Retro-Röhren zeichnen
+    flappyPipes.forEach(p => {
+        const botY = p.topH + p.gap;
+        const botH = Math.max(0, groundY - botY);
+
+        const drawPipeRect = (rx, ry, rw, rh, isTop) => {
+            const g = ctx.createLinearGradient(rx, 0, rx + rw, 0);
+            g.addColorStop(0, '#15803d');
+            g.addColorStop(0.3, '#4ade80');
+            g.addColorStop(0.8, '#16a34a');
+            g.addColorStop(1, '#14532d');
+            ctx.fillStyle = g;
+            ctx.fillRect(rx, ry, rw, rh);
+            ctx.strokeStyle = '#052e16';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(rx, ry, rw, rh);
+
+            // Röhren-Kragen (Rim)
+            const rimY = isTop ? (ry + rh - 22) : ry;
+            ctx.fillStyle = g;
+            ctx.fillRect(rx - 4, rimY, rw + 8, 22);
+            ctx.strokeRect(rx - 4, rimY, rw + 8, 22);
+        };
+
+        drawPipeRect(p.x, 0, p.w, p.topH, true);
+        drawPipeRect(p.x, botY, p.w, botH, false);
+
+        // Goldmünze in der Mitte der Lücke
+        if (!p.coinCollected) {
+            const cx = p.x + p.w / 2;
+            const cy = p.topH + p.gap / 2;
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#b45309';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#78350f';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('★', cx, cy + 4);
+        }
+    });
+
+    // 3. Scrollender Retro-Boden
+    ctx.fillStyle = '#d97706';
+    ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(0, groundY, W, 14);
+    ctx.fillStyle = '#15803d';
+    for (let gx = -flappyGroundScroll; gx < W; gx += 24) {
+        ctx.beginPath();
+        ctx.moveTo(gx, groundY);
+        ctx.lineTo(gx + 12, groundY);
+        ctx.lineTo(gx + 6, groundY + 14);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // 4. Flappy-Vogel zeichnen
+    ctx.save();
+    ctx.translate(flappyBird.x, flappyBird.y);
+    ctx.rotate(flappyBird.rot);
+
+    // Körper
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 17, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#422006';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Flügel (animiert)
+    const wingY = -2 + Math.sin(flappyBird.wingPhase * Math.PI) * -6;
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.ellipse(-4, wingY + 3, 9, 6, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Auge
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(7, -4, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(9, -4, 2.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Schnabel
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(12, -1);
+    ctx.lineTo(22, 3);
+    ctx.lineTo(12, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+
+    // 5. Schwebende Score-Popups
+    flappyPopups.forEach(pp => {
+        ctx.fillStyle = pp.col;
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(pp.text, pp.x, pp.y);
+    });
+
+    // Großer Live-Score oben mittig
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+    ctx.font = '900 38px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(flappyScore), W / 2 + 2, 56);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(String(flappyScore), W / 2, 54);
+
+    // Start- / Game-Over-Overlay
+    if (flappyState === 'ready') {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.68)';
+        ctx.beginPath();
+        ctx.roundRect(70, 145, 340, 125, 16);
+        ctx.fill();
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillText('🐦 FLAPPY CLOUD', W / 2, 185);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText('Drücke LEERTASTE, KLICK oder TIPPEN', W / 2, 218);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Sammle 🪙 Goldmünzen (+2) & knacke den Cloud-Rekord!', W / 2, 246);
+    } else if (flappyState === 'gameover') {
+        const medal = flappyGetMedal(flappyScore);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(65, 125, 350, 210, 18);
+        ctx.fill();
+        ctx.strokeStyle = medal.color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#f87171';
+        ctx.font = '900 24px sans-serif';
+        ctx.fillText('💥 GAME OVER', W / 2, 165);
+
+        ctx.fillStyle = medal.color;
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(`${medal.icon} ${medal.name}`, W / 2, 200);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 15px sans-serif';
+        ctx.fillText(`Punkte: ${flappyScore}   •   Rekord: ${flappyBest}`, W / 2, 235);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(`Durchflogene Röhren: ${flappyPipesPassed}`, W / 2, 262);
+
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText('▶ Klick oder Leertaste für neue Runde', W / 2, 305);
+    }
+
+    if (flappyFlashAlpha > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${flappyFlashAlpha})`;
+        ctx.fillRect(0, 0, W, H);
+    }
+}
+
+function flappyLoop(ts) {
+    const dt = Math.min(0.05, Math.max(0.001, (ts - flappyLastTs) / 1000));
+    flappyLastTs = ts;
+    if (activeGameKey === 'flappy') {
+        flappyUpdate(dt);
+        flappyDraw();
+    }
+    requestAnimationFrame(flappyLoop);
+}
+
+function flappyInit() {
+    if (flappyInitialized) return;
+    flappyInitialized = true;
+    try {
+        flappyBest = parseInt(localStorage.getItem('mc_flappy_best') || '0', 10) || 0;
+    } catch (e) {}
+
+    const canvas = document.getElementById('flappyCanvas');
+    if (canvas) {
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            flappyFlap();
+        });
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            flappyFlap();
+        }, { passive: false });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'flappy') return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target && e.target.tagName) || '')) return;
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+            e.preventDefault();
+            flappyFlap();
+        }
+    });
+
+    flappyNewGame();
+    flappyLastTs = performance.now();
+    requestAnimationFrame(flappyLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
@@ -15723,6 +16344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     trInit();
     dartsInit();
     froggerInit();
+    flappyInit();
     imInit();
     lemInit();
     ninjaInit();
