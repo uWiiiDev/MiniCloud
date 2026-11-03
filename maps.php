@@ -905,7 +905,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
     }
 
     $cacheFile = sprintf(
-        '%s/poi_%s_%.3f_%.3f_%d.json',
+        '%s/poi_v2_%s_%.3f_%.3f_%d.json',
         $poiCacheDir,
         $category,
         round($lat, 3),
@@ -913,56 +913,72 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
         $radiusMeters
     );
 
-    $overpassElements = null;
-    $sourceLabel = 'OpenStreetMap Live (Overpass-Proxy)';
+    $rawHits = null;
+    $sourceLabel = 'OpenStreetMap Live (MiniCloud Proxy)';
 
     if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < 900) {
         $cachedJson = @file_get_contents($cacheFile);
         $decoded = is_string($cachedJson) ? @json_decode($cachedJson, true) : null;
         if (is_array($decoded)) {
-            $overpassElements = $decoded;
+            $rawHits = $decoded;
             $sourceLabel = 'Lokaler MiniCloud POI-Cache';
         }
     }
 
-    if ($overpassElements === null) {
-        $around = sprintf('(around:%d,%.5f,%.5f)', $radiusMeters, $lat, $lng);
-        $queryBody = match ($category) {
-            'fuel'        => "nwr[\"amenity\"=\"fuel\"]$around;",
-            'charging'    => "nwr[\"amenity\"=\"charging_station\"]$around;",
-            'parking'     => "nwr[\"amenity\"=\"parking\"][\"access\"!=\"private\"]$around;",
-            'atm'         => "nwr[\"amenity\"~\"^(atm|bank)$\"]$around;",
-            'supermarket' => "nwr[\"shop\"~\"^(supermarket|convenience|farm|bakery)$\"]$around;",
-            'pharmacy'    => "nwr[\"amenity\"~\"^(pharmacy|hospital|doctors)$\"]$around;",
-            'aed'         => "nwr[\"emergency\"=\"defibrillator\"]$around;",
-            'food'        => "nwr[\"amenity\"~\"^(restaurant|cafe|biergarten|fast_food)$\"]$around;",
-            default       => "nwr[\"amenity\"=\"fuel\"]$around;",
+    if ($rawHits === null) {
+        // Bounding-Box für Umkreis berechnen (1° Breitengrad ≈ 111,32 km)
+        $latDelta = $radiusKm / 111.32;
+        $cosLat   = max(0.15, abs(cos(deg2rad($lat))));
+        $lngDelta = $radiusKm / (111.32 * $cosLat);
+
+        $latTop    = min(85.0, $lat + $latDelta);
+        $latBottom = max(-85.0, $lat - $latDelta);
+        $lonLeft   = max(-180.0, $lng - $lngDelta);
+        $lonRight  = min(180.0, $lng + $lngDelta);
+        $viewbox   = sprintf('%.5f,%.5f,%.5f,%.5f', $lonLeft, $latTop, $lonRight, $latBottom);
+
+        $phraseTags = match ($category) {
+            'fuel'        => ['[fuel]'],
+            'charging'    => ['[charging_station]'],
+            'parking'     => ['[parking]'],
+            'atm'         => ['[atm]', '[bank]'],
+            'supermarket' => ['[supermarket]', '[bakery]'],
+            'pharmacy'    => ['[pharmacy]', '[hospital]'],
+            'aed'         => ['[defibrillator]'],
+            'food'        => ['[restaurant]', '[cafe]'],
+            default       => ['[fuel]'],
         };
 
-        $overpassQl = "[out:json][timeout:10];(" . $queryBody . ");out center 100;";
-        $endpoints = [
-            'https://overpass-api.de/api/interpreter',
-            'https://overpass.kumi.systems/api/interpreter',
-        ];
+        $collected = [];
+        $ctxNom = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'timeout' => 4.5,
+                'header'  => "User-Agent: MiniCloud-Maps-Umkreisfinder/1.0 (https://runready.cloud)\r\nAccept: application/json\r\nAccept-Language: de\r\n",
+            ],
+        ]);
 
-        foreach ($endpoints as $ep) {
-            $ctx = stream_context_create([
-                'http' => [
-                    'method'  => 'POST',
-                    'timeout' => 8.5,
-                    'header'  => "Content-Type: application/x-www-form-urlencoded\r\nUser-Agent: MiniCloud-Maps-Umkreisfinder/1.0\r\n",
-                    'content' => http_build_query(['data' => $overpassQl]),
-                ],
-            ]);
-            $resp = @file_get_contents($ep, false, $ctx);
+        foreach ($phraseTags as $tagQ) {
+            $nomUrl = 'https://nominatim.openstreetmap.org/search?format=jsonv2'
+                    . '&q=' . rawurlencode($tagQ)
+                    . '&viewbox=' . rawurlencode($viewbox)
+                    . '&bounded=1&addressdetails=1&extratags=1&limit=45';
+            $resp = @file_get_contents($nomUrl, false, $ctxNom);
             if (is_string($resp) && $resp !== '') {
-                $json = @json_decode($resp, true);
-                if (is_array($json) && isset($json['elements']) && is_array($json['elements'])) {
-                    $overpassElements = $json['elements'];
-                    @file_put_contents($cacheFile, json_encode($overpassElements, JSON_UNESCAPED_UNICODE));
-                    break;
+                $arr = @json_decode($resp, true);
+                if (is_array($arr)) {
+                    foreach ($arr as $item) {
+                        if (is_array($item) && isset($item['lat'], $item['lon'])) {
+                            $collected[] = $item;
+                        }
+                    }
                 }
             }
+        }
+
+        if (!empty($collected)) {
+            $rawHits = $collected;
+            @file_put_contents($cacheFile, json_encode($rawHits, JSON_UNESCAPED_UNICODE));
         }
     }
 
@@ -979,10 +995,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
     $pois = [];
     $seenCoords = [];
 
-    if (is_array($overpassElements)) {
-        foreach ($overpassElements as $el) {
-            $pLat = isset($el['lat']) ? (float)$el['lat'] : (isset($el['center']['lat']) ? (float)$el['center']['lat'] : null);
-            $pLng = isset($el['lon']) ? (float)$el['lon'] : (isset($el['center']['lon']) ? (float)$el['center']['lon'] : null);
+    if (is_array($rawHits)) {
+        foreach ($rawHits as $el) {
+            $pLat = isset($el['lat']) ? (float)$el['lat'] : null;
+            $pLng = isset($el['lon']) ? (float)$el['lon'] : null;
             if ($pLat === null || $pLng === null) {
                 continue;
             }
@@ -992,18 +1008,26 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
             }
             $seenCoords[$coordKey] = true;
 
-            $tags = is_array($el['tags'] ?? null) ? $el['tags'] : [];
-            $name = trim((string)($tags['name'] ?? $tags['brand'] ?? $tags['operator'] ?? ''));
+            $distKm = haversineDistanceKm($lat, $lng, $pLat, $pLng);
+            if ($distKm > $radiusKm * 1.15) {
+                continue;
+            }
+
+            $tags = is_array($el['extratags'] ?? null) ? $el['extratags'] : [];
+            $addr = is_array($el['address'] ?? null) ? $el['address'] : [];
+            $elType = (string)($el['type'] ?? '');
+
+            $name = trim((string)($el['name'] ?? $tags['brand'] ?? $tags['operator'] ?? ''));
             if ($name === '') {
                 $name = match ($category) {
                     'fuel'        => 'Tankstelle',
                     'charging'    => 'E-Ladestation',
                     'parking'     => (!empty($tags['parking']) && $tags['parking'] === 'multi-storey') ? 'Parkhaus' : 'Parkplatz',
-                    'atm'         => (($tags['amenity'] ?? '') === 'bank') ? 'Bankfiliale' : 'Geldautomat (ATM)',
-                    'supermarket' => (($tags['shop'] ?? '') === 'bakery') ? 'Bäckerei' : ((($tags['shop'] ?? '') === 'farm') ? 'Hofladen' : 'Supermarkt'),
-                    'pharmacy'    => (($tags['amenity'] ?? '') === 'hospital') ? 'Krankenhaus / Klinik' : 'Apotheke',
+                    'atm'         => ($elType === 'bank') ? 'Bankfiliale' : 'Geldautomat (ATM)',
+                    'supermarket' => ($elType === 'bakery') ? 'Bäckerei' : 'Supermarkt',
+                    'pharmacy'    => ($elType === 'hospital') ? 'Krankenhaus / Klinik' : 'Apotheke',
                     'aed'         => 'Defibrillator (AED)',
-                    'food'        => 'Restaurant / Café',
+                    'food'        => ($elType === 'cafe') ? 'Café' : 'Restaurant',
                     default       => $meta['label'],
                 };
             }
@@ -1013,15 +1037,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
                 $name .= ' (' . $brand . ')';
             }
 
-            // Adresse zusammensetzen
-            $street = trim((string)($tags['addr:street'] ?? '') . ' ' . (string)($tags['addr:housenumber'] ?? ''));
-            $city   = trim((string)($tags['addr:postcode'] ?? '') . ' ' . (string)($tags['addr:city'] ?? ''));
+            // Adresse aus Nominatim-Adressfeldern zusammensetzen
+            $street = trim((string)($addr['road'] ?? $addr['pedestrian'] ?? '') . ' ' . (string)($addr['house_number'] ?? ''));
+            $city   = trim((string)($addr['postcode'] ?? '') . ' ' . (string)($addr['city'] ?? $addr['town'] ?? $addr['village'] ?? $addr['municipality'] ?? ''));
             $addrParts = array_values(array_filter([$street, $city]));
             $address = implode(', ', $addrParts);
             if ($address === '' && !empty($tags['defibrillator:location'])) {
                 $address = (string)$tags['defibrillator:location'];
-            } elseif ($address === '' && !empty($tags['description'])) {
-                $address = mb_substr((string)$tags['description'], 0, 90);
             }
 
             // Zusatzinfos (Kraftstoffe, Ladeleistung, Küche, Öffnungszeiten, Gebühren)
@@ -1045,11 +1067,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
                 $extras[] = '🕒 ' . mb_substr((string)$tags['opening_hours'], 0, 50);
             }
 
-            $distKm = haversineDistanceKm($lat, $lng, $pLat, $pLng);
-            if ($distKm > $radiusKm * 1.15) {
-                continue;
-            }
-
             $pois[] = [
                 'title'      => $name,
                 'address'    => $address,
@@ -1067,27 +1084,32 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
         }
     }
 
-    // Offline-Fallback: Falls Air-Gap / kein Internet verfügbar ist, auch gespeicherte Orte & deutsche Städte im Umkreis einbeziehen
+    // Offline-Fallback: Falls Air-Gap / kein Internet verfügbar ist, auch gespeicherte Orte aus der DB im Umkreis einbeziehen
     if (empty($pois)) {
         $sourceLabel = 'Lokales Offline-Verzeichnis (Intranet-Fallback)';
-        foreach ($places as $pl) {
-            $d = haversineDistanceKm($lat, $lng, (float)$pl['lat'], (float)$pl['lng']);
-            if ($d <= $radiusKm) {
-                $pois[] = [
-                    'title'     => (string)$pl['title'],
-                    'address'   => (string)$pl['address'],
-                    'info'      => 'Eigener gespeicherter Ort',
-                    'phone'     => '',
-                    'website'   => '',
-                    'lat'       => (float)$pl['lat'],
-                    'lng'       => (float)$pl['lng'],
-                    'dist_km'   => round($d, 2),
-                    'direction' => $calcCompass($lat, $lng, (float)$pl['lat'], (float)$pl['lng']),
-                    'icon'      => (string)$pl['icon'],
-                    'color'     => (string)$pl['color'],
-                    'place_cat' => (string)$pl['category'],
-                ];
+        try {
+            $stmtLocalPl = $pdo->prepare('SELECT * FROM map_places WHERE (user_id = :uid OR is_shared = 1) AND floorplan_id = 0');
+            $stmtLocalPl->execute([':uid' => $userId]);
+            foreach ($stmtLocalPl->fetchAll() as $pl) {
+                $d = haversineDistanceKm($lat, $lng, (float)$pl['lat'], (float)$pl['lng']);
+                if ($d <= $radiusKm) {
+                    $pois[] = [
+                        'title'     => (string)$pl['title'],
+                        'address'   => (string)$pl['address'],
+                        'info'      => 'Eigener gespeicherter Ort',
+                        'phone'     => '',
+                        'website'   => '',
+                        'lat'       => (float)$pl['lat'],
+                        'lng'       => (float)$pl['lng'],
+                        'dist_km'   => round($d, 2),
+                        'direction' => $calcCompass($lat, $lng, (float)$pl['lat'], (float)$pl['lng']),
+                        'icon'      => (string)$pl['icon'],
+                        'color'     => (string)$pl['color'],
+                        'place_cat' => (string)$pl['category'],
+                    ];
+                }
             }
+        } catch (Throwable) {
         }
     }
 
