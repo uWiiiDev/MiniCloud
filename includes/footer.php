@@ -1773,7 +1773,7 @@ if (
         </button>
     </div>
 </div>
-<audio id="mcGlobalPersistentAudio" preload="none" crossorigin="anonymous" class="hidden"></audio>
+<audio id="mcGlobalPersistentAudio" preload="none" class="hidden"></audio>
 
 <script>
 (() => {
@@ -1791,6 +1791,12 @@ if (
 
     let icyTimer = null;
     let appFrame = null;
+    let reconnectTimer = null;
+    let watchdogTimer  = null;
+    let reconnectAttemptCount = 0;
+    let lastAudioCurrentTime  = -1;
+    let frozenTicksCount      = 0;
+    let boundAudioEl          = null;
 
     const getState = () => {
         try {
@@ -1881,6 +1887,186 @@ if (
         icyTimer = setInterval(pollIcyTitle, 25000);
     };
 
+    const clearReconnectSchedule = () => {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+    };
+
+    const buildFreshStreamUrl = (rawUrl, attempt) => {
+        if (!rawUrl) return '';
+        // Beim 1., 3., 5. Versuch saubere Original-URL (für strikte Icecast-Server),
+        // bei jedem geraden Versuch mit Cache-Buster, um festgefahrene Browser-/Proxy-Sockets aufzubrechen.
+        if (attempt % 2 === 1) {
+            return rawUrl;
+        }
+        try {
+            const u = new URL(rawUrl, window.location.href);
+            u.searchParams.set('_mc_recon', String(Date.now()));
+            return u.toString();
+        } catch (e) {
+            const sep = rawUrl.includes('?') ? '&' : '?';
+            return rawUrl + sep + '_mc_recon=' + Date.now();
+        }
+    };
+
+    const attemptStreamReconnect = (reason) => {
+        clearReconnectSchedule();
+        const st = getState();
+        const a  = getAudioEl();
+        if (!st || !st.playing || st.closed || !st.streamUrl || !a) {
+            return;
+        }
+        if (navigator.onLine === false) {
+            saveState({
+                reconnecting: true,
+                songTitle: '📡 Netzwerk getrennt – warte auf Wiederverbindung…'
+            });
+            updateMiniBarUi();
+            scheduleStreamReconnect(2500);
+            return;
+        }
+
+        reconnectAttemptCount++;
+        const nextUrl = buildFreshStreamUrl(st.streamUrl, reconnectAttemptCount);
+        const vol = typeof st.volume === 'number' ? st.volume : 85;
+
+        saveState({
+            reconnecting: true,
+            songTitle: '🔄 Verbindung unterbrochen – verbinde automatisch neu…'
+        });
+        updateMiniBarUi();
+
+        try {
+            a.pause();
+            a.removeAttribute('src');
+            a.load();
+        } catch (e) {}
+
+        a.src = nextUrl;
+        a.volume = Math.max(0, Math.min(1, vol / 100));
+        a.muted  = Boolean(st.muted);
+
+        a.play().then(() => {
+            reconnectAttemptCount = 0;
+            frozenTicksCount      = 0;
+            lastAudioCurrentTime  = a.currentTime;
+            saveState({
+                playing: true,
+                closed: false,
+                reconnecting: false,
+                songTitle: 'Live-Übertragung • ' + (st.name || 'Radio')
+            });
+            updateMiniBarUi();
+            pollIcyTitle();
+            ensureIcyPolling();
+        }).catch(() => {
+            // Wichtig: playing bleibt true (Benutzer-Wunsch), wir versuchen es automatisch weiter!
+            scheduleStreamReconnect(3000);
+        });
+    };
+
+    const scheduleStreamReconnect = (delayMs = 2000) => {
+        const st = getState();
+        if (!st || !st.playing || st.closed || !st.streamUrl) return;
+        clearReconnectSchedule();
+        reconnectTimer = setTimeout(() => {
+            attemptStreamReconnect('scheduled');
+        }, delayMs);
+    };
+
+    const bindAudioRecoveryEvents = (a) => {
+        if (!a || boundAudioEl === a) return;
+        boundAudioEl = a;
+
+        a.addEventListener('playing', () => {
+            clearReconnectSchedule();
+            reconnectAttemptCount = 0;
+            frozenTicksCount      = 0;
+            lastAudioCurrentTime  = a.currentTime;
+            const st = getState();
+            if (st && st.reconnecting) {
+                saveState({
+                    reconnecting: false,
+                    songTitle: 'Live-Übertragung • ' + (st.name || 'Radio')
+                });
+                pollIcyTitle();
+            }
+            updateMiniBarUi();
+        });
+
+        // Wenn der Stream durch kurzen Netzwerkausfall abbricht, feuert der Browser error, ended oder stalled
+        ['error', 'ended'].forEach((evName) => {
+            a.addEventListener(evName, () => {
+                const st = getState();
+                if (st && st.playing && !st.closed && st.streamUrl) {
+                    scheduleStreamReconnect(1500);
+                }
+            });
+        });
+
+        a.addEventListener('stalled', () => {
+            const st = getState();
+            if (st && st.playing && !st.closed && st.streamUrl) {
+                scheduleStreamReconnect(3500);
+            }
+        });
+    };
+
+    const ensureStreamWatchdog = () => {
+        if (watchdogTimer) return;
+        watchdogTimer = setInterval(() => {
+            const st = getState();
+            const a  = getAudioEl();
+            if (a) bindAudioRecoveryEvents(a);
+            if (!st || !st.playing || st.closed || !st.streamUrl || !a) {
+                frozenTicksCount = 0;
+                return;
+            }
+
+            const curT = Number(a.currentTime || 0);
+            if (a.paused || a.ended || a.error) {
+                frozenTicksCount++;
+            } else if (Math.abs(curT - lastAudioCurrentTime) < 0.01) {
+                frozenTicksCount++;
+            } else {
+                frozenTicksCount = 0;
+                lastAudioCurrentTime = curT;
+                if (st.reconnecting) {
+                    saveState({ reconnecting: false });
+                    updateMiniBarUi();
+                }
+            }
+
+            // Wenn der Stream seit >= 6 Sekunden (2 Watchdog-Ticks à 3s) stillsteht, sofort neu verbinden!
+            if (frozenTicksCount >= 2 && !reconnectTimer) {
+                frozenTicksCount = 0;
+                attemptStreamReconnect('watchdog');
+            }
+        }, 3000);
+    };
+
+    // Sofortiger Auto-Reconnect, sobald das Betriebssystem / der Browser wieder Netzwerk meldet
+    window.addEventListener('online', () => {
+        const st = getState();
+        if (st && st.playing && !st.closed && st.streamUrl) {
+            clearReconnectSchedule();
+            setTimeout(() => attemptStreamReconnect('online'), 250);
+        }
+    });
+
+    window.addEventListener('offline', () => {
+        const st = getState();
+        if (st && st.playing && !st.closed && st.streamUrl) {
+            saveState({
+                reconnecting: true,
+                songTitle: '📡 Netzwerk getrennt – warte auf Wiederverbindung…'
+            });
+            updateMiniBarUi();
+        }
+    });
+
     const openInSeamlessViewport = (targetUrl) => {
         const parsed = new URL(targetUrl, window.location.href);
         const hostPath = window.location.pathname;
@@ -1946,6 +2132,12 @@ if (
         playStation: (name, streamUrl, genre) => {
             const a = getAudioEl();
             if (!a || !streamUrl) return;
+            bindAudioRecoveryEvents(a);
+            ensureStreamWatchdog();
+            clearReconnectSchedule();
+            reconnectAttemptCount = 0;
+            frozenTicksCount      = 0;
+
             const prev = getState() || {};
             const vol = typeof prev.volume === 'number' ? prev.volume : 85;
             a.src = streamUrl;
@@ -1954,6 +2146,7 @@ if (
             saveState({
                 playing: true,
                 closed: false,
+                reconnecting: false,
                 name: name || 'Live-Webradio',
                 streamUrl: streamUrl,
                 genre: genre || 'Live',
@@ -1963,16 +2156,19 @@ if (
             });
             updateMiniBarUi();
             a.play().then(() => {
+                lastAudioCurrentTime = a.currentTime;
                 saveState({
                     playing: true,
                     closed: false,
+                    reconnecting: false,
                     songTitle: 'Live-Übertragung • ' + (name || 'Radio')
                 });
                 updateMiniBarUi();
                 pollIcyTitle();
                 ensureIcyPolling();
             }).catch(() => {
-                saveState({ playing: false });
+                // Falls Netzwerk beim Start kurz weg ist, automatisch weiterversuchen
+                scheduleStreamReconnect(2500);
                 updateMiniBarUi();
             });
         },
@@ -1980,27 +2176,33 @@ if (
             const a = getAudioEl();
             const st = getState();
             if (!a || !st || !st.streamUrl) return;
-            if (a.paused) {
-                if (!a.src || a.src !== st.streamUrl) {
-                    a.src = st.streamUrl;
-                }
+            bindAudioRecoveryEvents(a);
+            ensureStreamWatchdog();
+            if (a.paused && !st.reconnecting) {
+                clearReconnectSchedule();
+                a.src = st.streamUrl;
                 a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
                 a.muted = Boolean(st.muted);
+                saveState({ playing: true, closed: false, reconnecting: false });
                 a.play().then(() => {
-                    saveState({ playing: true, closed: false });
+                    lastAudioCurrentTime = a.currentTime;
                     updateMiniBarUi();
                     ensureIcyPolling();
-                }).catch(() => {});
+                }).catch(() => {
+                    scheduleStreamReconnect(2500);
+                });
             } else {
+                clearReconnectSchedule();
                 a.pause();
-                saveState({ playing: false });
+                saveState({ playing: false, reconnecting: false });
                 updateMiniBarUi();
             }
         },
         pause: () => {
+            clearReconnectSchedule();
             const a = getAudioEl();
             if (a && !a.paused) a.pause();
-            saveState({ playing: false });
+            saveState({ playing: false, reconnecting: false });
             updateMiniBarUi();
         },
         setVolume: (val) => {
@@ -2022,6 +2224,7 @@ if (
             return a.muted;
         },
         stopAndClose: () => {
+            clearReconnectSchedule();
             const a = getAudioEl();
             if (a) {
                 a.pause();
@@ -2032,7 +2235,7 @@ if (
                 clearInterval(icyTimer);
                 icyTimer = null;
             }
-            saveState({ playing: false, closed: true });
+            saveState({ playing: false, closed: true, reconnecting: false });
             updateMiniBarUi();
             if (typeof updateRadioUiPlaying === 'function') {
                 updateRadioUiPlaying(false);
@@ -2111,11 +2314,16 @@ if (
         updateMiniBarUi();
         if (st.playing) {
             const a = getAudioEl();
+            if (a) {
+                bindAudioRecoveryEvents(a);
+                ensureStreamWatchdog();
+            }
             if (a && a.paused) {
                 a.src = st.streamUrl;
                 a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
                 a.muted = Boolean(st.muted);
                 a.play().then(() => {
+                    lastAudioCurrentTime = a.currentTime;
                     updateMiniBarUi();
                     ensureIcyPolling();
                     if (typeof syncRadioDockFromState === 'function') {

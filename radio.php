@@ -505,7 +505,7 @@ require_once __DIR__ . '/includes/header.php';
                     <span id="radioSleepCountdown" class="hidden text-[11px] font-mono font-bold text-amber-300"></span>
                 </div>
             </div>
-            <audio id="globalRadioAudio" preload="none" crossorigin="anonymous"></audio>
+            <audio id="globalRadioAudio" preload="none"></audio>
         </div>
     </div>
 
@@ -954,9 +954,22 @@ function syncRadioDockFromState() {
         muteBtn.textContent = (st.muted || st.volume === 0) ? '🔇' : '🔊';
     }
     const audio = getEffectiveRadioAudio();
-    const isActuallyPlaying = Boolean(st.playing && audio && !audio.paused);
+    const isActuallyPlaying = Boolean(st.playing && ((audio && !audio.paused) || st.reconnecting));
     updateRadioUiPlaying(isActuallyPlaying || Boolean(st.playing));
 }
+
+window.addEventListener('online', () => {
+    const host = getSharedRadioHost();
+    const st = readSavedRadioState();
+    if (st && st.playing && !st.closed && st.streamUrl) {
+        if (host && typeof host.playStation === 'function') {
+            const a = getEffectiveRadioAudio();
+            if (!a || a.paused || a.ended || a.error) {
+                host.playStation(st.name || 'Live-Radio', st.streamUrl, st.genre || 'Live');
+            }
+        }
+    }
+});
 
 window.addEventListener('DOMContentLoaded', () => {
     syncRadioDockFromState();
