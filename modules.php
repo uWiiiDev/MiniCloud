@@ -631,6 +631,16 @@ require_once __DIR__ . '/includes/header.php';
             <!-- Rechts: Schnellsuche + Ansichts-Umschalter + Angeheftet-Status -->
             <div class="flex flex-wrap items-center gap-2">
                 <!-- Schnellsuche -->
+                <?php if (isAdmin()): ?>
+                    <a
+                        href="plugins.php"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors"
+                        title="Module von GitHub nachladen, aktualisieren oder verwalten"
+                    >
+                        <span>🛒</span>
+                        <span>App-Store &amp; Plugins</span>
+                    </a>
+                <?php endif; ?>
                 <div class="relative flex-1 sm:flex-initial sm:w-60">
                     <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 pointer-events-none text-xs">🔍</span>
                     <input

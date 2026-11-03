@@ -2342,6 +2342,17 @@ $localSnapshots  = getLocalAppSnapshots();
     </button>
     <?php endif; ?>
 
+    <?php if (isFullAdmin()): ?>
+    <a
+        href="plugins.php"
+        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all"
+        title="MiniCloud App-Store öffnen: Einzelne Module von GitHub nachladen, aktualisieren oder verwalten"
+    >
+        <span>🧩</span>
+        <span>App-Store &amp; Plugins</span>
+    </a>
+    <?php endif; ?>
+
     <button
         type="button"
         data-admin-tab-btn="all"

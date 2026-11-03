@@ -98,6 +98,9 @@ $catalog = [
     ['title' => 'Live-Mentimeter',                'sub' => 'Interaktive Wortwolken & Live-Votings',       'icon' => '🎤', 'cat' => 'Modul', 'url' => 'menti.php',                'kw' => 'mentimeter präsentation wortwolke', 'setting' => 'enable_menti'],
     ['title' => 'Papierkorb',                     'sub' => 'Gelöschte Dateien wiederherstellen',          'icon' => '🗑️', 'cat' => 'System', 'url' => 'trash.php',                'kw' => 'papierkorb gelöscht wiederherstellen'],
 ];
+if (isAdmin()) {
+    $catalog[] = ['title' => 'App-Store & Plugins', 'sub' => 'Module von GitHub nachladen, aktualisieren & verwalten', 'icon' => '🧩', 'cat' => 'System', 'url' => 'plugins.php', 'kw' => 'plugins app store module nachladen github installieren deinstallieren'];
+}
 
 $matchedModules = [];
 $searchTerms    = splitSearchTerms($q, 8);
@@ -171,7 +174,7 @@ if ($qLow === '' || empty($searchTerms)) {
             $openParams['preview_id'] = $fId;
             $openUrl = 'index.php?' . http_build_query($openParams);
 
-            $officeType = !$isEnc ? getOfficeEditorType($name) : null;
+            $officeType = (!$isEnc && ($appSettings['enable_office'] ?? '1') === '1') ? getOfficeEditorType($name) : null;
             $officeUrl  = $officeType !== null ? ('office.php?id=' . $fId) : '';
 
             $locLabel = $fp !== '' ? (' · 📁 ' . $fp) : ' · 🏠 Hauptverzeichnis';
@@ -382,7 +385,7 @@ try {
         $openParams['preview_id'] = $fId;
         $openUrl = 'index.php?' . http_build_query($openParams);
 
-        $officeType = !$isEnc ? getOfficeEditorType($name) : null;
+        $officeType = (!$isEnc && ($appSettings['enable_office'] ?? '1') === '1') ? getOfficeEditorType($name) : null;
         $officeUrl  = $officeType !== null ? ('office.php?id=' . $fId) : '';
 
         $snippet = '';

@@ -690,6 +690,8 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_polls'                  => '1',
         'enable_menti'                  => '1',
         'enable_passwords'              => '1',
+        'enable_authenticator'          => '1',
+        'enable_whiteboard'             => '1',
         'enable_pdf_tools'              => '1',
         'enable_projects'               => '1',
         'enable_office'                 => '1',
@@ -773,6 +775,59 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         || strcasecmp(trim($defaults['github_repo']), 'uWiiiMiniCloud/MiniCloud') === 0
     ) {
         $defaults['github_repo'] = 'uWiiiDev/MiniCloud';
+    }
+
+    // Plugin-System: Falls eine Modul-PHP-Datei physisch nicht installiert ist (z.B. im files-only Zweig
+    // oder nach Deinstallation über plugins.php), wird das Modul im Menü/System automatisch ausgeblendet.
+    $rootDir = dirname(__DIR__);
+    $moduleFileMap = [
+        'enable_dashboard'     => 'dashboard.php',
+        'enable_office'        => 'office.php',
+        'enable_calendar'      => 'calendar.php',
+        'enable_chat'          => 'messages.php',
+        'enable_tasks'         => 'tasks.php',
+        'enable_notes'         => 'notes.php',
+        'enable_contacts'      => 'contacts.php',
+        'enable_polls'         => 'polls.php',
+        'enable_menti'         => 'menti.php',
+        'enable_passwords'     => 'passwords.php',
+        'enable_authenticator' => 'authenticator.php',
+        'enable_whiteboard'    => 'whiteboard.php',
+        'enable_pdf_tools'     => 'pdf_tools.php',
+        'enable_projects'      => 'projects.php',
+        'enable_assistant'     => 'assistant.php',
+        'enable_ebooks'        => 'ebooks.php',
+        'enable_games'         => 'games.php',
+        'enable_mindmap'       => 'mindmap.php',
+        'enable_budget'        => 'budget.php',
+        'enable_split'         => 'split.php',
+        'enable_club'          => 'club.php',
+        'enable_gallery'       => 'gallery.php',
+        'enable_forms'         => 'forms.php',
+        'enable_music'         => 'music.php',
+        'enable_calculator'    => 'calculator.php',
+        'enable_toolbox'       => 'toolbox.php',
+        'enable_video_studio'  => 'video_studio.php',
+        'enable_surflog'       => 'surflog.php',
+        'enable_cinema'        => 'cinema.php',
+        'enable_translator'    => 'translate.php',
+        'enable_bundesliga'    => 'bundesliga.php',
+        'enable_tv_radio'      => 'tv_radio.php',
+        'enable_radio'         => 'radio.php',
+        'enable_news'          => 'news.php',
+        'enable_markets'       => 'markets.php',
+        'enable_maps'          => 'maps.php',
+        'enable_weather'       => 'weather.php',
+        'enable_traffic'       => 'traffic.php',
+        'enable_fuel'          => 'fuel.php',
+        'enable_transit'       => 'transit.php',
+        'enable_alerts'        => 'alerts.php',
+        'enable_podcasts'      => 'podcasts.php',
+    ];
+    foreach ($moduleFileMap as $settingKey => $scriptFile) {
+        if (!is_file($rootDir . '/' . $scriptFile)) {
+            $defaults[$settingKey] = '0';
+        }
     }
 
     $GLOBALS['_mc_app_settings_cache'] = $defaults;
@@ -3029,7 +3084,7 @@ function ensureModuleUsageSchema(PDO $pdo): void
  */
 function getModuleStatsCatalog(): array
 {
-    return [
+    $all = [
         'files' => [
             'icon'        => '📂',
             'label'       => 'Datei-Manager & Ordner',
@@ -3325,6 +3380,13 @@ function getModuleStatsCatalog(): array
             'color'       => 'bg-sky-600',
         ],
     ];
+    $rootDir = dirname(__DIR__);
+    return array_filter($all, static function (array $item, string $key) use ($rootDir): bool {
+        if ($key === 'files' || $key === 'webdav') {
+            return true;
+        }
+        return is_file($rootDir . '/' . ltrim($item['url'], '/'));
+    }, ARRAY_FILTER_USE_BOTH);
 }
 
 /**
