@@ -442,6 +442,7 @@ SVG;
 
 // 5a) Lokaler Kachel-Endpunkt (?action=tile&style=osm&z=6&x=33&y=21)
 if (isset($_GET['action']) && $_GET['action'] === 'tile') {
+    @session_write_close();
     $style = preg_replace('/[^a-z0-9_-]/i', '', (string)($_GET['style'] ?? 'osm')) ?: 'osm';
     $z = max(0, min(19, (int)($_GET['z'] ?? 6)));
     $maxCoord = max(1, (1 << $z) - 1);
@@ -617,6 +618,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'offline_search') {
 
 // 5b) Eigenes Lageplan-/Gebäudeplan-Bild ausliefern (?action=floorplan_img&id=...)
 if (isset($_GET['action']) && $_GET['action'] === 'floorplan_img') {
+    @session_write_close();
     $fpId = (int)($_GET['id'] ?? 0);
     $stmtFp = $pdo->prepare('SELECT * FROM map_floorplans WHERE id = :id AND (user_id = :uid OR is_shared = 1) LIMIT 1');
     $stmtFp->execute([':id' => $fpId, ':uid' => $userId]);
@@ -631,6 +633,777 @@ if (isset($_GET['action']) && $_GET['action'] === 'floorplan_img') {
         }
     }
     http_response_code(404);
+    exit;
+}
+
+// 5c) Live-Regenradar Metadaten (RainViewer Radar-Zeitleiste + Open-Meteo Live-Wetter für DACH-Städte) (?action=rain_radar_meta)
+if (isset($_GET['action']) && $_GET['action'] === 'rain_radar_meta') {
+    @session_write_close();
+    header('Content-Type: application/json; charset=UTF-8');
+
+    $radarCacheDir = $tilesCacheDir . '/radar';
+    if (!is_dir($radarCacheDir)) {
+        @mkdir($radarCacheDir, 0775, true);
+    }
+
+    // 1. RainViewer Radar-Zeitstempel laden (3 Minuten Cache)
+    $metaCacheFile = $radarCacheDir . '/weather_maps_meta.json';
+    $rawMeta = null;
+    if (is_file($metaCacheFile) && (time() - (int)@filemtime($metaCacheFile)) < 180) {
+        $rawMeta = @file_get_contents($metaCacheFile);
+    }
+    if (!is_string($rawMeta) || $rawMeta === '') {
+        $ctx = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'timeout' => 5.0,
+                'header'  => "User-Agent: MiniCloud-RadarProxy/1.0\r\nAccept: application/json\r\n",
+            ],
+            'ssl' => [
+                'verify_peer'      => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+        $fetched = @file_get_contents('https://api.rainviewer.com/public/weather-maps.json', false, $ctx);
+        if (is_string($fetched) && $fetched !== '') {
+            $rawMeta = $fetched;
+            @file_put_contents($metaCacheFile, $rawMeta);
+        } elseif (is_file($metaCacheFile)) {
+            $rawMeta = @file_get_contents($metaCacheFile);
+        }
+    }
+
+    $frames = [];
+    $radarHost = 'https://tilecache.rainviewer.com';
+    if (is_string($rawMeta) && $rawMeta !== '') {
+        $parsed = @json_decode($rawMeta, true);
+        if (is_array($parsed)) {
+            if (!empty($parsed['host']) && is_string($parsed['host'])) {
+                $radarHost = rtrim($parsed['host'], '/');
+            }
+            $past = $parsed['radar']['past'] ?? [];
+            $nowcast = $parsed['radar']['nowcast'] ?? [];
+            if (is_array($past)) {
+                foreach ($past as $f) {
+                    if (!empty($f['time']) && !empty($f['path'])) {
+                        $ts = (int)$f['time'];
+                        $frames[] = [
+                            'time'     => $ts,
+                            'path'     => (string)$f['path'],
+                            'label'    => date('H:i', $ts) . ' Uhr',
+                            'forecast' => false,
+                        ];
+                    }
+                }
+            }
+            if (is_array($nowcast)) {
+                foreach ($nowcast as $f) {
+                    if (!empty($f['time']) && !empty($f['path'])) {
+                        $ts = (int)$f['time'];
+                        $diffMin = max(5, (int)round(($ts - time()) / 60));
+                        $frames[] = [
+                            'time'     => $ts,
+                            'path'     => (string)$f['path'],
+                            'label'    => date('H:i', $ts) . ' Uhr (+' . $diffMin . ' Min. Prognose)',
+                            'forecast' => true,
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Live-Wetter-Pins (Temperatur, Wetterzustand, Wind & Niederschlag) für 14 DACH-Stationen (10 Min. Cache)
+    $stations = [
+        ['name' => 'Hamburg',   'lat' => 53.5511, 'lng' => 9.9937],
+        ['name' => 'Berlin',    'lat' => 52.5200, 'lng' => 13.4050],
+        ['name' => 'Hannover',  'lat' => 52.3759, 'lng' => 9.7320],
+        ['name' => 'Köln',      'lat' => 50.9375, 'lng' => 6.9603],
+        ['name' => 'Frankfurt', 'lat' => 50.1109, 'lng' => 8.6821],
+        ['name' => 'Leipzig',   'lat' => 51.3397, 'lng' => 12.3731],
+        ['name' => 'Dresden',   'lat' => 51.0504, 'lng' => 13.7373],
+        ['name' => 'Nürnberg',  'lat' => 49.4521, 'lng' => 11.0767],
+        ['name' => 'Stuttgart', 'lat' => 48.7758, 'lng' => 9.1829],
+        ['name' => 'Freiburg',  'lat' => 47.9990, 'lng' => 7.8421],
+        ['name' => 'München',   'lat' => 48.1351, 'lng' => 11.5820],
+        ['name' => 'Rostock',   'lat' => 54.0924, 'lng' => 12.0991],
+        ['name' => 'Wien',      'lat' => 48.2082, 'lng' => 16.3738],
+        ['name' => 'Zürich',    'lat' => 47.3769, 'lng' => 8.5417],
+    ];
+
+    $wxCacheFile = $radarCacheDir . '/cities_live_wx.json';
+    $cityWeather = [];
+    if (is_file($wxCacheFile) && (time() - (int)@filemtime($wxCacheFile)) < 600) {
+        $cachedWx = @json_decode((string)@file_get_contents($wxCacheFile), true);
+        if (is_array($cachedWx)) {
+            $cityWeather = $cachedWx;
+        }
+    }
+
+    if (empty($cityWeather)) {
+        $lats = implode(',', array_map(static fn($s) => (string)$s['lat'], $stations));
+        $lngs = implode(',', array_map(static fn($s) => (string)$s['lng'], $stations));
+        $wxUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' . $lats
+               . '&longitude=' . $lngs
+               . '&current=temperature_2m,precipitation,weather_code,wind_speed_10m&timezone=Europe%2FBerlin';
+        $ctxWx = stream_context_create([
+            'http' => ['method' => 'GET', 'timeout' => 4.5, 'header' => "User-Agent: MiniCloud-Weather/1.0\r\n"],
+        ]);
+        $rawWx = @file_get_contents($wxUrl, false, $ctxWx);
+        $wxArr = is_string($rawWx) ? @json_decode($rawWx, true) : null;
+        if (is_array($wxArr)) {
+            $wxList = isset($wxArr[0]) ? $wxArr : [$wxArr];
+            foreach ($stations as $i => $st) {
+                $cur = $wxList[$i]['current'] ?? [];
+                $wCode = (int)($cur['weather_code'] ?? 0);
+                $icon = match (true) {
+                    $wCode === 0 => '☀️',
+                    in_array($wCode, [1, 2], true) => '🌤️',
+                    $wCode === 3 => '☁️',
+                    in_array($wCode, [45, 48], true) => '🌫️',
+                    in_array($wCode, [51, 53, 55, 56, 57], true) => '🌦️',
+                    in_array($wCode, [61, 63, 65, 66, 67, 80, 81, 82], true) => '🌧️',
+                    in_array($wCode, [71, 73, 75, 77, 85, 86], true) => '❄️',
+                    $wCode >= 95 => '⛈️',
+                    default => '⛅',
+                };
+                $desc = match (true) {
+                    $wCode === 0 => 'Klar & sonnig',
+                    in_array($wCode, [1, 2], true) => 'Leicht bewölkt',
+                    $wCode === 3 => 'Bedeckt',
+                    in_array($wCode, [45, 48], true) => 'Nebel',
+                    in_array($wCode, [51, 53, 55], true) => 'Nieselregen',
+                    in_array($wCode, [61, 63, 80, 81], true) => 'Regen',
+                    in_array($wCode, [65, 82], true) => 'Starkregen',
+                    in_array($wCode, [71, 73, 75, 85, 86], true) => 'Schneefall',
+                    $wCode >= 95 => 'Gewitter / Sturm',
+                    default => 'Wechselhaft',
+                };
+                $cityWeather[] = [
+                    'name'   => $st['name'],
+                    'lat'    => $st['lat'],
+                    'lng'    => $st['lng'],
+                    'temp'   => isset($cur['temperature_2m']) ? round((float)$cur['temperature_2m'], 1) : null,
+                    'precip' => isset($cur['precipitation']) ? round((float)$cur['precipitation'], 1) : 0.0,
+                    'wind'   => isset($cur['wind_speed_10m']) ? round((float)$cur['wind_speed_10m'], 0) : 0,
+                    'icon'   => $icon,
+                    'desc'   => $desc,
+                ];
+            }
+            @file_put_contents($wxCacheFile, json_encode($cityWeather, JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    echo json_encode([
+        'ok'     => !empty($frames),
+        'host'   => $radarHost,
+        'frames' => $frames,
+        'cities' => $cityWeather,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 5d) Datenschutzfreundlicher Regenradar-Kachel-Proxy mit lokalem Kurzzeit-Cache (?action=rain_radar_tile&path=...&z=...&x=...&y=...)
+if (isset($_GET['action']) && $_GET['action'] === 'rain_radar_tile') {
+    @session_write_close();
+    $path = trim((string)($_GET['path'] ?? ''));
+    $z = max(0, min(10, (int)($_GET['z'] ?? 6)));
+    $maxCoord = max(1, (1 << $z) - 1);
+    $x = max(0, min($maxCoord, (int)($_GET['x'] ?? 0)));
+    $y = max(0, min($maxCoord, (int)($_GET['y'] ?? 0)));
+
+    // 1x1 transparentes PNG als Fallback bei wolken-/niederschlagsfreien Kacheln
+    $transparentPng = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+
+    if (!preg_match('#^/v2/radar/[a-zA-Z0-9_/-]+$#', $path)) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=300');
+        echo $transparentPng;
+        exit;
+    }
+
+    $radarCacheDir = $tilesCacheDir . '/radar';
+    if (!is_dir($radarCacheDir)) {
+        @mkdir($radarCacheDir, 0775, true);
+    }
+
+    // Gelegentliche Bereinigung alter Radar-Kacheln (> 3 Stunden)
+    if (random_int(1, 80) === 1) {
+        $nowTs = time();
+        foreach (glob($radarCacheDir . '/rt_*.png') ?: [] as $oldTile) {
+            if (($nowTs - (int)@filemtime($oldTile)) > 10800) {
+                @unlink($oldTile);
+            }
+        }
+    }
+
+    $cacheKey = 'rt_' . substr(md5($path), 0, 12) . '_' . $z . '_' . $x . '_' . $y . '.png';
+    $cacheFile = $radarCacheDir . '/' . $cacheKey;
+
+    if (is_file($cacheFile) && filesize($cacheFile) > 40) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=1800');
+        header('X-MiniCloud-Radar-Cache: HIT');
+        readfile($cacheFile);
+        exit;
+    }
+
+    // RainViewer Tile-URL: {host}{path}/256/{z}/{x}/{y}/2/1_1.png (Farbschema 2 = Universal Blue, 1_1 = Glättung + Schnee)
+    $remoteUrl = 'https://tilecache.rainviewer.com' . $path . '/256/' . $z . '/' . $x . '/' . $y . '/2/1_1.png';
+    $ctx = stream_context_create([
+        'http' => [
+            'method'  => 'GET',
+            'timeout' => 4.5,
+            'header'  => "User-Agent: MiniCloud-RadarProxy/1.0\r\nAccept: image/png,image/*\r\n",
+        ],
+    ]);
+    $imgData = @file_get_contents($remoteUrl, false, $ctx);
+    if (is_string($imgData) && strlen($imgData) > 60 && str_starts_with($imgData, "\x89PNG")) {
+        @file_put_contents($cacheFile, $imgData);
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=1800');
+        header('X-MiniCloud-Radar-Cache: MISS');
+        echo $imgData;
+        exit;
+    }
+
+    header('Content-Type: image/png');
+    header('Cache-Control: public, max-age=600');
+    echo $transparentPng;
+    exit;
+}
+
+// 5e) Live-Umkreis-Finder rund um Standort / Kartenmitte (?action=poi_radius_search&lat=...&lng=...&radius=...&category=...)
+if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
+    @session_write_close();
+    header('Content-Type: application/json; charset=UTF-8');
+
+    $lat = max(-85.0, min(85.0, (float)($_GET['lat'] ?? 51.1657)));
+    $lng = max(-180.0, min(180.0, (float)($_GET['lng'] ?? 10.4515)));
+    $radiusKm = max(1.0, min(30.0, (float)($_GET['radius'] ?? 5.0)));
+    $radiusMeters = (int)round($radiusKm * 1000);
+    $category = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_GET['category'] ?? 'fuel'))) ?: 'fuel';
+
+    $catMeta = [
+        'fuel'        => ['label' => 'Tankstellen',              'icon' => '⛽', 'color' => '#ea580c', 'place_cat' => 'car'],
+        'charging'    => ['label' => 'E-Ladesäulen',             'icon' => '🔌', 'color' => '#16a34a', 'place_cat' => 'car'],
+        'parking'     => ['label' => 'Parkplätze & Parkhäuser',  'icon' => '🅿️', 'color' => '#2563eb', 'place_cat' => 'car'],
+        'atm'         => ['label' => 'Geldautomaten & Banken',   'icon' => '🏧', 'color' => '#0284c7', 'place_cat' => 'office'],
+        'supermarket' => ['label' => 'Supermärkte & Bäckereien', 'icon' => '🛒', 'color' => '#059669', 'place_cat' => 'favorite'],
+        'pharmacy'    => ['label' => 'Apotheken & Kliniken',     'icon' => '💊', 'color' => '#dc2626', 'place_cat' => 'emergency'],
+        'aed'         => ['label' => 'Defibrillatoren (AED)',    'icon' => '❤️', 'color' => '#e11d48', 'place_cat' => 'emergency'],
+        'food'        => ['label' => 'Restaurants & Cafés',      'icon' => '🍽️', 'color' => '#d97706', 'place_cat' => 'food'],
+    ];
+    if (!isset($catMeta[$category])) {
+        $category = 'fuel';
+    }
+    $meta = $catMeta[$category];
+
+    $poiCacheDir = $tilesCacheDir . '/poi_cache';
+    if (!is_dir($poiCacheDir)) {
+        @mkdir($poiCacheDir, 0775, true);
+    }
+
+    $cacheFile = sprintf(
+        '%s/poi_%s_%.3f_%.3f_%d.json',
+        $poiCacheDir,
+        $category,
+        round($lat, 3),
+        round($lng, 3),
+        $radiusMeters
+    );
+
+    $overpassElements = null;
+    $sourceLabel = 'OpenStreetMap Live (Overpass-Proxy)';
+
+    if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < 900) {
+        $cachedJson = @file_get_contents($cacheFile);
+        $decoded = is_string($cachedJson) ? @json_decode($cachedJson, true) : null;
+        if (is_array($decoded)) {
+            $overpassElements = $decoded;
+            $sourceLabel = 'Lokaler MiniCloud POI-Cache';
+        }
+    }
+
+    if ($overpassElements === null) {
+        $around = sprintf('(around:%d,%.5f,%.5f)', $radiusMeters, $lat, $lng);
+        $queryBody = match ($category) {
+            'fuel'        => "nwr[\"amenity\"=\"fuel\"]$around;",
+            'charging'    => "nwr[\"amenity\"=\"charging_station\"]$around;",
+            'parking'     => "nwr[\"amenity\"=\"parking\"][\"access\"!=\"private\"]$around;",
+            'atm'         => "nwr[\"amenity\"~\"^(atm|bank)$\"]$around;",
+            'supermarket' => "nwr[\"shop\"~\"^(supermarket|convenience|farm|bakery)$\"]$around;",
+            'pharmacy'    => "nwr[\"amenity\"~\"^(pharmacy|hospital|doctors)$\"]$around;",
+            'aed'         => "nwr[\"emergency\"=\"defibrillator\"]$around;",
+            'food'        => "nwr[\"amenity\"~\"^(restaurant|cafe|biergarten|fast_food)$\"]$around;",
+            default       => "nwr[\"amenity\"=\"fuel\"]$around;",
+        };
+
+        $overpassQl = "[out:json][timeout:10];(" . $queryBody . ");out center 100;";
+        $endpoints = [
+            'https://overpass-api.de/api/interpreter',
+            'https://overpass.kumi.systems/api/interpreter',
+        ];
+
+        foreach ($endpoints as $ep) {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'  => 'POST',
+                    'timeout' => 8.5,
+                    'header'  => "Content-Type: application/x-www-form-urlencoded\r\nUser-Agent: MiniCloud-Maps-Umkreisfinder/1.0\r\n",
+                    'content' => http_build_query(['data' => $overpassQl]),
+                ],
+            ]);
+            $resp = @file_get_contents($ep, false, $ctx);
+            if (is_string($resp) && $resp !== '') {
+                $json = @json_decode($resp, true);
+                if (is_array($json) && isset($json['elements']) && is_array($json['elements'])) {
+                    $overpassElements = $json['elements'];
+                    @file_put_contents($cacheFile, json_encode($overpassElements, JSON_UNESCAPED_UNICODE));
+                    break;
+                }
+            }
+        }
+    }
+
+    // Himmelsrichtung berechnen (N, NO, O, SO, S, SW, W, NW)
+    $calcCompass = static function (float $lat1, float $lon1, float $lat2, float $lon2): string {
+        $dLon = deg2rad($lon2 - $lon1);
+        $y = sin($dLon) * cos(deg2rad($lat2));
+        $x = cos(deg2rad($lat1)) * sin(deg2rad($lat2)) - sin(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos($dLon);
+        $brng = fmod((rad2deg(atan2($y, $x)) + 360.0), 360.0);
+        $dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+        return $dirs[(int)round($brng / 45.0) % 8];
+    };
+
+    $pois = [];
+    $seenCoords = [];
+
+    if (is_array($overpassElements)) {
+        foreach ($overpassElements as $el) {
+            $pLat = isset($el['lat']) ? (float)$el['lat'] : (isset($el['center']['lat']) ? (float)$el['center']['lat'] : null);
+            $pLng = isset($el['lon']) ? (float)$el['lon'] : (isset($el['center']['lon']) ? (float)$el['center']['lon'] : null);
+            if ($pLat === null || $pLng === null) {
+                continue;
+            }
+            $coordKey = sprintf('%.4f_%.4f', $pLat, $pLng);
+            if (isset($seenCoords[$coordKey])) {
+                continue;
+            }
+            $seenCoords[$coordKey] = true;
+
+            $tags = is_array($el['tags'] ?? null) ? $el['tags'] : [];
+            $name = trim((string)($tags['name'] ?? $tags['brand'] ?? $tags['operator'] ?? ''));
+            if ($name === '') {
+                $name = match ($category) {
+                    'fuel'        => 'Tankstelle',
+                    'charging'    => 'E-Ladestation',
+                    'parking'     => (!empty($tags['parking']) && $tags['parking'] === 'multi-storey') ? 'Parkhaus' : 'Parkplatz',
+                    'atm'         => (($tags['amenity'] ?? '') === 'bank') ? 'Bankfiliale' : 'Geldautomat (ATM)',
+                    'supermarket' => (($tags['shop'] ?? '') === 'bakery') ? 'Bäckerei' : ((($tags['shop'] ?? '') === 'farm') ? 'Hofladen' : 'Supermarkt'),
+                    'pharmacy'    => (($tags['amenity'] ?? '') === 'hospital') ? 'Krankenhaus / Klinik' : 'Apotheke',
+                    'aed'         => 'Defibrillator (AED)',
+                    'food'        => 'Restaurant / Café',
+                    default       => $meta['label'],
+                };
+            }
+
+            $brand = trim((string)($tags['brand'] ?? $tags['operator'] ?? ''));
+            if ($brand !== '' && stripos($name, $brand) === false) {
+                $name .= ' (' . $brand . ')';
+            }
+
+            // Adresse zusammensetzen
+            $street = trim((string)($tags['addr:street'] ?? '') . ' ' . (string)($tags['addr:housenumber'] ?? ''));
+            $city   = trim((string)($tags['addr:postcode'] ?? '') . ' ' . (string)($tags['addr:city'] ?? ''));
+            $addrParts = array_values(array_filter([$street, $city]));
+            $address = implode(', ', $addrParts);
+            if ($address === '' && !empty($tags['defibrillator:location'])) {
+                $address = (string)$tags['defibrillator:location'];
+            } elseif ($address === '' && !empty($tags['description'])) {
+                $address = mb_substr((string)$tags['description'], 0, 90);
+            }
+
+            // Zusatzinfos (Kraftstoffe, Ladeleistung, Küche, Öffnungszeiten, Gebühren)
+            $extras = [];
+            if ($category === 'fuel') {
+                if (($tags['fuel:diesel'] ?? '') === 'yes') $extras[] = 'Diesel';
+                if (($tags['fuel:e10'] ?? '') === 'yes' || ($tags['fuel:octane_95'] ?? '') === 'yes') $extras[] = 'Super E5/E10';
+                if (($tags['fuel:lpg'] ?? '') === 'yes') $extras[] = 'LPG';
+            } elseif ($category === 'charging') {
+                if (!empty($tags['capacity'])) $extras[] = 'Plätze: ' . $tags['capacity'];
+                if (!empty($tags['socket:type2'])) $extras[] = 'Typ 2';
+                if (!empty($tags['socket:type2_combo'])) $extras[] = 'CCS Schnelllader';
+            } elseif ($category === 'parking') {
+                if (!empty($tags['capacity'])) $extras[] = $tags['capacity'] . ' Stellplätze';
+                if (($tags['fee'] ?? '') === 'no') $extras[] = 'Kostenlos';
+                elseif (($tags['fee'] ?? '') === 'yes') $extras[] = 'Gebührenpflichtig';
+            } elseif ($category === 'food' && !empty($tags['cuisine'])) {
+                $extras[] = 'Küche: ' . str_replace(';', ', ', (string)$tags['cuisine']);
+            }
+            if (!empty($tags['opening_hours'])) {
+                $extras[] = '🕒 ' . mb_substr((string)$tags['opening_hours'], 0, 50);
+            }
+
+            $distKm = haversineDistanceKm($lat, $lng, $pLat, $pLng);
+            if ($distKm > $radiusKm * 1.15) {
+                continue;
+            }
+
+            $pois[] = [
+                'title'      => $name,
+                'address'    => $address,
+                'info'       => implode(' · ', $extras),
+                'phone'      => (string)($tags['phone'] ?? $tags['contact:phone'] ?? ''),
+                'website'    => (string)($tags['website'] ?? $tags['contact:website'] ?? ''),
+                'lat'        => round($pLat, 6),
+                'lng'        => round($pLng, 6),
+                'dist_km'    => round($distKm, 2),
+                'direction'  => $calcCompass($lat, $lng, $pLat, $pLng),
+                'icon'       => $meta['icon'],
+                'color'      => $meta['color'],
+                'place_cat'  => $meta['place_cat'],
+            ];
+        }
+    }
+
+    // Offline-Fallback: Falls Air-Gap / kein Internet verfügbar ist, auch gespeicherte Orte & deutsche Städte im Umkreis einbeziehen
+    if (empty($pois)) {
+        $sourceLabel = 'Lokales Offline-Verzeichnis (Intranet-Fallback)';
+        foreach ($places as $pl) {
+            $d = haversineDistanceKm($lat, $lng, (float)$pl['lat'], (float)$pl['lng']);
+            if ($d <= $radiusKm) {
+                $pois[] = [
+                    'title'     => (string)$pl['title'],
+                    'address'   => (string)$pl['address'],
+                    'info'      => 'Eigener gespeicherter Ort',
+                    'phone'     => '',
+                    'website'   => '',
+                    'lat'       => (float)$pl['lat'],
+                    'lng'       => (float)$pl['lng'],
+                    'dist_km'   => round($d, 2),
+                    'direction' => $calcCompass($lat, $lng, (float)$pl['lat'], (float)$pl['lng']),
+                    'icon'      => (string)$pl['icon'],
+                    'color'     => (string)$pl['color'],
+                    'place_cat' => (string)$pl['category'],
+                ];
+            }
+        }
+    }
+
+    usort($pois, static fn(array $a, array $b): int => $a['dist_km'] <=> $b['dist_km']);
+    $pois = array_slice($pois, 0, 80);
+
+    echo json_encode([
+        'ok'       => true,
+        'category' => $category,
+        'label'    => $meta['label'],
+        'icon'     => $meta['icon'],
+        'color'    => $meta['color'],
+        'radius'   => $radiusKm,
+        'source'   => $sourceLabel,
+        'count'    => count($pois),
+        'results'  => $pois,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// 5f) Sicherheits-Landkarte: Geo-IP-Herkunft aller Logins, Sitzungen & abgewehrten Login-Fehlversuche (?action=security_map_data)
+if (isset($_GET['action']) && $_GET['action'] === 'security_map_data') {
+    @session_write_close();
+    header('Content-Type: application/json; charset=UTF-8');
+
+    $canSeeAllSecurity = isAdmin() || (function_exists('hasAdminPermission') && hasAdminPermission('system'));
+
+    // 1. Audit-Logs aus der Datenbank auslesen (Logins, Fehlversuche & sicherheitsrelevante Zugriffe)
+    $ipBuckets = [];
+    try {
+        if ($canSeeAllSecurity) {
+            $stmtSec = $pdo->query(
+                "SELECT `username`, `event_type`, `description`, `ip_address`, `created_at`
+                 FROM `audit_logs`
+                 ORDER BY `id` DESC
+                 LIMIT 600"
+            );
+        } else {
+            $stmtSec = $pdo->prepare(
+                "SELECT `username`, `event_type`, `description`, `ip_address`, `created_at`
+                 FROM `audit_logs`
+                 WHERE `user_id` = :uid OR `username` = :uname
+                 ORDER BY `id` DESC
+                 LIMIT 300"
+            );
+            $stmtSec->execute([
+                ':uid'   => $userId,
+                ':uname' => (string)($_SESSION['username'] ?? ''),
+            ]);
+        }
+
+        foreach ($stmtSec->fetchAll() as $row) {
+            $ipRaw = trim((string)($row['ip_address'] ?? ''));
+            if ($ipRaw === '') {
+                $ipRaw = 'lokal';
+            }
+            if (!isset($ipBuckets[$ipRaw])) {
+                $ipBuckets[$ipRaw] = [
+                    'masked_ip'     => $ipRaw,
+                    'success_count' => 0,
+                    'failed_count'  => 0,
+                    'other_count'   => 0,
+                    'users'         => [],
+                    'first_seen'    => (string)$row['created_at'],
+                    'last_seen'     => (string)$row['created_at'],
+                    'events'        => [],
+                ];
+            }
+            $etype = strtolower((string)$row['event_type']);
+            if ($etype === 'login_success') {
+                $ipBuckets[$ipRaw]['success_count']++;
+            } elseif (str_contains($etype, 'fail') || str_contains($etype, 'block') || str_contains($etype, 'lock')) {
+                $ipBuckets[$ipRaw]['failed_count']++;
+            } else {
+                $ipBuckets[$ipRaw]['other_count']++;
+            }
+
+            $uName = trim((string)($row['username'] ?? 'Gast'));
+            if ($uName !== '' && !in_array($uName, $ipBuckets[$ipRaw]['users'], true)) {
+                $ipBuckets[$ipRaw]['users'][] = $uName;
+            }
+            $ipBuckets[$ipRaw]['first_seen'] = (string)$row['created_at'];
+            if (count($ipBuckets[$ipRaw]['events']) < 6) {
+                $ipBuckets[$ipRaw]['events'][] = [
+                    'type' => $etype,
+                    'desc' => (string)$row['description'],
+                    'user' => $uName,
+                    'time' => date('d.m.Y H:i', strtotime((string)$row['created_at']) ?: time()),
+                ];
+            }
+        }
+    } catch (Throwable) {
+    }
+
+    // 2. Aktuelle Sitzungs-IP des eingeloggten Benutzers immer als Live-Sitzung einbinden
+    $currentMaskedIp = getClientIp();
+    if (!isset($ipBuckets[$currentMaskedIp])) {
+        $ipBuckets[$currentMaskedIp] = [
+            'masked_ip'     => $currentMaskedIp,
+            'success_count' => 1,
+            'failed_count'  => 0,
+            'other_count'   => 0,
+            'users'         => [(string)($_SESSION['username'] ?? 'Ich')],
+            'first_seen'    => date('Y-m-d H:i:s'),
+            'last_seen'     => date('Y-m-d H:i:s'),
+            'events'        => [[
+                'type' => 'login_success',
+                'desc' => 'Aktive Cloud-Sitzung (aktuell verbunden)',
+                'user' => (string)($_SESSION['username'] ?? 'Ich'),
+                'time' => date('d.m.Y H:i'),
+            ]],
+        ];
+    }
+
+    // 3. Für Administratoren optional auch abgewehrte SSH-/Web-Bruteforce-IPs aus /var/log/auth.log einbeziehen (falls lesbar)
+    if ($canSeeAllSecurity && is_readable('/var/log/auth.log')) {
+        $authTail = @file_get_contents('/var/log/auth.log', false, null, max(0, (int)@filesize('/var/log/auth.log') - 65536));
+        if (is_string($authTail) && $authTail !== '') {
+            if (preg_match_all('/(?:Failed password|Invalid user).*?from\s+([0-9]{1,3}(?:\.[0-9]{1,3}){3})/i', $authTail, $mIps)) {
+                $countsByAuthIp = array_count_values($mIps[1]);
+                arsort($countsByAuthIp);
+                foreach (array_slice($countsByAuthIp, 0, 18, true) as $atkIp => $cnt) {
+                    $parts = explode('.', (string)$atkIp);
+                    $parts[3] = 'x';
+                    $maskedAtk = implode('.', $parts);
+                    if (!isset($ipBuckets[$maskedAtk])) {
+                        $ipBuckets[$maskedAtk] = [
+                            'masked_ip'     => $maskedAtk,
+                            'success_count' => 0,
+                            'failed_count'  => (int)$cnt,
+                            'other_count'   => 0,
+                            'users'         => ['root / SSH'],
+                            'first_seen'    => date('Y-m-d H:i:s'),
+                            'last_seen'     => date('Y-m-d H:i:s'),
+                            'events'        => [[
+                                'type' => 'login_failed',
+                                'desc' => sprintf('%d abgewehrte Server-/SSH-Anmeldeversuche', (int)$cnt),
+                                'user' => 'SSH-Guard',
+                                'time' => date('d.m.Y H:i'),
+                            ]],
+                        ];
+                    } else {
+                        $ipBuckets[$maskedAtk]['failed_count'] += (int)$cnt;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Maskierte IPs (z.B. 84.152.31.x -> 84.152.31.1) in auflösbare Subnetz-IPs umwandeln & lokal cachen
+    $toProbeIp = static function (string $masked): ?string {
+        if ($masked === 'lokal' || $masked === '127.0.0.1' || $masked === '::1') {
+            return null;
+        }
+        $candidate = str_ends_with($masked, '.x')
+            ? substr($masked, 0, -2) . '.1'
+            : (str_ends_with($masked, '::x') ? substr($masked, 0, -3) . '::1' : $masked);
+        if (filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+            return $candidate;
+        }
+        return null;
+    };
+
+    $geoCacheFile = $mapsBaseDir . '/geoip_cache.json';
+    $geoCache = [];
+    if (is_file($geoCacheFile)) {
+        $loaded = @json_decode((string)@file_get_contents($geoCacheFile), true);
+        if (is_array($loaded)) {
+            $geoCache = $loaded;
+        }
+    }
+
+    // Server-IP (runready.cloud) bestimmen
+    $serverIp = trim((string)($_SERVER['SERVER_ADDR'] ?? ''));
+    if ($serverIp === '' || filter_var($serverIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+        $resolvedHost = @gethostbyname('runready.cloud');
+        if (is_string($resolvedHost) && filter_var($resolvedHost, FILTER_VALIDATE_IP) !== false) {
+            $serverIp = $resolvedHost;
+        }
+    }
+
+    $ipsToLookup = [];
+    if ($serverIp !== '' && filter_var($serverIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false && !isset($geoCache[$serverIp])) {
+        $ipsToLookup[] = $serverIp;
+    }
+    foreach ($ipBuckets as $maskedKey => $b) {
+        $probe = $toProbeIp($maskedKey);
+        if ($probe !== null && !isset($geoCache[$probe])) {
+            $ipsToLookup[] = $probe;
+        }
+    }
+    $ipsToLookup = array_values(array_unique($ipsToLookup));
+
+    if (!empty($ipsToLookup)) {
+        $batchSlice = array_slice($ipsToLookup, 0, 80);
+        $ctxGeo = stream_context_create([
+            'http' => [
+                'method'  => 'POST',
+                'timeout' => 5.0,
+                'header'  => "Content-Type: application/json\r\nUser-Agent: MiniCloud-SecurityMap/1.0\r\n",
+                'content' => json_encode($batchSlice),
+            ],
+        ]);
+        $batchResp = @file_get_contents('http://ip-api.com/batch?fields=status,query,country,countryCode,regionName,city,lat,lon,isp,org&lang=de', false, $ctxGeo);
+        if (is_string($batchResp) && $batchResp !== '') {
+            $decodedBatch = @json_decode($batchResp, true);
+            if (is_array($decodedBatch)) {
+                foreach ($decodedBatch as $item) {
+                    if (is_array($item) && ($item['status'] ?? '') === 'success' && !empty($item['query'])) {
+                        $geoCache[(string)$item['query']] = [
+                            'lat'         => (float)($item['lat'] ?? 51.1657),
+                            'lng'         => (float)($item['lon'] ?? 10.4515),
+                            'city'        => (string)($item['city'] ?? 'Unbekannt'),
+                            'region'      => (string)($item['regionName'] ?? ''),
+                            'country'     => (string)($item['country'] ?? 'Deutschland'),
+                            'countryCode' => (string)($item['countryCode'] ?? 'DE'),
+                            'isp'         => (string)($item['isp'] ?: ($item['org'] ?? 'Unbekannter Provider')),
+                            'cached_at'   => time(),
+                        ];
+                    }
+                }
+                @file_put_contents($geoCacheFile, json_encode($geoCache, JSON_UNESCAPED_UNICODE));
+            }
+        }
+    }
+
+    // Server-Standort für Verbindungsbögen vorbereiten
+    $serverGeo = ($serverIp !== '' && isset($geoCache[$serverIp])) ? $geoCache[$serverIp] : [
+        'lat'         => 50.1109,
+        'lng'         => 8.6821,
+        'city'        => 'Frankfurt / Rechenzentrum',
+        'country'     => 'Deutschland',
+        'countryCode' => 'DE',
+        'isp'         => 'MiniCloud Host (runready.cloud)',
+    ];
+
+    $markers = [];
+    $countriesSet = [];
+    $totalSuccess = 0;
+    $totalFailed  = 0;
+
+    $idxOffset = 0;
+    foreach ($ipBuckets as $maskedKey => $b) {
+        $probe = $toProbeIp($maskedKey);
+        if ($probe !== null && isset($geoCache[$probe])) {
+            $g = $geoCache[$probe];
+        } else {
+            // Lokales Netzwerk / Intranet-Zugriff nah beim Server platzieren
+            $g = [
+                'lat'         => $serverGeo['lat'] + 0.06,
+                'lng'         => $serverGeo['lng'] - 0.06,
+                'city'        => 'Intranet / Lokales Netz',
+                'region'      => 'Lokal',
+                'country'     => 'Deutschland',
+                'countryCode' => 'DE',
+                'isp'         => 'Lokales Netzwerk / Direktzugriff',
+            ];
+        }
+
+        // Kleiner Versatz falls mehrere Subnetze in exakt derselben Stadt landen, damit alle Pins anklickbar bleiben
+        $jitterLat = $g['lat'] + (($idxOffset % 5) - 2) * 0.008;
+        $jitterLng = $g['lng'] + ((int)floor($idxOffset / 5) % 5 - 2) * 0.008;
+        $idxOffset++;
+
+        $totalSuccess += (int)$b['success_count'];
+        $totalFailed  += (int)$b['failed_count'];
+        $countriesSet[$g['country']] = true;
+
+        $status = 'info';
+        if ($b['failed_count'] > 0 && $b['success_count'] === 0) {
+            $status = 'danger';
+        } elseif ($b['failed_count'] > 0 && $b['success_count'] > 0) {
+            $status = 'mixed';
+        } elseif ($b['success_count'] > 0) {
+            $status = 'success';
+        }
+
+        $markers[] = [
+            'masked_ip'     => $b['masked_ip'],
+            'is_current'    => ($b['masked_ip'] === $currentMaskedIp),
+            'status'        => $status,
+            'lat'           => round($jitterLat, 5),
+            'lng'           => round($jitterLng, 5),
+            'city'          => $g['city'],
+            'region'        => $g['region'] ?? '',
+            'country'       => $g['country'],
+            'country_code'  => $g['countryCode'],
+            'isp'           => $g['isp'],
+            'success_count' => (int)$b['success_count'],
+            'failed_count'  => (int)$b['failed_count'],
+            'other_count'   => (int)$b['other_count'],
+            'users'         => $b['users'],
+            'last_seen'     => date('d.m.Y H:i', strtotime($b['last_seen']) ?: time()),
+            'events'        => $b['events'],
+        ];
+    }
+
+    echo json_encode([
+        'ok'       => true,
+        'is_admin' => $canSeeAllSecurity,
+        'server'   => [
+            'host'    => (string)($_SERVER['HTTP_HOST'] ?? 'runready.cloud'),
+            'lat'     => $serverGeo['lat'],
+            'lng'     => $serverGeo['lng'],
+            'city'    => $serverGeo['city'],
+            'country' => $serverGeo['country'],
+            'isp'     => $serverGeo['isp'],
+        ],
+        'stats' => [
+            'unique_ips'    => count($markers),
+            'countries'     => count($countriesSet),
+            'total_success' => $totalSuccess,
+            'total_failed'  => $totalFailed,
+        ],
+        'markers' => $markers,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -1452,6 +2225,39 @@ require_once __DIR__ . '/includes/header.php';
                         <option value="46.81,8.22,8">🇨🇭 Schweiz</option>
                         <option value="50.0,10.0,4">🌍 ganz Europa</option>
                     </select>
+
+                    <button
+                        type="button"
+                        id="btnRainRadar"
+                        onclick="toggleRainRadar()"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-50 dark:bg-sky-950/70 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/80 transition-colors cursor-pointer"
+                        title="Live-Regenradar &amp; Wetter-Overlay mit 2-Stunden-Rückblick &amp; 30-Min.-Prognose einblenden"
+                    >
+                        <span>⛈️</span>
+                        <span id="btnRainRadarLabel">Regenradar</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="btnPoiFinder"
+                        onclick="openRadiusFinderPanel()"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 transition-colors cursor-pointer"
+                        title="Umkreis-Finder: Tankstellen, E-Ladesäulen, Parkplätze, Geldautomaten, Apotheken &amp; Restaurants im Umkreis suchen"
+                    >
+                        <span>⛽</span>
+                        <span>Umkreis-Finder</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="btnSecurityMap"
+                        onclick="openSecurityMapPanel()"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/70 hover:bg-rose-100 dark:hover:bg-rose-900/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 transition-colors cursor-pointer"
+                        title="Sicherheits-Landkarte: Geo-IP-Herkunft aller Logins, Sitzungen &amp; abgewehrten Fehlversuche visualisieren"
+                    >
+                        <span>🛡️</span>
+                        <span>Sicherheits-Karte</span>
+                    </button>
                 <?php endif; ?>
 
                 <button
@@ -1463,17 +2269,6 @@ require_once __DIR__ . '/includes/header.php';
                 >
                     <span>📏</span>
                     <span id="measureBtnLabel">Distanz &amp; Route messen</span>
-                </button>
-
-                <button
-                    type="button"
-                    id="btnRadiusTool"
-                    onclick="drawQuickRadiusPrompt()"
-                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer"
-                    title="Umkreis-Radius (z.B. 5 km, 10 km, 50 km) um die Kartenmitte einzeichnen"
-                >
-                    <span>⭕</span>
-                    <span>Umkreis</span>
                 </button>
             </div>
         </div>
@@ -1526,6 +2321,71 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
+                <!-- LIVE-REGENRADAR & WETTER-STEUERLEISTE (WENN AKTIV) -->
+                <div id="rainRadarControlBar" class="hidden mb-2 p-2.5 rounded-xl bg-sky-50/90 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800/80 space-y-2 text-xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-extrabold text-sky-900 dark:text-sky-200 flex items-center gap-1">
+                                <span>⛈️</span>
+                                <span>Live-Regenradar &amp; Wetter</span>
+                            </span>
+                            <button
+                                type="button"
+                                id="btnRadarPlayPause"
+                                onclick="toggleRainRadarAnimation()"
+                                class="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold cursor-pointer shadow-2xs"
+                            >
+                                ▶️ Abspielen
+                            </button>
+                            <input
+                                type="range"
+                                id="radarTimeSlider"
+                                min="0"
+                                max="12"
+                                step="1"
+                                value="0"
+                                oninput="onRadarFrameSlide(this.value)"
+                                class="w-36 sm:w-52 accent-sky-600 cursor-pointer"
+                            >
+                            <span id="radarTimeBadge" class="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 font-bold text-sky-800 dark:text-sky-300">
+                                Lade Radar…
+                            </span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer select-none" title="Live-Temperatur &amp; Wind der Wetterstationen ein-/ausblenden">
+                                <input type="checkbox" id="chkRadarWeatherPins" checked onchange="toggleRadarWeatherPins(this.checked)" class="rounded text-sky-600">
+                                <span class="font-semibold">🌡️ Live-Temperaturen</span>
+                            </label>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[11px] text-slate-500">Deckkraft:</span>
+                                <input
+                                    type="range"
+                                    id="radarOpacitySlider"
+                                    min="25"
+                                    max="95"
+                                    value="72"
+                                    oninput="onRadarOpacityChange(this.value)"
+                                    class="w-16 accent-sky-600 cursor-pointer"
+                                >
+                            </div>
+                            <button type="button" onclick="toggleRainRadar()" class="px-2 py-0.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold cursor-pointer">
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-sky-200/60 dark:border-sky-800/60">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-semibold">Niederschlags-Intensität:</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-sky-300 inline-block"></span> Leicht</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-blue-600 inline-block"></span> Mäßig</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-500 inline-block"></span> Starkregen</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-red-600 inline-block"></span> Unwetter / Hagel</span>
+                        </div>
+                        <span>🛡️ Datenschutz-Proxy über MiniCloud-Server (keine IP-Weitergabe)</span>
+                    </div>
+                </div>
+
                 <!-- MESS- & ROUTEN-INFOBAR (WENN AKTIV) -->
                 <div id="measureInfoBar" class="hidden mb-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div class="flex flex-wrap items-center gap-3">
@@ -1560,7 +2420,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
 
-        <!-- RECHTE SEITENLEISTE (3 SPALTEN): ORTE, TOUREN, CLOUD-VERKNÜPFUNGEN & DETAILGRAD-INFO -->
+        <!-- RECHTE SEITENLEISTE (3 SPALTEN): ORTE, UMKREIS-FINDER, SICHERHEITS-KARTE, TOUREN & CLOUD -->
         <div class="lg:col-span-4 xl:col-span-3 space-y-3">
             <!-- DETAILGRAD-ERKLÄRUNG & OFFLINE-STATUS-BOX -->
             <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-xs space-y-2">
@@ -1585,17 +2445,23 @@ require_once __DIR__ . '/includes/header.php';
                 </p>
             </div>
 
-            <!-- SIDEBAR-TABS: ORTE / GPX-TOUREN / CLOUD-ELEMENTE -->
+            <!-- SIDEBAR-TABS: ORTE / UMKREIS / SICHERHEIT / TOUREN / CLOUD -->
             <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-xs space-y-3">
-                <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
-                    <button type="button" id="tabBtnPlaces" onclick="switchSidebarTab('places')" class="py-1.5 rounded-lg bg-brand-600 text-white cursor-pointer">
-                        📍 Orte (<?= count($places) ?>)
+                <div class="grid grid-cols-5 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
+                    <button type="button" id="tabBtnPlaces" onclick="switchSidebarTab('places')" class="py-1.5 rounded-lg bg-brand-600 text-white cursor-pointer truncate" title="Gespeicherte Orte (<?= count($places) ?>)">
+                        📍 Orte
                     </button>
-                    <button type="button" id="tabBtnTracks" onclick="switchSidebarTab('tracks')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer">
-                        🥾 Touren (<?= count($tracks) ?>)
+                    <button type="button" id="tabBtnPoi" onclick="switchSidebarTab('poi')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer truncate" title="Umkreis-Finder (Tankstellen, Ladesäulen, Parken, Geld, Apotheken)">
+                        ⛽ Umkreis
                     </button>
-                    <button type="button" id="tabBtnCloud" onclick="switchSidebarTab('cloud')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer">
-                        🔗 Cloud (<?= count($contactPins) + count($calendarPins) + count($photoPins) ?>)
+                    <button type="button" id="tabBtnSecurity" onclick="switchSidebarTab('security')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer truncate" title="Sicherheits-Landkarte (Login- &amp; Zugriffs-Herkunft)">
+                        🛡️ Schutz
+                    </button>
+                    <button type="button" id="tabBtnTracks" onclick="switchSidebarTab('tracks')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer truncate" title="GPX-Touren (<?= count($tracks) ?>)">
+                        🥾 Touren
+                    </button>
+                    <button type="button" id="tabBtnCloud" onclick="switchSidebarTab('cloud')" class="py-1.5 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer truncate" title="Cloud-Elemente (Kontakte, Termine, Fotos)">
+                        🔗 Cloud
                     </button>
                 </div>
 
@@ -1719,6 +2585,134 @@ require_once __DIR__ . '/includes/header.php';
                             <p class="text-[11px] text-slate-500"><?= e($pp['date']) ?> · GPS-Foto</p>
                         </button>
                     <?php endforeach; ?>
+                </div>
+
+                <!-- TAB 4: UMKREIS-FINDER (TANKSTELLEN, E-LADESÄULEN, PARKPLÄTZE, GELDAUTOMATEN, APOTHEKEN, GASTRONOMIE) -->
+                <div id="sideTabPoi" class="hidden space-y-3 text-xs">
+                    <div class="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/70 space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-extrabold text-emerald-900 dark:text-emerald-200">⛽ Umkreis-Finder</span>
+                            <button
+                                type="button"
+                                onclick="useMyGpsForPoiSearch()"
+                                class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer shadow-2xs"
+                                title="Eigenen GPS-Standort des Geräts bestimmen und als Suchmittelpunkt verwenden"
+                            >
+                                📡 Mein GPS
+                            </button>
+                        </div>
+
+                        <!-- Suchradius-Auswahl -->
+                        <div class="flex items-center justify-between gap-1">
+                            <span class="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">Suchradius:</span>
+                            <div class="inline-flex rounded-lg bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700">
+                                <?php foreach ([2 => '2 km', 5 => '5 km', 10 => '10 km', 25 => '25 km'] as $rKm => $rLbl): ?>
+                                    <button
+                                        type="button"
+                                        id="poiRadBtn_<?= $rKm ?>"
+                                        onclick="setPoiSearchRadius(<?= $rKm ?>)"
+                                        class="px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer <?= $rKm === 5 ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-300' ?>"
+                                    >
+                                        <?= $rLbl ?>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <!-- 8 Schnell-Kategorien -->
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button type="button" onclick="runPoiRadiusSearch('fuel')" id="poiCatBtn_fuel" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-orange-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>⛽</span><span class="truncate">Tankstellen</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('charging')" id="poiCatBtn_charging" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>🔌</span><span class="truncate">E-Ladesäulen</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('parking')" id="poiCatBtn_parking" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>🅿️</span><span class="truncate">Parkplätze</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('atm')" id="poiCatBtn_atm" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>🏧</span><span class="truncate">Geld / Banken</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('supermarket')" id="poiCatBtn_supermarket" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>🛒</span><span class="truncate">Supermärkte</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('pharmacy')" id="poiCatBtn_pharmacy" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>💊</span><span class="truncate">Apotheke/Arzt</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('aed')" id="poiCatBtn_aed" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>❤️</span><span class="truncate">Defibrillator</span>
+                            </button>
+                            <button type="button" onclick="runPoiRadiusSearch('food')" id="poiCatBtn_food" class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 font-bold text-left flex items-center gap-1.5 cursor-pointer">
+                                <span>🍽️</span><span class="truncate">Gastronomie</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                            <span id="poiSearchStatusText">Wähle oben eine Kategorie rund um die Kartenmitte.</span>
+                            <button type="button" onclick="clearPoiSearchResults()" class="text-slate-400 hover:text-red-500 font-bold cursor-pointer">Leeren</button>
+                        </div>
+                    </div>
+
+                    <div id="poiResultsList" class="space-y-2 max-h-[310px] overflow-y-auto pr-1">
+                        <div class="text-center py-5 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700">
+                            <p class="text-xl mb-1">🧭</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200">Bereit für Umkreissuche</p>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Zoome auf eine Stadt oder klicke auf „📡 Mein GPS“ und wähle eine Kategorie.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: SICHERHEITS-LANDKARTE (GEO-IP LOGIN- & ZUGRIFFS-HERKUNFT) -->
+                <div id="sideTabSecurity" class="hidden space-y-3 text-xs">
+                    <div class="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/70 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-extrabold text-rose-900 dark:text-rose-200 flex items-center gap-1">
+                                <span>🛡️</span>
+                                <span>Sicherheits-Landkarte</span>
+                            </span>
+                            <button
+                                type="button"
+                                onclick="loadSecurityMapData(true)"
+                                class="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold cursor-pointer"
+                            >
+                                🔄 Aktualisieren
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                            Visualisiert erfolgreiche Cloud-Anmeldungen (🟢), abgewehrte Login-/Bruteforce-Versuche (🔴) und Verbindungswege zum Server.
+                        </p>
+
+                        <div class="grid grid-cols-3 gap-1.5 text-center pt-1">
+                            <div class="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800/70">
+                                <p class="text-[10px] text-slate-400">Logins OK</p>
+                                <p class="text-sm font-extrabold text-emerald-600 dark:text-emerald-400" id="secStatSuccess">–</p>
+                            </div>
+                            <div class="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800/70">
+                                <p class="text-[10px] text-slate-400">Abgewehrt</p>
+                                <p class="text-sm font-extrabold text-rose-600 dark:text-rose-400" id="secStatFailed">–</p>
+                            </div>
+                            <div class="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                <p class="text-[10px] text-slate-400">IP-Netze</p>
+                                <p class="text-sm font-extrabold text-slate-800 dark:text-slate-100" id="secStatIps">–</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-1 pt-1">
+                            <div class="inline-flex rounded-lg bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 w-full">
+                                <button type="button" id="secFilter_all" onclick="filterSecurityMap('all')" class="flex-1 py-1 rounded-md text-[11px] font-bold bg-rose-600 text-white cursor-pointer">Alle</button>
+                                <button type="button" id="secFilter_success" onclick="filterSecurityMap('success')" class="flex-1 py-1 rounded-md text-[11px] font-bold text-slate-600 dark:text-slate-300 cursor-pointer">🟢 Logins</button>
+                                <button type="button" id="secFilter_danger" onclick="filterSecurityMap('danger')" class="flex-1 py-1 rounded-md text-[11px] font-bold text-slate-600 dark:text-slate-300 cursor-pointer">🔴 Angriffe</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="securityMapList" class="space-y-2 max-h-[310px] overflow-y-auto pr-1">
+                        <div class="text-center py-5 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700">
+                            <p class="text-xl mb-1">🛡️</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200">Sicherheits-Analyse bereit</p>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Klicke auf „🔄 Aktualisieren“, um alle Login-Standorte auf der Karte anzuzeigen.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2048,15 +3042,18 @@ let mcPmtilesLayer      = null;
 let mcPlaceMarkersById  = {};
 
 // Schicht-Gruppen (LayerGroups)
-const layerGroupBaseVector = L.layerGroup();
-const layerGroupInfra      = L.layerGroup();
-const layerGroupCities     = L.layerGroup();
-const layerGroupPlaces     = L.layerGroup();
-const layerGroupTracks     = L.layerGroup();
-const layerGroupContacts   = L.layerGroup();
-const layerGroupCalendar   = L.layerGroup();
-const layerGroupPhotos     = L.layerGroup();
-const layerGroupMeasure    = L.layerGroup();
+const layerGroupBaseVector  = L.layerGroup();
+const layerGroupInfra       = L.layerGroup();
+const layerGroupCities      = L.layerGroup();
+const layerGroupPlaces      = L.layerGroup();
+const layerGroupTracks      = L.layerGroup();
+const layerGroupContacts    = L.layerGroup();
+const layerGroupCalendar    = L.layerGroup();
+const layerGroupPhotos      = L.layerGroup();
+const layerGroupMeasure     = L.layerGroup();
+const layerGroupRainWeather = L.layerGroup();
+const layerGroupPoiSearch   = L.layerGroup();
+const layerGroupSecurityMap = L.layerGroup();
 
 // Eingebettete Offline-Vektordaten (Deutschland-Umriss, Nachbarländer, Bundesländer, Hauptflüsse & Autobahnen)
 const OFFLINE_GERMANY_POLY = [
@@ -2141,6 +3138,9 @@ function initMiniCloudMap() {
         layerGroupCalendar.addTo(mcMap);
         layerGroupPhotos.addTo(mcMap);
         layerGroupPlaces.addTo(mcMap);
+        layerGroupPoiSearch.addTo(mcMap);
+        layerGroupSecurityMap.addTo(mcMap);
+        layerGroupRainWeather.addTo(mcMap);
         layerGroupMeasure.addTo(mcMap);
 
         switchMapBaseStyle(mcAirGapOnly ? 'intranet_vector' : 'osm');
@@ -2790,17 +3790,600 @@ function drawTrackElevation(idx) {
 }
 
 function switchSidebarTab(tab) {
-    ['places', 'tracks', 'cloud'].forEach(t => {
+    ['places', 'poi', 'security', 'tracks', 'cloud'].forEach(t => {
         const cap = t.charAt(0).toUpperCase() + t.slice(1);
         const box = document.getElementById('sideTab' + cap);
         const btn = document.getElementById('tabBtn' + cap);
         if (box) box.classList.toggle('hidden', t !== tab);
         if (btn) {
-            btn.className = 'py-1.5 rounded-lg cursor-pointer ' + (
+            btn.className = 'py-1.5 rounded-lg cursor-pointer truncate ' + (
                 t === tab ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'
             );
         }
     });
+}
+
+// =========================================================================
+// 10. LIVE-REGENRADAR & WETTER-OVERLAY (RAINVIEWER + OPEN-METEO PROXY)
+// =========================================================================
+let rainRadarActive      = false;
+let rainRadarFrames      = [];
+let rainRadarCities      = [];
+let rainRadarCurrentIdx  = 0;
+let rainRadarTileLayer   = null;
+let rainRadarAnimTimer   = null;
+let rainRadarOpacity     = 0.72;
+let rainRadarShowPins    = true;
+
+async function toggleRainRadar() {
+    if (!mcMap || MC_FLOORPLAN) return;
+    rainRadarActive = !rainRadarActive;
+    const bar = document.getElementById('rainRadarControlBar');
+    const btn = document.getElementById('btnRainRadar');
+    const lbl = document.getElementById('btnRainRadarLabel');
+
+    if (bar) bar.classList.toggle('hidden', !rainRadarActive);
+    if (lbl) lbl.textContent = rainRadarActive ? 'Regenradar aktiv' : 'Regenradar';
+    if (btn) {
+        btn.className = rainRadarActive
+            ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-600 text-white shadow-xs transition-colors cursor-pointer'
+            : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-50 dark:bg-sky-950/70 hover:bg-sky-100 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/80 transition-colors cursor-pointer';
+    }
+
+    if (!rainRadarActive) {
+        stopRainRadarAnimation();
+        if (rainRadarTileLayer && mcMap.hasLayer(rainRadarTileLayer)) {
+            mcMap.removeLayer(rainRadarTileLayer);
+        }
+        rainRadarTileLayer = null;
+        layerGroupRainWeather.clearLayers();
+        return;
+    }
+
+    await loadRainRadarMeta();
+}
+
+async function loadRainRadarMeta() {
+    const badge = document.getElementById('radarTimeBadge');
+    if (badge) badge.textContent = '⏳ Lade Radar-Daten…';
+    try {
+        const res = await fetch('maps.php?action=rain_radar_meta');
+        const d   = await res.json();
+        if (d && Array.isArray(d.frames) && d.frames.length > 0) {
+            rainRadarFrames = d.frames;
+            rainRadarCities = Array.isArray(d.cities) ? d.cities : [];
+            const slider = document.getElementById('radarTimeSlider');
+            // Standardmäßig das aktuellste Live-Radarbild (letztes Nicht-Prognose-Bild) wählen
+            let liveIdx = rainRadarFrames.length - 1;
+            for (let i = 0; i < rainRadarFrames.length; i++) {
+                if (!rainRadarFrames[i].forecast) {
+                    liveIdx = i;
+                }
+            }
+            rainRadarCurrentIdx = liveIdx;
+            if (slider) {
+                slider.min   = '0';
+                slider.max   = String(rainRadarFrames.length - 1);
+                slider.value = String(rainRadarCurrentIdx);
+            }
+            showRadarFrame(rainRadarCurrentIdx);
+            renderRadarWeatherPins();
+        } else {
+            if (badge) badge.textContent = '⚠️ Keine Radar-Daten verfügbar';
+        }
+    } catch (e) {
+        if (badge) badge.textContent = '⚠️ Radar-Verbindungsfehler';
+    }
+}
+
+function showRadarFrame(idx) {
+    if (!mcMap || !rainRadarFrames.length) return;
+    const clamped = Math.max(0, Math.min(rainRadarFrames.length - 1, Number(idx) || 0));
+    rainRadarCurrentIdx = clamped;
+    const frame = rainRadarFrames[clamped];
+    const slider = document.getElementById('radarTimeSlider');
+    const badge  = document.getElementById('radarTimeBadge');
+    if (slider) slider.value = String(clamped);
+    if (badge) {
+        badge.textContent = (frame.forecast ? '🔮 ' : '📡 ') + frame.label;
+        badge.className = 'px-2 py-0.5 rounded-lg border font-bold ' + (
+            frame.forecast
+                ? 'bg-amber-50 dark:bg-amber-950/80 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300'
+                : 'bg-white dark:bg-slate-800 border-sky-200 dark:border-sky-700 text-sky-800 dark:text-sky-300'
+        );
+    }
+
+    const nextLayer = L.tileLayer(
+        `maps.php?action=rain_radar_tile&path=${encodeURIComponent(frame.path)}&z={z}&x={x}&y={y}`,
+        {
+            opacity: rainRadarOpacity,
+            maxNativeZoom: 7,
+            maxZoom: 18,
+            zIndex: 450,
+            attribution: '⛈️ Regenradar via MiniCloud Radar-Proxy (RainViewer)'
+        }
+    );
+    nextLayer.addTo(mcMap);
+    if (rainRadarTileLayer && mcMap.hasLayer(rainRadarTileLayer)) {
+        mcMap.removeLayer(rainRadarTileLayer);
+    }
+    rainRadarTileLayer = nextLayer;
+}
+
+function onRadarFrameSlide(val) {
+    stopRainRadarAnimation();
+    showRadarFrame(Number(val));
+}
+
+function onRadarOpacityChange(val) {
+    rainRadarOpacity = Math.max(0.2, Math.min(0.95, (Number(val) || 72) / 100.0));
+    if (rainRadarTileLayer) {
+        rainRadarTileLayer.setOpacity(rainRadarOpacity);
+    }
+}
+
+function toggleRainRadarAnimation() {
+    if (rainRadarAnimTimer) {
+        stopRainRadarAnimation();
+        return;
+    }
+    if (!rainRadarFrames.length) return;
+    const btn = document.getElementById('btnRadarPlayPause');
+    if (btn) btn.textContent = '⏸️ Pause';
+    rainRadarAnimTimer = setInterval(() => {
+        const nextIdx = (rainRadarCurrentIdx + 1) % rainRadarFrames.length;
+        showRadarFrame(nextIdx);
+    }, 850);
+}
+
+function stopRainRadarAnimation() {
+    if (rainRadarAnimTimer) {
+        clearInterval(rainRadarAnimTimer);
+        rainRadarAnimTimer = null;
+    }
+    const btn = document.getElementById('btnRadarPlayPause');
+    if (btn) btn.textContent = '▶️ Abspielen';
+}
+
+function toggleRadarWeatherPins(checked) {
+    rainRadarShowPins = Boolean(checked);
+    renderRadarWeatherPins();
+}
+
+function renderRadarWeatherPins() {
+    layerGroupRainWeather.clearLayers();
+    if (!rainRadarActive || !rainRadarShowPins || !Array.isArray(rainRadarCities)) return;
+
+    rainRadarCities.forEach(st => {
+        const tempStr = st.temp !== null ? `${st.temp.toFixed(1).replace('.', ',')} °C` : '';
+        const marker = L.marker([st.lat, st.lng], {
+            icon: L.divIcon({
+                className: '',
+                html: `<div class="px-2 py-0.5 rounded-full bg-slate-900/90 text-white border border-sky-400/70 shadow-md text-[11px] font-bold whitespace-nowrap flex items-center gap-1">
+                    <span>${escapeMapHtml(st.icon)}</span>
+                    <span>${escapeMapHtml(tempStr)}</span>
+                </div>`,
+                iconAnchor: [34, 12]
+            })
+        });
+        marker.bindPopup(`
+            <div class="text-xs space-y-1 min-w-[165px]">
+                <p class="font-extrabold text-sm">${escapeMapHtml(st.icon)} Wetter ${escapeMapHtml(st.name)}</p>
+                <p>🌡️ Temperatur: <strong>${escapeMapHtml(tempStr)}</strong> (${escapeMapHtml(st.desc)})</p>
+                <p>💨 Wind: <strong>${Number(st.wind || 0)} km/h</strong></p>
+                <p>💧 Niederschlag aktuell: <strong>${Number(st.precip || 0).toFixed(1).replace('.', ',')} mm</strong></p>
+            </div>
+        `);
+        marker.addTo(layerGroupRainWeather);
+    });
+}
+
+// =========================================================================
+// 11. UMKREIS-FINDER (TANKSTELLEN, E-LADESÄULEN, PARKPLÄTZE, BANKEN, APOTHEKEN)
+// =========================================================================
+let poiSearchRadiusKm = 5;
+let poiSearchCustomOrigin = null; // null = aktuelle Kartenmitte, sonst {lat, lng}
+let poiCurrentMarkers = [];
+let poiLastResults = [];
+let poiActiveCategory = 'fuel';
+
+function openRadiusFinderPanel() {
+    switchSidebarTab('poi');
+    if (poiLastResults.length === 0) {
+        runPoiRadiusSearch('fuel');
+    }
+}
+
+function setPoiSearchRadius(km) {
+    poiSearchRadiusKm = Number(km) || 5;
+    [2, 5, 10, 25].forEach(r => {
+        const btn = document.getElementById('poiRadBtn_' + r);
+        if (btn) {
+            btn.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer ' + (
+                r === poiSearchRadiusKm ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            );
+        }
+    });
+    if (poiActiveCategory) {
+        runPoiRadiusSearch(poiActiveCategory);
+    }
+}
+
+function useMyGpsForPoiSearch() {
+    const statusEl = document.getElementById('poiSearchStatusText');
+    if (!navigator.geolocation) {
+        if (statusEl) statusEl.textContent = '⚠️ Browser unterstützt keine GPS-Ortung.';
+        return;
+    }
+    if (statusEl) statusEl.textContent = '📡 Ermittle deinen GPS-Standort…';
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            poiSearchCustomOrigin = { lat, lng };
+            if (mcMap) {
+                mcMap.setView([lat, lng], 13, { animate: true });
+            }
+            if (statusEl) statusEl.textContent = `📡 GPS aktiv (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            runPoiRadiusSearch(poiActiveCategory || 'fuel', true);
+        },
+        () => {
+            if (statusEl) statusEl.textContent = '⚠️ GPS-Freigabe abgelehnt – nutze aktuelle Kartenmitte.';
+            poiSearchCustomOrigin = null;
+            runPoiRadiusSearch(poiActiveCategory || 'fuel', false);
+        },
+        { enableHighAccuracy: true, timeout: 7000 }
+    );
+}
+
+async function runPoiRadiusSearch(category, useStoredGps = false) {
+    if (!mcMap || MC_FLOORPLAN) return;
+    poiActiveCategory = category || 'fuel';
+
+    ['fuel', 'charging', 'parking', 'atm', 'supermarket', 'pharmacy', 'aed', 'food'].forEach(cat => {
+        const b = document.getElementById('poiCatBtn_' + cat);
+        if (b) {
+            b.className = 'px-2.5 py-1.5 rounded-xl font-bold text-left flex items-center gap-1.5 cursor-pointer border ' + (
+                cat === poiActiveCategory
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                    : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'
+            );
+        }
+    });
+
+    const center = (useStoredGps && poiSearchCustomOrigin) ? poiSearchCustomOrigin : mcMap.getCenter();
+    const statusEl = document.getElementById('poiSearchStatusText');
+    const listEl   = document.getElementById('poiResultsList');
+
+    if (statusEl) statusEl.textContent = `⏳ Suche im Umkreis von ${poiSearchRadiusKm} km…`;
+    if (listEl) {
+        listEl.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">⏳ Durchsuche Umkreis (${poiSearchRadiusKm} km)…</div>`;
+    }
+
+    try {
+        const url = `maps.php?action=poi_radius_search&lat=${encodeURIComponent(center.lat)}&lng=${encodeURIComponent(center.lng)}&radius=${encodeURIComponent(poiSearchRadiusKm)}&category=${encodeURIComponent(poiActiveCategory)}`;
+        const res = await fetch(url);
+        const d   = await res.json();
+
+        layerGroupPoiSearch.clearLayers();
+        poiCurrentMarkers = [];
+        poiLastResults    = [];
+
+        // Suchradius-Kreis und Zentrum auf der Karte einzeichnen
+        const radiusCircle = L.circle([center.lat, center.lng], {
+            radius: poiSearchRadiusKm * 1000,
+            color: (d && d.color) ? d.color : '#10b981',
+            weight: 2,
+            dashArray: '6,4',
+            fillColor: (d && d.color) ? d.color : '#10b981',
+            fillOpacity: 0.07
+        }).addTo(layerGroupPoiSearch);
+
+        L.circleMarker([center.lat, center.lng], {
+            radius: 5,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: '#0f172a',
+            fillOpacity: 1
+        }).bindTooltip('🎯 Suchmittelpunkt').addTo(layerGroupPoiSearch);
+
+        if (!d || !d.ok || !Array.isArray(d.results) || d.results.length === 0) {
+            if (statusEl) statusEl.textContent = `Keine Treffer im ${poiSearchRadiusKm}-km-Umkreis gefunden.`;
+            if (listEl) {
+                listEl.innerHTML = `
+                    <div class="text-center py-5 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700">
+                        <p class="text-xl mb-1">🔍</p>
+                        <p class="text-xs font-bold text-slate-700 dark:text-slate-200">Keine Treffer im ${poiSearchRadiusKm}-km-Radius</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Wähle oben einen größeren Radius (z. B. 10 km oder 25 km) oder verschiebe den Kartenausschnitt.</p>
+                    </div>`;
+            }
+            return;
+        }
+
+        poiLastResults = d.results;
+        if (statusEl) {
+            statusEl.textContent = `✅ ${d.results.length} ${d.label} im ${poiSearchRadiusKm}-km-Umkreis`;
+        }
+
+        d.results.forEach((item, idx) => {
+            const marker = L.marker([item.lat, item.lng], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `<div class="mc-map-pin" style="background-color:${escapeMapHtml(item.color)}">${escapeMapHtml(item.icon)}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16],
+                    popupAnchor: [0, -14]
+                })
+            });
+
+            marker.bindPopup(`
+                <div class="text-xs space-y-1.5 min-w-[200px]">
+                    <p class="font-extrabold text-sm">${escapeMapHtml(item.icon)} ${escapeMapHtml(item.title)}</p>
+                    <p class="font-bold text-emerald-600">📏 ${item.dist_km.toFixed(2).replace('.', ',')} km Richtung ${escapeMapHtml(item.direction)}</p>
+                    ${item.address ? `<p class="text-slate-600">📫 ${escapeMapHtml(item.address)}</p>` : ''}
+                    ${item.info ? `<p class="text-slate-500">${escapeMapHtml(item.info)}</p>` : ''}
+                    ${item.phone ? `<p class="text-slate-500">📞 ${escapeMapHtml(item.phone)}</p>` : ''}
+                    <div class="pt-1 flex items-center gap-1.5">
+                        <button type="button" onclick="savePoiAsMyPlace(${idx})" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold cursor-pointer">
+                            💾 Als eigenen Ort speichern
+                        </button>
+                    </div>
+                </div>
+            `);
+            marker.addTo(layerGroupPoiSearch);
+            poiCurrentMarkers[idx] = marker;
+        });
+
+        mcMap.fitBounds(radiusCircle.getBounds(), { padding: [24, 24], maxZoom: 14 });
+
+        if (listEl) {
+            listEl.innerHTML = d.results.map((item, idx) => `
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors">
+                    <div class="flex items-start justify-between gap-2">
+                        <button type="button" onclick="focusPoiResult(${idx})" class="text-left min-w-0 flex-1 cursor-pointer">
+                            <div class="flex items-center gap-1.5">
+                                <span>${escapeMapHtml(item.icon)}</span>
+                                <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeMapHtml(item.title)}</p>
+                            </div>
+                            ${item.address ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">📫 ${escapeMapHtml(item.address)}</p>` : ''}
+                            ${item.info ? `<p class="text-[10px] text-slate-400 truncate mt-0.5">${escapeMapHtml(item.info)}</p>` : ''}
+                        </button>
+                        <div class="flex flex-col items-end gap-1 shrink-0">
+                            <span class="px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-extrabold">
+                                ${item.dist_km.toFixed(1).replace('.', ',')} km ${escapeMapHtml(item.direction)}
+                            </span>
+                            <button type="button" onclick="savePoiAsMyPlace(${idx})" class="text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer" title="In meine eigenen Orte übernehmen">
+                                💾 Speichern
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (e) {
+        if (statusEl) statusEl.textContent = '⚠️ Fehler bei der Umkreis-Abfrage.';
+    }
+}
+
+function focusPoiResult(idx) {
+    const item = poiLastResults[idx];
+    const marker = poiCurrentMarkers[idx];
+    if (!item || !mcMap) return;
+    mcMap.setView([item.lat, item.lng], 15, { animate: true });
+    if (marker) marker.openPopup();
+}
+
+function clearPoiSearchResults() {
+    layerGroupPoiSearch.clearLayers();
+    poiCurrentMarkers = [];
+    poiLastResults = [];
+    const statusEl = document.getElementById('poiSearchStatusText');
+    const listEl   = document.getElementById('poiResultsList');
+    if (statusEl) statusEl.textContent = 'Umkreis-Markierungen ausgeblendet.';
+    if (listEl) {
+        listEl.innerHTML = `<div class="text-center py-5 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-xs text-slate-500">Wähle oben eine Kategorie aus.</div>`;
+    }
+}
+
+function savePoiAsMyPlace(idx) {
+    const item = poiLastResults[idx];
+    if (!item) return;
+    openNewPlaceModal(item.lat, item.lng, item.title);
+    document.getElementById('placeFormAddress').value  = item.address || '';
+    document.getElementById('placeFormDesc').value     = item.info || '';
+    document.getElementById('placeFormCategory').value = item.place_cat || 'favorite';
+    document.getElementById('placeFormIcon').value     = item.icon || '📍';
+    document.getElementById('placeFormColor').value    = item.color || '#2563eb';
+}
+
+// =========================================================================
+// 12. SICHERHEITS-LANDKARTE (GEO-IP LOGIN- & ANGRIFFS-HERKUNFT)
+// =========================================================================
+let securityMapData      = null;
+let securityMapFilter    = 'all';
+let securityMapMarkers   = [];
+
+function openSecurityMapPanel() {
+    switchSidebarTab('security');
+    loadSecurityMapData(false);
+}
+
+async function loadSecurityMapData(forceReload = false) {
+    if (!mcMap || MC_FLOORPLAN) return;
+    if (securityMapData && !forceReload) {
+        renderSecurityMapMarkers();
+        return;
+    }
+
+    const listEl = document.getElementById('securityMapList');
+    if (listEl) {
+        listEl.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">🛡️ Ermittle Geo-IP-Standorte aus dem Sicherheitsprotokoll…</div>`;
+    }
+
+    try {
+        const res = await fetch('maps.php?action=security_map_data');
+        const d   = await res.json();
+        if (d && d.ok) {
+            securityMapData = d;
+            const sSucc = document.getElementById('secStatSuccess');
+            const sFail = document.getElementById('secStatFailed');
+            const sIps  = document.getElementById('secStatIps');
+            if (sSucc) sSucc.textContent = String(d.stats.total_success || 0);
+            if (sFail) sFail.textContent = String(d.stats.total_failed || 0);
+            if (sIps)  sIps.textContent  = `${d.stats.unique_ips || 0} (${d.stats.countries || 1} L.)`;
+            renderSecurityMapMarkers();
+        }
+    } catch (e) {
+        if (listEl) {
+            listEl.innerHTML = `<div class="p-3 text-xs text-rose-600">Fehler beim Laden der Sicherheits-Landkarte.</div>`;
+        }
+    }
+}
+
+function filterSecurityMap(mode) {
+    securityMapFilter = mode || 'all';
+    ['all', 'success', 'danger'].forEach(m => {
+        const btn = document.getElementById('secFilter_' + m);
+        if (btn) {
+            btn.className = 'flex-1 py-1 rounded-md text-[11px] font-bold cursor-pointer ' + (
+                m === securityMapFilter ? 'bg-rose-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            );
+        }
+    });
+    renderSecurityMapMarkers();
+}
+
+function renderSecurityMapMarkers() {
+    if (!mcMap || !securityMapData) return;
+    layerGroupSecurityMap.clearLayers();
+    securityMapMarkers = [];
+
+    const srv = securityMapData.server || { lat: 50.1109, lng: 8.6821, host: 'runready.cloud', city: 'Rechenzentrum' };
+
+    // 1. Zentraler MiniCloud-Server-Knoten (Zielpunkt aller Verbindungen)
+    const srvMarker = L.marker([srv.lat, srv.lng], {
+        icon: L.divIcon({
+            className: '',
+            html: `<div class="mc-map-pin" style="background-color:#4f46e5;width:36px;height:36px;font-size:17px;">🖥️</div>`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        })
+    });
+    srvMarker.bindPopup(`
+        <div class="text-xs space-y-1 min-w-[190px]">
+            <p class="font-extrabold text-sm">🖥️ MiniCloud Server (${escapeMapHtml(srv.host)})</p>
+            <p class="text-slate-600">📍 Standort: ${escapeMapHtml(srv.city)}, ${escapeMapHtml(srv.country || 'Deutschland')}</p>
+            <p class="text-slate-500">🏢 Host: ${escapeMapHtml(srv.isp || '')}</p>
+        </div>
+    `);
+    srvMarker.addTo(layerGroupSecurityMap);
+
+    const allMarkers = Array.isArray(securityMapData.markers) ? securityMapData.markers : [];
+    const filtered = allMarkers.filter(m => {
+        if (securityMapFilter === 'success') return m.success_count > 0;
+        if (securityMapFilter === 'danger')  return m.failed_count > 0;
+        return true;
+    });
+
+    const boundsPts = [[srv.lat, srv.lng]];
+
+    filtered.forEach((m, idx) => {
+        const isDanger = m.status === 'danger';
+        const isMixed  = m.status === 'mixed';
+        const pinColor = isDanger ? '#e11d48' : (isMixed ? '#d97706' : '#10b981');
+        const pinIcon  = isDanger ? '🚨' : (m.is_current ? '🟢' : (isMixed ? '⚠️' : '🛡️'));
+
+        // Verbindungslinie zwischen Ursprungs-IP und MiniCloud-Server zeichnen
+        L.polyline([[m.lat, m.lng], [srv.lat, srv.lng]], {
+            color: pinColor,
+            weight: isDanger ? 2.2 : 1.8,
+            opacity: 0.65,
+            dashArray: isDanger ? '4,6' : '6,4'
+        }).addTo(layerGroupSecurityMap);
+
+        const evHtml = (Array.isArray(m.events) ? m.events : []).map(ev => `
+            <li class="border-t border-slate-100 pt-1">
+                <span class="font-semibold">${escapeMapHtml(ev.time)}</span> ·
+                <span class="font-bold">${escapeMapHtml(ev.user)}</span>:
+                <span>${escapeMapHtml(ev.desc)}</span>
+            </li>
+        `).join('');
+
+        const marker = L.marker([m.lat, m.lng], {
+            icon: L.divIcon({
+                className: '',
+                html: `<div class="mc-map-pin" style="background-color:${pinColor}">${pinIcon}</div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -14]
+            })
+        });
+
+        marker.bindPopup(`
+            <div class="text-xs space-y-1.5 min-w-[220px] max-w-[280px]">
+                <div class="flex items-center justify-between gap-2">
+                    <p class="font-extrabold text-sm">${pinIcon} ${escapeMapHtml(m.city)} (${escapeMapHtml(m.country_code)})</p>
+                    ${m.is_current ? '<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">Deine Sitzung</span>' : ''}
+                </div>
+                <p class="font-mono text-[11px] text-slate-600">🌐 IP-Netz: <strong>${escapeMapHtml(m.masked_ip)}</strong></p>
+                <p class="text-slate-500">📡 Provider: ${escapeMapHtml(m.isp)}</p>
+                <p class="text-slate-500">👤 Konten: <strong>${escapeMapHtml((m.users || []).join(', '))}</strong></p>
+                <div class="flex items-center gap-2 pt-0.5">
+                    <span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold">✅ ${m.success_count} Logins</span>
+                    <span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold">🚫 ${m.failed_count} Fehlversuche</span>
+                </div>
+                ${evHtml ? `<ul class="text-[10px] text-slate-500 space-y-1 max-h-28 overflow-y-auto pt-1">${evHtml}</ul>` : ''}
+            </div>
+        `);
+
+        marker.addTo(layerGroupSecurityMap);
+        securityMapMarkers[idx] = marker;
+        boundsPts.push([m.lat, m.lng]);
+    });
+
+    if (boundsPts.length >= 2) {
+        mcMap.fitBounds(L.latLngBounds(boundsPts), { padding: [36, 36], maxZoom: 10 });
+    }
+
+    const listEl = document.getElementById('securityMapList');
+    if (listEl) {
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">Keine Einträge für diesen Filter vorhanden.</div>`;
+            return;
+        }
+        listEl.innerHTML = filtered.map((m, idx) => {
+            const isDanger = m.status === 'danger';
+            const badgeCls = isDanger
+                ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300'
+                : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300';
+            return `
+                <button type="button" onclick="focusSecurityMarker(${idx}, ${m.lat}, ${m.lng})" class="w-full text-left p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition-colors cursor-pointer">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                ${isDanger ? '🚨' : (m.is_current ? '🟢' : '🛡️')} ${escapeMapHtml(m.city)}, ${escapeMapHtml(m.country)}
+                            </p>
+                            <p class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                                ${escapeMapHtml(m.masked_ip)} · ${escapeMapHtml((m.users || []).join(', '))}
+                            </p>
+                            <p class="text-[10px] text-slate-400 truncate">${escapeMapHtml(m.isp)} · ${escapeMapHtml(m.last_seen)}</p>
+                        </div>
+                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold shrink-0 ${badgeCls}">
+                            ${isDanger ? `🚫 ${m.failed_count}` : `✅ ${m.success_count}`}
+                        </span>
+                    </div>
+                </button>
+            `;
+        }).join('');
+    }
+}
+
+function focusSecurityMarker(idx, lat, lng) {
+    if (!mcMap) return;
+    mcMap.setView([lat, lng], 10, { animate: true });
+    if (securityMapMarkers[idx]) {
+        securityMapMarkers[idx].openPopup();
+    }
 }
 
 function openMapModal(id) {
