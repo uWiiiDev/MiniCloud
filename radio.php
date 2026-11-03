@@ -503,6 +503,17 @@ require_once __DIR__ . '/includes/header.php';
                         <option value="90" class="text-slate-900">🌙 90 Min.</option>
                     </select>
                     <span id="radioSleepCountdown" class="hidden text-[11px] font-mono font-bold text-amber-300"></span>
+
+                    <!-- Live-Verkehrsfunk mit Audio-Ducking -->
+                    <button type="button" id="btnRadioTrafficBulletin" onclick="triggerRadioTrafficBulletin()"
+                            title="Aktuellen Autobahn-Verkehrsfunk über der laufenden Musik ansagen (Musik wird automatisch auf 18% abgesenkt)"
+                            class="px-3 py-1.5 rounded-xl bg-sky-500/25 hover:bg-sky-500/40 border border-sky-400/40 text-xs font-extrabold text-sky-100 cursor-pointer transition flex items-center gap-1.5">
+                        <span>🚗 Verkehrsfunk</span>
+                    </button>
+                    <a href="traffic.php" title="Verkehrszentrale &amp; Staukarte öffnen"
+                       class="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition">
+                        🛣️ Karte
+                    </a>
                 </div>
             </div>
             <audio id="globalRadioAudio" preload="none"></audio>
@@ -1096,6 +1107,76 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+// ============================================================================
+// LIVE-VERKEHRSFUNK MIT AUTOMATISCHEM AUDIO-DUCKING IM WEBRADIO
+// ============================================================================
+let radioSavedVolForTraffic = null;
+
+function restoreRadioVolFromTraffic() {
+    if (radioSavedVolForTraffic !== null) {
+        setRadioVolume(radioSavedVolForTraffic);
+        const slider = document.getElementById('radioVolumeSlider');
+        if (slider) slider.value = radioSavedVolForTraffic;
+        radioSavedVolForTraffic = null;
+    }
+    const btn = document.getElementById('btnRadioTrafficBulletin');
+    if (btn) btn.innerHTML = '<span>🚗 Verkehrsfunk</span>';
+}
+
+async function triggerRadioTrafficBulletin() {
+    if (!('speechSynthesis' in window)) {
+        alert('Dein Browser unterstützt keine Sprachausgabe (Web Speech API).');
+        return;
+    }
+    if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        restoreRadioVolFromTraffic();
+        return;
+    }
+
+    const btn = document.getElementById('btnRadioTrafficBulletin');
+    if (btn) btn.innerHTML = '<span>⏳ Lade Meldungen...</span>';
+
+    try {
+        const res = await fetch('traffic.php?action=radio_bulletin');
+        const data = await res.json();
+        if (!data || !data.ok || !data.speech) {
+            if (btn) btn.innerHTML = '<span>🚗 Verkehrsfunk</span>';
+            return;
+        }
+
+        // Musik auf 18% absenken (Audio-Ducking), während der Sprecher redet
+        const slider = document.getElementById('radioVolumeSlider');
+        const curVol = slider ? parseInt(slider.value || '85', 10) : 85;
+        radioSavedVolForTraffic = curVol;
+        setRadioVolume(Math.min(curVol, 18));
+
+        const utter = new SpeechSynthesisUtterance(data.speech);
+        utter.lang = 'de-DE';
+        utter.rate = 1.0;
+        if (btn) btn.innerHTML = '<span>⏹️ Durchsage läuft...</span>';
+
+        utter.onend = restoreRadioVolFromTraffic;
+        utter.onerror = restoreRadioVolFromTraffic;
+        window.speechSynthesis.speak(utter);
+    } catch (e) {
+        restoreRadioVolFromTraffic();
+    }
+}
+
+// Optionaler 30-Minuten-Automatik-Verkehrsfunk (wenn in traffic.php aktiviert und Radio läuft)
+setInterval(() => {
+    try {
+        if (localStorage.getItem('mc_auto_traffic_30m') !== '1') return;
+        const now = new Date();
+        if ((now.getMinutes() === 0 || now.getMinutes() === 30) && now.getSeconds() < 10) {
+            if (window.McGlobalRadio && window.McGlobalRadio.getState && window.McGlobalRadio.getState().playing) {
+                triggerRadioTrafficBulletin();
+            }
+        }
+    } catch (e) {}
+}, 10000);
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

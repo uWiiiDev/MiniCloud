@@ -716,6 +716,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_markets'                => '1',
         'enable_maps'                   => '1',
         'enable_weather'                => '1',
+        'enable_traffic'                => '1',
         'maps_airgap_only'              => '1',
         'maps_default_detail'           => '4',
         'maps_max_zoom_detail'          => '14',
@@ -3271,10 +3272,17 @@ function getModuleStatsCatalog(): array
         ],
         'weather' => [
             'icon'        => '⛅',
-            'label'       => 'Wetter, Regenradar & Warnzentrale',
+            'label'       => 'Wetter, Regenradar & Polarlichter',
             'url'         => 'weather.php',
             'setting_key' => 'enable_weather',
             'color'       => 'bg-sky-500',
+        ],
+        'traffic' => [
+            'icon'        => '🚗',
+            'label'       => 'Verkehrszentrale & Staumelder',
+            'url'         => 'traffic.php',
+            'setting_key' => 'enable_traffic',
+            'color'       => 'bg-rose-600',
         ],
         'webdav' => [
             'icon'        => '📡',
@@ -3295,7 +3303,7 @@ function detectCurrentModuleKeyForStats(): ?string
 
     // Hintergrund-Polls (z.B. ungelesene Nachrichten-Badge oder Office-Co-Editing-Heartbeat) nicht als Modulaufruf werten
     $ajaxAction = (string)($_GET['ajax'] ?? $_POST['ajax'] ?? $_GET['action'] ?? $_POST['action'] ?? '');
-    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search', 'tile', 'floorplan_img', 'offline_search', 'rain_radar_meta', 'rain_radar_tile', 'poi_radius_search', 'security_map_data'], true)) {
+    if (in_array($ajaxAction, ['unread_count', 'check_unread', 'poll', 'voice_poll', 'voice_signal', 'voice_join', 'voice_leave', 'voice_ptt', 'heartbeat', 'poll_state', 'live_status', 'poll_matches', 'get_leaderboard', 'save_state', 'save_progress', 'toggle_favorite', 'icy_meta', 'radio_search', 'translate_article', 'ai_briefing', 'search', 'tile', 'floorplan_img', 'offline_search', 'rain_radar_meta', 'rain_radar_tile', 'poi_radius_search', 'security_map_data', 'radio_bulletin'], true)) {
         return null;
     }
 
@@ -3309,6 +3317,7 @@ function detectCurrentModuleKeyForStats(): ?string
         'contacts.php'  => 'contacts',
         'maps.php'      => 'maps',
         'weather.php'   => 'weather',
+        'traffic.php'   => 'traffic',
         'messages.php'  => 'chat',
         'pdf_tools.php' => 'pdf_tools',
         'projects.php'  => 'projects',
