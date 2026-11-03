@@ -82,10 +82,25 @@ if (!is_dir($cacheDir)) {
 // ----------------------------------------------------------------------------
 // 2. DEUTSCHE ORTS-SUCHE & TANKERKÖNIG / MTS-K ABRUF
 // ----------------------------------------------------------------------------
+function buildIchTankeCitySlug(string $name): string
+{
+    $s = mb_strtolower(trim($name), 'UTF-8');
+    $s = strtr($s, ['ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss', 'ä' => 'ae']);
+    $s = (string)preg_replace('/[^a-z0-9]+/', '-', $s);
+    return trim($s, '-');
+}
+
 function findFuelLocation(string $query): array
 {
     $query = trim($query);
-    $default = ['zip' => '70173', 'name' => 'Stuttgart', 'state' => 'Baden-Württemberg', 'lat' => 48.7758, 'lng' => 9.1829];
+    $default = [
+        'zip'   => '70173',
+        'name'  => 'Stuttgart',
+        'state' => 'Baden-Württemberg',
+        'lat'   => 48.7758,
+        'lng'   => 9.1829,
+        'slug'  => '70173-stuttgart',
+    ];
     if ($query === '') {
         return $default;
     }
@@ -96,33 +111,53 @@ function findFuelLocation(string $query): array
         $list = $raw ? json_decode($raw, true) : null;
         if (is_array($list)) {
             $qLow = mb_strtolower($query, 'UTF-8');
+            $matched = null;
+
             // 1. Exakter Treffer auf PLZ oder Ortsname
             foreach ($list as $p) {
                 $zip  = (string)($p[0] ?? '');
                 $name = (string)($p[1] ?? '');
                 if ($zip === $query || mb_strtolower($name, 'UTF-8') === $qLow) {
-                    return [
-                        'zip'   => $zip,
-                        'name'  => $name,
-                        'state' => (string)($p[2] ?? 'Deutschland'),
-                        'lat'   => (float)($p[4] ?? 48.7758),
-                        'lng'   => (float)($p[5] ?? 9.1829),
-                    ];
+                    $matched = $p;
+                    break;
                 }
             }
             // 2. Teilstring-Treffer auf Ortsname oder PLZ-Präfix
-            foreach ($list as $p) {
-                $zip  = (string)($p[0] ?? '');
-                $name = (string)($p[1] ?? '');
-                if (($zip !== '' && str_starts_with($zip, $query)) || mb_stripos($name, $query, 0, 'UTF-8') !== false) {
-                    return [
-                        'zip'   => $zip,
-                        'name'  => $name,
-                        'state' => (string)($p[2] ?? 'Deutschland'),
-                        'lat'   => (float)($p[4] ?? 48.7758),
-                        'lng'   => (float)($p[5] ?? 9.1829),
-                    ];
+            if ($matched === null) {
+                foreach ($list as $p) {
+                    $zip  = (string)($p[0] ?? '');
+                    $name = (string)($p[1] ?? '');
+                    if (($zip !== '' && str_starts_with($zip, $query)) || mb_stripos($name, $query, 0, 'UTF-8') !== false) {
+                        $matched = $p;
+                        break;
+                    }
                 }
+            }
+
+            if (is_array($matched)) {
+                $zip  = (string)($matched[0] ?? '70173');
+                $name = (string)($matched[1] ?? 'Stuttgart');
+                $nameLow = mb_strtolower($name, 'UTF-8');
+                $zipCount = 0;
+                foreach ($list as $p) {
+                    if (mb_strtolower((string)($p[1] ?? ''), 'UTF-8') === $nameLow) {
+                        $zipCount++;
+                        if ($zipCount > 1) {
+                            break;
+                        }
+                    }
+                }
+                $citySlug = buildIchTankeCitySlug($name);
+                $slug = ($zipCount > 1 && $zip !== '') ? ($zip . '-' . $citySlug) : $citySlug;
+
+                return [
+                    'zip'   => $zip,
+                    'name'  => $name,
+                    'state' => (string)($matched[2] ?? 'Deutschland'),
+                    'lat'   => (float)($matched[4] ?? 48.7758),
+                    'lng'   => (float)($matched[5] ?? 9.1829),
+                    'slug'  => $slug,
+                ];
             }
         }
     }
@@ -156,89 +191,89 @@ function getHourlyFuelPriceCurve(float $baseE5 = 1.949, float $baseE10 = 1.889, 
 }
 
 /**
- * Parst eine MTS-K Live-Tankstellenliste (clever-tanken.de HTML) für eine bestimmte Kraftstoffsorte.
+ * Parst eine MTS-K Live-Tankstellenliste von ich-tanke.de (enthält eingebettetes JSON-Array `var tankstellen = [...]`
+ * mit exakten GPS-Koordinaten, MTS-K-UUIDs, Straße, PLZ/Ort, Preis & Änderungszeitpunkt).
  *
- * @return array<string, array{id: string, name: string, street: string, place: string, dist: float, changed: string, price: float}>
+ * @return array<string, array{id: string, name: string, street: string, place: string, lat: float, lng: float, dist: float, is_open: bool, changed: string, price: float}>
  */
-function parseMtskFuelHtml(string $html): array
+function parseIchTankeHtml(string $html): array
 {
-    $result = [];
-    $blocks = explode('href="/tankstelle_details/', $html);
-    array_shift($blocks);
+    $res = [];
+    $meta = [];
 
-    foreach ($blocks as $b) {
-        if (!preg_match('/^(\d+)"/', $b, $mId)) {
-            continue;
-        }
-        $ctId = $mId[1];
-
-        $price = 0.0;
-        if (preg_match('/price-text[^>]*>\s*(\d+\.\d{2})\s*<\/span>.*?sup[^>]*>\s*(\d)\s*<\/sup>/s', $b, $mP)) {
-            $price = (float)($mP[1] . $mP[2]);
-        }
-        $name   = preg_match('/fuel-station-location-name[^>]*>([^<]+)</', $b, $mN) ? trim(html_entity_decode($mN[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')) : '';
-        $street = preg_match('/fuel-station-location-street[^>]*>([^<]+)</', $b, $mS) ? trim(html_entity_decode($mS[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')) : '';
-        $city   = preg_match('/fuel-station-location-city[^>]*>([^<]+)</', $b, $mC) ? trim(html_entity_decode($mC[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')) : '';
-        $dist   = preg_match('/fuel-station-location-distance[^>]*>\s*([\d\.]+)\s*km/', $b, $mD) ? (float)$mD[1] : 0.0;
-        $chg    = preg_match('/price-changed[^>]*>\s*([^<\n]+)/', $b, $mCh) ? trim(preg_replace('/\s+/', ' ', html_entity_decode($mCh[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) : '';
-
-        if ($name !== '' && $price > 1.10) {
-            $result[$ctId] = [
-                'id'      => $ctId,
-                'name'    => $name,
-                'street'  => $street,
-                'place'   => $city,
-                'dist'    => $dist,
-                'changed' => $chg,
-                'price'   => $price,
-            ];
+    if (preg_match_all('/<li id="tankstelle-([0-9a-f]{32})">(.*?)<\/li>/s', $html, $mLi, PREG_SET_ORDER)) {
+        foreach ($mLi as $li) {
+            $id   = $li[1];
+            $body = $li[2];
+            $dist = preg_match('/Entfernung:\s*ca\.\s*([\d,]+)\s*km/i', $body, $mD) ? (float)str_replace(',', '.', $mD[1]) : 0.0;
+            $open = strpos($body, 'class="o0"') === false;
+            $meta[$id] = ['dist' => $dist, 'is_open' => $open];
         }
     }
-    return $result;
+
+    if (preg_match('/var tankstellen=(\[.*?\]);/s', $html, $mJson)) {
+        $arr = @json_decode($mJson[1], true);
+        if (is_array($arr)) {
+            foreach ($arr as $item) {
+                if (!is_array($item) || count($item) < 4) {
+                    continue;
+                }
+                $lng  = (float)$item[0];
+                $lat  = (float)$item[1];
+                $name = trim((string)$item[2]);
+                $info = (string)$item[3];
+
+                if (!preg_match('/\/tankstelle\/([0-9a-f]{32})\//', $info, $mId)) {
+                    continue;
+                }
+                $id = $mId[1];
+
+                $price = 0.0;
+                if (preg_match('/class="zahl">(\d+,\d{2})<sup>(\d)<\/sup>/', $info, $mP)) {
+                    $price = (float)(str_replace(',', '.', $mP[1]) . $mP[2]);
+                }
+
+                $changed = '';
+                if (preg_match('/<em>(?:<span[^>]*>.*?<\/span>)?\s*([^<]+)<\/em>/', $info, $mC)) {
+                    $changed = trim(html_entity_decode($mC[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                }
+
+                $street = '';
+                $place  = '';
+                if (preg_match('/<\/a><br \/>([^<]+)<br \/><a[^>]*>([^<]+)<\/a>/', $info, $mAdr)) {
+                    $street = trim(html_entity_decode($mAdr[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                    $place  = trim(html_entity_decode($mAdr[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                }
+
+                if ($price > 1.10 && ($lat !== 0.0 || $lng !== 0.0)) {
+                    $res[$id] = [
+                        'id'      => $id,
+                        'name'    => $name !== '' ? $name : 'Tankstelle',
+                        'street'  => $street,
+                        'place'   => $place,
+                        'lat'     => $lat,
+                        'lng'     => $lng,
+                        'dist'    => $meta[$id]['dist'] ?? 0.0,
+                        'is_open' => $meta[$id]['is_open'] ?? true,
+                        'changed' => $changed !== '' ? $changed : 'MTS-K Live',
+                        'price'   => $price,
+                    ];
+                }
+            }
+        }
+    }
+
+    return $res;
 }
 
 /**
- * Ruft echte MTS-K Echtzeit-Preise (Super E5, Super E10, Diesel) für Tankstellen im Umkreis ab.
- * Nutzt entweder einen hinterlegten persönlichen Tankerkönig-API-Key ODER – falls keiner hinterlegt ist –
- * den parallelen Live-MTS-K-Feed (clever-tanken.de für E5/E10/Diesel kombiniert mit Tankerkönig-Geokoordinaten).
+ * Führt einen parallelen cURL-Abruf für mehrere URLs durch.
+ *
+ * @param array<string, string> $urls
+ * @return array<string, string>
  */
-function fetchNearbyFuelStations(float $lat, float $lng, int $radiusKm, string $customApiKey, string $cacheDir, string $placeQuery = 'Stuttgart', bool $forceRefresh = false): array
+function fetchMultiUrls(array $urls, int $timeoutSec = 8): array
 {
-    $radiusKm = max(2, min(25, $radiusKm));
-    $hasCustomKey = trim($customApiKey) !== '' && strlen(trim($customApiKey)) >= 30;
-    $apiKey = $hasCustomKey ? trim($customApiKey) : '00000000-0000-0000-0000-000000000002';
-
-    $cacheKey = sprintf('fuel_live_v2_%0.3f_%0.3f_%d_%s.json', $lat, $lng, $radiusKm, $hasCustomKey ? 'tk' : 'mtsk');
-    $cacheFile = $cacheDir . '/' . $cacheKey;
-
-    if (!$forceRefresh && is_file($cacheFile) && (time() - (int)filemtime($cacheFile)) < 180) {
-        $cached = @json_decode((string)@file_get_contents($cacheFile), true);
-        if (is_array($cached) && !empty($cached['stations'])) {
-            return $cached;
-        }
-    }
-
-    // 1. Paralleler Abruf: MTS-K Live-Preise (E5=7, E10=5, Diesel=3) + Tankerkönig-Koordinaten
-    $tkUrl = sprintf(
-        'https://creativecommons.tankerkoenig.de/json/list.php?lat=%0.4f&lng=%0.4f&rad=%d&sort=dist&type=all&apikey=%s',
-        $lat,
-        $lng,
-        $radiusKm,
-        rawurlencode($apiKey)
-    );
-
-    $urls = ['tk' => $tkUrl];
-    foreach (['e5' => 7, 'e10' => 5, 'diesel' => 3] as $type => $spritId) {
-        $urls[$type] = sprintf(
-            'https://www.clever-tanken.de/tankstelle_liste?lat=%0.4f&lon=%0.4f&ort=%s&spritsorte=%d&r=%d',
-            $lat,
-            $lng,
-            rawurlencode($placeQuery),
-            $spritId,
-            $radiusKm
-        );
-    }
-
     $mh = curl_multi_init();
     $handles = [];
     foreach ($urls as $key => $u) {
@@ -246,9 +281,10 @@ function fetchNearbyFuelStations(float $lat, float $lng, int $radiusKm, string $
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT        => 6,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (X11; Linux x86_64) Chrome/124.0 Safari/537.36',
+            CURLOPT_TIMEOUT        => $timeoutSec,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
         ]);
         curl_multi_add_handle($mh, $ch);
         $handles[$key] = $ch;
@@ -270,88 +306,119 @@ function fetchNearbyFuelStations(float $lat, float $lng, int $radiusKm, string $
     }
     curl_multi_close($mh);
 
-    $tkData = @json_decode($responses['tk'] ?? '', true);
-    $tkStations = (is_array($tkData) && !empty($tkData['stations']) && is_array($tkData['stations'])) ? $tkData['stations'] : [];
+    return $responses;
+}
 
-    // Koordinaten-Index aus Tankerkönig-Stammdaten nach Straße aufbauen
-    $coordsByStreet = [];
-    foreach ($tkStations as $st) {
-        if (!is_array($st)) {
-            continue;
-        }
-        $sLat = (float)($st['lat'] ?? 0.0);
-        $sLng = (float)($st['lng'] ?? 0.0);
-        if ($sLat === 0.0 && $sLng === 0.0) {
-            continue;
-        }
-        $streetNorm = mb_strtolower(trim((string)($st['street'] ?? '') . ' ' . (string)($st['houseNumber'] ?? '')), 'UTF-8');
-        $streetNorm = preg_replace('/\s+/', ' ', str_replace(['straße', 'str.'], 'str', $streetNorm));
-        if ($streetNorm !== '') {
-            $coordsByStreet[$streetNorm] = [
-                'lat'     => $sLat,
-                'lng'     => $sLng,
-                'brand'   => trim((string)($st['brand'] ?? '')),
-                'is_open' => (bool)($st['isOpen'] ?? true),
-            ];
+/**
+ * Ruft echte MTS-K Echtzeit-Preise (Super E5, Super E10, Diesel) inkl. exakter Geokoordinaten ab.
+ * Nutzt entweder einen persönlichen Tankerkönig-API-Key ODER den MTS-K Live-Feed (ich-tanke.de) mit
+ * eingebettetem `var tankstellen`-Geodaten-JSON.
+ */
+function fetchNearbyFuelStations(
+    float $lat,
+    float $lng,
+    int $radiusKm,
+    string $customApiKey,
+    string $cacheDir,
+    array $locInfo = [],
+    bool $forceRefresh = false
+): array {
+    $radiusKm = max(2, min(25, $radiusKm));
+    $hasCustomKey = trim($customApiKey) !== '' && strlen(trim($customApiKey)) >= 30;
+    $zip  = (string)($locInfo['zip'] ?? '70173');
+    $slug = (string)($locInfo['slug'] ?? '70173-stuttgart');
+
+    $cacheKey = sprintf('fuel_live_v3_%s_%0.3f_%0.3f_%d_%s.json', preg_replace('/[^a-z0-9_-]/', '', $slug), $lat, $lng, $radiusKm, $hasCustomKey ? 'tk' : 'mtsk');
+    $cacheFile = $cacheDir . '/' . $cacheKey;
+
+    if (!$forceRefresh && is_file($cacheFile) && (time() - (int)filemtime($cacheFile)) < 180) {
+        $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+        if (is_array($cached) && !empty($cached['stations'])) {
+            return $cached;
         }
     }
 
     $stations = [];
 
-    // A) Falls ein eigener gültiger Tankerkönig-Key echte Preise (> 1.15 €) geliefert hat:
-    $tkHasRealPrices = false;
-    if ($hasCustomKey && !empty($tkStations)) {
-        foreach ($tkStations as $st) {
-            if ((float)($st['e5'] ?? 0.0) > 1.15 || (float)($st['diesel'] ?? 0.0) > 1.15) {
-                $tkHasRealPrices = true;
-                break;
+    // 1. Falls persönlicher Tankerkönig-Key vorhanden ist, zuerst diesen abfragen
+    if ($hasCustomKey) {
+        $tkUrl = sprintf(
+            'https://creativecommons.tankerkoenig.de/json/list.php?lat=%0.4f&lng=%0.4f&rad=%d&sort=dist&type=all&apikey=%s',
+            $lat,
+            $lng,
+            $radiusKm,
+            rawurlencode(trim($customApiKey))
+        );
+        $resp = fetchMultiUrls(['tk' => $tkUrl], 6);
+        $tkData = @json_decode($resp['tk'] ?? '', true);
+        if (is_array($tkData) && !empty($tkData['stations']) && is_array($tkData['stations'])) {
+            foreach ($tkData['stations'] as $idx => $st) {
+                $sLat = (float)($st['lat'] ?? 0.0);
+                $sLng = (float)($st['lng'] ?? 0.0);
+                $e5     = (float)($st['e5'] ?? 0.0);
+                $e10    = (float)($st['e10'] ?? 0.0);
+                $diesel = (float)($st['diesel'] ?? 0.0);
+                if (($sLat === 0.0 && $sLng === 0.0) || ($e5 <= 1.15 && $diesel <= 1.15)) {
+                    continue;
+                }
+                $brand = trim((string)($st['brand'] ?? ''));
+                $name  = trim((string)($st['name'] ?? $brand ?: 'Tankstelle'));
+                $stations[] = [
+                    'id'      => (string)($st['id'] ?? ('tk_' . $idx)),
+                    'name'    => $name,
+                    'brand'   => $brand !== '' ? $brand : explode(' ', $name)[0],
+                    'street'  => trim((string)($st['street'] ?? '') . ' ' . (string)($st['houseNumber'] ?? '')),
+                    'place'   => trim((string)($st['postCode'] ?? '') . ' ' . (string)($st['place'] ?? '')),
+                    'lat'     => $sLat,
+                    'lng'     => $sLng,
+                    'dist'    => round((float)($st['dist'] ?? 0.0), 1),
+                    'is_open' => (bool)($st['isOpen'] ?? true),
+                    'changed' => 'MTS-K Live',
+                    'e5'      => $e5 > 1.15 ? $e5 : round($e10 + 0.06, 3),
+                    'e10'     => $e10 > 1.15 ? $e10 : round($e5 - 0.06, 3),
+                    'diesel'  => $diesel > 1.15 ? $diesel : round($e5 - 0.05, 3),
+                ];
             }
         }
     }
 
-    if ($tkHasRealPrices) {
-        foreach ($tkStations as $idx => $st) {
-            $sLat = (float)($st['lat'] ?? 0.0);
-            $sLng = (float)($st['lng'] ?? 0.0);
-            if ($sLat === 0.0 && $sLng === 0.0) {
-                continue;
+    // 2. Live MTS-K Abruf über ich-tanke.de (Super E5, Super E10, Diesel parallel)
+    if (empty($stations)) {
+        $urls = [
+            'e5'     => "https://www.ich-tanke.de/tankstellen/super-e5/umkreis/{$slug}/",
+            'e10'    => "https://www.ich-tanke.de/tankstellen/super-e10/umkreis/{$slug}/",
+            'diesel' => "https://www.ich-tanke.de/tankstellen/diesel/umkreis/{$slug}/",
+        ];
+        $responses = fetchMultiUrls($urls, 8);
+        $e5Map     = parseIchTankeHtml($responses['e5'] ?? '');
+
+        // Falls der Orts-Slug (z. B. wegen Sonderformat) 0 Treffer lieferte, über /suche/?q={zip} exakten Slug auflösen
+        if (empty($e5Map) && $zip !== '') {
+            $searchResp = fetchMultiUrls(['search' => 'https://www.ich-tanke.de/suche/?q=' . rawurlencode($zip)], 6);
+            if (preg_match('/href="\/tankstellen\/super-e5\/umkreis\/([^"\/]+)\/"/', $searchResp['search'] ?? '', $mSlug)) {
+                $resolvedSlug = $mSlug[1];
+                if ($resolvedSlug !== $slug) {
+                    $responses = fetchMultiUrls([
+                        'e5'     => "https://www.ich-tanke.de/tankstellen/super-e5/umkreis/{$resolvedSlug}/",
+                        'e10'    => "https://www.ich-tanke.de/tankstellen/super-e10/umkreis/{$resolvedSlug}/",
+                        'diesel' => "https://www.ich-tanke.de/tankstellen/diesel/umkreis/{$resolvedSlug}/",
+                    ], 8);
+                    $e5Map = parseIchTankeHtml($responses['e5'] ?? '');
+                }
             }
-            $brand  = trim((string)($st['brand'] ?? ''));
-            $name   = trim((string)($st['name'] ?? $brand ?: 'Tankstelle'));
-            $e5     = (float)($st['e5'] ?? 0.0);
-            $e10    = (float)($st['e10'] ?? 0.0);
-            $diesel = (float)($st['diesel'] ?? 0.0);
-            if ($e5 <= 1.15 && $diesel <= 1.15) {
-                continue;
-            }
-            $stations[] = [
-                'id'      => (string)($st['id'] ?? ('tk_' . $idx)),
-                'name'    => $name,
-                'brand'   => $brand !== '' ? $brand : explode(' ', $name)[0],
-                'street'  => trim((string)($st['street'] ?? '') . ' ' . (string)($st['houseNumber'] ?? '')),
-                'place'   => trim((string)($st['postCode'] ?? '') . ' ' . (string)($st['place'] ?? '')),
-                'lat'     => $sLat,
-                'lng'     => $sLng,
-                'dist'    => round((float)($st['dist'] ?? 0.0), 1),
-                'is_open' => (bool)($st['isOpen'] ?? true),
-                'changed' => 'MTS-K Live',
-                'e5'      => $e5 > 1.15 ? $e5 : round($e10 + 0.06, 3),
-                'e10'     => $e10 > 1.15 ? $e10 : round($e5 - 0.06, 3),
-                'diesel'  => $diesel > 1.15 ? $diesel : round($e5 - 0.05, 3),
-            ];
         }
-    } else {
-        // B) Live MTS-K Abruf über clever-tanken.de (E5 + E10 + Diesel) kombiniert mit Koordinaten
-        $e5Map     = parseMtskFuelHtml($responses['e5'] ?? '');
-        $e10Map    = parseMtskFuelHtml($responses['e10'] ?? '');
-        $dieselMap = parseMtskFuelHtml($responses['diesel'] ?? '');
+
+        $e10Map    = parseIchTankeHtml($responses['e10'] ?? '');
+        $dieselMap = parseIchTankeHtml($responses['diesel'] ?? '');
 
         $allIds = array_unique(array_merge(array_keys($e5Map), array_keys($e10Map), array_keys($dieselMap)));
-        foreach ($allIds as $idx => $ctId) {
-            $base = $e5Map[$ctId] ?? $e10Map[$ctId] ?? $dieselMap[$ctId];
-            $pE5     = (float)($e5Map[$ctId]['price'] ?? 0.0);
-            $pE10    = (float)($e10Map[$ctId]['price'] ?? 0.0);
-            $pDiesel = (float)($dieselMap[$ctId]['price'] ?? 0.0);
+        $allParsed = [];
+
+        foreach ($allIds as $id) {
+            $base = $e5Map[$id] ?? $e10Map[$id] ?? $dieselMap[$id];
+            $pE5     = (float)($e5Map[$id]['price'] ?? 0.0);
+            $pE10    = (float)($e10Map[$id]['price'] ?? 0.0);
+            $pDiesel = (float)($dieselMap[$id]['price'] ?? 0.0);
 
             if ($pE5 <= 1.15 && $pE10 > 1.15) {
                 $pE5 = round($pE10 + 0.060, 3);
@@ -360,49 +427,51 @@ function fetchNearbyFuelStations(float $lat, float $lng, int $radiusKm, string $
                 $pE10 = round($pE5 - 0.060, 3);
             }
             if ($pDiesel <= 1.15 && $pE5 > 1.15) {
-                $pDiesel = round($pE5 - 0.050, 3);
+                $pDiesel = round($pE5 - 0.040, 3);
             }
             if ($pE5 <= 1.15 && $pDiesel <= 1.15) {
                 continue;
             }
 
-            $streetNorm = mb_strtolower(trim($base['street']), 'UTF-8');
-            $streetNorm = preg_replace('/\s+/', ' ', str_replace(['straße', 'str.'], 'str', $streetNorm));
-
-            if (isset($coordsByStreet[$streetNorm])) {
-                $sLat   = $coordsByStreet[$streetNorm]['lat'];
-                $sLng   = $coordsByStreet[$streetNorm]['lng'];
-                $brand  = $coordsByStreet[$streetNorm]['brand'] ?: explode(' ', $base['name'])[0];
-                $isOpen = $coordsByStreet[$streetNorm]['is_open'];
-            } else {
-                // Deterministische Geo-Position im exakten Abstand rund um das Ortszentrum
-                $angle  = ($idx * 137.5) * (M_PI / 180.0);
-                $distKm = max(0.4, (float)$base['dist']);
-                $sLat   = round($lat + ($distKm / 111.32) * cos($angle), 5);
-                $sLng   = round($lng + ($distKm / (111.32 * max(0.2, cos(deg2rad($lat))))) * sin($angle), 5);
-                $brand  = explode(' ', $base['name'])[0];
-                $isOpen = true;
+            // Exakte Luftlinien-Distanz zum gewählten Ortszentrum berechnen, falls Distanzangabe fehlt
+            $distKm = (float)$base['dist'];
+            if ($distKm <= 0.0) {
+                $dLat = deg2rad($base['lat'] - $lat);
+                $dLng = deg2rad($base['lng'] - $lng);
+                $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat)) * cos(deg2rad($base['lat'])) * sin($dLng / 2) ** 2;
+                $distKm = round(6371.0 * 2 * atan2(sqrt($a), sqrt(max(0.0, 1.0 - $a))), 1);
             }
 
-            $stations[] = [
-                'id'      => 'ct_' . $ctId,
+            $brand = explode(' ', $base['name'])[0] ?: 'Tankstelle';
+            $item = [
+                'id'      => $id,
                 'name'    => $base['name'],
                 'brand'   => $brand,
                 'street'  => $base['street'],
                 'place'   => $base['place'],
-                'lat'     => $sLat,
-                'lng'     => $sLng,
-                'dist'    => round((float)$base['dist'], 1),
-                'is_open' => $isOpen,
-                'changed' => $base['changed'] !== '' ? $base['changed'] : 'MTS-K Live',
+                'lat'     => (float)$base['lat'],
+                'lng'     => (float)$base['lng'],
+                'dist'    => round($distKm, 1),
+                'is_open' => (bool)$base['is_open'],
+                'changed' => $base['changed'],
                 'e5'      => $pE5,
                 'e10'     => $pE10,
                 'diesel'  => $pDiesel,
             ];
+            $allParsed[] = $item;
+            if ($distKm <= $radiusKm + 0.5) {
+                $stations[] = $item;
+            }
+        }
+
+        // Falls im engen Radius (z. B. 5 km auf dem Land) weniger als 3 Tankstellen liegen, die nächstgelegenen aus dem Umkreis zeigen
+        if (count($stations) < 3 && !empty($allParsed)) {
+            usort($allParsed, static fn(array $a, array $b): int => $a['dist'] <=> $b['dist']);
+            $stations = array_slice($allParsed, 0, 20);
         }
     }
 
-    // Nach günstigstem E5-Preis sortieren
+    // Nach günstigstem E5-Preis (und bei Gleichstand nach Entfernung) sortieren
     usort($stations, static fn(array $a, array $b): int => ($a['e5'] <=> $b['e5']) ?: ($a['dist'] <=> $b['dist']));
 
     $result = [
@@ -525,7 +594,7 @@ $radiusKm     = max(2, min(25, (int)($_GET['rad'] ?? 10)));
 $forceRefresh = !empty($_GET['refresh']);
 $locInfo      = findFuelLocation($cityQuery);
 $customKey    = (string)($appSettings['tankerkoenig_api_key'] ?? '');
-$fuelData     = fetchNearbyFuelStations($locInfo['lat'], $locInfo['lng'], $radiusKm, $customKey, $cacheDir, $locInfo['name'], $forceRefresh);
+$fuelData     = fetchNearbyFuelStations($locInfo['lat'], $locInfo['lng'], $radiusKm, $customKey, $cacheDir, $locInfo, $forceRefresh);
 $stations     = $fuelData['stations'] ?? [];
 
 $e5Prices     = array_values(array_filter(array_map(static fn($s) => (float)($s['e5'] ?? 0), $stations), static fn($v) => $v > 1.10));
