@@ -457,10 +457,18 @@ require_once __DIR__ . '/includes/header.php';
     <!-- HAUPTBEREICH: TANKSTELLEN-KARTE (LINKS) + PREISLISTE (RECHTS) -->
     <div class="fuel-main-grid">
         <div class="fuel-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                 <div>
-                    <h3 style="margin:0;font-size:1.05rem;">🗺️ Tankstellen-Karte (<?= e($locInfo['name']) ?> &amp; Umgebung)</h3>
-                    <div class="text-muted" style="font-size:0.78rem;">Grün = günstigste Tankstelle im Umkreis · Klick auf Liste rechts zoomt direkt zur Säule</div>
+                    <h3 style="margin:0;font-size:1.05rem;">🗺️ Tankstellen- &amp; Stromtankstellen-Karte (<?= e($locInfo['name']) ?> &amp; Umgebung)</h3>
+                    <div class="text-muted" style="font-size:0.78rem;">Grün = günstigste Tankstelle · Violett/Blau = ⚡ E-Ladesäulen · Klick auf Liste rechts zoomt direkt zur Säule</div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button type="button" id="btnFuelEvToggle" onclick="toggleFuelEvChargers()" class="btn btn-sm" style="background:rgba(147,51,234,0.18);border:1px solid #9333ea;color:#d8b4fe;font-weight:700;">
+                        ⚡ Stromtankstellen einblenden
+                    </button>
+                    <a href="maps.php?ev=1" class="btn btn-sm" style="background:rgba(56,189,248,0.15);border:1px solid #0284c7;color:#7dd3fc;text-decoration:none;font-weight:700;">
+                        🗺️ Vollbild-Ladekarte &rarr;
+                    </a>
                 </div>
             </div>
             <div id="fuelMapCanvas" class="fuel-map-box"></div>
@@ -692,6 +700,72 @@ function initFuelMap() {
 
     if (bounds.length > 1) {
         try { fuelMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 }); } catch (e) {}
+    }
+
+    fuelMap.on('moveend', function() {
+        if (fuelEvActive) {
+            loadFuelEvChargers();
+        }
+    });
+}
+
+let fuelEvActive = false;
+let fuelEvLayer  = null;
+
+async function toggleFuelEvChargers() {
+    if (!fuelMap) return;
+    fuelEvActive = !fuelEvActive;
+    const btn = document.getElementById('btnFuelEvToggle');
+    if (!fuelEvLayer) {
+        fuelEvLayer = L.layerGroup().addTo(fuelMap);
+    }
+    if (!fuelEvActive) {
+        fuelEvLayer.clearLayers();
+        if (btn) {
+            btn.textContent = '⚡ Stromtankstellen einblenden';
+            btn.style.background = 'rgba(147,51,234,0.18)';
+            btn.style.color = '#d8b4fe';
+        }
+        return;
+    }
+    if (btn) {
+        btn.textContent = '⏳ Lade Stromtankstellen…';
+        btn.style.background = '#9333ea';
+        btn.style.color = '#ffffff';
+    }
+    await loadFuelEvChargers();
+}
+
+async function loadFuelEvChargers() {
+    if (!fuelMap || !fuelEvActive || !fuelEvLayer) return;
+    const btn = document.getElementById('btnFuelEvToggle');
+    try {
+        const b = fuelMap.getBounds();
+        const z = Math.max(10, fuelMap.getZoom());
+        const res = await fetch(`maps.php?action=ev_charging_bbox&south=${encodeURIComponent(b.getSouth())}&west=${encodeURIComponent(b.getWest())}&north=${encodeURIComponent(b.getNorth())}&east=${encodeURIComponent(b.getEast())}&zoom=${encodeURIComponent(z)}`);
+        const d = await res.json();
+        fuelEvLayer.clearLayers();
+        if (d && d.ok && Array.isArray(d.stations)) {
+            d.stations.forEach(st => {
+                L.circleMarker([st.lat, st.lng], {
+                    radius: st.max_kw >= 150 ? 9 : 7,
+                    color: '#ffffff',
+                    weight: 2,
+                    fillColor: st.color || '#9333ea',
+                    fillOpacity: 0.95
+                }).bindPopup(
+                    `<strong>${st.icon || '⚡'} ${st.title}</strong><br>` +
+                    `<span style="color:${st.color || '#9333ea'};font-weight:700;">Max. ${st.max_kw || 22} kW</span> · ${st.sockets || 'CCS / Typ 2'}<br>` +
+                    (st.operator ? `🏢 ${st.operator}<br>` : '') +
+                    (st.address ? `📫 ${st.address}` : '')
+                ).addTo(fuelEvLayer);
+            });
+            if (btn) {
+                btn.textContent = `⚡ ${d.stations.length} Stromtankstellen aktiv`;
+            }
+        }
+    } catch (e) {
+        if (btn) btn.textContent = '⚡ Stromtankstellen aktiv';
     }
 }
 

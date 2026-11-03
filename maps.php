@@ -1130,6 +1130,339 @@ if (isset($_GET['action']) && $_GET['action'] === 'poi_radius_search') {
     exit;
 }
 
+// 5e_2) Flächendeckendes Stromtankstellen- & E-Ladesäulen-Radar (?action=ev_charging_bbox)
+if (isset($_GET['action']) && $_GET['action'] === 'ev_charging_bbox') {
+    @session_write_close();
+    header('Content-Type: application/json; charset=UTF-8');
+
+    $south = max(-85.0, min(85.0, (float)($_GET['south'] ?? 47.2)));
+    $north = max(-85.0, min(85.0, (float)($_GET['north'] ?? 55.1)));
+    $west  = max(-180.0, min(180.0, (float)($_GET['west'] ?? 5.8)));
+    $east  = max(-180.0, min(180.0, (float)($_GET['east'] ?? 15.1)));
+    $zoom  = max(4, min(18, (int)($_GET['zoom'] ?? 6)));
+
+    if ($south > $north) {
+        [$south, $north] = [$north, $south];
+    }
+    if ($west > $east) {
+        [$west, $east] = [$east, $west];
+    }
+
+    $evCacheDir = $tilesCacheDir . '/ev_cache';
+    if (!is_dir($evCacheDir)) {
+        @mkdir($evCacheDir, 0775, true);
+    }
+
+    // Bundesweites Basis-Verzeichnis großer Schnellladeparks (HPC) & Lade-Hubs (immer verfügbar, auch bei Zoom 4–8 & Offline)
+    $nationwideHubs = [
+        ['title' => 'EnBW HyperHub Berlin-Tempelhof',       'operator' => 'EnBW mobility+',     'city' => 'Berlin',              'lat' => 52.4732, 'lng' => 13.3852, 'kw' => 300, 'cap' => 16, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'IONITY Ladepark Berlin-Mitte / Alex',  'operator' => 'IONITY / Stadtwerke', 'city' => 'Berlin',              'lat' => 52.5219, 'lng' => 13.4132, 'kw' => 350, 'cap' => 12, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'Tesla Supercharger Berlin-EUREF',      'operator' => 'Tesla Supercharger',  'city' => 'Berlin',              'lat' => 52.4815, 'lng' => 13.3568, 'kw' => 250, 'cap' => 20, 'sockets' => 'CCS V3 (250 kW)'],
+        ['title' => 'Hamburg Stromnetz Lade-Hub HafenCity', 'operator' => 'Hamburg Energie',     'city' => 'Hamburg',             'lat' => 53.5413, 'lng' => 9.9964,  'kw' => 150, 'cap' => 12, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'Aral pulse Schnellladepark Hamburg',   'operator' => 'Aral pulse',          'city' => 'Hamburg',             'lat' => 53.5652, 'lng' => 9.9810,  'kw' => 300, 'cap' => 10, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'SWM Schnellladepark München-Olympia',  'operator' => 'Stadtwerke München',  'city' => 'München',             'lat' => 48.1731, 'lng' => 11.5466, 'kw' => 300, 'cap' => 18, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW HyperNetz München-Ost',           'operator' => 'EnBW mobility+',     'city' => 'München',             'lat' => 48.1372, 'lng' => 11.6625, 'kw' => 300, 'cap' => 16, 'sockets' => 'CCS (300 kW), CHAdeMO'],
+        ['title' => 'TankE Schnellladezentrum Köln-Deutz',  'operator' => 'RheinEnergie TankE',  'city' => 'Köln',                'lat' => 50.9413, 'lng' => 6.9748,  'kw' => 150, 'cap' => 14, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW Schnellladepark Köln-Frechen',    'operator' => 'EnBW mobility+',     'city' => 'Köln / Frechen',      'lat' => 50.9182, 'lng' => 6.8435,  'kw' => 300, 'cap' => 20, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'Mainova Lade-Hub Frankfurt Messe',     'operator' => 'Mainova / IONITY',    'city' => 'Frankfurt am Main',   'lat' => 50.1115, 'lng' => 8.6485,  'kw' => 300, 'cap' => 16, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW Flagship-Park Stuttgart-Zuffenh.','operator' => 'EnBW mobility+',     'city' => 'Stuttgart',           'lat' => 48.8342, 'lng' => 9.1518,  'kw' => 400, 'cap' => 16, 'sockets' => 'CCS (400 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW HyperHub Kamener Kreuz (A1/A2)',  'operator' => 'EnBW mobility+',     'city' => 'Kamen / Dortmund',    'lat' => 51.5880, 'lng' => 7.6852,  'kw' => 300, 'cap' => 52, 'sockets' => 'CCS (300 kW, 52 Ladepunkte)'],
+        ['title' => 'Ladepark Kreuz Hilden (Seed & Greet)', 'operator' => 'Tesla / Fastned',     'city' => 'Hilden / Düsseldorf', 'lat' => 51.1811, 'lng' => 6.9125,  'kw' => 300, 'cap' => 62, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'Audi charging hub Nürnberg Messe',     'operator' => 'Audi / HPC',          'city' => 'Nürnberg',            'lat' => 49.4162, 'lng' => 11.1165, 'kw' => 320, 'cap' => 6,  'sockets' => 'CCS (320 kW Lounge)'],
+        ['title' => 'Leipziger Stadtwerke Schnellladepark', 'operator' => 'Stadtwerke Leipzig',  'city' => 'Leipzig',             'lat' => 51.3402, 'lng' => 12.3812, 'kw' => 300, 'cap' => 14, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'SachsenEnergie Lade-Hub Dresden',      'operator' => 'SachsenEnergie',      'city' => 'Dresden',             'lat' => 51.0518, 'lng' => 13.7385, 'kw' => 150, 'cap' => 12, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'enercity Schnellladepark Hannover',    'operator' => 'enercity',            'city' => 'Hannover',            'lat' => 52.3755, 'lng' => 9.7382,  'kw' => 300, 'cap' => 16, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'EWE Go Hypercharger Bremen-Flughafen', 'operator' => 'EWE Go',              'city' => 'Bremen',              'lat' => 53.0522, 'lng' => 8.7885,  'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'EnBW Ladepark Rutesheim (A8)',         'operator' => 'EnBW mobility+',     'city' => 'Rutesheim',           'lat' => 48.8095, 'lng' => 8.9522,  'kw' => 300, 'cap' => 16, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'Sortimo Innovationspark Zusmarshausen','operator' => 'Sortimo (A8)',        'city' => 'Zusmarshausen',       'lat' => 48.4038, 'lng' => 10.6052, 'kw' => 350, 'cap' => 72, 'sockets' => 'CCS (350 kW, 72 Ladepunkte)'],
+        ['title' => 'IONITY Ladepark Lutterberg (A7)',      'operator' => 'IONITY',              'city' => 'Kassel / Lutterberg', 'lat' => 51.3712, 'lng' => 9.6125,  'kw' => 350, 'cap' => 18, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'IONITY Ladepark Brohltal (A61)',       'operator' => 'IONITY',              'city' => 'Koblenz / Brohltal',  'lat' => 50.4485, 'lng' => 7.2115,  'kw' => 350, 'cap' => 12, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'IONITY Ladepark Hohenwarsleben (A2)',  'operator' => 'IONITY / Allego',     'city' => 'Magdeburg',           'lat' => 52.1815, 'lng' => 11.5012, 'kw' => 350, 'cap' => 16, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'EnBW Schnellladepark Erfurt-Bindersl.','operator' => 'EnBW mobility+',     'city' => 'Erfurt',              'lat' => 50.9785, 'lng' => 10.9620, 'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW), Typ 2'],
+        ['title' => 'Stadtwerke Kiel Lade-Hub Förde',       'operator' => 'Stadtwerke Kiel',     'city' => 'Kiel',                'lat' => 54.3233, 'lng' => 10.1394, 'kw' => 150, 'cap' => 10, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'Stadtwerke Rostock Schnelllader',      'operator' => 'SW Rostock / EWE Go', 'city' => 'Rostock',             'lat' => 54.0924, 'lng' => 12.0991, 'kw' => 150, 'cap' => 10, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'badenova Schnellladepark Freiburg',    'operator' => 'badenova / EnBW',     'city' => 'Freiburg im Breisgau','lat' => 47.9990, 'lng' => 7.8421,  'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'Pfalzwerke Lade-Hub Mannheim/Ludwigsh.','operator'=> 'Pfalzwerke',          'city' => 'Mannheim',            'lat' => 49.4875, 'lng' => 8.4660,  'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'Stadtwerke Münster Schnellladepark',   'operator' => 'Stadtwerke Münster',  'city' => 'Münster',             'lat' => 51.9607, 'lng' => 7.6261,  'kw' => 150, 'cap' => 12, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'SWB Lade-Hub Bielefeld (A2)',          'operator' => 'Stadtwerke Bielefeld','city' => 'Bielefeld',           'lat' => 52.0302, 'lng' => 8.5325,  'kw' => 300, 'cap' => 10, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'EWE Go Ladepark Oldenburg',            'operator' => 'EWE Go',              'city' => 'Oldenburg',           'lat' => 53.1435, 'lng' => 8.2146,  'kw' => 300, 'cap' => 10, 'sockets' => 'CCS (300 kW)'],
+        ['title' => 'STAWAG Schnellladepark Aachener Kreuz','operator' => 'STAWAG / Fastned',    'city' => 'Aachen',              'lat' => 50.7753, 'lng' => 6.0839,  'kw' => 300, 'cap' => 14, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'Stadtwerke Trier Lade-Hub Mosel',      'operator' => 'SWT Trier',           'city' => 'Trier',               'lat' => 49.7499, 'lng' => 6.6371,  'kw' => 150, 'cap' => 8,  'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'energis Schnellladepark Saarbrücken',  'operator' => 'energis / IONITY',    'city' => 'Saarbrücken',         'lat' => 49.2402, 'lng' => 6.9969,  'kw' => 300, 'cap' => 10, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'WVV Schnellladepark Würzburg (A3/A7)', 'operator' => 'WVV / IONITY',        'city' => 'Würzburg',            'lat' => 49.7913, 'lng' => 9.9534,  'kw' => 350, 'cap' => 16, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'REWAG Lade-Hub Regensburg (A3/A93)',   'operator' => 'REWAG / EnBW',        'city' => 'Regensburg',          'lat' => 49.0134, 'lng' => 12.1016, 'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'SWU Schnellladepark Ulm-Merklingen',   'operator' => 'SWU / EnBW (A8)',     'city' => 'Ulm',                 'lat' => 48.5125, 'lng' => 9.7540,  'kw' => 300, 'cap' => 24, 'sockets' => 'CCS (300 kW, 24 Ladepunkte)'],
+        ['title' => 'BS Energy Lade-Hub Braunschweig',      'operator' => 'BS Energy',           'city' => 'Braunschweig',        'lat' => 52.2689, 'lng' => 10.5268, 'kw' => 150, 'cap' => 10, 'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW Ladepark Cottbus / Spreewald',    'operator' => 'EnBW mobility+',     'city' => 'Cottbus',             'lat' => 51.7563, 'lng' => 14.3329, 'kw' => 300, 'cap' => 8,  'sockets' => 'CCS (300 kW)'],
+        ['title' => 'Stadtwerke Flensburg Lade-Hub Nord',   'operator' => 'SW Flensburg (A7)',   'city' => 'Flensburg',           'lat' => 54.7937, 'lng' => 9.4469,  'kw' => 300, 'cap' => 12, 'sockets' => 'CCS (300 kW), Typ 2 (22 kW)'],
+        ['title' => 'EnBW Ladepark Passau-Süd (A3)',        'operator' => 'EnBW / IONITY',       'city' => 'Passau',              'lat' => 48.5667, 'lng' => 13.4319, 'kw' => 350, 'cap' => 12, 'sockets' => 'CCS (350 kW)'],
+        ['title' => 'Stadtwerke Konstanz Lade-Hub Bodensee','operator' => 'SW Konstanz',         'city' => 'Konstanz',            'lat' => 47.6779, 'lng' => 9.1732,  'kw' => 150, 'cap' => 8,  'sockets' => 'CCS (150 kW), Typ 2 (22 kW)'],
+    ];
+
+    $stations = [];
+    $seenKeys = [];
+
+    $addStation = static function (array $st) use (&$stations, &$seenKeys, $south, $north, $west, $east): void {
+        $lat = (float)($st['lat'] ?? 0.0);
+        $lng = (float)($st['lng'] ?? 0.0);
+        if ($lat < $south || $lat > $north || $lng < $west || $lng > $east) {
+            return;
+        }
+        $key = sprintf('%.4f_%.4f', $lat, $lng);
+        if (isset($seenKeys[$key])) {
+            return;
+        }
+        $seenKeys[$key] = true;
+        $kw = (int)($st['max_kw'] ?? 22);
+        $class = $kw >= 150 ? 'hpc' : ($kw >= 50 ? 'fast' : 'ac');
+        $color = $class === 'hpc' ? '#9333ea' : ($class === 'fast' ? '#059669' : '#0284c7');
+        $icon  = $class === 'hpc' ? '⚡' : ($class === 'fast' ? '🔋' : '🔌');
+
+        $stations[] = [
+            'title'         => (string)($st['title'] ?? 'E-Ladestation'),
+            'operator'      => (string)($st['operator'] ?? ''),
+            'address'       => (string)($st['address'] ?? ''),
+            'lat'           => round($lat, 6),
+            'lng'           => round($lng, 6),
+            'max_kw'        => $kw,
+            'charger_class' => $class,
+            'color'         => $color,
+            'icon'          => $icon,
+            'capacity'      => (int)($st['capacity'] ?? 2),
+            'sockets'       => (string)($st['sockets'] ?? 'Typ 2 / CCS'),
+            'opening_hours' => (string)($st['opening_hours'] ?? '24/7'),
+        ];
+    };
+
+    // 1. Bundesweite Hubs immer einbeziehen, falls im Ausschnitt
+    foreach ($nationwideHubs as $h) {
+        $addStation([
+            'title'         => $h['title'],
+            'operator'      => $h['operator'],
+            'address'       => $h['city'],
+            'lat'           => $h['lat'],
+            'lng'           => $h['lng'],
+            'max_kw'        => $h['kw'],
+            'capacity'      => $h['cap'],
+            'sockets'       => $h['sockets'],
+            'opening_hours' => '24/7 durchgehend geöffnet',
+        ]);
+    }
+
+    // 2. Autobahn-Ladesäulen des Bundes (A1–A96) aus Cache oder Live-API laden
+    $autobahnEvCache = $evCacheDir . '/autobahn_ev_stations_v1.json';
+    $autobahnEvList  = null;
+    if (is_file($autobahnEvCache) && (time() - (int)@filemtime($autobahnEvCache)) < 7200) {
+        $decodedAb = @json_decode((string)@file_get_contents($autobahnEvCache), true);
+        if (is_array($decodedAb)) {
+            $autobahnEvList = $decodedAb;
+        }
+    }
+
+    if ($autobahnEvList === null && !$airGapMode) {
+        $autobahnEvList = [];
+        $roads = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A14', 'A20', 'A24', 'A31', 'A40', 'A45', 'A61', 'A81', 'A96'];
+        $ctxAb = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'timeout' => 2.2,
+                'header'  => "User-Agent: MiniCloud-Maps-EVRadar/1.0\r\nAccept: application/json\r\n",
+            ],
+        ]);
+        foreach ($roads as $rd) {
+            $abUrl = 'https://verkehr.autobahn.de/o/autobahn/' . rawurlencode($rd) . '/services/electric_charging_station';
+            $abRaw = @file_get_contents($abUrl, false, $ctxAb);
+            if (!is_string($abRaw) || $abRaw === '') {
+                continue;
+            }
+            $abData = @json_decode($abRaw, true);
+            $items  = $abData['electric_charging_station'] ?? [];
+            if (!is_array($items)) {
+                continue;
+            }
+            foreach ($items as $it) {
+                $cLat = (float)($it['coordinate']['lat'] ?? 0.0);
+                $cLng = (float)($it['coordinate']['long'] ?? 0.0);
+                if ($cLat === 0.0 && $cLng === 0.0) {
+                    continue;
+                }
+                $descLines = is_array($it['description'] ?? null) ? implode(' | ', $it['description']) : (string)($it['description'] ?? '');
+                $maxKw = 150;
+                if (preg_match_all('/(\d+)\s*kW/i', $descLines, $mKw) && !empty($mKw[1])) {
+                    $maxKw = max(array_map('intval', $mKw[1]));
+                }
+                $autobahnEvList[] = [
+                    'title'    => trim((string)($it['title'] ?? ($rd . ' Schnellladestation'))),
+                    'operator' => 'Autobahn-Schnelllader (' . $rd . ')',
+                    'address'  => trim((string)($it['subtitle'] ?? $rd)),
+                    'lat'      => $cLat,
+                    'lng'      => $cLng,
+                    'max_kw'   => max(50, $maxKw),
+                    'capacity' => 4,
+                    'sockets'  => 'CCS / Typ 2 (' . max(50, $maxKw) . ' kW)',
+                ];
+            }
+        }
+        if (!empty($autobahnEvList)) {
+            @file_put_contents($autobahnEvCache, json_encode($autobahnEvList, JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    if (is_array($autobahnEvList)) {
+        foreach ($autobahnEvList as $abSt) {
+            $addStation($abSt);
+        }
+    }
+
+    // 3. Ab Zoom >= 9 (oder kleinem Kartenausschnitt): Alle regionalen & städtischen Stromtankstellen via OpenStreetMap Overpass API abrufen
+    $latSpan = abs($north - $south);
+    $lngSpan = abs($east - $west);
+    $sourceLabel = 'Bundesnetz & Autobahn-Ladesäulen';
+
+    if ($zoom >= 9 && $latSpan <= 2.2 && $lngSpan <= 3.5) {
+        $bboxCacheFile = sprintf(
+            '%s/ev_bbox_v1_%.2f_%.2f_%.2f_%.2f.json',
+            $evCacheDir,
+            round($south, 2),
+            round($west, 2),
+            round($north, 2),
+            round($east, 2)
+        );
+
+        $osmElements = null;
+        if (is_file($bboxCacheFile) && (time() - (int)@filemtime($bboxCacheFile)) < 1800) {
+            $decOsm = @json_decode((string)@file_get_contents($bboxCacheFile), true);
+            if (is_array($decOsm)) {
+                $osmElements = $decOsm;
+                $sourceLabel = 'OpenStreetMap Ladesäulen-Register (Cache)';
+            }
+        }
+
+        if ($osmElements === null) {
+            $overpassQuery = sprintf(
+                '[out:json][timeout:10];(node["amenity"="charging_station"](%.4f,%.4f,%.4f,%.4f);way["amenity"="charging_station"](%.4f,%.4f,%.4f,%.4f););out center 350;',
+                $south,
+                $west,
+                $north,
+                $east,
+                $south,
+                $west,
+                $north,
+                $east
+            );
+
+            $mirrors = [
+                'https://overpass-api.de/api/interpreter',
+                'https://overpass.kumi.systems/api/interpreter',
+                'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+            ];
+
+            foreach ($mirrors as $mirrorUrl) {
+                $ctxOv = stream_context_create([
+                    'http' => [
+                        'method'  => 'POST',
+                        'timeout' => 7.0,
+                        'header'  => "Content-Type: application/x-www-form-urlencoded\r\nUser-Agent: MiniCloud-Maps-EVRadar/1.0\r\n",
+                        'content' => 'data=' . rawurlencode($overpassQuery),
+                    ],
+                ]);
+                $ovRaw = @file_get_contents($mirrorUrl, false, $ctxOv);
+                if (is_string($ovRaw) && $ovRaw !== '') {
+                    $ovJson = @json_decode($ovRaw, true);
+                    if (is_array($ovJson['elements'] ?? null)) {
+                        $osmElements = $ovJson['elements'];
+                        $sourceLabel = 'OpenStreetMap Ladesäulen-Register (Live)';
+                        @file_put_contents($bboxCacheFile, json_encode($osmElements, JSON_UNESCAPED_UNICODE));
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (is_array($osmElements)) {
+            foreach ($osmElements as $el) {
+                $eLat = isset($el['lat']) ? (float)$el['lat'] : (isset($el['center']['lat']) ? (float)$el['center']['lat'] : 0.0);
+                $eLng = isset($el['lon']) ? (float)$el['lon'] : (isset($el['center']['lon']) ? (float)$el['center']['lon'] : 0.0);
+                if ($eLat === 0.0 && $eLng === 0.0) {
+                    continue;
+                }
+                $tags = is_array($el['tags'] ?? null) ? $el['tags'] : [];
+
+                // Ladeleistung (kW) aus OSM-Tags ermitteln
+                $maxKw = 22;
+                $kwCandidates = [
+                    $tags['socket:type2_combo:output'] ?? '',
+                    $tags['socket:chademo:output'] ?? '',
+                    $tags['socket:type2:output'] ?? '',
+                    $tags['charging_station:output'] ?? '',
+                    $tags['maxpower'] ?? '',
+                    $tags['output'] ?? '',
+                ];
+                foreach ($kwCandidates as $cand) {
+                    if ($cand !== '' && preg_match('/(\d+(?:[.,]\d+)?)/', (string)$cand, $m)) {
+                        $val = (int)round((float)str_replace(',', '.', $m[1]));
+                        if ($val > $maxKw && $val <= 1000) {
+                            $maxKw = $val;
+                        }
+                    }
+                }
+                if (!empty($tags['socket:type2_combo']) && $maxKw < 50) {
+                    $maxKw = 150;
+                }
+
+                // Steckertypen zusammenstellen
+                $socketList = [];
+                if (!empty($tags['socket:type2_combo'])) {
+                    $socketList[] = 'CCS (' . $tags['socket:type2_combo'] . 'x)';
+                }
+                if (!empty($tags['socket:type2']) || !empty($tags['socket:type2_cable'])) {
+                    $cnt2 = (int)($tags['socket:type2'] ?? $tags['socket:type2_cable'] ?? 1);
+                    $socketList[] = 'Typ 2 (' . $cnt2 . 'x)';
+                }
+                if (!empty($tags['socket:chademo'])) {
+                    $socketList[] = 'CHAdeMO';
+                }
+                if (empty($socketList)) {
+                    $socketList[] = $maxKw >= 50 ? 'CCS / Typ 2' : 'Typ 2 (' . $maxKw . ' kW)';
+                }
+
+                $op   = trim((string)($tags['operator'] ?? $tags['brand'] ?? $tags['network'] ?? ''));
+                $name = trim((string)($tags['name'] ?? ''));
+                if ($name === '') {
+                    $name = $op !== '' ? ('Ladesäule ' . $op) : 'Öffentliche Stromtankstelle';
+                } elseif ($op !== '' && stripos($name, $op) === false) {
+                    $name .= ' (' . $op . ')';
+                }
+
+                $street = trim(((string)($tags['addr:street'] ?? '')) . ' ' . ((string)($tags['addr:housenumber'] ?? '')));
+                $city   = trim(((string)($tags['addr:postcode'] ?? '')) . ' ' . ((string)($tags['addr:city'] ?? '')));
+                $addrStr = implode(', ', array_filter([$street, $city]));
+
+                $addStation([
+                    'title'         => $name,
+                    'operator'      => $op,
+                    'address'       => $addrStr,
+                    'lat'           => $eLat,
+                    'lng'           => $eLng,
+                    'max_kw'        => $maxKw,
+                    'capacity'      => max(1, (int)($tags['capacity'] ?? 2)),
+                    'sockets'       => implode(', ', $socketList) . ' · max. ' . $maxKw . ' kW',
+                    'opening_hours' => (string)($tags['opening_hours'] ?? '24/7'),
+                ]);
+            }
+        }
+    }
+
+    echo json_encode([
+        'ok'       => true,
+        'zoom'     => $zoom,
+        'source'   => $sourceLabel,
+        'count'    => count($stations),
+        'stations' => array_slice($stations, 0, 400),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // 5f) Sicherheits-Landkarte: Geo-IP-Herkunft aller Logins, Sitzungen & abgewehrten Login-Fehlversuche (?action=security_map_data)
 if (isset($_GET['action']) && $_GET['action'] === 'security_map_data') {
     @session_write_close();
@@ -2261,6 +2594,17 @@ require_once __DIR__ . '/includes/header.php';
 
                     <button
                         type="button"
+                        id="btnEvCharging"
+                        onclick="toggleEvChargingLayer()"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-50 dark:bg-purple-950/70 hover:bg-purple-100 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 transition-colors cursor-pointer"
+                        title="Alle Stromtankstellen &amp; E-Ladesäulen (HPC Ultra-Schnelllader, DC-Schnelllader &amp; AC-Typ-2) auf der Karte anzeigen"
+                    >
+                        <span>⚡</span>
+                        <span id="btnEvChargingLabel">Stromtankstellen</span>
+                    </button>
+
+                    <button
+                        type="button"
                         id="btnPoiFinder"
                         onclick="openRadiusFinderPanel()"
                         class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 transition-colors cursor-pointer"
@@ -2332,6 +2676,11 @@ require_once __DIR__ . '/includes/header.php';
                             <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
                                 <input type="checkbox" id="chkLayerPhotos" checked onchange="syncMapLayersVisibility()" class="rounded text-brand-600">
                                 <span class="font-semibold">📸 Foto-GPS (<?= count($photoPins) ?>)</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer select-none px-2 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-800/80 text-purple-800 dark:text-purple-200">
+                                <input type="checkbox" id="chkLayerEvCharging" onchange="toggleEvChargingLayer(this.checked)" class="rounded text-purple-600">
+                                <span class="font-bold">⚡ Stromtankstellen</span>
+                                <span id="evChargingCountBadge" class="hidden px-1.5 py-0.2 rounded-full bg-purple-600 text-white text-[10px] font-bold">0</span>
                             </label>
                         <?php endif; ?>
                     </div>
@@ -2405,6 +2754,50 @@ require_once __DIR__ . '/includes/header.php';
                             <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-red-600 inline-block"></span> Unwetter / Hagel</span>
                         </div>
                         <span>🛡️ Datenschutz-Proxy über MiniCloud-Server (keine IP-Weitergabe)</span>
+                    </div>
+                </div>
+
+                <!-- STROMTANKSTELLEN & E-LADESÄULEN STEUERLEISTE (WENN AKTIV) -->
+                <div id="evChargingControlBar" class="hidden mb-2 p-2.5 rounded-xl bg-purple-50/90 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/80 space-y-2 text-xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-extrabold text-purple-900 dark:text-purple-200 flex items-center gap-1">
+                                <span>⚡</span>
+                                <span>Stromtankstellen &amp; E-Ladesäulen</span>
+                            </span>
+                            <span id="evChargingStatusBadge" class="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-700 font-bold text-purple-800 dark:text-purple-300">
+                                Lade Stationen…
+                            </span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" id="evFilterBtn_all" onclick="setEvChargingFilter('all')" class="px-2 py-1 rounded-lg bg-purple-600 text-white font-bold cursor-pointer text-[11px]">
+                                Alle
+                            </button>
+                            <button type="button" id="evFilterBtn_hpc" onclick="setEvChargingFilter('hpc')" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-purple-200 dark:border-purple-700 font-bold cursor-pointer text-[11px]" title="Ultra-Schnelllader ab 150 kW bis 400 kW (HPC)">
+                                ⚡ HPC ≥150 kW
+                            </button>
+                            <button type="button" id="evFilterBtn_fast" onclick="setEvChargingFilter('fast')" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-purple-200 dark:border-purple-700 font-bold cursor-pointer text-[11px]" title="DC-Schnelllader 50 bis 149 kW">
+                                🔋 Schnell 50–149 kW
+                            </button>
+                            <button type="button" id="evFilterBtn_ac" onclick="setEvChargingFilter('ac')" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-purple-200 dark:border-purple-700 font-bold cursor-pointer text-[11px]" title="AC-Normallader 11 bis 43 kW (Typ 2)">
+                                🔌 AC Typ 2
+                            </button>
+                            <button type="button" onclick="loadEvChargingStationsInView(true)" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 text-slate-700 dark:text-slate-200 font-bold cursor-pointer text-[11px]" title="Aktuellen Kartenausschnitt neu abfragen">
+                                🔄
+                            </button>
+                            <button type="button" onclick="toggleEvChargingLayer(false)" class="px-2 py-0.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold cursor-pointer">
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-purple-200/60 dark:border-purple-800/60">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block"></span> ⚡ HPC Ultra-Schnelllader (150–400 kW)</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> 🔋 DC-Schnelllader (50–149 kW)</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-600 inline-block"></span> 🔌 AC-Ladesäule (11–43 kW Typ 2)</span>
+                        </div>
+                        <span>💡 Zoome näher an eine Stadt heran (ab Zoom 9), um alle lokalen Straßen-Ladesäulen nachzuladen</span>
                     </div>
                 </div>
 
@@ -3076,6 +3469,7 @@ const layerGroupMeasure     = L.layerGroup();
 const layerGroupRainWeather = L.layerGroup();
 const layerGroupPoiSearch   = L.layerGroup();
 const layerGroupSecurityMap = L.layerGroup();
+const layerGroupEvCharging  = L.layerGroup();
 
 // Eingebettete Offline-Vektordaten (Deutschland-Umriss, Nachbarländer, Bundesländer, Hauptflüsse & Autobahnen)
 const OFFLINE_GERMANY_POLY = [
@@ -3163,6 +3557,7 @@ function initMiniCloudMap() {
         layerGroupPoiSearch.addTo(mcMap);
         layerGroupSecurityMap.addTo(mcMap);
         layerGroupRainWeather.addTo(mcMap);
+        layerGroupEvCharging.addTo(mcMap);
         layerGroupMeasure.addTo(mcMap);
 
         switchMapBaseStyle(mcAirGapOnly ? 'intranet_vector' : 'osm');
@@ -3175,6 +3570,10 @@ function initMiniCloudMap() {
         renderPlacesLayer();
         renderTracksLayer();
         renderCloudLayers();
+
+        if (new URLSearchParams(window.location.search).get('ev') === '1') {
+            setTimeout(() => toggleEvChargingLayer(true), 200);
+        }
     }
 
     mcMap.on('mousemove', function(e) {
@@ -3192,6 +3591,12 @@ function initMiniCloudMap() {
         if (zb) zb.textContent = 'Zoom ' + mcMap.getZoom();
         if (!MC_FLOORPLAN) {
             renderOfflineVectorAtlas();
+        }
+    });
+
+    mcMap.on('moveend', function() {
+        if (!MC_FLOORPLAN && typeof evChargingLayerActive !== 'undefined' && evChargingLayerActive) {
+            scheduleEvChargingReload();
         }
     });
 
@@ -4515,6 +4920,159 @@ async function prefetchCurrentViewTiles() {
     if (msg) {
         msg.textContent = `✅ Detailstufe Zoom ${zoom} lokal gespeichert: ${totalFetched} neue Kacheln geladen (${lastCached + totalFetched} Kacheln in dieser Region offline verfügbar).`;
     }
+}
+
+// =========================================================================
+// 13. STROMTANKSTELLEN & E-LADESÄULEN-RADAR (BUNDESWEIT + OSM OVERPASS LIVE)
+// =========================================================================
+let evChargingLayerActive = false;
+let evChargingStations    = [];
+let evChargingFilterMode  = 'all';
+let evReloadTimer         = null;
+
+function toggleEvChargingLayer(forceState) {
+    if (!mcMap || MC_FLOORPLAN) return;
+    evChargingLayerActive = (typeof forceState === 'boolean') ? forceState : !evChargingLayerActive;
+
+    const chk   = document.getElementById('chkLayerEvCharging');
+    const bar   = document.getElementById('evChargingControlBar');
+    const btn   = document.getElementById('btnEvCharging');
+    const lbl   = document.getElementById('btnEvChargingLabel');
+    const badge = document.getElementById('evChargingCountBadge');
+
+    if (chk) chk.checked = evChargingLayerActive;
+    if (bar) bar.classList.toggle('hidden', !evChargingLayerActive);
+    if (lbl) lbl.textContent = evChargingLayerActive ? 'Stromtankstellen aktiv' : 'Stromtankstellen';
+    if (btn) {
+        btn.className = evChargingLayerActive
+            ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-xs transition-colors cursor-pointer'
+            : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-50 dark:bg-purple-950/70 hover:bg-purple-100 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 transition-colors cursor-pointer';
+    }
+
+    if (!evChargingLayerActive) {
+        layerGroupEvCharging.clearLayers();
+        if (badge) badge.classList.add('hidden');
+        return;
+    }
+
+    loadEvChargingStationsInView(false);
+}
+
+function scheduleEvChargingReload() {
+    if (!evChargingLayerActive) return;
+    if (evReloadTimer) clearTimeout(evReloadTimer);
+    evReloadTimer = setTimeout(() => {
+        loadEvChargingStationsInView(false);
+    }, 380);
+}
+
+async function loadEvChargingStationsInView(forceRefresh = false) {
+    if (!mcMap || !evChargingLayerActive || MC_FLOORPLAN) return;
+    const statusBadge = document.getElementById('evChargingStatusBadge');
+    if (statusBadge) {
+        statusBadge.textContent = '⏳ Lade Stromtankstellen im Ausschnitt…';
+    }
+
+    try {
+        const b    = mcMap.getBounds();
+        const zoom = mcMap.getZoom();
+        const url  = `maps.php?action=ev_charging_bbox&south=${encodeURIComponent(b.getSouth())}&west=${encodeURIComponent(b.getWest())}&north=${encodeURIComponent(b.getNorth())}&east=${encodeURIComponent(b.getEast())}&zoom=${encodeURIComponent(zoom)}${forceRefresh ? '&t=' + Date.now() : ''}`;
+        const res  = await fetch(url);
+        const d    = await res.json();
+
+        if (d && d.ok && Array.isArray(d.stations)) {
+            evChargingStations = d.stations;
+            renderEvChargingMarkers(d.source || '');
+        } else {
+            if (statusBadge) statusBadge.textContent = '⚠️ Keine Ladesäulen im Ausschnitt gefunden';
+        }
+    } catch (e) {
+        if (statusBadge) statusBadge.textContent = '⚠️ Fehler beim Abruf der Ladesäulen';
+    }
+}
+
+function setEvChargingFilter(mode) {
+    evChargingFilterMode = mode || 'all';
+    ['all', 'hpc', 'fast', 'ac'].forEach(m => {
+        const b = document.getElementById('evFilterBtn_' + m);
+        if (b) {
+            b.className = m === evChargingFilterMode
+                ? 'px-2 py-1 rounded-lg bg-purple-600 text-white font-bold cursor-pointer text-[11px]'
+                : 'px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-purple-200 dark:border-purple-700 font-bold cursor-pointer text-[11px]';
+        }
+    });
+    renderEvChargingMarkers();
+}
+
+function renderEvChargingMarkers(sourceNote = '') {
+    layerGroupEvCharging.clearLayers();
+    if (!evChargingLayerActive) return;
+
+    const filtered = evChargingStations.filter(st => {
+        if (evChargingFilterMode === 'all') return true;
+        return st.charger_class === evChargingFilterMode;
+    });
+
+    const statusBadge = document.getElementById('evChargingStatusBadge');
+    const countBadge  = document.getElementById('evChargingCountBadge');
+
+    if (statusBadge) {
+        const zoom = mcMap ? mcMap.getZoom() : 6;
+        const zoomHint = zoom < 9 ? ' (HPC- & Autobahn-Netz · für alle Straßen-Säulen näher heranzoomen)' : '';
+        statusBadge.textContent = `⚡ ${filtered.length} Stromtankstellen im Ausschnitt${zoomHint}`;
+    }
+    if (countBadge) {
+        countBadge.textContent = String(filtered.length);
+        countBadge.classList.remove('hidden');
+    }
+
+    filtered.forEach((st, idx) => {
+        const kwBadge = st.max_kw ? `${st.max_kw} kW` : '';
+        const marker = L.marker([st.lat, st.lng], {
+            icon: L.divIcon({
+                className: '',
+                html: `<div class="mc-map-pin" style="background-color:${escapeMapHtml(st.color)}" title="${escapeMapHtml(st.title)} (${escapeMapHtml(kwBadge)})">${escapeMapHtml(st.icon)}</div>`,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15],
+                popupAnchor: [0, -14]
+            })
+        });
+
+        const classLabel = st.charger_class === 'hpc'
+            ? '⚡ HPC Ultra-Schnelllader (≥ 150 kW)'
+            : (st.charger_class === 'fast' ? '🔋 DC-Schnelllader (50–149 kW)' : '🔌 AC-Normallader (Typ 2)');
+
+        marker.bindPopup(`
+            <div class="text-xs space-y-1.5 min-w-[215px]">
+                <p class="font-extrabold text-sm">${escapeMapHtml(st.icon)} ${escapeMapHtml(st.title)}</p>
+                <p class="font-bold" style="color:${escapeMapHtml(st.color)}">${escapeMapHtml(classLabel)} · max. ${Number(st.max_kw || 22)} kW</p>
+                ${st.operator ? `<p class="text-slate-600">🏢 Betreiber: <strong>${escapeMapHtml(st.operator)}</strong></p>` : ''}
+                ${st.sockets ? `<p class="text-slate-600">🔌 Anschlüsse: <strong>${escapeMapHtml(st.sockets)}</strong></p>` : ''}
+                ${st.capacity ? `<p class="text-slate-500">🚗 Ladepunkte: <strong>${Number(st.capacity)}</strong></p>` : ''}
+                ${st.address ? `<p class="text-slate-500">📫 ${escapeMapHtml(st.address)}</p>` : ''}
+                ${st.opening_hours ? `<p class="text-slate-400 text-[11px]">🕒 ${escapeMapHtml(st.opening_hours)}</p>` : ''}
+                <div class="pt-1 flex items-center gap-1.5">
+                    <button type="button" onclick="saveEvStationAsMyPlace(${idx})" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold cursor-pointer">
+                        💾 Als Favorit speichern
+                    </button>
+                </div>
+            </div>
+        `);
+
+        marker.addTo(layerGroupEvCharging);
+    });
+}
+
+function saveEvStationAsMyPlace(idx) {
+    const filtered = evChargingStations.filter(st => evChargingFilterMode === 'all' || st.charger_class === evChargingFilterMode);
+    const st = filtered[idx];
+    if (!st) return;
+    openNewPlaceModal(st.lat, st.lng, st.title);
+    document.getElementById('placeFormAddress').value  = st.address || '';
+    document.getElementById('placeFormDesc').value     = `${st.sockets || ''} · Betreiber: ${st.operator || 'Öffentlich'}`;
+    document.getElementById('placeFormCategory').value = 'favorite';
+    document.getElementById('placeFormIcon').value     = st.icon || '⚡';
+    document.getElementById('placeFormColor').value    = st.color || '#9333ea';
 }
 
 function escapeMapHtml(s) {
