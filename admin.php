@@ -606,29 +606,57 @@ function createLocalAppSnapshot(PDO $pdo, string $reason = 'Vor System-Update'):
     $rootDir = realpath(__DIR__) ?: __DIR__;
     $filesAdded = 0;
 
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($rootDir, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
+    $dirIterator = new RecursiveDirectoryIterator($rootDir, FilesystemIterator::SKIP_DOTS);
+    $filterIterator = new RecursiveCallbackFilterIterator(
+        $dirIterator,
+        static function (SplFileInfo $current) use ($rootDir): bool {
+            // Niemals Symlinks (z.B. 7,2 GB germany_detail.pmtiles) folgen
+            if ($current->isLink()) {
+                return false;
+            }
+            $fullPath = $current->getPathname();
+            $relPath  = ltrim(str_replace('\\', '/', substr($fullPath, strlen($rootDir))), '/');
+            if ($relPath === '') {
+                return true;
+            }
+            // Große Daten-, Cache- und Versionsverwaltungs-Ordner gar nicht erst betreten
+            if ($current->isDir()) {
+                $firstSeg = strtok($relPath, '/');
+                if (in_array($firstSeg, ['uploads', '.git', '.github', '.idea', '.vscode', 'node_modules'], true)) {
+                    return false;
+                }
+                if ($relPath === 'assets/ocr' || $relPath === 'assets/maps/tiles_osm') {
+                    return false;
+                }
+                return true;
+            }
+            return true;
+        }
     );
+
+    $iterator = new RecursiveIteratorIterator($filterIterator, RecursiveIteratorIterator::LEAVES_ONLY);
 
     foreach ($iterator as $fileInfo) {
         /** @var SplFileInfo $fileInfo */
-        if (!$fileInfo->isFile()) {
+        if ($fileInfo->isLink() || !$fileInfo->isFile()) {
             continue;
         }
         $fullPath = $fileInfo->getPathname();
         $relPath  = ltrim(str_replace('\\', '/', substr($fullPath, strlen($rootDir))), '/');
+        $ext      = strtolower($fileInfo->getExtension());
 
         if (
             $relPath === '' ||
+            in_array($ext, ['pmtiles', 'mbtiles', 'zip', 'tar', 'gz', 'log', 'part'], true) ||
+            (int)@$fileInfo->getSize() > 10 * 1024 * 1024 ||
             str_starts_with($relPath, 'uploads/') ||
             str_starts_with($relPath, '.git/') ||
             str_starts_with($relPath, '.github/') ||
-            str_starts_with($relPath, '.idea/') ||
-            str_starts_with($relPath, '.vscode/') ||
             $relPath === 'config/database.php' ||
             $relPath === 'config/db_credentials.php' ||
-            $relPath === 'config/database.local.php'
+            $relPath === 'config/database.local.php' ||
+            $relPath === 'tools/telegram_bridge/config.json' ||
+            $relPath === 'tools/telegram_bridge/state.json'
         ) {
             continue;
         }
