@@ -423,6 +423,9 @@ function fetchNearbyFuelStations(
             if ($pE5 <= 1.15 && $pE10 > 1.15) {
                 $pE5 = round($pE10 + 0.060, 3);
             }
+            if ($pE5 <= 1.15 && $pDiesel > 1.15) {
+                $pE5 = round($pDiesel + 0.050, 3);
+            }
             if ($pE10 <= 1.15 && $pE5 > 1.15) {
                 $pE10 = round($pE5 - 0.060, 3);
             }
