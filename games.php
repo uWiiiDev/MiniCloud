@@ -186,6 +186,15 @@ function getGamesCatalog(): array
             'desc'     => 'Der weltberühmte Ein-Tasten-Klassiker: Flattere durch die grünen Röhren, sammle Goldmünzen, schalte Tag/Nacht-Wechsel & Medaillen (Bronze bis Platin) frei!',
             'color'    => 'from-sky-400 to-emerald-600',
         ],
+        'angrybirds' => [
+            'key'      => 'angrybirds',
+            'title'    => 'Feder-Katapult (Angry Birds)',
+            'icon'     => '🪃',
+            'category' => 'Physik & Katapult',
+            'group'    => 'action',
+            'desc'     => 'Spanne die Zwille! 5 Vogel-Spezialfähigkeiten (Turbo, Drillinge, Bombe, Eier-Abwurf), Holz-, Glas-, Stein- & TNT-Festungen mit 2D-Physik!',
+            'color'    => 'from-red-600 to-amber-500',
+        ],
         'lastninja' => [
             'key'      => 'lastninja',
             'title'    => 'Schatten-Shinobi',
@@ -2945,6 +2954,85 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 22. SPIEL: FEDER-KATAPULT / ANGRY BIRDS (2D-PHYSIK & BURG-BELAGERUNG) -->
+            <div id="gamePanel-angrybirds" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🪃 Feder-Katapult (Angry Birds)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300">🪵 Holz • 🧊 Glas • 🪨 Stein • 🧨 TNT • 🐷 Festungs-Schweinchen</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Ziehe die Zwille mit <strong>Maus oder Finger</strong> zurück und lass los! Drücke im Flug <strong>Klick / Touch / Leertaste</strong> für die Spezialfähigkeit des Vogels.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="abLevelSelect" onchange="abLoadLevel(parseInt(this.value, 10))"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            <option value="1">🏰 Level 1: Das Holzhaus im Grünen</option>
+                            <option value="2">🌉 Level 2: Die Zwillings-Türme</option>
+                            <option value="3">🧨 Level 3: Das Pulverfass-Lager</option>
+                            <option value="4">🪨 Level 4: Die Stein-Zitadelle</option>
+                            <option value="5">🔺 Level 5: Der Pyramiden-Bunker</option>
+                            <option value="6">🪖 Level 6: Die Gepanzerte Bastion</option>
+                            <option value="7">👑 Level 7: König Grunzers Thronsaal</option>
+                            <option value="8">♾️ Level 8+: Endlos-Festungs-Generator</option>
+                        </select>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
+                            Punkte: <span id="abScore">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+                            Rekord: <span id="abBest">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 text-xs font-extrabold" id="abPigsBadge">
+                            🐷 0 übrig
+                        </span>
+                        <button type="button" onclick="abToggleSound()" id="abSoundBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold cursor-pointer"
+                                title="Soundeffekte ein-/ausschalten">
+                            🔊 Ton
+                        </button>
+                        <button type="button" onclick="abNextBirdImmediate()"
+                                class="px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold cursor-pointer"
+                                title="Direkt zum nächsten Vogel springen">
+                            ⏭️ Nächster Vogel
+                        </button>
+                        <button type="button" onclick="abRestartLevel()"
+                                class="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold cursor-pointer shadow-xs">
+                            🔄 Level neu starten
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="abCanvas" width="960" height="520"
+                            class="w-full max-w-[960px] h-auto rounded-2xl bg-sky-950 border-2 border-amber-500/80 shadow-xl select-none touch-none cursor-grab active:cursor-grabbing"></canvas>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full max-w-[960px] text-[11px]">
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🔴</span>
+                            <div><strong>Roter Kardinal</strong><br><span class="text-slate-500">Ausgewogene Wucht</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🟡</span>
+                            <div><strong>Turbo-Falke</strong><br><span class="text-slate-500">Klick = 2,6× Speed vs. Holz</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🔵</span>
+                            <div><strong>Drillings-Spatzen</strong><br><span class="text-slate-500">Klick = 3 Vögel vs. Glas</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">⚫</span>
+                            <div><strong>Bomben-Rabe</strong><br><span class="text-slate-500">Klick = Explosion vs. Stein</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2 col-span-2 sm:col-span-1">
+                            <span class="text-base">⚪</span>
+                            <div><strong>Eier-Bomber</strong><br><span class="text-slate-500">Klick = Spreng-Ei abwerfen</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -3218,6 +3306,11 @@ function selectCloudGame(gameKey) {
             flappyInit();
         }
         flappyDraw();
+    } else if (gameKey === 'angrybirds') {
+        if (!abInitialized) {
+            abInit();
+        }
+        abDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -16337,6 +16430,1401 @@ function flappyInit() {
     requestAnimationFrame(flappyLoop);
 }
 
+// =========================================================================
+// 22. SPIEL: FEDER-KATAPULT / ANGRY BIRDS (2D-PHYSIK & BURG-BELAGERUNG)
+// =========================================================================
+let abInitialized = false;
+let abSoundOn     = true;
+let abAudioCtx    = null;
+let abLevel       = 1;
+let abScore       = 0;
+let abTotalScore  = 0;
+let abBest        = 0;
+let abState       = 'aiming'; // aiming | dragging | flying | settling | won | lost
+let abStartTs     = 0;
+let abLastTs      = 0;
+let abSettleTimer = 0;
+
+const AB_SLING_X  = 148;
+const AB_SLING_Y  = 358;
+const AB_MAX_PULL = 86;
+const AB_GROUND_Y = 445;
+
+let abPullX = AB_SLING_X;
+let abPullY = AB_SLING_Y;
+
+let abQueue       = []; // Wartende Vögel ['red', 'yellow', 'blue', 'black', 'white']
+let abActiveBirds = []; // Aktuell fliegende Vögel/Eier
+let abBlocks      = []; // Blöcke { x, y, w, h, vx, vy, mat, hp, maxHp }
+let abPigs        = []; // Schweine { x, y, r, vx, vy, hp, maxHp, type, blink }
+let abParticles   = []; // Splitter, Rauch, Federn
+let abPopups      = []; // "+500", "+5000"
+let abLastTrail   = []; // Flugspur des vorherigen Schusses
+let abCurTrail    = []; // Aktuelle Flugspur
+
+const AB_BIRD_META = {
+    red:    { name: 'Roter Kardinal',    r: 15, mass: 1.2, col: '#ef4444', belly: '#fecaca', desc: 'Ausgewogene Wucht' },
+    yellow: { name: 'Turbo-Falke',       r: 14, mass: 1.1, col: '#eab308', belly: '#fef08a', desc: 'Klick = 2,6× Turbo-Schub (Holz-Brecher)' },
+    blue:   { name: 'Drillings-Spatzen', r: 11, mass: 0.85, col: '#3b82f6', belly: '#bfdbfe', desc: 'Klick = Teilt sich in 3 Vögel (Glas-Brecher)' },
+    black:  { name: 'Bomben-Rabe',       r: 18, mass: 1.75, col: '#1e293b', belly: '#94a3b8', desc: 'Klick = Sprengladung (Stein-Brecher)' },
+    white:  { name: 'Eier-Bomber',       r: 17, mass: 1.35, col: '#f8fafc', belly: '#fde047', desc: 'Klick = Spreng-Ei senkrecht abwerfen' },
+    egg:    { name: 'Spreng-Ei',         r: 11, mass: 1.5,  col: '#ffffff', belly: '#fef08a', desc: '' }
+};
+
+const AB_MAT_META = {
+    glass: { hp: 28,  mass: 0.7,  col: '#7dd3fc', stroke: '#0284c7', score: 300 },
+    wood:  { hp: 65,  mass: 1.15, col: '#d97706', stroke: '#78350f', score: 500 },
+    stone: { hp: 145, mass: 2.1,  col: '#94a3b8', stroke: '#334155', score: 800 },
+    tnt:   { hp: 22,  mass: 1.0,  col: '#dc2626', stroke: '#7f1d1d', score: 1000 }
+};
+
+function abPlaySound(type) {
+    if (!abSoundOn) return;
+    try {
+        if (!abAudioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) abAudioCtx = new AC();
+        }
+        if (!abAudioCtx) return;
+        if (abAudioCtx.state === 'suspended') abAudioCtx.resume();
+        const now = abAudioCtx.currentTime;
+        const osc = abAudioCtx.createOscillator();
+        const gain = abAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(abAudioCtx.destination);
+
+        if (type === 'stretch') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(140, now);
+            osc.frequency.linearRampToValueAtTime(195, now + 0.08);
+            gain.gain.setValueAtTime(0.06, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+            osc.start(now);
+            osc.stop(now + 0.09);
+        } else if (type === 'launch') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, now);
+            osc.frequency.exponentialRampToValueAtTime(680, now + 0.22);
+            gain.gain.setValueAtTime(0.14, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.23);
+            osc.start(now);
+            osc.stop(now + 0.23);
+        } else if (type === 'boost') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(340, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.16);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+            osc.start(now);
+            osc.stop(now + 0.17);
+        } else if (type === 'hit') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(130, now);
+            osc.frequency.exponentialRampToValueAtTime(55, now + 0.11);
+            gain.gain.setValueAtTime(0.10, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.start(now);
+            osc.stop(now + 0.12);
+        } else if (type === 'pig') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, now);
+            osc.frequency.setValueAtTime(760, now + 0.06);
+            osc.frequency.exponentialRampToValueAtTime(320, now + 0.19);
+            gain.gain.setValueAtTime(0.14, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+            osc.start(now);
+            osc.stop(now + 0.20);
+        } else if (type === 'boom') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(95, now);
+            osc.frequency.exponentialRampToValueAtTime(28, now + 0.36);
+            gain.gain.setValueAtTime(0.22, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+            osc.start(now);
+            osc.stop(now + 0.38);
+        } else if (type === 'win') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.setValueAtTime(554, now + 0.11);
+            osc.frequency.setValueAtTime(659, now + 0.22);
+            osc.frequency.setValueAtTime(880, now + 0.34);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+            osc.start(now);
+            osc.stop(now + 0.55);
+        }
+    } catch (e) {}
+}
+
+function abToggleSound() {
+    abSoundOn = !abSoundOn;
+    const btn = document.getElementById('abSoundBtn');
+    if (btn) btn.textContent = abSoundOn ? '🔊 Ton' : '🔇 Stumm';
+}
+
+function abUpdateHud() {
+    const scEl = document.getElementById('abScore');
+    if (scEl) scEl.textContent = String(abTotalScore + abScore);
+    const bsEl = document.getElementById('abBest');
+    if (bsEl) bsEl.textContent = String(abBest);
+    const pgEl = document.getElementById('abPigsBadge');
+    if (pgEl) {
+        pgEl.textContent = `🐷 ${abPigs.length} übrig • 🐦 ${abQueue.length + (abState === 'aiming' || abState === 'dragging' ? 1 : 0)}`;
+    }
+    const sel = document.getElementById('abLevelSelect');
+    if (sel && parseInt(sel.value, 10) !== Math.min(8, abLevel)) {
+        sel.value = String(Math.min(8, abLevel));
+    }
+}
+
+function abAddBlock(x, y, w, h, mat) {
+    const m = AB_MAT_META[mat] || AB_MAT_META.wood;
+    abBlocks.push({
+        x: x,
+        y: y,
+        w: w,
+        h: h,
+        vx: 0,
+        vy: 0,
+        mat: mat,
+        hp: m.hp,
+        maxHp: m.hp,
+        mass: m.mass * ((w * h) / 1200)
+    });
+}
+
+function abAddPig(x, y, type = 'normal') {
+    const r    = type === 'king' ? 24 : (type === 'helmet' ? 18 : 15);
+    const maxH = type === 'king' ? 95 : (type === 'helmet' ? 58 : 26);
+    abPigs.push({
+        x: x,
+        y: y,
+        r: r,
+        vx: 0,
+        vy: 0,
+        hp: maxH,
+        maxHp: maxH,
+        type: type,
+        blink: Math.random() * 4
+    });
+}
+
+function abBuildLevelGeometry(lvl) {
+    abBlocks = [];
+    abPigs   = [];
+    const G  = AB_GROUND_Y;
+
+    if (lvl === 1) {
+        // Level 1: Das Holzhaus im Grünen
+        abQueue = ['red', 'yellow', 'blue', 'red'];
+        abAddBlock(580, G - 90, 18, 90, 'wood');
+        abAddBlock(680, G - 90, 18, 90, 'wood');
+        abAddBlock(572, G - 108, 134, 18, 'wood');
+        abAddBlock(600, G - 170, 16, 62, 'glass');
+        abAddBlock(662, G - 170, 16, 62, 'glass');
+        abAddBlock(592, G - 186, 94, 16, 'wood');
+        abAddPig(639, G - 15, 'normal');
+        abAddPig(639, G - 123, 'normal');
+    } else if (lvl === 2) {
+        // Level 2: Die Zwillings-Türme
+        abQueue = ['blue', 'yellow', 'red', 'black'];
+        // Turm Links
+        abAddBlock(520, G - 85, 16, 85, 'glass');
+        abAddBlock(590, G - 85, 16, 85, 'glass');
+        abAddBlock(514, G - 101, 98, 16, 'wood');
+        abAddPig(563, G - 15, 'normal');
+        abAddPig(563, G - 116, 'normal');
+        // Turm Rechts
+        abAddBlock(690, G - 100, 18, 100, 'wood');
+        abAddBlock(770, G - 100, 18, 100, 'wood');
+        abAddBlock(684, G - 118, 110, 18, 'stone');
+        abAddBlock(715, G - 178, 16, 60, 'wood');
+        abAddBlock(755, G - 178, 16, 60, 'wood');
+        abAddBlock(708, G - 194, 70, 16, 'wood');
+        abAddPig(739, G - 15, 'helmet');
+    } else if (lvl === 3) {
+        // Level 3: Das Pulverfass-Lager (TNT-Kettenreaktion)
+        abQueue = ['yellow', 'blue', 'black', 'red'];
+        abAddBlock(540, G - 80, 18, 80, 'wood');
+        abAddBlock(630, G - 80, 18, 80, 'wood');
+        abAddBlock(720, G - 80, 18, 80, 'wood');
+        abAddBlock(810, G - 80, 18, 80, 'wood');
+        abAddBlock(535, G - 98, 118, 18, 'wood');
+        abAddBlock(625, G - 98, 118, 18, 'stone');
+        abAddBlock(715, G - 98, 118, 18, 'wood');
+        // TNT & Schweinchen
+        abAddBlock(572, G - 36, 36, 36, 'tnt');
+        abAddBlock(752, G - 36, 36, 36, 'tnt');
+        abAddPig(684, G - 18, 'helmet');
+        abAddPig(585, G - 113, 'normal');
+        abAddPig(684, G - 113, 'normal');
+        abAddPig(774, G - 113, 'normal');
+    } else if (lvl === 4) {
+        // Level 4: Die Stein-Zitadelle
+        abQueue = ['black', 'white', 'yellow', 'blue', 'red'];
+        abAddBlock(560, G - 100, 22, 100, 'stone');
+        abAddBlock(660, G - 100, 22, 100, 'stone');
+        abAddBlock(760, G - 100, 22, 100, 'stone');
+        abAddBlock(555, G - 120, 130, 20, 'stone');
+        abAddBlock(655, G - 120, 130, 20, 'stone');
+        abAddBlock(600, G - 190, 18, 70, 'wood');
+        abAddBlock(720, G - 190, 18, 70, 'wood');
+        abAddBlock(595, G - 208, 148, 18, 'glass');
+        abAddBlock(652, G - 156, 36, 36, 'tnt');
+        abAddPig(618, G - 18, 'helmet');
+        abAddPig(718, G - 18, 'helmet');
+        abAddPig(669, G - 232, 'king');
+    } else if (lvl === 5) {
+        // Level 5: Der Pyramiden-Bunker
+        abQueue = ['blue', 'yellow', 'black', 'white', 'red'];
+        const baseX = 520;
+        for (let i = 0; i < 4; i++) {
+            const x = baseX + i * 86;
+            abAddBlock(x, G - 75, 18, 75, i % 2 === 0 ? 'wood' : 'stone');
+            abAddBlock(x + 62, G - 75, 18, 75, i % 2 === 0 ? 'wood' : 'stone');
+            abAddBlock(x - 4, G - 93, 88, 18, 'wood');
+            if (i === 1 || i === 2) {
+                abAddBlock(x + 22, G - 36, 36, 36, 'tnt');
+            } else {
+                abAddPig(x + 40, G - 15, 'normal');
+            }
+        }
+        for (let i = 0; i < 3; i++) {
+            const x = baseX + 43 + i * 86;
+            abAddBlock(x, G - 165, 16, 72, 'glass');
+            abAddBlock(x + 58, G - 165, 16, 72, 'glass');
+            abAddBlock(x - 4, G - 181, 82, 16, 'wood');
+            abAddPig(x + 37, G - 108, i === 1 ? 'helmet' : 'normal');
+        }
+        abAddPig(baseX + 172, G - 205, 'king');
+    } else if (lvl === 6) {
+        // Level 6: Die Gepanzerte Bastion
+        abQueue = ['white', 'black', 'yellow', 'blue', 'black'];
+        abAddBlock(500, G - 120, 24, 120, 'stone');
+        abAddBlock(610, G - 120, 20, 120, 'wood');
+        abAddBlock(720, G - 120, 20, 120, 'wood');
+        abAddBlock(830, G - 120, 24, 120, 'stone');
+        abAddBlock(496, G - 140, 138, 20, 'stone');
+        abAddBlock(606, G - 140, 138, 20, 'wood');
+        abAddBlock(716, G - 140, 142, 20, 'stone');
+        abAddBlock(656, G - 36, 36, 36, 'tnt');
+        abAddPig(564, G - 18, 'helmet');
+        abAddPig(782, G - 18, 'helmet');
+        abAddPig(564, G - 155, 'normal');
+        abAddPig(675, G - 164, 'king');
+        abAddPig(782, G - 155, 'normal');
+    } else if (lvl === 7) {
+        // Level 7: König Grunzers Thronsaal
+        abQueue = ['blue', 'yellow', 'white', 'black', 'black', 'red'];
+        abAddBlock(490, G - 95, 22, 95, 'stone');
+        abAddBlock(575, G - 95, 18, 95, 'wood');
+        abAddBlock(675, G - 95, 18, 95, 'wood');
+        abAddBlock(775, G - 95, 18, 95, 'wood');
+        abAddBlock(860, G - 95, 22, 95, 'stone');
+        abAddBlock(486, G - 115, 112, 20, 'stone');
+        abAddBlock(572, G - 115, 124, 20, 'wood');
+        abAddBlock(672, G - 115, 124, 20, 'wood');
+        abAddBlock(772, G - 115, 114, 20, 'stone');
+
+        abAddBlock(525, G - 36, 36, 36, 'tnt');
+        abAddBlock(810, G - 36, 36, 36, 'tnt');
+        abAddPig(634, G - 18, 'helmet');
+        abAddPig(734, G - 18, 'helmet');
+
+        // 2. Etage Thronsaal
+        abAddBlock(605, G - 205, 20, 90, 'stone');
+        abAddBlock(745, G - 205, 20, 90, 'stone');
+        abAddBlock(600, G - 225, 170, 20, 'stone');
+        abAddBlock(630, G - 280, 16, 55, 'glass');
+        abAddBlock(724, G - 280, 16, 55, 'glass');
+        abAddBlock(625, G - 296, 120, 16, 'wood');
+        abAddPig(685, G - 139, 'king');
+        abAddPig(538, G - 130, 'normal');
+        abAddPig(828, G - 130, 'normal');
+        abAddPig(685, G - 311, 'helmet');
+    } else {
+        // Level 8+: Prozeduraler Festungs-Generator
+        const birdsPool = ['red', 'yellow', 'blue', 'black', 'white'];
+        abQueue = ['yellow', 'blue', 'black', 'white', birdsPool[lvl % birdsPool.length]];
+        const cols = 3 + (lvl % 2);
+        const startX = 500;
+        const span = 92;
+        const mats = ['wood', 'glass', 'stone'];
+        for (let c = 0; c < cols; c++) {
+            const x = startX + c * span;
+            const m1 = mats[(lvl + c) % mats.length];
+            const m2 = mats[(lvl + c + 1) % mats.length];
+            abAddBlock(x, G - 88, 18, 88, m1);
+            abAddBlock(x + 64, G - 88, 18, 88, m1);
+            abAddBlock(x - 4, G - 106, 90, 18, m2);
+            if (c === 1) {
+                abAddBlock(x + 23, G - 36, 36, 36, 'tnt');
+            } else {
+                abAddPig(x + 41, G - 16, c % 2 === 0 ? 'helmet' : 'normal');
+            }
+            // Obergeschoss
+            abAddBlock(x + 10, G - 174, 16, 68, 'glass');
+            abAddBlock(x + 54, G - 174, 16, 68, 'glass');
+            abAddBlock(x + 6, G - 190, 68, 16, 'wood');
+            abAddPig(x + 40, G - 122, c === Math.floor(cols / 2) ? 'king' : 'normal');
+        }
+    }
+}
+
+function abLoadLevel(lvl) {
+    abLevel = Math.max(1, lvl || 1);
+    if (abLevel === 1) {
+        abTotalScore = 0;
+    }
+    abScore        = 0;
+    abActiveBirds  = [];
+    abParticles    = [];
+    abPopups       = [];
+    abLastTrail    = [];
+    abCurTrail     = [];
+    abPullX        = AB_SLING_X;
+    abPullY        = AB_SLING_Y;
+    abState        = 'aiming';
+    abStartTs      = performance.now();
+    abBuildLevelGeometry(abLevel);
+    abUpdateHud();
+    abDraw();
+}
+
+function abRestartLevel() {
+    abLoadLevel(abLevel);
+}
+
+function abSpawnExplosion(ex, ey, radius, maxDmg) {
+    abPlaySound('boom');
+    for (let i = 0; i < 34; i++) {
+        const ang = (Math.PI * 2 * i) / 34 + (Math.random() - 0.5) * 0.25;
+        const spd = 90 + Math.random() * 290;
+        abParticles.push({
+            x: ex,
+            y: ey,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 50,
+            r: 4 + Math.random() * 6,
+            col: i % 3 === 0 ? '#facc15' : (i % 3 === 1 ? '#f97316' : '#475569'),
+            ttl: 0.55 + Math.random() * 0.45
+        });
+    }
+
+    // Blöcke im Explosionsradius beschädigen & wegschleudern
+    for (let i = abBlocks.length - 1; i >= 0; i--) {
+        const b = abBlocks[i];
+        const cx = b.x + b.w * 0.5;
+        const cy = b.y + b.h * 0.5;
+        const dist = Math.hypot(cx - ex, cy - ey);
+        if (dist < radius) {
+            const fac = 1 - dist / radius;
+            const ang = Math.atan2(cy - ey, cx - ex);
+            b.vx += Math.cos(ang) * 340 * fac;
+            b.vy += Math.sin(ang) * 340 * fac - 110 * fac;
+            b.hp -= maxDmg * fac;
+        }
+    }
+
+    // Schweine im Explosionsradius beschädigen
+    for (let i = abPigs.length - 1; i >= 0; i--) {
+        const p = abPigs[i];
+        const dist = Math.hypot(p.x - ex, p.y - ey);
+        if (dist < radius) {
+            const fac = 1 - dist / radius;
+            const ang = Math.atan2(p.y - ey, p.x - ex);
+            p.vx += Math.cos(ang) * 360 * fac;
+            p.vy += Math.sin(ang) * 360 * fac - 130 * fac;
+            p.hp -= maxDmg * fac;
+        }
+    }
+}
+
+function abTriggerSpecial() {
+    if (abState !== 'flying' || abActiveBirds.length === 0) return;
+    const main = abActiveBirds[0];
+    if (!main || main.specialUsed) return;
+    main.specialUsed = true;
+
+    if (main.type === 'yellow') {
+        // Turbo-Boost
+        abPlaySound('boost');
+        main.vx *= 2.45;
+        main.vy *= 0.65;
+        abPopups.push({ x: main.x, y: main.y - 22, text: '⚡ TURBO!', col: '#fde047', ttl: 0.75 });
+        for (let i = 0; i < 12; i++) {
+            abParticles.push({
+                x: main.x, y: main.y,
+                vx: -main.vx * 0.25 + (Math.random() - 0.5) * 80,
+                vy: (Math.random() - 0.5) * 90,
+                r: 4, col: '#fef08a', ttl: 0.45
+            });
+        }
+    } else if (main.type === 'blue') {
+        // Drillings-Spatzen
+        abPlaySound('boost');
+        abPopups.push({ x: main.x, y: main.y - 22, text: '🐦🐦🐦 DRILLINGE!', col: '#60a5fa', ttl: 0.75 });
+        const spd = Math.hypot(main.vx, main.vy);
+        const baseAng = Math.atan2(main.vy, main.vx);
+        [-0.22, 0.22].forEach(offset => {
+            abActiveBirds.push({
+                type: 'blue',
+                x: main.x,
+                y: main.y + (offset < 0 ? -12 : 12),
+                vx: Math.cos(baseAng + offset) * spd * 1.05,
+                vy: Math.sin(baseAng + offset) * spd * 1.05,
+                r: AB_BIRD_META.blue.r,
+                mass: AB_BIRD_META.blue.mass,
+                rot: 0,
+                specialUsed: true,
+                bounces: 0,
+                age: 0
+            });
+        });
+    } else if (main.type === 'black') {
+        // Sofort-Explosion
+        abPopups.push({ x: main.x, y: main.y - 26, text: '💥 KABOOM!', col: '#f97316', ttl: 0.85 });
+        abSpawnExplosion(main.x, main.y, 145, 165);
+        abActiveBirds.splice(0, 1);
+    } else if (main.type === 'white') {
+        // Spreng-Ei nach unten abwerfen, Vogel zieht steil nach oben weg
+        abPlaySound('launch');
+        abPopups.push({ x: main.x, y: main.y - 24, text: '🥚 BOMBEN-EI!', col: '#ffffff', ttl: 0.75 });
+        main.vy = -360;
+        main.vx *= 1.15;
+        abActiveBirds.push({
+            type: 'egg',
+            x: main.x,
+            y: main.y + 16,
+            vx: main.vx * 0.22,
+            vy: 340,
+            r: 11,
+            mass: 1.5,
+            rot: 0,
+            specialUsed: true,
+            bounces: 0,
+            age: 0
+        });
+    }
+}
+
+function abNextBirdImmediate() {
+    if (abState === 'flying' || abState === 'settling') {
+        abActiveBirds = [];
+        abAdvanceTurn();
+    }
+}
+
+function abAdvanceTurn() {
+    if (abCurTrail.length > 1) {
+        abLastTrail = abCurTrail.slice(0, 80);
+    }
+    abCurTrail = [];
+    abActiveBirds = [];
+
+    if (abPigs.length === 0) {
+        // Level gewonnen! Bonus für übrig gebliebene Vögel
+        const bonusBirds = abQueue.length;
+        const birdBonus  = bonusBirds * 5000;
+        if (birdBonus > 0) {
+            abScore += birdBonus;
+            abPopups.push({ x: 240, y: 260, text: `+${birdBonus} VOGEL-BONUS!`, col: '#fde047', ttl: 1.4 });
+        }
+        abTotalScore += abScore;
+        abState = 'won';
+        abPlaySound('win');
+        if (abTotalScore > abBest) {
+            abBest = abTotalScore;
+            try { localStorage.setItem('mc_angrybirds_best', String(abBest)); } catch (e) {}
+        }
+        const dur = Math.max(1, Math.round((performance.now() - abStartTs) / 1000));
+        submitCloudScore('angrybirds', abTotalScore, dur, `🏰 Level ${abLevel} gemeistert`);
+        abUpdateHud();
+        return;
+    }
+
+    if (abQueue.length === 0) {
+        abState = 'lost';
+        abUpdateHud();
+        return;
+    }
+
+    abPullX = AB_SLING_X;
+    abPullY = AB_SLING_Y;
+    abState = 'aiming';
+    abUpdateHud();
+}
+
+function abDestroyBlockAt(idx) {
+    const b = abBlocks[idx];
+    if (!b) return;
+    const m = AB_MAT_META[b.mat] || AB_MAT_META.wood;
+    abScore += m.score;
+    const cx = b.x + b.w * 0.5;
+    const cy = b.y + b.h * 0.5;
+    abPopups.push({ x: cx, y: cy - 10, text: `+${m.score}`, col: m.col, ttl: 0.75 });
+
+    for (let k = 0; k < 10; k++) {
+        abParticles.push({
+            x: cx + (Math.random() - 0.5) * b.w,
+            y: cy + (Math.random() - 0.5) * b.h,
+            vx: (Math.random() - 0.5) * 190,
+            vy: -40 - Math.random() * 140,
+            r: 3 + Math.random() * 4,
+            col: m.col,
+            ttl: 0.5 + Math.random() * 0.35
+        });
+    }
+
+    const wasTnt = (b.mat === 'tnt');
+    abBlocks.splice(idx, 1);
+
+    if (wasTnt) {
+        abPopups.push({ x: cx, y: cy - 26, text: '🧨 TNT-EXPLOSION!', col: '#ef4444', ttl: 0.95 });
+        abSpawnExplosion(cx, cy, 155, 175);
+    } else {
+        abPlaySound('hit');
+    }
+}
+
+function abDestroyPigAt(idx) {
+    const p = abPigs[idx];
+    if (!p) return;
+    const pts = p.type === 'king' ? 10000 : (p.type === 'helmet' ? 5000 : 3000);
+    abScore += pts;
+    abPlaySound('pig');
+    abPopups.push({ x: p.x, y: p.y - 18, text: `🐷 +${pts}!`, col: '#4ade80', ttl: 0.95 });
+    for (let k = 0; k < 14; k++) {
+        abParticles.push({
+            x: p.x,
+            y: p.y,
+            vx: (Math.random() - 0.5) * 170,
+            vy: -50 - Math.random() * 130,
+            r: 4 + Math.random() * 4,
+            col: k % 2 === 0 ? '#4ade80' : '#ffffff',
+            ttl: 0.55 + Math.random() * 0.3
+        });
+    }
+    abPigs.splice(idx, 1);
+}
+
+function abUpdate(dt) {
+    // Partikel & Popups aktualisieren
+    for (let i = abParticles.length - 1; i >= 0; i--) {
+        const pt = abParticles[i];
+        pt.vy += 460 * dt;
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.ttl -= dt;
+        if (pt.ttl <= 0) abParticles.splice(i, 1);
+    }
+    for (let i = abPopups.length - 1; i >= 0; i--) {
+        abPopups[i].y -= 34 * dt;
+        abPopups[i].ttl -= dt;
+        if (abPopups[i].ttl <= 0) abPopups.splice(i, 1);
+    }
+
+    const gravity = 560;
+
+    // 1. Fliegende Vögel / Eier simulieren
+    if (abState === 'flying') {
+        for (let bi = abActiveBirds.length - 1; bi >= 0; bi--) {
+            const bird = abActiveBirds[bi];
+            bird.age += dt;
+            bird.vy += gravity * dt;
+            bird.x += bird.vx * dt;
+            bird.y += bird.vy * dt;
+            bird.rot += (bird.vx * 0.012) * dt;
+
+            if (bi === 0 && Math.random() < 0.55) {
+                abCurTrail.push({ x: bird.x, y: bird.y });
+            }
+
+            // Boden-Kollision
+            if (bird.y + bird.r >= AB_GROUND_Y) {
+                bird.y = AB_GROUND_Y - bird.r;
+                if (bird.type === 'egg') {
+                    abSpawnExplosion(bird.x, bird.y, 130, 150);
+                    abActiveBirds.splice(bi, 1);
+                    continue;
+                }
+                if (Math.abs(bird.vy) > 65) {
+                    abPlaySound('hit');
+                }
+                bird.vy = -bird.vy * 0.42;
+                bird.vx *= 0.72;
+                bird.bounces += 1;
+            }
+
+            // Kollision Vogel <-> Blöcke
+            for (let i = abBlocks.length - 1; i >= 0; i--) {
+                const b = abBlocks[i];
+                const nearX = Math.max(b.x, Math.min(bird.x, b.x + b.w));
+                const nearY = Math.max(b.y, Math.min(bird.y, b.y + b.h));
+                const dx = bird.x - nearX;
+                const dy = bird.y - nearY;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < bird.r) {
+                    if (bird.type === 'egg') {
+                        abSpawnExplosion(bird.x, bird.y, 135, 160);
+                        abActiveBirds.splice(bi, 1);
+                        break;
+                    }
+                    const speed = Math.hypot(bird.vx, bird.vy);
+                    let mult = 1.0;
+                    if (bird.type === 'yellow' && b.mat === 'wood') mult = 2.1;
+                    if (bird.type === 'blue' && b.mat === 'glass') mult = 2.4;
+                    if (bird.type === 'black' && b.mat === 'stone') mult = 1.8;
+
+                    const dmg = speed * 0.16 * bird.mass * mult;
+                    b.hp -= dmg;
+                    b.vx += bird.vx * (0.38 / Math.max(0.6, b.mass));
+                    b.vy += bird.vy * (0.28 / Math.max(0.6, b.mass));
+
+                    // Rückstoß auf den Vogel
+                    if (b.hp > 0) {
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            bird.vx = -bird.vx * 0.42;
+                            bird.x += (dx >= 0 ? 1 : -1) * (bird.r - dist + 2);
+                        } else {
+                            bird.vy = -bird.vy * 0.45;
+                            bird.y += (dy >= 0 ? 1 : -1) * (bird.r - dist + 2);
+                        }
+                        abPlaySound('hit');
+                    } else {
+                        // Vogel durchschlägt den zerstörten Block mit Rest-Schwung
+                        bird.vx *= 0.74;
+                        bird.vy *= 0.74;
+                    }
+
+                    // Schwarzer Bomben-Rabe zündet nach dem ersten kräftigen Aufprall automatisch
+                    if (bird.type === 'black' && !bird.fuseSet) {
+                        bird.fuseSet = true;
+                        bird.fuseTimer = 0.55;
+                    }
+                }
+            }
+
+            // Kollision Vogel <-> Schweine
+            for (let pi = abPigs.length - 1; pi >= 0; pi--) {
+                const p = abPigs[pi];
+                const dist = Math.hypot(bird.x - p.x, bird.y - p.y);
+                if (dist < bird.r + p.r) {
+                    if (bird.type === 'egg') {
+                        abSpawnExplosion(bird.x, bird.y, 135, 160);
+                        abActiveBirds.splice(bi, 1);
+                        break;
+                    }
+                    const speed = Math.hypot(bird.vx, bird.vy);
+                    p.hp -= speed * 0.22 * bird.mass;
+                    p.vx += bird.vx * 0.5;
+                    p.vy += bird.vy * 0.4 - 40;
+                    bird.vx *= 0.62;
+                    bird.vy = -Math.abs(bird.vy) * 0.45;
+                }
+            }
+
+            // Zündschnur beim Bomben-Raben
+            if (bird && bird.fuseSet) {
+                bird.fuseTimer -= dt;
+                if (bird.fuseTimer <= 0) {
+                    abSpawnExplosion(bird.x, bird.y, 145, 165);
+                    abActiveBirds.splice(bi, 1);
+                    continue;
+                }
+            }
+
+            // Vogel außerhalb des Spielfelds oder ausgerollt
+            if (bird && (bird.x > 995 || bird.x < -40 || bird.age > 6.5 || (Math.hypot(bird.vx, bird.vy) < 18 && bird.age > 1.2))) {
+                abActiveBirds.splice(bi, 1);
+            }
+        }
+
+        if (abActiveBirds.length === 0) {
+            abState = 'settling';
+            abSettleTimer = 0.9;
+        }
+    }
+
+    // 2. Baustatik & Schwerkraft für alle Blöcke
+    for (let i = 0; i < abBlocks.length; i++) {
+        const b = abBlocks[i];
+        // Prüfen, ob Block auf dem Boden oder auf einem anderen Block aufliegt
+        let supportedY = AB_GROUND_Y;
+        for (let j = 0; j < abBlocks.length; j++) {
+            if (i === j) continue;
+            const other = abBlocks[j];
+            const overlapX = Math.min(b.x + b.w, other.x + other.w) - Math.max(b.x, other.x);
+            if (overlapX > 5 && other.y >= b.y + b.h - 6) {
+                if (other.y < supportedY) {
+                    supportedY = other.y;
+                }
+            }
+        }
+
+        if (b.y + b.h < supportedY - 1) {
+            b.vy += gravity * dt;
+        } else {
+            if (b.vy > 135) {
+                b.hp -= (b.vy - 120) * 0.18;
+            }
+            b.y = supportedY - b.h;
+            b.vy = 0;
+            b.vx *= 0.80;
+        }
+
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.vx *= 0.95;
+
+        // Seitlicher Zusammenstoß mit Nachbarblöcken überträgt Impuls (Domino-Effekt!)
+        if (Math.abs(b.vx) > 25) {
+            for (let j = 0; j < abBlocks.length; j++) {
+                if (i === j) continue;
+                const other = abBlocks[j];
+                const overlapY = Math.min(b.y + b.h, other.y + other.h) - Math.max(b.y, other.y);
+                if (overlapY > 6) {
+                    if (b.vx > 0 && b.x + b.w > other.x && b.x < other.x) {
+                        const imp = b.vx * 0.55;
+                        other.vx += imp;
+                        other.hp -= Math.abs(imp) * 0.14;
+                        b.vx *= 0.35;
+                        b.x = other.x - b.w;
+                    } else if (b.vx < 0 && b.x < other.x + other.w && b.x + b.w > other.x + other.w) {
+                        const imp = b.vx * 0.55;
+                        other.vx += imp;
+                        other.hp -= Math.abs(imp) * 0.14;
+                        b.vx *= 0.35;
+                        b.x = other.x + other.w;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Schwerkraft & Quetsch-Schaden für alle Schweinchen
+    for (let pi = 0; pi < abPigs.length; pi++) {
+        const p = abPigs[pi];
+        p.blink = (p.blink + dt) % 4.5;
+        let supportedY = AB_GROUND_Y;
+        for (let j = 0; j < abBlocks.length; j++) {
+            const b = abBlocks[j];
+            if (p.x + p.r * 0.6 > b.x && p.x - p.r * 0.6 < b.x + b.w) {
+                if (b.y >= p.y + p.r - 6 && b.y < supportedY) {
+                    supportedY = b.y;
+                }
+                // Herabfallender Block trifft Schwein von oben
+                if (b.vy > 70 && b.y + b.h >= p.y - p.r && b.y < p.y) {
+                    p.hp -= b.vy * 0.28 * b.mass;
+                }
+                // Seitlich rutschender Block trifft Schwein
+                if (Math.abs(b.vx) > 40 && Math.abs((b.x + b.w * 0.5) - p.x) < b.w * 0.5 + p.r && Math.abs((b.y + b.h * 0.5) - p.y) < b.h * 0.5 + p.r) {
+                    p.hp -= Math.abs(b.vx) * 0.25;
+                    p.vx += b.vx * 0.6;
+                }
+            }
+        }
+
+        if (p.y + p.r < supportedY - 1) {
+            p.vy += gravity * dt;
+        } else {
+            if (p.vy > 125) {
+                p.hp -= (p.vy - 105) * 0.32;
+            }
+            p.y = supportedY - p.r;
+            p.vy = 0;
+            p.vx *= 0.80;
+        }
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.x > 965 || p.x < 20) {
+            p.hp = 0;
+        }
+    }
+
+    // Zerstörte Blöcke & besiegte Schweinchen abräumen
+    for (let i = abBlocks.length - 1; i >= 0; i--) {
+        if (abBlocks[i].hp <= 0) {
+            abDestroyBlockAt(i);
+            abUpdateHud();
+        }
+    }
+    for (let pi = abPigs.length - 1; pi >= 0; pi--) {
+        if (abPigs[pi].hp <= 0) {
+            abDestroyPigAt(pi);
+            abUpdateHud();
+        }
+    }
+
+    if (abState === 'settling') {
+        abSettleTimer -= dt;
+        if (abSettleTimer <= 0 || abPigs.length === 0) {
+            abAdvanceTurn();
+        }
+    }
+}
+
+function abDrawBirdSprite(ctx, type, x, y, r, rot) {
+    const meta = AB_BIRD_META[type] || AB_BIRD_META.red;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot || 0);
+
+    if (type === 'egg') {
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 0.85, r * 1.15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
+    // Kopffedern
+    ctx.fillStyle = meta.col;
+    ctx.beginPath();
+    ctx.moveTo(-4, -r + 2);
+    ctx.lineTo(-9, -r - 7);
+    ctx.lineTo(0, -r - 2);
+    ctx.lineTo(4, -r - 8);
+    ctx.lineTo(6, -r + 2);
+    ctx.fill();
+
+    // Körper
+    if (type === 'yellow') {
+        // Dreieckige Turbo-Form
+        ctx.fillStyle = meta.col;
+        ctx.strokeStyle = '#713f12';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(0, -r - 3);
+        ctx.lineTo(r + 3, r - 2);
+        ctx.lineTo(-r - 3, r - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = meta.col;
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Heller Bauch
+        ctx.fillStyle = meta.belly;
+        ctx.beginPath();
+        ctx.arc(2, r * 0.35, r * 0.58, 0, Math.PI, false);
+        ctx.fill();
+    }
+
+    // Zündschnur beim Bomben-Raben
+    if (type === 'black') {
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -r);
+        ctx.lineTo(4, -r - 9);
+        ctx.stroke();
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(4, -r - 10, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Augen
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(3, -2, r * 0.27, 0, Math.PI * 2);
+    ctx.arc(9, -2, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(4, -2, 2, 0, Math.PI * 2);
+    ctx.arc(10, -2, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Typische grimmige Augenbrauen
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-2, -7);
+    ctx.lineTo(6, -4);
+    ctx.lineTo(13, -7);
+    ctx.stroke();
+
+    // Schnabel
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(r + 6, 3);
+    ctx.lineTo(8, 6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function abDrawPigSprite(ctx, p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    // Ohren
+    ctx.fillStyle = '#22c55e';
+    ctx.strokeStyle = '#14532d';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(-p.r * 0.65, -p.r * 0.72, 4.5, 0, Math.PI * 2);
+    ctx.arc(p.r * 0.65, -p.r * 0.72, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Körper
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Helm oder Königskrone
+    if (p.type === 'helmet') {
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(0, -2, p.r + 1.5, Math.PI, 0, false);
+        ctx.fill();
+        ctx.stroke();
+    } else if (p.type === 'king') {
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = '#854d0e';
+        ctx.beginPath();
+        ctx.moveTo(-12, -p.r + 2);
+        ctx.lineTo(-14, -p.r - 12);
+        ctx.lineTo(-5, -p.r - 5);
+        ctx.lineTo(0, -p.r - 15);
+        ctx.lineTo(5, -p.r - 5);
+        ctx.lineTo(14, -p.r - 12);
+        ctx.lineTo(12, -p.r + 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // Augen
+    const eyesClosed = p.blink > 4.25;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(-p.r * 0.42, -2, 4, 0, Math.PI * 2);
+    ctx.arc(p.r * 0.42, -2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (!eyesClosed) {
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(-p.r * 0.42, -2, 1.8, 0, Math.PI * 2);
+        ctx.arc(p.r * 0.42, -2, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Blaue Flecken / Pflaster bei Schaden
+    if (p.hp < p.maxHp * 0.65) {
+        ctx.fillStyle = 'rgba(126, 34, 206, 0.45)';
+        ctx.beginPath();
+        ctx.arc(-p.r * 0.42, -2, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Rüssel-Schnauze
+    ctx.fillStyle = '#86efac';
+    ctx.strokeStyle = '#15803d';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, p.r * 0.38, p.r * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#14532d';
+    ctx.beginPath();
+    ctx.arc(-2.5, 2, 1.6, 0, Math.PI * 2);
+    ctx.arc(2.5, 2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function abDraw() {
+    const canvas = document.getElementById('abCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // 1. Himmel & Gebirgs-Panorama
+    const sky = ctx.createLinearGradient(0, 0, 0, AB_GROUND_Y);
+    sky.addColorStop(0, '#0284c7');
+    sky.addColorStop(0.55, '#38bdf8');
+    sky.addColorStop(1, '#bae6fd');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, AB_GROUND_Y);
+
+    // Sanfte Hügel im Hintergrund
+    ctx.fillStyle = '#7dd3fc';
+    ctx.beginPath();
+    ctx.arc(210, AB_GROUND_Y + 40, 180, Math.PI, 0);
+    ctx.arc(540, AB_GROUND_Y + 60, 240, Math.PI, 0);
+    ctx.arc(820, AB_GROUND_Y + 30, 160, Math.PI, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#86efac';
+    ctx.beginPath();
+    ctx.arc(130, AB_GROUND_Y + 60, 140, Math.PI, 0);
+    ctx.arc(430, AB_GROUND_Y + 75, 190, Math.PI, 0);
+    ctx.arc(740, AB_GROUND_Y + 55, 175, Math.PI, 0);
+    ctx.fill();
+
+    // 2. Flugspur des letzten Schusses + aktuelle Spur
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    abLastTrail.forEach((pt, idx) => {
+        if (idx % 2 === 0) {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 2.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    abCurTrail.forEach((pt, idx) => {
+        if (idx % 2 === 0) {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    // 3. Gepunktete Ziel-Parabel beim Spannen der Zwille
+    if (abState === 'dragging') {
+        const dx = AB_SLING_X - abPullX;
+        const dy = AB_SLING_Y - abPullY;
+        const vx = dx * 8.2;
+        const vy = dy * 8.2;
+        const g  = 560;
+        for (let step = 1; step <= 20; step++) {
+            const t  = step * 0.065;
+            const px = abPullX + vx * t;
+            const py = abPullY + vy * t + 0.5 * g * t * t;
+            if (py > AB_GROUND_Y) break;
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.15, 0.9 - step * 0.04)})`;
+            ctx.beginPath();
+            ctx.arc(px, py, 3.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // 4. Holz-Zwille (hinterer Gabelarm + hinteres Gummiband)
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(AB_SLING_X, AB_GROUND_Y);
+    ctx.lineTo(AB_SLING_X, AB_SLING_Y + 24);
+    ctx.lineTo(AB_SLING_X + 12, AB_SLING_Y - 4);
+    ctx.stroke();
+
+    if (abState === 'aiming' || abState === 'dragging') {
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(AB_SLING_X + 11, AB_SLING_Y - 2);
+        ctx.lineTo(abPullX, abPullY);
+        ctx.stroke();
+    }
+
+    // 5. Wartende Vögel links neben dem Katapult + Vogel in der Zwille
+    for (let i = 1; i < abQueue.length; i++) {
+        const bType = abQueue[i];
+        const bMeta = AB_BIRD_META[bType] || AB_BIRD_META.red;
+        abDrawBirdSprite(ctx, bType, AB_SLING_X - 36 - (i - 1) * 32, AB_GROUND_Y - bMeta.r, bMeta.r, 0);
+    }
+
+    if ((abState === 'aiming' || abState === 'dragging') && abQueue.length > 0) {
+        const curType = abQueue[0];
+        const curMeta = AB_BIRD_META[curType] || AB_BIRD_META.red;
+        abDrawBirdSprite(ctx, curType, abPullX, abPullY, curMeta.r, 0);
+
+        // Vorderes Gummiband
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.moveTo(AB_SLING_X - 10, AB_SLING_Y - 2);
+        ctx.lineTo(abPullX - 4, abPullY + 2);
+        ctx.stroke();
+    }
+
+    // Vorderer Gabelarm der Zwille
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(AB_SLING_X, AB_SLING_Y + 24);
+    ctx.lineTo(AB_SLING_X - 11, AB_SLING_Y - 4);
+    ctx.stroke();
+
+    // 6. Festungs-Blöcke zeichnen
+    abBlocks.forEach(b => {
+        const m = AB_MAT_META[b.mat] || AB_MAT_META.wood;
+        ctx.save();
+        if (b.mat === 'glass') {
+            ctx.globalAlpha = 0.78;
+        }
+        ctx.fillStyle = m.col;
+        ctx.strokeStyle = m.stroke;
+        ctx.lineWidth = 2;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+        if (b.mat === 'tnt') {
+            ctx.fillStyle = '#fef08a';
+            ctx.font = '900 11px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('TNT', b.x + b.w * 0.5, b.y + b.h * 0.5 + 4);
+        }
+
+        // Risse bei Beschädigung
+        if (b.hp < b.maxHp * 0.68) {
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(b.x + b.w * 0.25, b.y + b.h * 0.2);
+            ctx.lineTo(b.x + b.w * 0.55, b.y + b.h * 0.55);
+            ctx.lineTo(b.x + b.w * 0.38, b.y + b.h * 0.85);
+            ctx.stroke();
+        }
+        ctx.restore();
+    });
+
+    // 7. Grüne Festungs-Schweinchen zeichnen
+    abPigs.forEach(p => abDrawPigSprite(ctx, p));
+
+    // 8. Fliegende Vögel zeichnen
+    abActiveBirds.forEach(bird => {
+        abDrawBirdSprite(ctx, bird.type, bird.x, bird.y, bird.r, bird.rot);
+    });
+
+    // 9. Boden & Wiese
+    ctx.fillStyle = '#16a34a';
+    ctx.fillRect(0, AB_GROUND_Y, W, 14);
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(0, AB_GROUND_Y + 14, W, H - AB_GROUND_Y - 14);
+
+    // 10. Partikel & Popups
+    abParticles.forEach(pt => {
+        ctx.fillStyle = pt.col;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    ctx.textAlign = 'center';
+    ctx.font = '900 15px system-ui, sans-serif';
+    abPopups.forEach(pp => {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(pp.text, pp.x + 1, pp.y + 1);
+        ctx.fillStyle = pp.col;
+        ctx.fillText(pp.text, pp.x, pp.y);
+    });
+
+    // Info-Leiste zum aktuellen Vogel oben links
+    if ((abState === 'aiming' || abState === 'dragging') && abQueue.length > 0) {
+        const curMeta = AB_BIRD_META[abQueue[0]] || AB_BIRD_META.red;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+        ctx.beginPath();
+        ctx.roundRect(14, 14, 340, 34, 10);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'left';
+        ctx.font = '700 12px system-ui, sans-serif';
+        ctx.fillText(`🎯 Bereit: ${curMeta.name} – ${curMeta.desc}`, 24, 35);
+    }
+
+    // 11. Sieg- / Niederlagen-Overlay
+    if (abState === 'won' || abState === 'lost') {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = abState === 'won' ? '#facc15' : '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(W * 0.5 - 210, 110, 420, 270, 20);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = abState === 'won' ? '#facc15' : '#f87171';
+        ctx.font = '900 28px system-ui, sans-serif';
+        ctx.fillText(abState === 'won' ? `🏆 LEVEL ${abLevel} GEMEISTERT!` : '💥 KEINE VÖGEL MEHR ÜBRIG!', W * 0.5, 162);
+
+        const stars = abState === 'won' ? (abQueue.length >= 2 ? '⭐⭐⭐' : (abQueue.length === 1 ? '⭐⭐' : '⭐')) : '💀';
+        ctx.font = '900 32px system-ui, sans-serif';
+        ctx.fillText(stars, W * 0.5, 208);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '700 16px system-ui, sans-serif';
+        ctx.fillText(`Level-Punkte: ${abScore}   •   Gesamt: ${abTotalScore}`, W * 0.5, 250);
+        ctx.fillStyle = '#fde047';
+        ctx.fillText(`Persönlicher Rekord: ${abBest}`, W * 0.5, 278);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '800 15px system-ui, sans-serif';
+        ctx.fillText(
+            abState === 'won'
+                ? '▶ Klicke oder drücke LEERTASTE für das nächste Level!'
+                : '🔄 Klicke oder drücke LEERTASTE für einen neuen Versuch!',
+            W * 0.5,
+            335
+        );
+    }
+}
+
+function abLoop(ts) {
+    const dt = Math.min(0.04, Math.max(0.001, (ts - abLastTs) / 1000));
+    abLastTs = ts;
+    if (activeGameKey === 'angrybirds') {
+        abUpdate(dt);
+        abDraw();
+    }
+    requestAnimationFrame(abLoop);
+}
+
+function abGetCanvasPoint(canvas, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
+
+function abInit() {
+    if (abInitialized) return;
+    abInitialized = true;
+    try {
+        abBest = parseInt(localStorage.getItem('mc_angrybirds_best') || '0', 10) || 0;
+    } catch (e) {}
+
+    const canvas = document.getElementById('abCanvas');
+    if (canvas) {
+        const onDown = (clientX, clientY) => {
+            if (abState === 'won') {
+                abLoadLevel(abLevel + 1);
+                return;
+            }
+            if (abState === 'lost') {
+                abLoadLevel(abLevel);
+                return;
+            }
+            if (abState === 'flying') {
+                abTriggerSpecial();
+                return;
+            }
+            if (abState === 'aiming' && abQueue.length > 0) {
+                const pt = abGetCanvasPoint(canvas, clientX, clientY);
+                if (Math.hypot(pt.x - AB_SLING_X, pt.y - AB_SLING_Y) < 95) {
+                    abState = 'dragging';
+                    abPlaySound('stretch');
+                }
+            }
+        };
+
+        const onMove = (clientX, clientY) => {
+            if (abState !== 'dragging') return;
+            const pt = abGetCanvasPoint(canvas, clientX, clientY);
+            let dx = pt.x - AB_SLING_X;
+            let dy = pt.y - AB_SLING_Y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > AB_MAX_PULL) {
+                dx = (dx / dist) * AB_MAX_PULL;
+                dy = (dy / dist) * AB_MAX_PULL;
+            }
+            // Nur nach links/unten spannen erlauben
+            if (dx > 20) dx = 20;
+            abPullX = AB_SLING_X + dx;
+            abPullY = Math.min(AB_GROUND_Y - 16, AB_SLING_Y + dy);
+        };
+
+        const onUp = () => {
+            if (abState !== 'dragging') return;
+            const dx = AB_SLING_X - abPullX;
+            const dy = AB_SLING_Y - abPullY;
+            if (Math.hypot(dx, dy) < 14) {
+                abPullX = AB_SLING_X;
+                abPullY = AB_SLING_Y;
+                abState = 'aiming';
+                return;
+            }
+            const bType = abQueue.shift();
+            const bMeta = AB_BIRD_META[bType] || AB_BIRD_META.red;
+            abActiveBirds = [{
+                type: bType,
+                x: abPullX,
+                y: abPullY,
+                vx: dx * 8.2,
+                vy: dy * 8.2,
+                r: bMeta.r,
+                mass: bMeta.mass,
+                rot: 0,
+                specialUsed: false,
+                bounces: 0,
+                age: 0
+            }];
+            abCurTrail = [];
+            abState = 'flying';
+            abPlaySound('launch');
+            abUpdateHud();
+        };
+
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            onDown(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', () => onUp());
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches[0]) onDown(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            onUp();
+        }, { passive: false });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'angrybirds') return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target && e.target.tagName) || '')) return;
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (abState === 'flying') {
+                abTriggerSpecial();
+            } else if (abState === 'won') {
+                abLoadLevel(abLevel + 1);
+            } else if (abState === 'lost') {
+                abLoadLevel(abLevel);
+            }
+        }
+    });
+
+    abLoadLevel(1);
+    abLastTs = performance.now();
+    requestAnimationFrame(abLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
@@ -16345,6 +17833,7 @@ document.addEventListener('DOMContentLoaded', () => {
     dartsInit();
     froggerInit();
     flappyInit();
+    abInit();
     imInit();
     lemInit();
     ninjaInit();
