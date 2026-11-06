@@ -150,6 +150,15 @@ function getGamesCatalog(): array
             'desc'     => '501 Double-Out, 301, Around the Clock & Highscore-Shootout mit Checkout-Rechner, 2.5× Ziel-Lupe & „ONE HUNDRED AND EIGHTY!“-Caller!',
             'color'    => 'from-emerald-600 to-red-700',
         ],
+        'moorhuhn' => [
+            'key'      => 'moorhuhn',
+            'title'    => 'Moor-Gockel Jagd (Moorhuhn)',
+            'icon'     => '🐔',
+            'category' => 'Kult-Jagd (90 Sek.)',
+            'group'    => 'action',
+            'desc'     => 'Der Büro-Kultklassiker! Schwenke durchs schottische Hochmoor, lade die 8er-Schrotflinte per Rechtsklick/Leertaste nach & entdecke versteckte Bonus-Ziele!',
+            'color'    => 'from-amber-600 to-orange-800',
+        ],
         'lemmings' => [
             'key'      => 'lemmings',
             'title'    => 'Cloud-Wuseler',
@@ -3033,6 +3042,101 @@ $csrfToken = getCsrfToken();
                 </div>
             </div>
 
+            <!-- 23. SPIEL: MOOR-GOCKEL JAGD / MOORHUHN (90-SEKUNDEN KULT-SHOOTER) -->
+            <div id="gamePanel-moorhuhn" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>🐔 Moor-Gockel Jagd (Moorhuhn)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
+                                🔫 8er-Schrotflinte &middot; 🏰 Panorama-Hochmoor &middot; 🎃 Geheim-Extras
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            <strong>Linksklick / Tippen</strong> = Schießen &middot; <strong>Rechtsklick / Leertaste / R</strong> = Nachladen (8 Schuss) &middot; <strong>Maus am Bildrand / Pfeiltasten / A D</strong> = Panorama schwenken!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="mhModeSelect" onchange="mhChangeMode(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            <option value="classic" selected>⏱️ Klassik-Jagd (90 Sek.)</option>
+                            <option value="sprint">⚡ Sprint-Jagd (60 Sek. · Viele Hühner)</option>
+                            <option value="marathon">🏆 Moor-Marathon (150 Sek.)</option>
+                        </select>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
+                            Punkte: <span id="mhScore">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+                            Rekord: <span id="mhBest">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-slate-900 text-amber-400 font-mono text-xs font-extrabold">
+                            ⏳ <span id="mhTimer">01:30</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 text-xs font-extrabold" id="mhAccBadge">
+                            🎯 0%
+                        </span>
+                        <button type="button" onclick="mhToggleSound()" id="mhSoundBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold cursor-pointer"
+                                title="Jagd- &amp; Nachlade-Sound ein-/ausschalten">
+                            🔊 Ton
+                        </button>
+                        <button type="button" onclick="mhStartGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold cursor-pointer shadow-xs">
+                            ▶ Neue Jagd starten
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="mhCanvas" width="920" height="500"
+                            class="w-full max-w-[920px] h-auto rounded-2xl bg-slate-950 border-2 border-amber-700/80 shadow-xl select-none touch-none cursor-crosshair"></canvas>
+
+                    <!-- Schwenk- & Nachlade-Leiste (ideal für Laptop-Touchpad, Smartphone & Tablet) -->
+                    <div class="flex flex-wrap items-center justify-center gap-2 select-none">
+                        <button type="button"
+                                onmousedown="mhPanKeys.left=true" onmouseup="mhPanKeys.left=false" onmouseleave="mhPanKeys.left=false"
+                                ontouchstart="event.preventDefault(); mhPanKeys.left=true" ontouchend="mhPanKeys.left=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 active:bg-amber-600 active:text-white font-extrabold text-xs sm:text-sm cursor-pointer">
+                            ◀ Nach links schwenken (A / ←)
+                        </button>
+                        <button type="button" onclick="mhReload()"
+                                class="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md cursor-pointer">
+                            🔄 NACHLADEN · 8 SCHUSS (Rechtsklick / Leertaste)
+                        </button>
+                        <button type="button"
+                                onmousedown="mhPanKeys.right=true" onmouseup="mhPanKeys.right=false" onmouseleave="mhPanKeys.right=false"
+                                ontouchstart="event.preventDefault(); mhPanKeys.right=true" ontouchend="mhPanKeys.right=false"
+                                class="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 active:bg-amber-600 active:text-white font-extrabold text-xs sm:text-sm cursor-pointer">
+                            Nach rechts schwenken (D / →) ▶
+                        </button>
+                    </div>
+
+                    <!-- Punktetafel & Geheim-Extras Übersicht -->
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full max-w-[920px] text-[11px]">
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🐔</span>
+                            <div><strong>Flug-Hühner</strong><br><span class="text-slate-500">Nah +5 · Mittel +10 · Fern +25</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🤪</span>
+                            <div><strong>Kamera- &amp; Baum-Huhn</strong><br><span class="text-slate-500">Vor der Linse +15 · Stamm +20</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🎃</span>
+                            <div><strong>Vogelscheuche &amp; Frosch</strong><br><span class="text-slate-500">Kürbis +25 · Hut +15 · Frosch +15</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🌬️</span>
+                            <div><strong>Windmühle &amp; Ballon</strong><br><span class="text-slate-500">4 Flügel +50 · Ballon-Huhn +30</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2 col-span-2 sm:col-span-1">
+                            <span class="text-base">✈️</span>
+                            <div><strong>Nicht schießen!</strong><br><span class="text-rose-600 dark:text-rose-400">Flugzeug &amp; Zeppelin -25 Pkt.</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- =============================================================== -->
@@ -3311,6 +3415,11 @@ function selectCloudGame(gameKey) {
             abInit();
         }
         abDraw();
+    } else if (gameKey === 'moorhuhn') {
+        if (!mhInitialized) {
+            mhInit();
+        }
+        mhDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -17825,6 +17934,1554 @@ function abInit() {
     requestAnimationFrame(abLoop);
 }
 
+// =============================================================================
+// 23. SPIEL: MOOR-GOCKEL JAGD / MOORHUHN (90-SEKUNDEN KULT-SHOOTER)
+// =============================================================================
+let mhInitialized = false;
+let mhState       = 'ready'; // 'ready' | 'playing' | 'gameover'
+let mhMode        = 'classic';
+let mhScore       = 0;
+let mhBest        = 0;
+let mhTimeLeft    = 90;
+let mhDuration    = 90;
+let mhAmmo        = 8;
+const MH_MAX_AMMO = 8;
+let mhShotsFired  = 0;
+let mhShotsHit    = 0;
+let mhCombo       = 0;
+let mhSoundOn     = true;
+let mhAudioCtx    = null;
+let mhLastTs      = 0;
+
+const MH_VIEW_W   = 920;
+const MH_VIEW_H   = 500;
+const MH_WORLD_W  = 2400;
+let mhCamX        = 620;
+let mhMouseX      = MH_VIEW_W * 0.5;
+let mhMouseY      = MH_VIEW_H * 0.5;
+let mhMouseInside = false;
+let mhPanKeys     = { left: false, right: false };
+let mhRecoil      = 0;
+let mhReloadFlash = 0;
+
+let mhChickens    = [];
+let mhFeathers    = [];
+let mhShells      = [];
+let mhPopups      = [];
+let mhMuzzleFlash = [];
+let mhClouds      = [];
+let mhSpawnTimer  = 0;
+let mhPopupTimer  = 4.5;
+let mhPeekTimer   = 3.5;
+let mhPlaneTimer  = 14.0;
+
+// Interaktive Landschafts-Geheimnisse (Secrets)
+let mhSecrets = {
+    windmillAngle: 0,
+    windmillBlades: [true, true, true, true],
+    windmillBonusGiven: false,
+    scarecrowHat: true,
+    scarecrowPumpkin: true,
+    frogAlive: true,
+    frogJumpY: 0,
+    signSpin: 0,
+    signHits: 0,
+    bellCooldown: 0,
+    peekChicken: null, // { timer, maxTimer, hit }
+    popupChicken: null // { screenX, y, targetY, phase, timer, hit, dir }
+};
+
+function mhPlaySound(type) {
+    if (!mhSoundOn) return;
+    try {
+        if (!mhAudioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) mhAudioCtx = new AC();
+        }
+        if (!mhAudioCtx) return;
+        if (mhAudioCtx.state === 'suspended') mhAudioCtx.resume();
+        const now = mhAudioCtx.currentTime;
+
+        if (type === 'shot') {
+            // Schrotflinten-Knall (White-Noise Burst + tiefer Bass-Punch)
+            const bufSize = mhAudioCtx.sampleRate * 0.22;
+            const buf = mhAudioCtx.createBuffer(1, bufSize, mhAudioCtx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (mhAudioCtx.sampleRate * 0.055));
+            }
+            const noise = mhAudioCtx.createBufferSource();
+            noise.buffer = buf;
+            const filter = mhAudioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1400, now);
+            filter.frequency.exponentialRampToValueAtTime(180, now + 0.2);
+            const g = mhAudioCtx.createGain();
+            g.gain.setValueAtTime(0.32, now);
+            g.gain.exponentialRampToValueAtTime(0.01, now + 0.21);
+            noise.connect(filter);
+            filter.connect(g);
+            g.connect(mhAudioCtx.destination);
+            noise.start(now);
+
+            const osc = mhAudioCtx.createOscillator();
+            const og = mhAudioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(135, now);
+            osc.frequency.exponentialRampToValueAtTime(36, now + 0.14);
+            og.gain.setValueAtTime(0.28, now);
+            og.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
+            osc.connect(og);
+            og.connect(mhAudioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        } else if (type === 'empty') {
+            // Trockenes Metall-Klicken bei leerem Magazin
+            const osc = mhAudioCtx.createOscillator();
+            const g = mhAudioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(980, now);
+            osc.frequency.setValueAtTime(520, now + 0.025);
+            g.gain.setValueAtTime(0.14, now);
+            g.gain.exponentialRampToValueAtTime(0.005, now + 0.06);
+            osc.connect(g);
+            g.connect(mhAudioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.06);
+        } else if (type === 'reload') {
+            // Klassisches Pump-Action "Tschk-Tschk" Nachladegeräusch
+            [0, 0.09].forEach((offset, idx) => {
+                const osc = mhAudioCtx.createOscillator();
+                const g = mhAudioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(idx === 0 ? 320 : 480, now + offset);
+                osc.frequency.exponentialRampToValueAtTime(idx === 0 ? 640 : 880, now + offset + 0.065);
+                g.gain.setValueAtTime(0.14, now + offset);
+                g.gain.exponentialRampToValueAtTime(0.005, now + offset + 0.07);
+                osc.connect(g);
+                g.connect(mhAudioCtx.destination);
+                osc.start(now + offset);
+                osc.stop(now + offset + 0.075);
+            });
+        } else if (type === 'cluck') {
+            // Gackern bei Treffer
+            const osc = mhAudioCtx.createOscillator();
+            const g = mhAudioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(580, now);
+            osc.frequency.exponentialRampToValueAtTime(920, now + 0.06);
+            osc.frequency.exponentialRampToValueAtTime(340, now + 0.18);
+            g.gain.setValueAtTime(0.15, now);
+            g.gain.exponentialRampToValueAtTime(0.005, now + 0.19);
+            osc.connect(g);
+            g.connect(mhAudioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === 'secret') {
+            [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+                const osc = mhAudioCtx.createOscillator();
+                const g = mhAudioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+                g.gain.setValueAtTime(0.14, now + idx * 0.055);
+                g.gain.exponentialRampToValueAtTime(0.005, now + idx * 0.055 + 0.14);
+                osc.connect(g);
+                g.connect(mhAudioCtx.destination);
+                osc.start(now + idx * 0.055);
+                osc.stop(now + idx * 0.055 + 0.15);
+            });
+        } else if (type === 'penalty') {
+            [290, 260, 220, 175].forEach((freq, idx) => {
+                const osc = mhAudioCtx.createOscillator();
+                const g = mhAudioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+                g.gain.setValueAtTime(0.13, now + idx * 0.11);
+                g.gain.exponentialRampToValueAtTime(0.005, now + idx * 0.11 + 0.13);
+                osc.connect(g);
+                g.connect(mhAudioCtx.destination);
+                osc.start(now + idx * 0.11);
+                osc.stop(now + idx * 0.11 + 0.14);
+            });
+        } else if (type === 'bell') {
+            const osc = mhAudioCtx.createOscillator();
+            const g = mhAudioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            g.gain.setValueAtTime(0.22, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+            osc.connect(g);
+            g.connect(mhAudioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.72);
+        } else if (type === 'horn') {
+            [392, 523.25, 659.25, 783.99].forEach((freq, idx) => {
+                const osc = mhAudioCtx.createOscillator();
+                const g = mhAudioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                g.gain.setValueAtTime(0.18, now + idx * 0.12);
+                g.gain.exponentialRampToValueAtTime(0.005, now + idx * 0.12 + 0.26);
+                osc.connect(g);
+                g.connect(mhAudioCtx.destination);
+                osc.start(now + idx * 0.12);
+                osc.stop(now + idx * 0.12 + 0.28);
+            });
+        }
+    } catch (e) {}
+}
+
+function mhToggleSound() {
+    mhSoundOn = !mhSoundOn;
+    const btn = document.getElementById('mhSoundBtn');
+    if (btn) btn.textContent = mhSoundOn ? '🔊 Ton' : '🔇 Stumm';
+}
+
+function mhChangeMode(mode) {
+    mhMode = ['classic', 'sprint', 'marathon'].includes(mode) ? mode : 'classic';
+    mhStartGame();
+}
+
+function mhUpdateHud() {
+    const scEl = document.getElementById('mhScore');
+    if (scEl) scEl.textContent = String(mhScore);
+    const bestEl = document.getElementById('mhBest');
+    if (bestEl) bestEl.textContent = String(mhBest);
+    const tmEl = document.getElementById('mhTimer');
+    if (tmEl) {
+        const s = Math.max(0, Math.ceil(mhTimeLeft));
+        const mm = String(Math.floor(s / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        tmEl.textContent = `${mm}:${ss}`;
+    }
+    const accEl = document.getElementById('mhAccBadge');
+    if (accEl) {
+        const pct = mhShotsFired > 0 ? Math.round((mhShotsHit / mhShotsFired) * 100) : 0;
+        accEl.textContent = `🎯 ${pct}%`;
+    }
+}
+
+function mhResetSecrets() {
+    mhSecrets = {
+        windmillAngle: 0,
+        windmillBlades: [true, true, true, true],
+        windmillBonusGiven: false,
+        scarecrowHat: true,
+        scarecrowPumpkin: true,
+        frogAlive: true,
+        frogJumpY: 0,
+        signSpin: 0,
+        signHits: 0,
+        bellCooldown: 0,
+        peekChicken: null,
+        popupChicken: null
+    };
+}
+
+function mhSpawnFlightChicken(forcedLayer = null, forcedX = null, forcedY = null) {
+    // Layer 0 = Fern (+25), Layer 1 = Mittel (+10), Layer 2 = Nah (+5)
+    let layer = forcedLayer;
+    if (layer === null) {
+        const r = Math.random();
+        if (r < 0.26) layer = 0;
+        else if (r < 0.68) layer = 1;
+        else layer = 2;
+    }
+
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const isBalloon = (layer === 1 && Math.random() < 0.14 && forcedX === null);
+    const hasHelmet = (!isBalloon && layer === 1 && Math.random() < 0.18);
+
+    const scaleByLayer = [0.46, 0.78, 1.22];
+    const ptsByLayer   = [25, 10, 5];
+    const yRanges      = [
+        [85, 205],
+        [115, 275],
+        [155, 345]
+    ];
+
+    const yMin = yRanges[layer][0];
+    const yMax = yRanges[layer][1];
+    const startX = forcedX !== null ? forcedX : (dir === 1 ? -80 : MH_WORLD_W + 80);
+    const startY = forcedY !== null ? forcedY : (isBalloon ? 380 : (yMin + Math.random() * (yMax - yMin)));
+
+    const baseSpeed = [125, 165, 210][layer] * (mhMode === 'sprint' ? 1.18 : 1.0);
+    const vx = isBalloon ? dir * (35 + Math.random() * 25) : dir * (baseSpeed + Math.random() * 55);
+    const vy = isBalloon ? -(48 + Math.random() * 22) : 0;
+
+    mhChickens.push({
+        kind: isBalloon ? 'balloon' : 'flight',
+        layer: layer,
+        x: startX,
+        y: startY,
+        baseY: startY,
+        vx: vx,
+        vy: vy,
+        dir: dir,
+        scale: scaleByLayer[layer],
+        points: isBalloon ? 30 : (hasHelmet ? 30 : ptsByLayer[layer]),
+        helmet: hasHelmet,
+        balloonAlive: isBalloon,
+        flapPhase: Math.random() * Math.PI * 2,
+        waveAmp: isBalloon ? 6 : (8 + Math.random() * 14),
+        waveFreq: 2.2 + Math.random() * 1.8,
+        alive: true,
+        fallRot: 0,
+        age: 0
+    });
+}
+
+function mhSpawnPenaltyCraft() {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const isZeppelin = Math.random() < 0.45;
+    mhChickens.push({
+        kind: isZeppelin ? 'zeppelin' : 'biplane',
+        layer: 0,
+        x: dir === 1 ? -140 : MH_WORLD_W + 140,
+        y: 65 + Math.random() * 75,
+        baseY: 90,
+        vx: dir * (isZeppelin ? 65 : 135),
+        vy: 0,
+        dir: dir,
+        scale: 0.9,
+        points: -25,
+        helmet: false,
+        balloonAlive: false,
+        flapPhase: 0,
+        waveAmp: 3,
+        waveFreq: 1.5,
+        alive: true,
+        fallRot: 0,
+        age: 0
+    });
+}
+
+function mhSpawnFeathers(worldX, screenY, count = 14, color = '#dc2626') {
+    for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 40 + Math.random() * 160;
+        mhFeathers.push({
+            worldX: worldX,
+            y: screenY,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 60,
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 9,
+            size: 5 + Math.random() * 6,
+            color: i % 3 === 0 ? '#f97316' : (i % 2 === 0 ? color : '#fef3c7'),
+            life: 1.0 + Math.random() * 0.5
+        });
+    }
+}
+
+function mhAddPopup(worldX, y, text, color = '#facc15', isScreenFixed = false) {
+    mhPopups.push({
+        worldX: worldX,
+        y: y,
+        text: text,
+        color: color,
+        isScreenFixed: isScreenFixed,
+        life: 1.15
+    });
+}
+
+function mhReload() {
+    if (mhState !== 'playing') return;
+    if (mhAmmo >= MH_MAX_AMMO) return;
+    mhAmmo = MH_MAX_AMMO;
+    mhReloadFlash = 0.25;
+    mhPlaySound('reload');
+}
+
+function mhStartGame() {
+    mhDuration = mhMode === 'sprint' ? 60 : (mhMode === 'marathon' ? 150 : 90);
+    mhTimeLeft = mhDuration;
+    mhScore = 0;
+    mhAmmo = MH_MAX_AMMO;
+    mhShotsFired = 0;
+    mhShotsHit = 0;
+    mhCombo = 0;
+    mhChickens = [];
+    mhFeathers = [];
+    mhShells = [];
+    mhPopups = [];
+    mhMuzzleFlash = [];
+    mhSpawnTimer = 0.2;
+    mhPopupTimer = 4.0;
+    mhPeekTimer = 3.0;
+    mhPlaneTimer = 11.0;
+    mhResetSecrets();
+
+    // Wolken initialisieren
+    if (mhClouds.length === 0) {
+        for (let i = 0; i < 10; i++) {
+            mhClouds.push({
+                x: Math.random() * MH_WORLD_W,
+                y: 28 + Math.random() * 95,
+                w: 85 + Math.random() * 80,
+                spd: 8 + Math.random() * 12
+            });
+        }
+    }
+
+    // Direkt zum Start ein paar Hühner in der Luft verteilen
+    for (let i = 0; i < 6; i++) {
+        mhSpawnFlightChicken(i % 3, 250 + Math.random() * (MH_WORLD_W - 500));
+    }
+
+    mhState = 'playing';
+    mhPlaySound('horn');
+    mhUpdateHud();
+}
+
+function mhEndGame() {
+    mhState = 'gameover';
+    mhPlaySound('horn');
+    if (mhScore > mhBest) {
+        mhBest = mhScore;
+        try {
+            localStorage.setItem('mc_moorhuhn_best', String(mhBest));
+        } catch (e) {}
+    }
+    mhUpdateHud();
+    if (mhScore > 0) {
+        const acc = mhShotsFired > 0 ? Math.round((mhShotsHit / mhShotsFired) * 100) : 0;
+        const modeLbl = mhMode === 'sprint' ? 'Sprint 60s' : (mhMode === 'marathon' ? 'Marathon 150s' : 'Klassik 90s');
+        submitCloudScore('moorhuhn', mhScore, mhDuration, `${modeLbl} · 🎯 ${acc}% Treffer`);
+    }
+}
+
+function mhLayerParallax(layer) {
+    if (layer === 0) return 0.45;
+    if (layer === 1) return 0.75;
+    return 1.0;
+}
+
+function mhShootAt(screenX, screenY) {
+    if (mhState === 'ready' || mhState === 'gameover') {
+        mhStartGame();
+        return;
+    }
+    if (mhState !== 'playing') return;
+
+    // Klick unten rechts direkt auf die Patronen-Anzeige = Nachladen!
+    if (screenX > MH_VIEW_W - 235 && screenY > MH_VIEW_H - 72) {
+        mhReload();
+        return;
+    }
+
+    if (mhAmmo <= 0) {
+        mhPlaySound('empty');
+        mhReloadFlash = 0.45;
+        return;
+    }
+
+    mhAmmo--;
+    mhShotsFired++;
+    mhRecoil = 9;
+    mhPlaySound('shot');
+
+    // Mündungsfeuer / Schrot-Rauchwölkchen am Fadenkreuz
+    mhMuzzleFlash.push({ x: screenX, y: screenY, life: 0.22 });
+
+    // Ausgeworfene Schrotpatrone unten rechts
+    mhShells.push({
+        x: MH_VIEW_W - 40 - mhAmmo * 22,
+        y: MH_VIEW_H - 42,
+        vx: 60 + Math.random() * 80,
+        vy: -160 - Math.random() * 60,
+        rot: 0,
+        vRot: 8 + Math.random() * 6,
+        life: 0.9
+    });
+
+    let hitSomething = false;
+    const worldXFull = screenX + mhCamX;
+    const worldXMid  = screenX + mhCamX * 0.6;
+    const worldXFar  = screenX + mhCamX * 0.3;
+
+    // 1. Prüfe Großaufnahme-Kamera-Huhn (ganz vorne vor der Linse)
+    if (mhSecrets.popupChicken && !mhSecrets.popupChicken.hit) {
+        const pc = mhSecrets.popupChicken;
+        if (Math.hypot(screenX - pc.screenX, screenY - pc.y) < 56) {
+            pc.hit = true;
+            pc.phase = 'falling';
+            hitSomething = true;
+            mhScore += 15;
+            mhPlaySound('cluck');
+            mhSpawnFeathers(worldXFull, screenY, 20);
+            mhAddPopup(screenX, screenY - 20, '+15 KAMERA-GOCKEL!', '#facc15', true);
+        }
+    }
+
+    // 2. Prüfe Baumstamm-Lauerhuhn (Vordergrund bei x = 580)
+    if (!hitSomething && mhSecrets.peekChicken && !mhSecrets.peekChicken.hit) {
+        const treeScreenX = 580 - mhCamX;
+        const treeScreenY = 305;
+        if (Math.hypot(screenX - treeScreenX, screenY - treeScreenY) < 36) {
+            mhSecrets.peekChicken.hit = true;
+            hitSomething = true;
+            mhScore += 20;
+            mhPlaySound('cluck');
+            mhSpawnFeathers(580, treeScreenY, 16);
+            mhAddPopup(580, treeScreenY - 18, '+20 VERSTECK-TREFFER!', '#4ade80', false);
+        }
+    }
+
+    // 3. Prüfe fliegende Hühner & Flugzeuge (von vorne nach hinten: Layer 2 -> 1 -> 0)
+    if (!hitSomething) {
+        const sortedIndices = mhChickens
+            .map((c, idx) => ({ c, idx }))
+            .filter((item) => item.c.alive)
+            .sort((a, b) => b.c.layer - a.c.layer);
+
+        for (const { c } of sortedIndices) {
+            const pFactor = mhLayerParallax(c.layer);
+            const cScreenX = c.x - mhCamX * pFactor;
+            const cScreenY = c.y;
+
+            // Bei Ballon-Huhn: erst prüfen, ob der Ballon über dem Huhn getroffen wurde
+            if (c.kind === 'balloon' && c.balloonAlive) {
+                if (Math.hypot(screenX - cScreenX, screenY - (cScreenY - 38)) < 26) {
+                    c.balloonAlive = false;
+                    c.alive = false;
+                    hitSomething = true;
+                    mhScore += 30;
+                    mhPlaySound('secret');
+                    mhSpawnFeathers(screenX + mhCamX, cScreenY - 38, 16, '#38bdf8');
+                    mhAddPopup(screenX + mhCamX, cScreenY - 40, '+30 BALLON-SCHUSS!', '#38bdf8', false);
+                    break;
+                }
+            }
+
+            const hitRadius = c.kind === 'zeppelin' ? 46 : (c.kind === 'biplane' ? 36 : 34 * c.scale);
+            if (Math.hypot(screenX - cScreenX, screenY - cScreenY) <= hitRadius) {
+                hitSomething = true;
+
+                if (c.kind === 'biplane' || c.kind === 'zeppelin') {
+                    c.alive = false;
+                    mhScore = Math.max(0, mhScore - 25);
+                    mhCombo = 0;
+                    mhPlaySound('penalty');
+                    mhSpawnFeathers(screenX + mhCamX, cScreenY, 14, '#64748b');
+                    mhAddPopup(screenX + mhCamX, cScreenY - 15, '-25 NICHT SCHIESSEN!', '#f87171', false);
+                    break;
+                }
+
+                // Huhn mit Kochtopf-Helm braucht 2 Treffer!
+                if (c.helmet) {
+                    c.helmet = false;
+                    mhPlaySound('empty');
+                    mhAddPopup(screenX + mhCamX, cScreenY - 18, '🪖 HELM AB! (+5)', '#cbd5e1', false);
+                    mhScore += 5;
+                    break;
+                }
+
+                c.alive = false;
+                mhCombo++;
+                const comboBonus = mhCombo >= 5 ? 5 : 0;
+                const pts = c.points + comboBonus;
+                mhScore += pts;
+                mhPlaySound('cluck');
+                mhSpawnFeathers(screenX + mhCamX, cScreenY, 15);
+                const lbl = comboBonus > 0 ? `+${pts} (🔥 KOMBO!)` : `+${pts}`;
+                mhAddPopup(screenX + mhCamX, cScreenY - 15, lbl, c.layer === 0 ? '#38bdf8' : '#facc15', false);
+                break;
+            }
+        }
+    }
+
+    // 4. Prüfe Landschafts-Geheimnisse (Secrets), falls kein Huhn getroffen wurde
+    if (!hitSomething) {
+        // 4a. Moor-Frosch auf dem Stein im Vordergrund (x = 1180, y = 432)
+        if (mhSecrets.frogAlive && Math.hypot(worldXFull - 1180, screenY - 432) < 28) {
+            mhSecrets.frogAlive = false;
+            mhSecrets.frogJumpY = 1;
+            hitSomething = true;
+            mhScore += 15;
+            mhPlaySound('secret');
+            mhAddPopup(1180, 405, '+15 MOOR-FROSCH!', '#4ade80', false);
+        }
+
+        // 4b. Wegweiser-Schild im Vordergrund (x = 1860, y = 370)
+        if (!hitSomething && mhSecrets.signHits < 3 && Math.hypot(worldXFull - 1860, screenY - 370) < 35) {
+            mhSecrets.signHits++;
+            mhSecrets.signSpin = 1.2;
+            hitSomething = true;
+            mhScore += 10;
+            mhPlaySound('secret');
+            mhAddPopup(1860, 345, '+10 WEGWEISER!', '#fde047', false);
+        }
+
+        // 4c. Vogelscheuche im Mittelgrund (x = 1480, Parallax 0.6)
+        const scX = 1480;
+        if (!hitSomething && mhSecrets.scarecrowHat && Math.hypot(worldXMid - scX, screenY - 262) < 26) {
+            mhSecrets.scarecrowHat = false;
+            hitSomething = true;
+            mhScore += 15;
+            mhPlaySound('secret');
+            mhSpawnFeathers(worldXFull, screenY, 10, '#78350f');
+            mhAddPopup(worldXFull, 248, '+15 HUT AB!', '#fde047', false);
+        } else if (!hitSomething && mhSecrets.scarecrowPumpkin && Math.hypot(worldXMid - scX, screenY - 282) < 26) {
+            mhSecrets.scarecrowPumpkin = false;
+            hitSomething = true;
+            mhScore += 25;
+            mhPlaySound('secret');
+            mhSpawnFeathers(worldXFull, screenY, 16, '#ea580c');
+            mhAddPopup(worldXFull, 268, '+25 KÜRBIS-KOPF!', '#fb923c', false);
+        }
+
+        // 4d. Windmühlen-Flügel im Mittelgrund (Zentrum x = 920, y = 230, Parallax 0.6)
+        if (!hitSomething && !mhSecrets.windmillBonusGiven) {
+            const wmCenterScreenX = 920 - mhCamX * 0.6;
+            const wmCenterY = 230;
+            for (let b = 0; b < 4; b++) {
+                if (!mhSecrets.windmillBlades[b]) continue;
+                const ang = mhSecrets.windmillAngle + b * (Math.PI / 2);
+                const bx = wmCenterScreenX + Math.cos(ang) * 46;
+                const by = wmCenterY + Math.sin(ang) * 46;
+                if (Math.hypot(screenX - bx, screenY - by) < 26) {
+                    mhSecrets.windmillBlades[b] = false;
+                    hitSomething = true;
+                    const allGone = mhSecrets.windmillBlades.every((v) => !v);
+                    if (allGone) {
+                        mhSecrets.windmillBonusGiven = true;
+                        mhScore += 50;
+                        mhPlaySound('horn');
+                        mhAddPopup(worldXFull, by - 15, '🏆 +50 WINDMÜHLEN-JACKPOT!', '#38bdf8', false);
+                    } else {
+                        mhScore += 10;
+                        mhPlaySound('secret');
+                        mhAddPopup(worldXFull, by - 12, '+10 MÜHLENFLÜGEL!', '#fde047', false);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // 4e. Burgglocke im Hintergrund (x = 460, y = 148, Parallax 0.3) -> scheucht 5 Fern-Hühner auf!
+        if (!hitSomething && mhSecrets.bellCooldown <= 0 && Math.hypot(worldXFar - 460, screenY - 148) < 26) {
+            mhSecrets.bellCooldown = 20;
+            hitSomething = true;
+            mhScore += 25;
+            mhPlaySound('bell');
+            mhAddPopup(worldXFull, 132, '🔔 +25 SCHLOSSGLOCKE! SCHWARM AUFGESCHEUCHT!', '#facc15', false);
+            for (let k = 0; k < 5; k++) {
+                mhSpawnFlightChicken(0, (460 - mhCamX * 0.3) + mhCamX * 0.45 + (k - 2) * 35, 130 + k * 14);
+            }
+        }
+    }
+
+    if (hitSomething) {
+        mhShotsHit++;
+    } else {
+        mhCombo = 0;
+    }
+
+    mhUpdateHud();
+}
+
+function mhUpdate(dt) {
+    // Wolken & Windmühle drehen sich immer
+    mhSecrets.windmillAngle += dt * 1.15;
+    if (mhSecrets.bellCooldown > 0) mhSecrets.bellCooldown = Math.max(0, mhSecrets.bellCooldown - dt);
+    if (mhSecrets.signSpin > 0) mhSecrets.signSpin = Math.max(0, mhSecrets.signSpin - dt * 1.8);
+    if (!mhSecrets.frogAlive && mhSecrets.frogJumpY < 180) mhSecrets.frogJumpY += dt * 260;
+
+    for (const cl of mhClouds) {
+        cl.x += cl.spd * dt;
+        if (cl.x > MH_WORLD_W + 150) cl.x = -150;
+    }
+
+    if (mhRecoil > 0) mhRecoil = Math.max(0, mhRecoil - dt * 45);
+    if (mhReloadFlash > 0) mhReloadFlash = Math.max(0, mhReloadFlash - dt);
+
+    // Panorama-Kameraschwenk per Tastatur, Touch-Buttons oder Maus am Bildschirmrand
+    let panSpeed = 0;
+    if (mhPanKeys.left) panSpeed = -560;
+    else if (mhPanKeys.right) panSpeed = 560;
+    else if (mhMouseInside && mhState === 'playing') {
+        if (mhMouseX < 105) {
+            panSpeed = -((105 - mhMouseX) / 105) * 580;
+        } else if (mhMouseX > MH_VIEW_W - 105) {
+            panSpeed = ((mhMouseX - (MH_VIEW_W - 105)) / 105) * 580;
+        }
+    }
+    mhCamX = Math.max(0, Math.min(MH_WORLD_W - MH_VIEW_W, mhCamX + panSpeed * dt));
+
+    if (mhState !== 'playing') return;
+
+    // Countdown
+    mhTimeLeft -= dt;
+    if (mhTimeLeft <= 0) {
+        mhTimeLeft = 0;
+        mhEndGame();
+        return;
+    }
+    mhUpdateHud();
+
+    // Neue Flug-Hühner spawnen
+    mhSpawnTimer -= dt;
+    if (mhSpawnTimer <= 0) {
+        const activeAlive = mhChickens.filter((c) => c.alive).length;
+        const maxAlive = mhMode === 'sprint' ? 14 : 10;
+        if (activeAlive < maxAlive) {
+            mhSpawnFlightChicken();
+        }
+        mhSpawnTimer = (mhMode === 'sprint' ? 0.65 : 0.95) + Math.random() * 0.7;
+    }
+
+    // Verbotene Flugzeuge / Zeppeline spawnen
+    mhPlaneTimer -= dt;
+    if (mhPlaneTimer <= 0) {
+        mhSpawnPenaltyCraft();
+        mhPlaneTimer = 14 + Math.random() * 10;
+    }
+
+    // Baumstamm-Lauerhuhn (bei x = 580)
+    if (!mhSecrets.peekChicken) {
+        mhPeekTimer -= dt;
+        if (mhPeekTimer <= 0) {
+            mhSecrets.peekChicken = { timer: 3.2, maxTimer: 3.2, hit: false };
+            mhPeekTimer = 7 + Math.random() * 6;
+        }
+    } else {
+        mhSecrets.peekChicken.timer -= dt;
+        if (mhSecrets.peekChicken.timer <= 0 || mhSecrets.peekChicken.hit) {
+            mhSecrets.peekChicken = null;
+        }
+    }
+
+    // Großaufnahme-Kamera-Huhn (taucht frech direkt vor der Kamera auf)
+    if (!mhSecrets.popupChicken) {
+        mhPopupTimer -= dt;
+        if (mhPopupTimer <= 0) {
+            mhSecrets.popupChicken = {
+                screenX: 160 + Math.random() * (MH_VIEW_W - 320),
+                y: MH_VIEW_H + 80,
+                targetY: MH_VIEW_H - 92,
+                phase: 'rising',
+                timer: 2.1,
+                hit: false,
+                dir: Math.random() < 0.5 ? 1 : -1
+            };
+            mhPlaySound('cluck');
+            mhPopupTimer = 8.5 + Math.random() * 6.5;
+        }
+    } else {
+        const pc = mhSecrets.popupChicken;
+        if (pc.phase === 'rising') {
+            pc.y = Math.max(pc.targetY, pc.y - 380 * dt);
+            if (pc.y <= pc.targetY) pc.phase = 'stay';
+        } else if (pc.phase === 'stay') {
+            pc.timer -= dt;
+            if (pc.timer <= 0) pc.phase = 'leaving';
+        } else if (pc.phase === 'leaving' || pc.phase === 'falling') {
+            pc.y += (pc.phase === 'falling' ? 520 : 340) * dt;
+            if (pc.y > MH_VIEW_H + 110) {
+                mhSecrets.popupChicken = null;
+            }
+        }
+    }
+
+    // Fliegende Hühner aktualisieren
+    for (let i = mhChickens.length - 1; i >= 0; i--) {
+        const c = mhChickens[i];
+        c.age += dt;
+        if (c.alive) {
+            c.x += c.vx * dt;
+            c.flapPhase += dt * 13;
+            if (c.kind === 'balloon') {
+                c.y += c.vy * dt;
+                c.x += Math.sin(c.age * 2.5) * 18 * dt;
+                if (c.y < -80) mhChickens.splice(i, 1);
+            } else {
+                c.y = c.baseY + Math.sin(c.age * c.waveFreq) * c.waveAmp;
+                if ((c.vx > 0 && c.x > MH_WORLD_W + 180) || (c.vx < 0 && c.x < -180)) {
+                    mhChickens.splice(i, 1);
+                }
+            }
+        } else {
+            // Getroffenes Huhn trudelt nach unten
+            c.vy += 680 * dt;
+            c.x += c.vx * 0.35 * dt;
+            c.y += c.vy * dt;
+            c.fallRot += dt * 9 * c.dir;
+            if (c.y > MH_VIEW_H + 90) {
+                mhChickens.splice(i, 1);
+            }
+        }
+    }
+
+    // Federn aktualisieren
+    for (let i = mhFeathers.length - 1; i >= 0; i--) {
+        const f = mhFeathers[i];
+        f.life -= dt;
+        f.vy += 220 * dt;
+        f.worldX += (f.vx + Math.sin(f.life * 8) * 25) * dt;
+        f.y += f.vy * dt;
+        f.rot += f.vRot * dt;
+        if (f.life <= 0) mhFeathers.splice(i, 1);
+    }
+
+    // Patronenhülsen aktualisieren
+    for (let i = mhShells.length - 1; i >= 0; i--) {
+        const s = mhShells[i];
+        s.life -= dt;
+        s.vy += 620 * dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.rot += s.vRot * dt;
+        if (s.life <= 0) mhShells.splice(i, 1);
+    }
+
+    // Mündungsfeuer & Popups aktualisieren
+    for (let i = mhMuzzleFlash.length - 1; i >= 0; i--) {
+        mhMuzzleFlash[i].life -= dt;
+        if (mhMuzzleFlash[i].life <= 0) mhMuzzleFlash.splice(i, 1);
+    }
+    for (let i = mhPopups.length - 1; i >= 0; i--) {
+        mhPopups[i].life -= dt;
+        mhPopups[i].y -= 36 * dt;
+        if (mhPopups[i].life <= 0) mhPopups.splice(i, 1);
+    }
+}
+
+function mhDrawChickenSprite(ctx, c, screenX, screenY) {
+    ctx.save();
+    ctx.translate(screenX, screenY);
+    if (!c.alive) {
+        ctx.rotate(c.fallRot);
+    }
+    ctx.scale(c.dir * c.scale, c.scale);
+
+    // Falls Ballon-Huhn: bunten Ballon darüber zeichnen
+    if (c.kind === 'balloon' && c.balloonAlive) {
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.lineTo(0, -42);
+        ctx.stroke();
+
+        const bGrad = ctx.createRadialGradient(-6, -58, 3, 0, -52, 22);
+        bGrad.addColorStop(0, '#f43f5e');
+        bGrad.addColorStop(1, '#9f1239');
+        ctx.fillStyle = bGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, -54, 18, 22, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Hinterer Flügel
+    const flapY = c.alive ? Math.sin(c.flapPhase) * 14 : -10;
+    ctx.fillStyle = '#9a3412';
+    ctx.beginPath();
+    ctx.ellipse(-4, -6 + flapY * 0.5, 14, 7, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Schwanzfedern
+    ctx.fillStyle = '#7c2d12';
+    ctx.beginPath();
+    ctx.moveTo(-18, -2);
+    ctx.lineTo(-32, -14);
+    ctx.lineTo(-28, -2);
+    ctx.lineTo(-33, 6);
+    ctx.lineTo(-18, 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Körper (rundlich braun-orange wie das Original-Moorhuhn)
+    const bodyGrad = ctx.createRadialGradient(-2, -2, 3, 0, 2, 22);
+    bodyGrad.addColorStop(0, '#ea580c');
+    bodyGrad.addColorStop(1, '#9a3412');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 3, 21, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Baumelnde gelbe Hühnerbeine
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-4, 15);
+    ctx.lineTo(-8, 25);
+    ctx.moveTo(4, 15);
+    ctx.lineTo(2, 25);
+    ctx.stroke();
+
+    // Hals & Kopf
+    ctx.fillStyle = '#c2410c';
+    ctx.beginPath();
+    ctx.arc(17, -9, 10.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Roter Hühnerkamm (oder Kochtopf-Helm)
+    if (c.helmet) {
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(17, -13, 11.5, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.arc(14, -19, 4, 0, Math.PI * 2);
+        ctx.arc(18, -20, 4.5, 0, Math.PI * 2);
+        ctx.arc(22, -18, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Großes verrücktes Glubschauge
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(20, -10, 4.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    if (c.alive) {
+        ctx.beginPath();
+        ctx.arc(21.2, -10, 2.1, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // X-Augen bei Treffer
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(18, -12);
+        ctx.lineTo(22, -8);
+        ctx.moveTo(22, -12);
+        ctx.lineTo(18, -8);
+        ctx.stroke();
+    }
+
+    // Gelb-Oranger Schnabel
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(26, -12);
+    ctx.lineTo(38, -8);
+    ctx.lineTo(26, -4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Roter Kehllappen
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.ellipse(25, -1, 2.8, 4.5, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Vorderer schlagender Flügel
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath();
+    ctx.ellipse(-1, 2 + flapY, 13, 7.5, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function mhDrawPenaltyCraft(ctx, c, screenX, screenY) {
+    ctx.save();
+    ctx.translate(screenX, screenY);
+    if (!c.alive) ctx.rotate(c.fallRot);
+    ctx.scale(c.dir, 1);
+
+    if (c.kind === 'zeppelin') {
+        // Silber-Roter Moor-Zeppelin
+        ctx.fillStyle = '#cbd5e1';
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 52, 22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(-36, -5, 72, 10);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('MOOR-AIR (-25)', 0, 3);
+    } else {
+        // Doppeldecker-Flugzeug
+        ctx.fillStyle = '#eab308';
+        ctx.fillRect(-26, -5, 48, 11);
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(-10, -16, 34, 5);
+        ctx.fillRect(-10, 9, 34, 5);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(22, -12, 3, 24);
+    }
+    ctx.restore();
+}
+
+function mhDraw() {
+    const canvas = document.getElementById('mhCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    ctx.save();
+    if (mhRecoil > 0.2) {
+        ctx.translate((Math.random() - 0.5) * mhRecoil, -mhRecoil * 0.65);
+    }
+
+    // 1. Himmel-Farbverlauf (Schottisches goldenes Herbst-/Abendlicht über dem Hochmoor)
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, 340);
+    skyGrad.addColorStop(0, '#1e3a5f');
+    skyGrad.addColorStop(0.48, '#4b749f');
+    skyGrad.addColorStop(0.85, '#d97706');
+    skyGrad.addColorStop(1, '#fbbf24');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Sonne
+    const sunX = 720 - mhCamX * 0.12;
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.32)';
+    ctx.beginPath();
+    ctx.arc(sunX, 115, 58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(sunX, 115, 34, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Wolken (Parallax 0.2)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    for (const cl of mhClouds) {
+        const cx = cl.x - mhCamX * 0.2;
+        if (cx < -160 || cx > W + 160) continue;
+        ctx.beginPath();
+        ctx.arc(cx, cl.y, cl.w * 0.28, 0, Math.PI * 2);
+        ctx.arc(cx + cl.w * 0.24, cl.y - 6, cl.w * 0.33, 0, Math.PI * 2);
+        ctx.arc(cx + cl.w * 0.52, cl.y, cl.w * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 2. Hintergrund-Hochlandgebirge & Schloss Loch Moor (Parallax 0.3)
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.moveTo(0, 320);
+    for (let wx = 0; wx <= MH_WORLD_W; wx += 140) {
+        const sx = wx - mhCamX * 0.3;
+        const peakY = 175 + Math.sin(wx * 0.0045) * 48 + Math.cos(wx * 0.011) * 24;
+        ctx.lineTo(sx, peakY);
+    }
+    ctx.lineTo(W + 200, 320);
+    ctx.closePath();
+    ctx.fill();
+
+    // Schottische Burg + Glockenturm bei Welt-X 460 (Parallax 0.3)
+    const castleX = 460 - mhCamX * 0.3;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(castleX - 45, 145, 90, 75);
+    ctx.fillRect(castleX - 55, 125, 24, 95);
+    ctx.fillRect(castleX + 31, 130, 24, 90);
+    // Glockenturm-Bogen + goldene Glocke (Secret +25!)
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(castleX - 10, 136, 20, 22);
+    ctx.fillStyle = mhSecrets.bellCooldown > 0 ? '#fde047' : '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(castleX, 148, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Ebene 0: Fern-Hühner (+25 Pkt.) & Flugzeuge/Zeppeline (-25 Pkt.)
+    for (const c of mhChickens) {
+        if (c.layer !== 0) continue;
+        const sx = c.x - mhCamX * mhLayerParallax(0);
+        if (sx < -120 || sx > W + 120) continue;
+        if (c.kind === 'biplane' || c.kind === 'zeppelin') {
+            mhDrawPenaltyCraft(ctx, c, sx, c.y);
+        } else {
+            mhDrawChickenSprite(ctx, c, sx, c.y);
+        }
+    }
+
+    // 4. Mittelgrund-Hügellandschaft, Moorsee, Windmühle & Vogelscheuche (Parallax 0.6)
+    ctx.fillStyle = '#3f6212';
+    ctx.beginPath();
+    ctx.moveTo(0, 390);
+    for (let wx = 0; wx <= MH_WORLD_W; wx += 100) {
+        const sx = wx - mhCamX * 0.6;
+        const hy = 278 + Math.sin(wx * 0.006 + 1.2) * 32;
+        ctx.lineTo(sx, hy);
+    }
+    ctx.lineTo(W + 200, 390);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glitzernder Moor-See im Mittelgrund
+    const lakeX = 680 - mhCamX * 0.6;
+    const lakeGrad = ctx.createLinearGradient(0, 310, 0, 365);
+    lakeGrad.addColorStop(0, '#0284c7');
+    lakeGrad.addColorStop(1, '#1e3a8a');
+    ctx.fillStyle = lakeGrad;
+    ctx.beginPath();
+    ctx.ellipse(lakeX, 342, 260, 26, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Alte Windmühle bei x = 920 (Parallax 0.6) mit 4 abschießbaren Flügeln
+    const wmX = 920 - mhCamX * 0.6;
+    const wmY = 230;
+    ctx.fillStyle = '#57534e';
+    ctx.beginPath();
+    ctx.moveTo(wmX - 24, 305);
+    ctx.lineTo(wmX - 13, wmY);
+    ctx.lineTo(wmX + 13, wmY);
+    ctx.lineTo(wmX + 24, 305);
+    ctx.closePath();
+    ctx.fill();
+    for (let b = 0; b < 4; b++) {
+        if (!mhSecrets.windmillBlades[b]) continue;
+        const ang = mhSecrets.windmillAngle + b * (Math.PI / 2);
+        ctx.save();
+        ctx.translate(wmX, wmY);
+        ctx.rotate(ang);
+        ctx.fillStyle = '#fef3c7';
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 2;
+        ctx.fillRect(6, -6, 56, 12);
+        ctx.strokeRect(6, -6, 56, 12);
+        ctx.restore();
+    }
+
+    // Vogelscheuche bei x = 1480 (Parallax 0.6)
+    const scX = 1480 - mhCamX * 0.6;
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(scX, 338);
+    ctx.lineTo(scX, 275);
+    ctx.moveTo(scX - 28, 298);
+    ctx.lineTo(scX + 28, 298);
+    ctx.stroke();
+    ctx.fillStyle = '#b45309';
+    ctx.fillRect(scX - 14, 292, 28, 28);
+    if (mhSecrets.scarecrowPumpkin) {
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(scX, 280, 13, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    if (mhSecrets.scarecrowHat) {
+        ctx.fillStyle = '#1c1917';
+        ctx.fillRect(scX - 18, 266, 36, 4);
+        ctx.fillRect(scX - 10, 254, 20, 13);
+    }
+
+    // 5. Ebene 1: Mittelgrund-Hühner (+10 Pkt.) & Ballon-Hühner (+30 Pkt.)
+    for (const c of mhChickens) {
+        if (c.layer !== 1) continue;
+        const sx = c.x - mhCamX * mhLayerParallax(1);
+        if (sx < -120 || sx > W + 120) continue;
+        mhDrawChickenSprite(ctx, c, sx, c.y);
+    }
+
+    // 6. Vordergrund-Moorwiese, Hohler Baumstamm, Wegweiser, Frosch & Ebene 2 Hühner (Parallax 1.0)
+    const fgGrad = ctx.createLinearGradient(0, 355, 0, H);
+    fgGrad.addColorStop(0, '#365314');
+    fgGrad.addColorStop(1, '#1a2e05');
+    ctx.fillStyle = fgGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let wx = 0; wx <= MH_WORLD_W; wx += 80) {
+        const sx = wx - mhCamX;
+        const gy = 372 + Math.sin(wx * 0.008) * 18;
+        ctx.lineTo(sx, gy);
+    }
+    ctx.lineTo(W + 120, H);
+    ctx.closePath();
+    ctx.fill();
+
+    // Kiefern / Moor-Bäume im Vordergrund
+    [220, 1020, 1690, 2180].forEach((tx) => {
+        const sx = tx - mhCamX;
+        if (sx < -120 || sx > W + 120) return;
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(sx - 8, 270, 16, 125);
+        ctx.fillStyle = '#14532d';
+        for (let tier = 0; tier < 3; tier++) {
+            ctx.beginPath();
+            ctx.moveTo(sx, 185 + tier * 28);
+            ctx.lineTo(sx - 46 - tier * 8, 250 + tier * 30);
+            ctx.lineTo(sx + 46 + tier * 8, 250 + tier * 30);
+            ctx.closePath();
+            ctx.fill();
+        }
+    });
+
+    // Hohler Baumstamm bei x = 580 + eventuell herausschauendes Lauerhuhn (+20 Pkt.)
+    const trunkX = 580 - mhCamX;
+    if (trunkX > -100 && trunkX < W + 100) {
+        if (mhSecrets.peekChicken && !mhSecrets.peekChicken.hit) {
+            mhDrawChickenSprite(ctx, {
+                alive: true,
+                dir: 1,
+                scale: 0.92,
+                flapPhase: 0,
+                helmet: false,
+                kind: 'peek'
+            }, trunkX + 18, 305);
+        }
+        ctx.fillStyle = '#5c2d0c';
+        ctx.fillRect(trunkX - 24, 285, 48, 115);
+        ctx.fillStyle = '#291304';
+        ctx.beginPath();
+        ctx.ellipse(trunkX + 4, 322, 13, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Stein + Moor-Frosch bei x = 1180 (+15 Pkt.)
+    const stoneX = 1180 - mhCamX;
+    if (stoneX > -80 && stoneX < W + 80) {
+        ctx.fillStyle = '#64748b';
+        ctx.beginPath();
+        ctx.ellipse(stoneX, 444, 30, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (mhSecrets.frogAlive || mhSecrets.frogJumpY < 160) {
+            const fy = 430 - mhSecrets.frogJumpY;
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.ellipse(stoneX, fy, 13, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(stoneX - 5, fy - 8, 3.5, 0, Math.PI * 2);
+            ctx.arc(stoneX + 5, fy - 8, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Holz-Wegweiser bei x = 1860 ("Moorloch 3 km")
+    const signX = 1860 - mhCamX;
+    if (signX > -100 && signX < W + 100) {
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(signX - 4, 345, 8, 78);
+        ctx.save();
+        ctx.translate(signX, 362);
+        if (mhSecrets.signSpin > 0) ctx.rotate(mhSecrets.signSpin * 8);
+        ctx.fillStyle = '#d97706';
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 2;
+        ctx.fillRect(-46, -13, 92, 24);
+        ctx.strokeRect(-46, -13, 92, 24);
+        ctx.fillStyle = '#fef3c7';
+        ctx.font = '800 10px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('MOORLOCH 3 KM', 0, 3);
+        ctx.restore();
+    }
+
+    // 7. Ebene 2: Große Vordergrund-Hühner (+5 Pkt.)
+    for (const c of mhChickens) {
+        if (c.layer !== 2) continue;
+        const sx = c.x - mhCamX;
+        if (sx < -120 || sx > W + 120) continue;
+        mhDrawChickenSprite(ctx, c, sx, c.y);
+    }
+
+    // 8. Großaufnahme-Kamera-Huhn (taucht riesig direkt am unteren Bildrand auf, +15 Pkt.)
+    if (mhSecrets.popupChicken) {
+        const pc = mhSecrets.popupChicken;
+        mhDrawChickenSprite(ctx, {
+            alive: !pc.hit,
+            dir: pc.dir,
+            scale: 2.15,
+            flapPhase: performance.now() * 0.012,
+            fallRot: pc.hit ? 0.5 : 0,
+            helmet: false,
+            kind: 'popup'
+        }, pc.screenX, pc.y);
+    }
+
+    // 9. Fliegende Federn & Mündungsfeuer
+    for (const f of mhFeathers) {
+        const fx = f.worldX - mhCamX;
+        ctx.save();
+        ctx.translate(fx, f.y);
+        ctx.rotate(f.rot);
+        ctx.fillStyle = f.color;
+        ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
+        ctx.beginPath();
+        ctx.ellipse(0, 0, f.size, f.size * 0.42, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    for (const mf of mhMuzzleFlash) {
+        ctx.save();
+        ctx.globalAlpha = mf.life * 4;
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(mf.x, mf.y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 10. Fliegende Punkte-Popups
+    for (const pop of mhPopups) {
+        const px = pop.isScreenFixed ? pop.worldX : (pop.worldX - mhCamX);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, pop.life));
+        ctx.font = '900 16px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 4;
+        ctx.strokeText(pop.text, px, pop.y);
+        ctx.fillStyle = pop.color;
+        ctx.fillText(pop.text, px, pop.y);
+        ctx.restore();
+    }
+
+    // 11. HUD-Elemente auf dem Canvas: Panorama-Kompass oben + 8 Schrotpatronen unten rechts
+    // Panorama-Positionsleiste oben Mitte
+    const radarW = 220;
+    const radarX = (W - radarW) * 0.5;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.beginPath();
+    ctx.roundRect(radarX, 10, radarW, 18, 9);
+    ctx.fill();
+    const viewThumbW = (MH_VIEW_W / MH_WORLD_W) * radarW;
+    const viewThumbX = radarX + (mhCamX / MH_WORLD_W) * radarW;
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(viewThumbX, 12, viewThumbW, 14, 7);
+    ctx.fill();
+    // Kleine rote Punkte auf dem Panorama-Radar für lebende Hühner
+    for (const c of mhChickens) {
+        if (!c.alive || c.points < 0) continue;
+        const dotX = radarX + Math.max(4, Math.min(radarW - 4, (c.x / MH_WORLD_W) * radarW));
+        ctx.fillStyle = c.layer === 0 ? '#38bdf8' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(dotX, 19, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 8er-Schrotpatronen-Magazin unten rechts
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.beginPath();
+    ctx.roundRect(W - 215, H - 64, 203, 52, 14);
+    ctx.fill();
+
+    for (let s = 0; s < MH_MAX_AMMO; s++) {
+        const sx = W - 200 + s * 23;
+        const sy = H - 52;
+        if (s < mhAmmo) {
+            // Geladene rote Schrotpatrone mit Messingboden
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(sx, sy, 14, 26);
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(sx - 1, sy + 24, 16, 8);
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            ctx.fillRect(sx + 2, sy + 2, 3, 20);
+        } else {
+            // Leerer Patronen-Slot
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(sx, sy, 14, 32);
+        }
+    }
+
+    // Ausgeworfene Hülsen
+    for (const sh of mhShells) {
+        ctx.save();
+        ctx.translate(sh.x, sh.y);
+        ctx.rotate(sh.rot);
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillRect(-6, -12, 12, 18);
+        ctx.fillStyle = '#eab308';
+        ctx.fillRect(-6, 6, 12, 6);
+        ctx.restore();
+    }
+
+    // Warnhinweis "NACHLADEN!", falls Magazin leer
+    if (mhState === 'playing' && (mhAmmo === 0 || mhReloadFlash > 0)) {
+        ctx.save();
+        ctx.font = '900 22px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = mhAmmo === 0 ? '#f87171' : '#4ade80';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 4;
+        const msg = mhAmmo === 0 ? '🔄 LEER! RECHTSKLICK / LEERTASTE ZUM NACHLADEN!' : '🔫 NACHGELADEN (8/8)!';
+        ctx.strokeText(msg, W * 0.5, H - 24);
+        ctx.fillText(msg, W * 0.5, H - 24);
+        ctx.restore();
+    }
+
+    // Eigenes Fadenkreuz an Mausposition zeichnen
+    if (mhMouseInside && mhState === 'playing') {
+        ctx.save();
+        ctx.strokeStyle = mhAmmo > 0 ? '#facc15' : '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mhMouseX, mhMouseY, 16, 0, Math.PI * 2);
+        ctx.moveTo(mhMouseX - 24, mhMouseY);
+        ctx.lineTo(mhMouseX - 7, mhMouseY);
+        ctx.moveTo(mhMouseX + 7, mhMouseY);
+        ctx.lineTo(mhMouseX + 24, mhMouseY);
+        ctx.moveTo(mhMouseX, mhMouseY - 24);
+        ctx.lineTo(mhMouseX, mhMouseY - 7);
+        ctx.moveTo(mhMouseX, mhMouseY + 7);
+        ctx.lineTo(mhMouseX, mhMouseY + 24);
+        ctx.stroke();
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(mhMouseX, mhMouseY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 12. Start- oder Game-Over-Overlay
+    if (mhState === 'ready' || mhState === 'gameover') {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(W * 0.5 - 230, 95, 460, 305, 22);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#facc15';
+        ctx.font = '900 28px system-ui, sans-serif';
+        ctx.fillText(
+            mhState === 'ready' ? '🐔 MOOR-GOCKEL JAGD' : '🎺 JAGDZEIT ABGELAUFEN!',
+            W * 0.5,
+            148
+        );
+
+        if (mhState === 'gameover') {
+            const acc = mhShotsFired > 0 ? Math.round((mhShotsHit / mhShotsFired) * 100) : 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 22px system-ui, sans-serif';
+            ctx.fillText(`Ergebnis: ${mhScore} Punkte`, W * 0.5, 195);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '700 15px system-ui, sans-serif';
+            ctx.fillText(`Trefferquote: ${acc}% (${mhShotsHit} / ${mhShotsFired} Schuss)`, W * 0.5, 228);
+            ctx.fillStyle = '#fde047';
+            ctx.fillText(`Persönlicher Rekord: ${mhBest} Punkte`, W * 0.5, 258);
+        } else {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '600 15px system-ui, sans-serif';
+            ctx.fillText('Schwenke durchs Hochmoor & erwische möglichst viele Hühner!', W * 0.5, 192);
+            ctx.fillText('Nah: +5 Pkt.  •  Mittel: +10 Pkt.  •  Fern: +25 Pkt.', W * 0.5, 222);
+            ctx.fillStyle = '#fde047';
+            ctx.fillText('Geheim-Extras: Windmühle (+50), Vogelscheuche, Glocke & Frosch!', W * 0.5, 254);
+        }
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '800 15px system-ui, sans-serif';
+        ctx.fillText('🔫 LINKSKLICK = Schießen   •   RECHTSKLICK / LEERTASTE = Nachladen', W * 0.5, 305);
+
+        ctx.fillStyle = '#4ade80';
+        ctx.font = '900 17px system-ui, sans-serif';
+        ctx.fillText('▶ KLICKE INS BILD ZUM STARTEN!', W * 0.5, 355);
+    }
+
+    ctx.restore();
+}
+
+function mhLoop(ts) {
+    const dt = Math.min(0.05, Math.max(0.001, (ts - mhLastTs) / 1000));
+    mhLastTs = ts;
+    if (activeGameKey === 'moorhuhn') {
+        mhUpdate(dt);
+        mhDraw();
+    }
+    requestAnimationFrame(mhLoop);
+}
+
+function mhGetCanvasCoords(canvas, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
+
+function mhInit() {
+    if (mhInitialized) return;
+    mhInitialized = true;
+    try {
+        mhBest = parseInt(localStorage.getItem('mc_moorhuhn_best') || '0', 10) || 0;
+    } catch (e) {}
+
+    // Wolken vorbereiten
+    for (let i = 0; i < 10; i++) {
+        mhClouds.push({
+            x: Math.random() * MH_WORLD_W,
+            y: 28 + Math.random() * 95,
+            w: 85 + Math.random() * 80,
+            spd: 8 + Math.random() * 12
+        });
+    }
+
+    const canvas = document.getElementById('mhCanvas');
+    if (canvas) {
+        canvas.addEventListener('mousemove', (e) => {
+            const pt = mhGetCanvasCoords(canvas, e.clientX, e.clientY);
+            mhMouseX = pt.x;
+            mhMouseY = pt.y;
+            mhMouseInside = true;
+        });
+        canvas.addEventListener('mouseleave', () => {
+            mhMouseInside = false;
+        });
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const pt = mhGetCanvasCoords(canvas, e.clientX, e.clientY);
+            mhMouseX = pt.x;
+            mhMouseY = pt.y;
+            if (e.button === 2) {
+                mhReload();
+            } else if (e.button === 0) {
+                mhShootAt(pt.x, pt.y);
+            }
+        });
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            mhReload();
+        });
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches[0]) {
+                const pt = mhGetCanvasCoords(canvas, e.touches[0].clientX, e.touches[0].clientY);
+                mhMouseX = pt.x;
+                mhMouseY = pt.y;
+                mhShootAt(pt.x, pt.y);
+            }
+        }, { passive: false });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'moorhuhn') return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target && e.target.tagName) || '')) return;
+        if (e.code === 'Space' || e.code === 'KeyR') {
+            e.preventDefault();
+            if (mhState === 'playing') mhReload();
+            else mhStartGame();
+        } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            mhPanKeys.left = true;
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            mhPanKeys.right = true;
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') mhPanKeys.left = false;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') mhPanKeys.right = false;
+    });
+
+    mhUpdateHud();
+    mhLastTs = performance.now();
+    requestAnimationFrame(mhLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
@@ -17834,6 +19491,7 @@ document.addEventListener('DOMContentLoaded', () => {
     froggerInit();
     flappyInit();
     abInit();
+    mhInit();
     imInit();
     lemInit();
     ninjaInit();
