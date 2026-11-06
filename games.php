@@ -201,8 +201,17 @@ function getGamesCatalog(): array
             'icon'     => '🪃',
             'category' => 'Physik & Katapult',
             'group'    => 'action',
-            'desc'     => 'Spanne die Zwille! 5 Vogel-Spezialfähigkeiten (Turbo, Drillinge, Bombe, Eier-Abwurf), Holz-, Glas-, Stein- & TNT-Festungen mit 2D-Physik!',
+            'desc'     => 'Spanne die Zwille! 16 Festungs-Level + Endlos-Modus, 5 Vogel-Spezialfähigkeiten (Turbo, Drillinge, Bombe, Eier-Abwurf), Holz, Glas, Stein & TNT!',
             'color'    => 'from-red-600 to-amber-500',
+        ],
+        'solitaire' => [
+            'key'      => 'solitaire',
+            'title'    => 'Klondike Solitär (Windows-Klassiker)',
+            'icon'     => '♠️',
+            'category' => 'Karten-Klassiker',
+            'group'    => 'logic',
+            'desc'     => 'Das legendäre Windows-Kartenspiel: 1- oder 3-Karten-Ziehen, Drag & Drop, Doppelklick-Automatik, Rückgängig, 4 Retro-Kartenrücken & das berühmte Karten-Feuerwerk!',
+            'color'    => 'from-emerald-600 to-teal-800',
         ],
         'lastninja' => [
             'key'      => 'lastninja',
@@ -2851,7 +2860,16 @@ $csrfToken = getCsrfToken();
                             <option value="5">🔺 Level 5: Der Pyramiden-Bunker</option>
                             <option value="6">🪖 Level 6: Die Gepanzerte Bastion</option>
                             <option value="7">👑 Level 7: König Grunzers Thronsaal</option>
-                            <option value="8">♾️ Level 8+: Endlos-Festungs-Generator</option>
+                            <option value="8">💎 Level 8: Das Glashaus-Gewächshaus</option>
+                            <option value="9">🏛️ Level 9: Das Römische Aquädukt</option>
+                            <option value="10">🪤 Level 10: Die Domino-Kettenreaktion</option>
+                            <option value="11">🏯 Level 11: Die Samurai-Pagode</option>
+                            <option value="12">🌉 Level 12: Die Hängebrücken-Schlucht</option>
+                            <option value="13">🛡️ Level 13: Der Doppel-Bunker (Ost &amp; West)</option>
+                            <option value="14">💣 Level 14: Das Dynamit-Bergwerk</option>
+                            <option value="15">🏰 Level 15: Die Dreifach-Festung von Schweinburg</option>
+                            <option value="16">👑 Level 16: Kaiser Eberhardts Imperiale Zitadelle</option>
+                            <option value="17">♾️ Level 17+: Endlos-Festungs-Generator</option>
                         </select>
                         <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
                             Punkte: <span id="abScore">0</span>
@@ -2998,6 +3016,89 @@ $csrfToken = getCsrfToken();
                         <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2 col-span-2 sm:col-span-1">
                             <span class="text-base">✈️</span>
                             <div><strong>Nicht schießen!</strong><br><span class="text-rose-600 dark:text-rose-400">Flugzeug &amp; Zeppelin -25 Pkt.</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 24. SPIEL: KLONDIKE SOLITÄR (WINDOWS-KARTENKLASSIKER) -->
+            <div id="gamePanel-solitaire" class="game-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>♠️ Klondike Solitär (Windows-Klassiker)</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300">
+                                🃏 1 / 3 Karten ziehen &middot; ⚡ Auto-Zug &middot; 🎆 Karten-Feuerwerk
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Ziehe Karten per <strong>Drag &amp; Drop</strong> oder tippe eine Karte einfach an (<strong>Klick / Doppelklick / Rechtsklick</strong> = automatischer Zug auf Ass-Ablage oder passende Reihe!).
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="solDrawSelect" onchange="solChangeDrawMode(parseInt(this.value, 10))"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer">
+                            <option value="1" selected>🃏 1 Karte ziehen (Klassisch)</option>
+                            <option value="3">🃏🃏🃏 3 Karten ziehen (Profi)</option>
+                        </select>
+                        <select id="solBackSelect" onchange="solChangeCardBack(this.value)"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer"
+                                title="Retro-Kartenrücken wählen">
+                            <option value="blue" selected>🟦 Rücken: Klassisch Blau</option>
+                            <option value="castle">🏰 Rücken: Mitternachts-Burg</option>
+                            <option value="palm">🌴 Rücken: Sonnen-Strand</option>
+                            <option value="red">🟥 Rücken: Königlich Rot</option>
+                        </select>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold">
+                            Punkte: <span id="solScore">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+                            Züge: <span id="solMoves">0</span>
+                        </span>
+                        <span class="px-2.5 py-1.5 rounded-xl bg-slate-900 text-amber-400 font-mono text-xs font-extrabold">
+                            ⏱️ <span id="solTimer">00:00</span>
+                        </span>
+                        <button type="button" onclick="solUndo()" id="solUndoBtn"
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold cursor-pointer"
+                                title="Letzten Zug rückgängig machen (Z)">
+                            ↩️ Rückgängig
+                        </button>
+                        <button type="button" onclick="solShowHint()"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-xs font-bold cursor-pointer"
+                                title="Möglichen Zug gelb markieren (H)">
+                            💡 Tipp
+                        </button>
+                        <button type="button" onclick="solAutoComplete()" id="solAutoBtn"
+                                class="hidden px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold cursor-pointer shadow-xs animate-pulse">
+                            ⚡ Auto-Fertigstellen
+                        </button>
+                        <button type="button" onclick="solNewGame()"
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold cursor-pointer shadow-xs">
+                            🔄 Neues Spiel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-3">
+                    <canvas id="solCanvas" width="960" height="580"
+                            class="w-full max-w-[960px] h-auto rounded-2xl bg-emerald-900 border-2 border-emerald-600/80 shadow-xl select-none touch-none cursor-pointer"></canvas>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-[960px] text-[11px]">
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">👆</span>
+                            <div><strong>Antippen oder Ziehen</strong><br><span class="text-slate-500">Klick bewegt Karte automatisch zum besten Platz</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">♠️♥️</span>
+                            <div><strong>7 Auslage-Spalten</strong><br><span class="text-slate-500">Absteigend mit wechselnder Farbe (Rot / Schwarz)</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🅰️👑</span>
+                            <div><strong>4 Ass-Ablagen oben rechts</strong><br><span class="text-slate-500">Aufsteigend nach Farbe von Ass (A) bis König (K)</span></div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                            <span class="text-base">🎆</span>
+                            <div><strong>Windows-Siegeskaskade</strong><br><span class="text-slate-500">Hüpfendes Karten-Feuerwerk + Zeitbonus beim Sieg!</span></div>
                         </div>
                     </div>
                 </div>
@@ -3427,6 +3528,11 @@ function selectCloudGame(gameKey, scrollToStage = false) {
             mhInit();
         }
         mhDraw();
+    } else if (gameKey === 'solitaire') {
+        if (!solInitialized) {
+            solInit();
+        }
+        solDraw();
     } else if (gameKey === 'pacman') {
         if (!pacmanInitialized) {
             pacmanInit();
@@ -16678,6 +16784,25 @@ function abToggleSound() {
     if (btn) btn.textContent = abSoundOn ? '🔊 Ton' : '🔇 Stumm';
 }
 
+const AB_LEVEL_TITLES = {
+    1:  '🏰 Level 1: Das Holzhaus im Grünen',
+    2:  '🌉 Level 2: Die Zwillings-Türme',
+    3:  '🧨 Level 3: Das Pulverfass-Lager',
+    4:  '🪨 Level 4: Die Stein-Zitadelle',
+    5:  '🔺 Level 5: Der Pyramiden-Bunker',
+    6:  '🪖 Level 6: Die Gepanzerte Bastion',
+    7:  '👑 Level 7: König Grunzers Thronsaal',
+    8:  '💎 Level 8: Das Glashaus-Gewächshaus',
+    9:  '🏛️ Level 9: Das Römische Aquädukt',
+    10: '🪤 Level 10: Die Domino-Kettenreaktion',
+    11: '🏯 Level 11: Die Samurai-Pagode',
+    12: '🌉 Level 12: Die Hängebrücken-Schlucht',
+    13: '🛡️ Level 13: Der Doppel-Bunker (Ost & West)',
+    14: '💣 Level 14: Das Dynamit-Bergwerk',
+    15: '🏰 Level 15: Die Dreifach-Festung von Schweinburg',
+    16: '👑 Level 16: Kaiser Eberhardts Imperiale Zitadelle'
+};
+
 function abUpdateHud() {
     const scEl = document.getElementById('abScore');
     if (scEl) scEl.textContent = String(abTotalScore + abScore);
@@ -16688,8 +16813,8 @@ function abUpdateHud() {
         pgEl.textContent = `🐷 ${abPigs.length} übrig • 🐦 ${abQueue.length + (abState === 'aiming' || abState === 'dragging' ? 1 : 0)}`;
     }
     const sel = document.getElementById('abLevelSelect');
-    if (sel && parseInt(sel.value, 10) !== Math.min(8, abLevel)) {
-        sel.value = String(Math.min(8, abLevel));
+    if (sel && parseInt(sel.value, 10) !== Math.min(17, abLevel)) {
+        sel.value = String(Math.min(17, abLevel));
     }
 }
 
@@ -16858,31 +16983,280 @@ function abBuildLevelGeometry(lvl) {
         abAddPig(538, G - 130, 'normal');
         abAddPig(828, G - 130, 'normal');
         abAddPig(685, G - 311, 'helmet');
+    } else if (lvl === 8) {
+        // Level 8: Das Glashaus-Gewächshaus (3-stufiger Kristallpalast mit TNT-Herz)
+        abQueue = ['blue', 'blue', 'yellow', 'red', 'white'];
+        const gx = 510;
+        for (let c = 0; c < 4; c++) {
+            const cx = gx + c * 85;
+            abAddBlock(cx, G - 85, 16, 85, 'glass');
+            abAddBlock(cx + 62, G - 85, 16, 85, 'glass');
+            abAddBlock(cx - 2, G - 101, 82, 16, 'wood');
+            if (c === 1 || c === 2) {
+                abAddBlock(cx + 21, G - 36, 36, 36, 'tnt');
+            } else {
+                abAddPig(cx + 39, G - 15, 'normal');
+            }
+        }
+        // 2. Etage Glas-Galerie
+        for (let c = 0; c < 3; c++) {
+            const cx = gx + 42 + c * 85;
+            abAddBlock(cx, G - 175, 16, 74, 'glass');
+            abAddBlock(cx + 58, G - 175, 16, 74, 'glass');
+            abAddBlock(cx - 2, G - 191, 78, 16, 'glass');
+            abAddPig(cx + 37, G - 116, c === 1 ? 'helmet' : 'normal');
+        }
+        // Glaskuppel-Spitze
+        abAddBlock(gx + 132, G - 255, 16, 64, 'glass');
+        abAddBlock(gx + 196, G - 255, 16, 64, 'glass');
+        abAddBlock(gx + 126, G - 271, 92, 16, 'wood');
+        abAddPig(gx + 172, G - 210, 'king');
+    } else if (lvl === 9) {
+        // Level 9: Das Römische Aquädukt (Doppelstöckige Stein- & Holzbögen)
+        abQueue = ['black', 'yellow', 'white', 'blue', 'red'];
+        for (let i = 0; i < 4; i++) {
+            const ax = 485 + i * 96;
+            abAddBlock(ax, G - 95, 20, 95, 'stone');
+            abAddBlock(ax + 66, G - 95, 20, 95, 'stone');
+            abAddBlock(ax - 3, G - 115, 92, 20, 'stone');
+            abAddPig(ax + 43, G - 16, i % 2 === 0 ? 'helmet' : 'normal');
+
+            // Obere Wasserführungs-Arkade
+            abAddBlock(ax + 8, G - 190, 16, 75, 'wood');
+            abAddBlock(ax + 58, G - 190, 16, 75, 'wood');
+            abAddBlock(ax + 4, G - 208, 74, 18, 'stone');
+            if (i === 1 || i === 2) {
+                abAddBlock(ax + 24, G - 151, 36, 36, 'tnt');
+            } else {
+                abAddPig(ax + 41, G - 131, 'normal');
+            }
+        }
+        abAddPig(675, G - 232, 'king');
+    } else if (lvl === 10) {
+        // Level 10: Die Domino-Kettenreaktion (Schlanke Domino-Säulen vor dem End-Bunker)
+        abQueue = ['yellow', 'red', 'blue', 'black'];
+        // 5 hohe Domino-Pfeiler von links nach rechts
+        for (let d = 0; d < 5; d++) {
+            const dx = 455 + d * 48;
+            abAddBlock(dx, G - 145, 18, 145, d % 2 === 0 ? 'wood' : 'stone');
+            abAddBlock(dx - 3, G - 161, 24, 16, 'glass');
+        }
+        // TNT-Zünder direkt am Ende der Domino-Reihe
+        abAddBlock(700, G - 36, 36, 36, 'tnt');
+        abAddBlock(700, G - 72, 36, 36, 'tnt');
+        // Schwerer Ziel-Bunker rechts
+        abAddBlock(748, G - 110, 22, 110, 'stone');
+        abAddBlock(868, G - 110, 22, 110, 'stone');
+        abAddBlock(744, G - 130, 150, 20, 'stone');
+        abAddBlock(772, G - 200, 18, 70, 'wood');
+        abAddBlock(846, G - 200, 18, 70, 'wood');
+        abAddBlock(768, G - 218, 102, 18, 'wood');
+        abAddPig(800, G - 18, 'helmet');
+        abAddPig(838, G - 18, 'helmet');
+        abAddPig(818, G - 154, 'king');
+        abAddPig(818, G - 234, 'normal');
+    } else if (lvl === 11) {
+        // Level 11: Die Samurai-Pagode (4-stöckiger Tempelturm)
+        abQueue = ['yellow', 'blue', 'white', 'black', 'red'];
+        // 1. Etage (Breit)
+        abAddBlock(545, G - 85, 20, 85, 'stone');
+        abAddBlock(635, G - 85, 18, 85, 'wood');
+        abAddBlock(725, G - 85, 18, 85, 'wood');
+        abAddBlock(815, G - 85, 20, 85, 'stone');
+        abAddBlock(535, G - 103, 155, 18, 'wood');
+        abAddBlock(690, G - 103, 155, 18, 'wood');
+        abAddPig(600, G - 16, 'helmet');
+        abAddPig(780, G - 16, 'helmet');
+        abAddBlock(672, G - 36, 36, 36, 'tnt');
+        // 2. Etage
+        abAddBlock(585, G - 183, 18, 80, 'wood');
+        abAddBlock(680, G - 183, 18, 80, 'stone');
+        abAddBlock(775, G - 183, 18, 80, 'wood');
+        abAddBlock(575, G - 201, 228, 18, 'wood');
+        abAddPig(640, G - 118, 'normal');
+        abAddPig(736, G - 118, 'normal');
+        // 3. Etage
+        abAddBlock(625, G - 275, 16, 74, 'glass');
+        abAddBlock(735, G - 275, 16, 74, 'glass');
+        abAddBlock(615, G - 293, 146, 18, 'stone');
+        abAddPig(688, G - 225, 'king');
+        // 4. Etage (Pagoden-Dachspitze)
+        abAddBlock(658, G - 348, 14, 55, 'wood');
+        abAddBlock(704, G - 348, 14, 55, 'wood');
+        abAddBlock(648, G - 364, 80, 16, 'wood');
+        abAddPig(688, G - 309, 'helmet');
+    } else if (lvl === 12) {
+        // Level 12: Die Hängebrücken-Schlucht (Zwei Brückenköpfe + Mittelbrücke)
+        abQueue = ['white', 'blue', 'yellow', 'black', 'red'];
+        // West-Pfeiler
+        abAddBlock(475, G - 125, 22, 125, 'stone');
+        abAddBlock(555, G - 125, 22, 125, 'stone');
+        abAddBlock(470, G - 145, 112, 20, 'stone');
+        abAddPig(526, G - 18, 'helmet');
+        abAddPig(526, G - 162, 'normal');
+        // Ost-Pfeiler
+        abAddBlock(785, G - 125, 22, 125, 'stone');
+        abAddBlock(865, G - 125, 22, 125, 'stone');
+        abAddBlock(780, G - 145, 112, 20, 'stone');
+        abAddPig(836, G - 18, 'helmet');
+        abAddPig(836, G - 169, 'king');
+        // Mittel-Stützen & Brückenfahrbahn
+        abAddBlock(630, G - 95, 16, 95, 'wood');
+        abAddBlock(710, G - 95, 16, 95, 'wood');
+        abAddBlock(582, G - 113, 194, 18, 'wood');
+        abAddBlock(660, G - 36, 36, 36, 'tnt');
+        abAddPig(618, G - 128, 'normal');
+        abAddPig(678, G - 128, 'helmet');
+        abAddPig(738, G - 128, 'normal');
+    } else if (lvl === 13) {
+        // Level 13: Der Doppel-Bunker (Ost & West – Perfekt für Eier-Bomber & Bomben-Rabe)
+        abQueue = ['white', 'black', 'white', 'yellow', 'blue'];
+        [480, 710].forEach((bx, idx) => {
+            abAddBlock(bx, G - 105, 24, 105, 'stone');
+            abAddBlock(bx + 140, G - 105, 24, 105, 'stone');
+            abAddBlock(bx - 4, G - 125, 172, 20, 'stone');
+            // Obergeschoss mit Glas-Dachluke
+            abAddBlock(bx + 20, G - 190, 18, 65, 'wood');
+            abAddBlock(bx + 122, G - 190, 18, 65, 'wood');
+            abAddBlock(bx + 16, G - 206, 132, 16, 'glass');
+            abAddBlock(bx + 64, G - 36, 36, 36, 'tnt');
+            abAddPig(bx + 42, G - 16, 'helmet');
+            abAddPig(bx + 118, G - 16, 'normal');
+            abAddPig(bx + 82, G - 149, idx === 1 ? 'king' : 'helmet');
+        });
+    } else if (lvl === 14) {
+        // Level 14: Das Dynamit-Bergwerk (Explosive Kettenreaktion im Steinbruch)
+        abQueue = ['blue', 'yellow', 'black', 'white', 'red'];
+        const mx = 500;
+        for (let col = 0; col < 4; col++) {
+            const x = mx + col * 94;
+            abAddBlock(x, G - 82, 20, 82, 'stone');
+            abAddBlock(x + 66, G - 82, 20, 82, 'stone');
+            abAddBlock(x - 2, G - 100, 90, 18, 'wood');
+            abAddBlock(x + 25, G - 36, 36, 36, 'tnt');
+
+            abAddBlock(x + 8, G - 172, 18, 72, 'wood');
+            abAddBlock(x + 58, G - 172, 18, 72, 'wood');
+            abAddBlock(x + 4, G - 190, 76, 18, 'stone');
+            abAddPig(x + 42, G - 116, col % 2 === 0 ? 'helmet' : 'normal');
+        }
+        abAddBlock(mx + 120, G - 226, 36, 36, 'tnt');
+        abAddBlock(mx + 214, G - 226, 36, 36, 'tnt');
+        abAddPig(mx + 42, G - 206, 'normal');
+        abAddPig(mx + 185, G - 214, 'king');
+        abAddPig(mx + 324, G - 206, 'helmet');
+    } else if (lvl === 15) {
+        // Level 15: Die Dreifach-Festung von Schweinburg
+        abQueue = ['yellow', 'blue', 'white', 'black', 'black', 'red'];
+        const towers = [470, 625, 780];
+        towers.forEach((tx, idx) => {
+            const isCenter = idx === 1;
+            const h1 = isCenter ? 110 : 90;
+            abAddBlock(tx, G - h1, 20, h1, 'stone');
+            abAddBlock(tx + 96, G - h1, 20, h1, 'stone');
+            abAddBlock(tx - 4, G - h1 - 20, 124, 20, isCenter ? 'stone' : 'wood');
+            if (isCenter) {
+                abAddBlock(tx + 40, G - 36, 36, 36, 'tnt');
+                abAddPig(tx + 24, G - 16, 'helmet');
+                abAddPig(tx + 88, G - 16, 'helmet');
+            } else {
+                abAddPig(tx + 58, G - 18, 'helmet');
+            }
+
+            // 2. Stockwerk
+            const y2 = G - h1 - 20;
+            abAddBlock(tx + 12, y2 - 75, 16, 75, 'wood');
+            abAddBlock(tx + 88, y2 - 75, 16, 75, 'wood');
+            abAddBlock(tx + 8, y2 - 93, 100, 18, 'glass');
+            abAddPig(tx + 58, y2 - 24, isCenter ? 'king' : 'normal');
+
+            // 3. Stockwerk auf dem Hauptturm
+            if (isCenter) {
+                const y3 = y2 - 93;
+                abAddBlock(tx + 26, y3 - 62, 16, 62, 'glass');
+                abAddBlock(tx + 74, y3 - 62, 16, 62, 'glass');
+                abAddBlock(tx + 22, y3 - 78, 72, 16, 'wood');
+                abAddPig(tx + 58, y3 - 16, 'helmet');
+            }
+        });
+    } else if (lvl === 16) {
+        // Level 16: Kaiser Eberhardts Imperiale Zitadelle (Großes Finale mit Zwillings-Königen)
+        abQueue = ['blue', 'yellow', 'white', 'black', 'white', 'black', 'red'];
+        // Vorwall (Schildmauer)
+        abAddBlock(445, G - 115, 24, 115, 'stone');
+        abAddBlock(441, G - 135, 32, 20, 'stone');
+        abAddPig(457, G - 151, 'helmet');
+
+        // 4 Hauptkammern im Erdgeschoss
+        for (let c = 0; c < 4; c++) {
+            const cx = 495 + c * 98;
+            abAddBlock(cx, G - 100, 22, 100, 'stone');
+            abAddBlock(cx + 72, G - 100, 22, 100, 'stone');
+            abAddBlock(cx - 3, G - 120, 100, 20, c % 2 === 0 ? 'stone' : 'wood');
+            if (c === 1 || c === 2) {
+                abAddBlock(cx + 29, G - 36, 36, 36, 'tnt');
+            } else {
+                abAddPig(cx + 47, G - 18, 'helmet');
+            }
+        }
+        // 2. Etage: Kaiserliche Halle
+        for (let c = 0; c < 3; c++) {
+            const cx = 535 + c * 102;
+            abAddBlock(cx, G - 205, 18, 85, 'wood');
+            abAddBlock(cx + 68, G - 205, 18, 85, 'wood');
+            abAddBlock(cx - 2, G - 223, 90, 18, 'stone');
+            if (c === 0 || c === 2) {
+                abAddPig(cx + 43, G - 144, 'king');
+            } else {
+                abAddBlock(cx + 25, G - 156, 36, 36, 'tnt');
+            }
+        }
+        // 3. Etage: Kronjuwelen-Kuppel
+        abAddBlock(625, G - 295, 16, 72, 'glass');
+        abAddBlock(715, G - 295, 16, 72, 'glass');
+        abAddBlock(620, G - 313, 116, 18, 'wood');
+        abAddPig(678, G - 240, 'helmet');
+        abAddPig(678, G - 330, 'helmet');
     } else {
-        // Level 8+: Prozeduraler Festungs-Generator
+        // Level 17+: Erweiterter Prozeduraler Festungs-Generator
         const birdsPool = ['red', 'yellow', 'blue', 'black', 'white'];
-        abQueue = ['yellow', 'blue', 'black', 'white', birdsPool[lvl % birdsPool.length]];
+        abQueue = [
+            birdsPool[lvl % 5],
+            'yellow',
+            'blue',
+            'black',
+            'white',
+            birdsPool[(lvl + 2) % 5]
+        ];
         const cols = 3 + (lvl % 2);
-        const startX = 500;
-        const span = 92;
+        const startX = 485;
+        const span = 96;
         const mats = ['wood', 'glass', 'stone'];
         for (let c = 0; c < cols; c++) {
             const x = startX + c * span;
             const m1 = mats[(lvl + c) % mats.length];
             const m2 = mats[(lvl + c + 1) % mats.length];
-            abAddBlock(x, G - 88, 18, 88, m1);
-            abAddBlock(x + 64, G - 88, 18, 88, m1);
-            abAddBlock(x - 4, G - 106, 90, 18, m2);
-            if (c === 1) {
-                abAddBlock(x + 23, G - 36, 36, 36, 'tnt');
+            const m3 = mats[(lvl + c + 2) % mats.length];
+            abAddBlock(x, G - 90, 18, 90, m1);
+            abAddBlock(x + 66, G - 90, 18, 90, m1);
+            abAddBlock(x - 4, G - 108, 92, 18, m2);
+            if ((c + lvl) % 2 === 1) {
+                abAddBlock(x + 24, G - 36, 36, 36, 'tnt');
             } else {
-                abAddPig(x + 41, G - 16, c % 2 === 0 ? 'helmet' : 'normal');
+                abAddPig(x + 42, G - 16, c % 2 === 0 ? 'helmet' : 'normal');
             }
-            // Obergeschoss
-            abAddBlock(x + 10, G - 174, 16, 68, 'glass');
-            abAddBlock(x + 54, G - 174, 16, 68, 'glass');
-            abAddBlock(x + 6, G - 190, 68, 16, 'wood');
-            abAddPig(x + 40, G - 122, c === Math.floor(cols / 2) ? 'king' : 'normal');
+            // 2. Geschoss
+            abAddBlock(x + 8, G - 180, 16, 72, m3);
+            abAddBlock(x + 56, G - 180, 16, 72, m3);
+            abAddBlock(x + 4, G - 196, 72, 16, m1);
+            abAddPig(x + 40, G - 124, c === Math.floor(cols / 2) ? 'king' : 'helmet');
+            // 3. Geschoss auf mittleren Türmen
+            if (c === 1 || c === 2) {
+                abAddBlock(x + 16, G - 256, 14, 60, 'glass');
+                abAddBlock(x + 48, G - 256, 14, 60, 'glass');
+                abAddBlock(x + 12, G - 270, 56, 14, 'wood');
+                abAddPig(x + 40, G - 211, 'normal');
+            }
         }
     }
 }
@@ -17751,7 +18125,17 @@ function abDraw() {
         ctx.fillText(pp.text, pp.x, pp.y);
     });
 
-    // Info-Leiste zum aktuellen Vogel oben links
+    // Info-Leiste zum aktuellen Vogel oben links + Level-Titel oben rechts
+    const lvlTitle = AB_LEVEL_TITLES[abLevel] || `♾️ Level ${abLevel}: Endlos-Festung`;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.beginPath();
+    ctx.roundRect(W - 334, 14, 320, 34, 10);
+    ctx.fill();
+    ctx.fillStyle = '#fde047';
+    ctx.textAlign = 'right';
+    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.fillText(lvlTitle, W - 24, 35);
+
     if ((abState === 'aiming' || abState === 'dragging') && abQueue.length > 0) {
         const curMeta = AB_BIRD_META[abQueue[0]] || AB_BIRD_META.red;
         ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
@@ -19489,6 +19873,1142 @@ function mhInit() {
     requestAnimationFrame(mhLoop);
 }
 
+// =========================================================================
+// 24. SPIEL: KLONDIKE SOLITÄR (WINDOWS-KARTENKLASSIKER MIT KASKADEN-FEUERWERK)
+// =========================================================================
+let solInitialized = false;
+let solDrawCount   = 1;
+let solCardBack    = 'blue';
+let solScore       = 0;
+let solMoves       = 0;
+let solStartTs     = 0;
+let solElapsedSec  = 0;
+let solTimerInt    = null;
+let solWon         = false;
+let solAutoTimer   = null;
+
+const SOL_CW   = 104;
+const SOL_CH   = 144;
+const SOL_X0   = 56;
+const SOL_DX   = 124;
+const SOL_YTOP = 22;
+const SOL_YTAB = 188;
+
+const SOL_SUITS = [
+    { key: 'spades',   sym: '♠', color: 'black', label: 'Pik' },
+    { key: 'hearts',   sym: '♥', color: 'red',   label: 'Herz' },
+    { key: 'clubs',    sym: '♣', color: 'black', label: 'Kreuz' },
+    { key: 'diamonds', sym: '♦', color: 'red',   label: 'Karo' }
+];
+const SOL_RANKS = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+let solStock       = []; // Verdeckter Nachziehstapel
+let solWaste       = []; // Aufgedeckter Ablagestapel
+let solFoundations = [[], [], [], []]; // 4 Ass-Ablagen
+let solTableau     = [[], [], [], [], [], [], []]; // 7 Spalten
+let solHistory     = []; // Undo-Stack
+let solHintBox     = null; // { fromRect, toRect, until }
+
+// Drag-&-Drop-Zustand
+let solDrag = null; // { sourceType, sourceIdx, cardIdx, cards, startX, startY, curX, curY, offsetX, offsetY, moved }
+
+// Windows-Siegeskaskade (Hüpfende Karten)
+let solCascadeTrail = []; // Gespeicherte Stempelabdrücke { card, x, y }
+let solCascadeActive = null; // Aktuell hüpfende Karte { card, x, y, vx, vy }
+let solCascadeQueue  = [];
+
+function solCloneState() {
+    return {
+        stock:       solStock.map(c => ({ ...c })),
+        waste:       solWaste.map(c => ({ ...c })),
+        foundations: solFoundations.map(f => f.map(c => ({ ...c }))),
+        tableau:     solTableau.map(col => col.map(c => ({ ...c }))),
+        score:       solScore,
+        moves:       solMoves
+    };
+}
+
+function solPushUndo() {
+    solHistory.push(solCloneState());
+    if (solHistory.length > 60) solHistory.shift();
+}
+
+function solUndo() {
+    if (solWon || solHistory.length === 0) return;
+    if (solAutoTimer) {
+        clearInterval(solAutoTimer);
+        solAutoTimer = null;
+    }
+    const prev = solHistory.pop();
+    solStock       = prev.stock;
+    solWaste       = prev.waste;
+    solFoundations = prev.foundations;
+    solTableau     = prev.tableau;
+    solScore       = Math.max(0, prev.score - 2);
+    solMoves       = prev.moves + 1;
+    solHintBox     = null;
+    solUpdateHud();
+    solDraw();
+}
+
+function solFormatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function solCanAutoComplete() {
+    if (solWon) return false;
+    if (solStock.length > 0 || solWaste.length > 0) return false;
+    for (let c = 0; c < 7; c++) {
+        for (let i = 0; i < solTableau[c].length; i++) {
+            if (!solTableau[c][i].faceUp) return false;
+        }
+    }
+    const totalFound = solFoundations.reduce((acc, f) => acc + f.length, 0);
+    return totalFound < 52;
+}
+
+function solUpdateHud() {
+    const scEl = document.getElementById('solScore');
+    if (scEl) scEl.textContent = String(solScore);
+    const mvEl = document.getElementById('solMoves');
+    if (mvEl) mvEl.textContent = String(solMoves);
+    const tmEl = document.getElementById('solTimer');
+    if (tmEl) tmEl.textContent = solFormatTime(solElapsedSec);
+    const autoBtn = document.getElementById('solAutoBtn');
+    if (autoBtn) {
+        autoBtn.classList.toggle('hidden', !solCanAutoComplete());
+    }
+}
+
+function solChangeDrawMode(cnt) {
+    solDrawCount = cnt === 3 ? 3 : 1;
+    solNewGame();
+}
+
+function solChangeCardBack(style) {
+    solCardBack = style || 'blue';
+    solDraw();
+}
+
+function solNewGame() {
+    if (solAutoTimer) {
+        clearInterval(solAutoTimer);
+        solAutoTimer = null;
+    }
+    const deck = [];
+    SOL_SUITS.forEach(s => {
+        for (let r = 1; r <= 13; r++) {
+            deck.push({
+                suit:   s.key,
+                sym:    s.sym,
+                color:  s.color,
+                rank:   r,
+                label:  SOL_RANKS[r],
+                faceUp: false
+            });
+        }
+    });
+    // Fisher-Yates Shuffle
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = deck[i];
+        deck[i] = deck[j];
+        deck[j] = tmp;
+    }
+
+    solTableau     = [[], [], [], [], [], [], []];
+    solFoundations = [[], [], [], []];
+    solWaste       = [];
+    solHistory     = [];
+    solHintBox     = null;
+    solDrag        = null;
+    solWon         = false;
+    solCascadeTrail  = [];
+    solCascadeActive = null;
+    solCascadeQueue  = [];
+
+    let ptr = 0;
+    for (let c = 0; c < 7; c++) {
+        for (let r = 0; r <= c; r++) {
+            const card = deck[ptr++];
+            card.faceUp = (r === c);
+            solTableau[c].push(card);
+        }
+    }
+    solStock = deck.slice(ptr);
+
+    solScore      = 0;
+    solMoves      = 0;
+    solElapsedSec = 0;
+    solStartTs    = Date.now();
+
+    if (solTimerInt) clearInterval(solTimerInt);
+    solTimerInt = setInterval(() => {
+        if (activeGameKey === 'solitaire' && !solWon) {
+            solElapsedSec = Math.floor((Date.now() - solStartTs) / 1000);
+            const tmEl = document.getElementById('solTimer');
+            if (tmEl) tmEl.textContent = solFormatTime(solElapsedSec);
+        }
+    }, 1000);
+
+    solUpdateHud();
+    solDraw();
+}
+
+function solGetColumnCardPositions(colIdx) {
+    const col = solTableau[colIdx];
+    const x   = SOL_X0 + colIdx * SOL_DX;
+    let y     = SOL_YTAB;
+    const coords = [];
+
+    // Dynamische Stauchung, falls die Spalte sehr lang wird
+    const downCount = col.filter(c => !c.faceUp).length;
+    const upCount   = Math.max(0, col.length - downCount - 1);
+    const downStep  = 15;
+    const maxAvail  = 566 - SOL_YTAB - SOL_CH - downCount * downStep;
+    const upStep    = upCount > 0 ? Math.min(26, Math.max(15, Math.floor(maxAvail / upCount))) : 26;
+
+    for (let i = 0; i < col.length; i++) {
+        coords.push({ x, y, w: SOL_CW, h: SOL_CH });
+        y += col[i].faceUp ? upStep : downStep;
+    }
+    return coords;
+}
+
+function solCanDropOnFoundation(card, fIdx) {
+    const pile = solFoundations[fIdx];
+    if (pile.length === 0) {
+        return card.rank === 1;
+    }
+    const top = pile[pile.length - 1];
+    return top.suit === card.suit && card.rank === top.rank + 1;
+}
+
+function solCanDropOnTableau(firstCard, colIdx) {
+    const col = solTableau[colIdx];
+    if (col.length === 0) {
+        return firstCard.rank === 13; // Nur König auf leeres Feld
+    }
+    const top = col[col.length - 1];
+    if (!top.faceUp) return false;
+    return top.color !== firstCard.color && firstCard.rank === top.rank - 1;
+}
+
+function solFlipTopTableauIfNeeded(colIdx) {
+    const col = solTableau[colIdx];
+    if (col.length > 0 && !col[col.length - 1].faceUp) {
+        col[col.length - 1].faceUp = true;
+        solScore += 5;
+    }
+}
+
+function solCheckVictory() {
+    const total = solFoundations.reduce((acc, f) => acc + f.length, 0);
+    if (total === 52 && !solWon) {
+        solWon = true;
+        if (solAutoTimer) {
+            clearInterval(solAutoTimer);
+            solAutoTimer = null;
+        }
+        // Windows-Solitär Zeitbonus: 700.000 / Sekunden (ab 30 Sek.)
+        const timeSec   = Math.max(20, solElapsedSec);
+        const timeBonus = Math.max(100, Math.round(25000 / Math.sqrt(timeSec)));
+        solScore += timeBonus;
+        solUpdateHud();
+
+        const modeLbl = solDrawCount === 3 ? '3-Karten-Profi' : '1-Karte-Klassik';
+        submitCloudScore('solitaire', solScore, solElapsedSec, `♠️ ${modeLbl} (${solMoves} Züge · ${solFormatTime(solElapsedSec)})`);
+
+        // Startet das legendäre Windows-Karten-Feuerwerk!
+        solStartVictoryCascade();
+    }
+}
+
+function solStartVictoryCascade() {
+    solCascadeTrail = [];
+    solCascadeQueue = [];
+    for (let r = 13; r >= 1; r--) {
+        for (let f = 0; f < 4; f++) {
+            const c = solFoundations[f][r - 1];
+            if (c) {
+                solCascadeQueue.push({
+                    card: { ...c, faceUp: true },
+                    x: SOL_X0 + (3 + f) * SOL_DX,
+                    y: SOL_YTOP
+                });
+            }
+        }
+    }
+    solSpawnNextCascadeCard();
+}
+
+function solSpawnNextCascadeCard() {
+    if (!solWon || solCascadeQueue.length === 0) {
+        solCascadeActive = null;
+        return;
+    }
+    const item = solCascadeQueue.shift();
+    const dir  = Math.random() < 0.5 ? -1 : 1;
+    solCascadeActive = {
+        card: item.card,
+        x:    item.x,
+        y:    item.y,
+        vx:   dir * (3.2 + Math.random() * 4.5) - 2.0,
+        vy:   -(2 + Math.random() * 4)
+    };
+}
+
+function solDrawStockClick() {
+    if (solWon) return;
+    solPushUndo();
+    solHintBox = null;
+    if (solStock.length > 0) {
+        const take = Math.min(solDrawCount, solStock.length);
+        for (let i = 0; i < take; i++) {
+            const c = solStock.pop();
+            c.faceUp = true;
+            solWaste.push(c);
+        }
+        solMoves++;
+    } else if (solWaste.length > 0) {
+        // Ablagestapel umdrehen zurück in den Stock
+        while (solWaste.length > 0) {
+            const c = solWaste.pop();
+            c.faceUp = false;
+            solStock.push(c);
+        }
+        if (solDrawCount === 1) {
+            solScore = Math.max(0, solScore - 15);
+        }
+        solMoves++;
+    }
+    solUpdateHud();
+    solDraw();
+}
+
+function solTryAutoMoveCard(sourceType, sourceIdx, cardIdx, preferFoundation = true) {
+    if (solWon) return false;
+    let movingCards = [];
+    if (sourceType === 'waste') {
+        if (solWaste.length === 0) return false;
+        movingCards = [solWaste[solWaste.length - 1]];
+    } else if (sourceType === 'tableau') {
+        const col = solTableau[sourceIdx];
+        if (!col || cardIdx < 0 || cardIdx >= col.length || !col[cardIdx].faceUp) return false;
+        movingCards = col.slice(cardIdx);
+    } else if (sourceType === 'foundation') {
+        const f = solFoundations[sourceIdx];
+        if (!f || f.length === 0) return false;
+        movingCards = [f[f.length - 1]];
+    } else {
+        return false;
+    }
+
+    const leadCard = movingCards[0];
+
+    // 1. Falls einzelne Karte: Prüfe 4 Ass-Ablagen (Foundations)
+    if (movingCards.length === 1 && preferFoundation && sourceType !== 'foundation') {
+        for (let f = 0; f < 4; f++) {
+            if (solCanDropOnFoundation(leadCard, f)) {
+                solPushUndo();
+                if (sourceType === 'waste') {
+                    solWaste.pop();
+                } else if (sourceType === 'tableau') {
+                    solTableau[sourceIdx].pop();
+                    solFlipTopTableauIfNeeded(sourceIdx);
+                }
+                solFoundations[f].push(leadCard);
+                solScore += 10;
+                solMoves++;
+                solHintBox = null;
+                solUpdateHud();
+                solCheckVictory();
+                solDraw();
+                return true;
+            }
+        }
+    }
+
+    // 2. Prüfe 7 Tableau-Spalten (bevorzuge nicht-leere Spalten für Könige, falls schon auf leerer Spalte)
+    for (let t = 0; t < 7; t++) {
+        if (sourceType === 'tableau' && t === sourceIdx) continue;
+        if (sourceType === 'tableau' && cardIdx === 0 && leadCard.rank === 13 && solTableau[t].length === 0) {
+            // König nicht sinnlos von einer leeren Spalte auf eine andere leere Spalte schieben
+            continue;
+        }
+        if (solCanDropOnTableau(leadCard, t)) {
+            solPushUndo();
+            if (sourceType === 'waste') {
+                solWaste.pop();
+                solScore += 5;
+            } else if (sourceType === 'tableau') {
+                solTableau[sourceIdx].splice(cardIdx);
+                solFlipTopTableauIfNeeded(sourceIdx);
+            } else if (sourceType === 'foundation') {
+                solFoundations[sourceIdx].pop();
+                solScore = Math.max(0, solScore - 10);
+            }
+            solTableau[t].push(...movingCards);
+            solMoves++;
+            solHintBox = null;
+            solUpdateHud();
+            solDraw();
+            return true;
+        }
+    }
+
+    // 3. Fallback: Falls Foundation noch nicht geprüft wurde
+    if (movingCards.length === 1 && !preferFoundation && sourceType !== 'foundation') {
+        for (let f = 0; f < 4; f++) {
+            if (solCanDropOnFoundation(leadCard, f)) {
+                solPushUndo();
+                if (sourceType === 'waste') solWaste.pop();
+                else if (sourceType === 'tableau') {
+                    solTableau[sourceIdx].pop();
+                    solFlipTopTableauIfNeeded(sourceIdx);
+                }
+                solFoundations[f].push(leadCard);
+                solScore += 10;
+                solMoves++;
+                solHintBox = null;
+                solUpdateHud();
+                solCheckVictory();
+                solDraw();
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function solShowHint() {
+    if (solWon) return;
+    // 1. Prüfe Waste -> Foundation oder Tableau
+    if (solWaste.length > 0) {
+        const wCard = solWaste[solWaste.length - 1];
+        const wShow = Math.min(solDrawCount === 3 ? 3 : 1, solWaste.length);
+        const wRect = { x: SOL_X0 + SOL_DX + (wShow - 1) * 22, y: SOL_YTOP, w: SOL_CW, h: SOL_CH };
+        for (let f = 0; f < 4; f++) {
+            if (solCanDropOnFoundation(wCard, f)) {
+                solHintBox = {
+                    fromRect: wRect,
+                    toRect:   { x: SOL_X0 + (3 + f) * SOL_DX, y: SOL_YTOP, w: SOL_CW, h: SOL_CH },
+                    until:    Date.now() + 2600
+                };
+                solDraw();
+                return;
+            }
+        }
+        for (let t = 0; t < 7; t++) {
+            if (solCanDropOnTableau(wCard, t)) {
+                const pos = solGetColumnCardPositions(t);
+                const toRect = pos.length > 0 ? pos[pos.length - 1] : { x: SOL_X0 + t * SOL_DX, y: SOL_YTAB, w: SOL_CW, h: SOL_CH };
+                solHintBox = { fromRect: wRect, toRect, until: Date.now() + 2600 };
+                solDraw();
+                return;
+            }
+        }
+    }
+
+    // 2. Prüfe Tableau -> Foundation oder sinnvollen Tableau-Wechsel
+    for (let c = 0; c < 7; c++) {
+        const col = solTableau[c];
+        if (col.length === 0) continue;
+        const pos = solGetColumnCardPositions(c);
+        const topCard = col[col.length - 1];
+        for (let f = 0; f < 4; f++) {
+            if (solCanDropOnFoundation(topCard, f)) {
+                solHintBox = {
+                    fromRect: pos[pos.length - 1],
+                    toRect:   { x: SOL_X0 + (3 + f) * SOL_DX, y: SOL_YTOP, w: SOL_CW, h: SOL_CH },
+                    until:    Date.now() + 2600
+                };
+                solDraw();
+                return;
+            }
+        }
+        // Prüfe oberste aufgedeckte Karte einer Sequenz (um verdeckte Karte darunter freizulegen)
+        const firstUpIdx = col.findIndex(cd => cd.faceUp);
+        if (firstUpIdx >= 0) {
+            const leadCard = col[firstUpIdx];
+            if (firstUpIdx === 0 && leadCard.rank === 13) continue;
+            for (let t = 0; t < 7; t++) {
+                if (t === c) continue;
+                if (solCanDropOnTableau(leadCard, t)) {
+                    const tPos = solGetColumnCardPositions(t);
+                    const toRect = tPos.length > 0 ? tPos[tPos.length - 1] : { x: SOL_X0 + t * SOL_DX, y: SOL_YTAB, w: SOL_CW, h: SOL_CH };
+                    solHintBox = { fromRect: pos[firstUpIdx], toRect, until: Date.now() + 2600 };
+                    solDraw();
+                    return;
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: Nachziehstapel markieren
+    solHintBox = {
+        fromRect: { x: SOL_X0, y: SOL_YTOP, w: SOL_CW, h: SOL_CH },
+        toRect:   null,
+        until:    Date.now() + 2200
+    };
+    solDraw();
+}
+
+function solAutoComplete() {
+    if (!solCanAutoComplete() || solAutoTimer) return;
+    solAutoTimer = setInterval(() => {
+        if (solWon) {
+            clearInterval(solAutoTimer);
+            solAutoTimer = null;
+            return;
+        }
+        // Suche niedrigste aufgedeckte Karte auf dem Tableau, die auf eine Foundation passt
+        let moved = false;
+        let bestCol = -1;
+        let bestFound = -1;
+        let lowestRank = 99;
+        for (let c = 0; c < 7; c++) {
+            const col = solTableau[c];
+            if (col.length === 0) continue;
+            const top = col[col.length - 1];
+            for (let f = 0; f < 4; f++) {
+                if (solCanDropOnFoundation(top, f) && top.rank < lowestRank) {
+                    lowestRank = top.rank;
+                    bestCol = c;
+                    bestFound = f;
+                }
+            }
+        }
+        if (bestCol >= 0 && bestFound >= 0) {
+            const card = solTableau[bestCol].pop();
+            solFoundations[bestFound].push(card);
+            solScore += 10;
+            solMoves++;
+            moved = true;
+            solUpdateHud();
+            solCheckVictory();
+            solDraw();
+        }
+        if (!moved) {
+            clearInterval(solAutoTimer);
+            solAutoTimer = null;
+        }
+    }, 95);
+}
+
+function solDrawCardBack(ctx, x, y, w, h) {
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    const pad = 5;
+    const ix = x + pad;
+    const iy = y + pad;
+    const iw = w - pad * 2;
+    const ih = h - pad * 2;
+
+    ctx.beginPath();
+    ctx.roundRect(ix, iy, iw, ih, 5);
+    ctx.clip();
+
+    if (solCardBack === 'castle') {
+        const g = ctx.createLinearGradient(ix, iy, ix, iy + ih);
+        g.addColorStop(0, '#1e1b4b');
+        g.addColorStop(1, '#312e81');
+        ctx.fillStyle = g;
+        ctx.fillRect(ix, iy, iw, ih);
+        // Vollmond & Silhouette einer Burg
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(ix + iw * 0.72, iy + 26, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(ix + 16, iy + ih - 48, iw - 32, 48);
+        ctx.fillRect(ix + 22, iy + ih - 72, 16, 26);
+        ctx.fillRect(ix + iw - 38, iy + ih - 72, 16, 26);
+        ctx.fillRect(ix + iw * 0.5 - 10, iy + ih - 86, 20, 40);
+    } else if (solCardBack === 'palm') {
+        const g = ctx.createLinearGradient(ix, iy, ix, iy + ih);
+        g.addColorStop(0, '#f97316');
+        g.addColorStop(0.55, '#fde047');
+        g.addColorStop(0.56, '#0284c7');
+        g.addColorStop(1, '#0369a1');
+        ctx.fillStyle = g;
+        ctx.fillRect(ix, iy, iw, ih);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(ix + iw * 0.5, iy + ih * 0.52, 18, Math.PI, 0);
+        ctx.fill();
+    } else if (solCardBack === 'red') {
+        ctx.fillStyle = '#991b1b';
+        ctx.fillRect(ix, iy, iw, ih);
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = 1;
+        for (let d = -ih; d < iw + ih; d += 12) {
+            ctx.beginPath();
+            ctx.moveTo(ix + d, iy);
+            ctx.lineTo(ix + d - ih, iy + ih);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(ix + 4, iy + 4, iw - 8, ih - 8);
+    } else {
+        // Klassisch Windows-Blau mit Rautenmuster
+        ctx.fillStyle = '#1d4ed8';
+        ctx.fillRect(ix, iy, iw, ih);
+        ctx.strokeStyle = 'rgba(147, 197, 253, 0.55)';
+        ctx.lineWidth = 1;
+        for (let d = -ih; d < iw + ih; d += 10) {
+            ctx.beginPath();
+            ctx.moveTo(ix + d, iy);
+            ctx.lineTo(ix + d - ih, iy + ih);
+            ctx.moveTo(ix + d, iy);
+            ctx.lineTo(ix + d + ih, iy + ih);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = '#eff6ff';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(ix + 3, iy + 3, iw - 6, ih - 6);
+    }
+    ctx.restore();
+}
+
+function solDrawCardFace(ctx, card, x, y, w, h) {
+    ctx.save();
+    // Schatten + weißes Kartenblatt
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + 3, w, h, 8);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    const col = card.color === 'red' ? '#dc2626' : '#0f172a';
+    ctx.fillStyle = col;
+
+    // Obere linke Ecke (Wert + Farb-Symbol nebeneinander, damit es in gestapelten Reihen perfekt lesbar ist)
+    ctx.textAlign = 'left';
+    ctx.font = '900 16px system-ui, sans-serif';
+    ctx.fillText(card.label, x + 7, y + 20);
+    ctx.font = '700 15px system-ui, sans-serif';
+    ctx.fillText(card.sym, x + (card.label === '10' ? 29 : 21), y + 20);
+
+    // Untere rechte Ecke
+    ctx.textAlign = 'right';
+    ctx.font = '900 15px system-ui, sans-serif';
+    ctx.fillText(card.label + card.sym, x + w - 7, y + h - 8);
+
+    // Zentrales Kartenmotiv
+    ctx.textAlign = 'center';
+    if (card.rank >= 11) {
+        // Bildkarten (Bube J, Dame Q, König K) mit goldumrandetem Hof-Spiegel
+        ctx.fillStyle = card.color === 'red' ? '#fef2f2' : '#f8fafc';
+        ctx.strokeStyle = '#eab308';
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(x + 14, y + 28, w - 28, h - 56);
+        ctx.strokeRect(x + 14, y + 28, w - 28, h - 56);
+
+        const royalEmoji = card.rank === 13 ? '👑' : (card.rank === 12 ? '👸' : '⚔️');
+        ctx.font = '26px system-ui, sans-serif';
+        ctx.fillText(royalEmoji, x + w * 0.5, y + h * 0.48);
+
+        ctx.fillStyle = col;
+        ctx.font = '900 22px system-ui, sans-serif';
+        ctx.fillText(card.label + ' ' + card.sym, x + w * 0.5, y + h * 0.72);
+    } else if (card.rank === 1) {
+        // Ass mit großem Prunk-Symbol
+        ctx.font = '52px system-ui, sans-serif';
+        ctx.fillText(card.sym, x + w * 0.5, y + h * 0.62);
+    } else {
+        // Zahlenkarten 2..10
+        ctx.font = '38px system-ui, sans-serif';
+        ctx.fillText(card.sym, x + w * 0.5, y + h * 0.58);
+        ctx.font = '800 13px system-ui, sans-serif';
+        ctx.globalAlpha = 0.75;
+        ctx.fillText(`${card.label} ${card.sym}`, x + w * 0.5, y + h * 0.76);
+    }
+
+    ctx.restore();
+}
+
+function solDrawEmptySlot(ctx, x, y, label) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(6, 78, 59, 0.55)';
+    ctx.strokeStyle = 'rgba(167, 243, 208, 0.38)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, SOL_CW, SOL_CH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    if (label) {
+        ctx.fillStyle = 'rgba(167, 243, 208, 0.45)';
+        ctx.textAlign = 'center';
+        ctx.font = '800 28px system-ui, sans-serif';
+        ctx.fillText(label, x + SOL_CW * 0.5, y + SOL_CH * 0.56);
+    }
+    ctx.restore();
+}
+
+function solDraw() {
+    const canvas = document.getElementById('solCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Klassischer grüner Filz-Spieltisch
+    const bg = ctx.createRadialGradient(W * 0.5, H * 0.35, 60, W * 0.5, H * 0.5, W * 0.75);
+    bg.addColorStop(0, '#15803d');
+    bg.addColorStop(0.65, '#166534');
+    bg.addColorStop(1, '#064e3b');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // 1. Stock (Nachziehstapel links oben)
+    solDrawEmptySlot(ctx, SOL_X0, SOL_YTOP, '↻');
+    if (solStock.length > 0) {
+        const layers = Math.min(3, Math.ceil(solStock.length / 8));
+        for (let i = 0; i < layers; i++) {
+            solDrawCardBack(ctx, SOL_X0 + i * 2, SOL_YTOP + i * 1.5, SOL_CW, SOL_CH);
+        }
+        // Kartenanzahl-Badge auf dem Nachziehstapel
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        ctx.beginPath();
+        ctx.roundRect(SOL_X0 + SOL_CW - 32, SOL_YTOP + SOL_CH - 24, 26, 18, 5);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.font = '800 11px system-ui, sans-serif';
+        ctx.fillText(String(solStock.length), SOL_X0 + SOL_CW - 19, SOL_YTOP + SOL_CH - 11);
+    }
+
+    // 2. Waste (Ablagestapel daneben)
+    solDrawEmptySlot(ctx, SOL_X0 + SOL_DX, SOL_YTOP, '');
+    const wasteVisibleCount = solWaste.length - (solDrag && solDrag.sourceType === 'waste' ? 1 : 0);
+    if (wasteVisibleCount > 0) {
+        const showN = Math.min(solDrawCount === 3 ? 3 : 1, wasteVisibleCount);
+        const startIdx = wasteVisibleCount - showN;
+        for (let i = 0; i < showN; i++) {
+            const c = solWaste[startIdx + i];
+            solDrawCardFace(ctx, c, SOL_X0 + SOL_DX + i * 22, SOL_YTOP, SOL_CW, SOL_CH);
+        }
+    }
+
+    // 3. 4 Foundations (Ass-Ablagen oben rechts)
+    const suitHints = ['♠', '♥', '♣', '♦'];
+    for (let f = 0; f < 4; f++) {
+        const fx = SOL_X0 + (3 + f) * SOL_DX;
+        solDrawEmptySlot(ctx, fx, SOL_YTOP, suitHints[f]);
+        const fPile = solFoundations[f];
+        const fLen  = fPile.length - (solDrag && solDrag.sourceType === 'foundation' && solDrag.sourceIdx === f ? 1 : 0);
+        if (fLen > 0) {
+            solDrawCardFace(ctx, fPile[fLen - 1], fx, SOL_YTOP, SOL_CW, SOL_CH);
+        }
+    }
+
+    // 4. 7 Tableau-Spalten
+    for (let c = 0; c < 7; c++) {
+        const tx = SOL_X0 + c * SOL_DX;
+        solDrawEmptySlot(ctx, tx, SOL_YTAB, 'K');
+        const col = solTableau[c];
+        const coords = solGetColumnCardPositions(c);
+        const limit = (solDrag && solDrag.sourceType === 'tableau' && solDrag.sourceIdx === c)
+            ? solDrag.cardIdx
+            : col.length;
+
+        for (let i = 0; i < limit; i++) {
+            const card = col[i];
+            const pt   = coords[i];
+            if (card.faceUp) {
+                solDrawCardFace(ctx, card, pt.x, pt.y, SOL_CW, SOL_CH);
+            } else {
+                solDrawCardBack(ctx, pt.x, pt.y, SOL_CW, SOL_CH);
+            }
+        }
+    }
+
+    // 5. Tipp-Markierung (falls aktiv)
+    if (solHintBox && Date.now() < solHintBox.until) {
+        ctx.save();
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 4;
+        if (solHintBox.fromRect) {
+            ctx.beginPath();
+            ctx.roundRect(solHintBox.fromRect.x - 3, solHintBox.fromRect.y - 3, SOL_CW + 6, SOL_CH + 6, 10);
+            ctx.stroke();
+        }
+        if (solHintBox.toRect) {
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.roundRect(solHintBox.toRect.x - 3, solHintBox.toRect.y - 3, SOL_CW + 6, SOL_CH + 6, 10);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // 6. Aktuell gezogene Karten (Drag & Drop)
+    if (solDrag && solDrag.cards.length > 0) {
+        for (let i = 0; i < solDrag.cards.length; i++) {
+            solDrawCardFace(
+                ctx,
+                solDrag.cards[i],
+                solDrag.curX - solDrag.offsetX,
+                solDrag.curY - solDrag.offsetY + i * 24,
+                SOL_CW,
+                SOL_CH
+            );
+        }
+    }
+
+    // 7. Windows-Siegeskaskade (Hüpfendes Karten-Feuerwerk + Stempelspur)
+    if (solWon) {
+        solCascadeTrail.forEach(st => {
+            solDrawCardFace(ctx, st.card, st.x, st.y, SOL_CW, SOL_CH);
+        });
+        if (solCascadeActive) {
+            solDrawCardFace(ctx, solCascadeActive.card, solCascadeActive.x, solCascadeActive.y, SOL_CW, SOL_CH);
+        }
+
+        // Sieg-Banner oben in der Mitte
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(W * 0.5 - 230, H - 118, 460, 96, 18);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#facc15';
+        ctx.font = '900 22px system-ui, sans-serif';
+        ctx.fillText('🏆 SOLITÄR GEWONNEN! KARTEN-FEUERWERK!', W * 0.5, H - 80);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '700 14px system-ui, sans-serif';
+        ctx.fillText(`Endstand: ${solScore} Punkte  •  ${solMoves} Züge  •  Zeit: ${solFormatTime(solElapsedSec)}`, W * 0.5, H - 54);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '800 13px system-ui, sans-serif';
+        ctx.fillText('▶ Klicke auf „Neues Spiel“ für die nächste Runde!', W * 0.5, H - 32);
+        ctx.restore();
+    }
+}
+
+function solCascadeLoop() {
+    if (activeGameKey === 'solitaire' && solWon && (solCascadeActive || solCascadeQueue.length > 0)) {
+        const canvas = document.getElementById('solCanvas');
+        const W = canvas ? canvas.width : 960;
+        const H = canvas ? canvas.height : 580;
+
+        if (!solCascadeActive) {
+            solSpawnNextCascadeCard();
+        } else {
+            solCascadeActive.x += solCascadeActive.vx;
+            solCascadeActive.y += solCascadeActive.vy;
+            solCascadeActive.vy += 0.62; // Schwerkraft
+
+            // Aufprall am unteren Tischrand -> klassischer Windows-Solitär-Bounce!
+            if (solCascadeActive.y + SOL_CH >= H) {
+                solCascadeActive.y = H - SOL_CH;
+                solCascadeActive.vy = -Math.abs(solCascadeActive.vy) * 0.78;
+            }
+
+            // Klassische Stempelspur hinterlassen
+            solCascadeTrail.push({
+                card: solCascadeActive.card,
+                x:    solCascadeActive.x,
+                y:    solCascadeActive.y
+            });
+            if (solCascadeTrail.length > 260) {
+                solCascadeTrail.shift();
+            }
+
+            if (solCascadeActive.x < -SOL_CW || solCascadeActive.x > W + SOL_CW) {
+                solSpawnNextCascadeCard();
+            }
+        }
+        solDraw();
+    }
+    requestAnimationFrame(solCascadeLoop);
+}
+
+function solGetCanvasPt(canvas, clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    return {
+        x: (clientX - r.left) * (canvas.width / r.width),
+        y: (clientY - r.top) * (canvas.height / r.height)
+    };
+}
+
+function solHitTest(px, py) {
+    // 1. Stock (Nachziehstapel)
+    if (px >= SOL_X0 && px <= SOL_X0 + SOL_CW && py >= SOL_YTOP && py <= SOL_YTOP + SOL_CH) {
+        return { type: 'stock' };
+    }
+
+    // 2. Waste (Ablagestapel – oberste sichtbare Karte)
+    if (solWaste.length > 0) {
+        const showN = Math.min(solDrawCount === 3 ? 3 : 1, solWaste.length);
+        const wx = SOL_X0 + SOL_DX + (showN - 1) * 22;
+        if (px >= wx && px <= wx + SOL_CW && py >= SOL_YTOP && py <= SOL_YTOP + SOL_CH) {
+            return {
+                type: 'waste',
+                cardIdx: solWaste.length - 1,
+                cards: [solWaste[solWaste.length - 1]],
+                rect: { x: wx, y: SOL_YTOP }
+            };
+        }
+    }
+
+    // 3. Foundations (4 Ass-Ablagen)
+    for (let f = 0; f < 4; f++) {
+        const fx = SOL_X0 + (3 + f) * SOL_DX;
+        if (px >= fx && px <= fx + SOL_CW && py >= SOL_YTOP && py <= SOL_YTOP + SOL_CH) {
+            const pile = solFoundations[f];
+            if (pile.length > 0) {
+                return {
+                    type: 'foundation',
+                    sourceIdx: f,
+                    cardIdx: pile.length - 1,
+                    cards: [pile[pile.length - 1]],
+                    rect: { x: fx, y: SOL_YTOP }
+                };
+            }
+        }
+    }
+
+    // 4. Tableau (7 Spalten – von der obersten Karte rückwärts prüfen)
+    for (let c = 0; c < 7; c++) {
+        const col = solTableau[c];
+        const coords = solGetColumnCardPositions(c);
+        for (let i = col.length - 1; i >= 0; i--) {
+            const pt = coords[i];
+            if (px >= pt.x && px <= pt.x + SOL_CW && py >= pt.y && py <= pt.y + SOL_CH) {
+                if (col[i].faceUp) {
+                    return {
+                        type: 'tableau',
+                        sourceIdx: c,
+                        cardIdx: i,
+                        cards: col.slice(i),
+                        rect: { x: pt.x, y: pt.y }
+                    };
+                }
+                return null;
+            }
+        }
+    }
+    return null;
+}
+
+function solFinishDragDrop(px, py) {
+    if (!solDrag) return;
+    const d = solDrag;
+    solDrag = null;
+
+    const dist = Math.hypot(px - d.startX, py - d.startY);
+    if (!d.moved && dist < 8) {
+        // Einfacher Klick / Antippen ohne Ziehen -> Automatischer Komfort-Zug!
+        solTryAutoMoveCard(d.sourceType, d.sourceIdx, d.cardIdx, true);
+        solDraw();
+        return;
+    }
+
+    const leadCard = d.cards[0];
+    const centerX  = px - d.offsetX + SOL_CW * 0.5;
+    const centerY  = py - d.offsetY + SOL_CH * 0.5;
+
+    // 1. Prüfe Drop auf eine der 4 Foundations (nur Einzelkarten)
+    if (d.cards.length === 1 && centerY < SOL_YTAB + 10) {
+        for (let f = 0; f < 4; f++) {
+            const fx = SOL_X0 + (3 + f) * SOL_DX;
+            if (Math.abs(centerX - (fx + SOL_CW * 0.5)) < SOL_CW * 0.65 && solCanDropOnFoundation(leadCard, f)) {
+                solPushUndo();
+                if (d.sourceType === 'waste') {
+                    solWaste.pop();
+                } else if (d.sourceType === 'tableau') {
+                    solTableau[d.sourceIdx].pop();
+                    solFlipTopTableauIfNeeded(d.sourceIdx);
+                } else if (d.sourceType === 'foundation') {
+                    solFoundations[d.sourceIdx].pop();
+                }
+                solFoundations[f].push(leadCard);
+                if (d.sourceType !== 'foundation') solScore += 10;
+                solMoves++;
+                solHintBox = null;
+                solUpdateHud();
+                solCheckVictory();
+                solDraw();
+                return;
+            }
+        }
+    }
+
+    // 2. Prüfe Drop auf eine der 7 Tableau-Spalten
+    let bestCol = -1;
+    let bestDist = 999;
+    for (let c = 0; c < 7; c++) {
+        if (d.sourceType === 'tableau' && d.sourceIdx === c) continue;
+        const tx = SOL_X0 + c * SOL_DX + SOL_CW * 0.5;
+        const dx = Math.abs(centerX - tx);
+        if (dx < SOL_CW * 0.72 && dx < bestDist && solCanDropOnTableau(leadCard, c)) {
+            bestDist = dx;
+            bestCol  = c;
+        }
+    }
+
+    if (bestCol >= 0) {
+        solPushUndo();
+        if (d.sourceType === 'waste') {
+            solWaste.pop();
+            solScore += 5;
+        } else if (d.sourceType === 'tableau') {
+            solTableau[d.sourceIdx].splice(d.cardIdx);
+            solFlipTopTableauIfNeeded(d.sourceIdx);
+        } else if (d.sourceType === 'foundation') {
+            solFoundations[d.sourceIdx].pop();
+            solScore = Math.max(0, solScore - 10);
+        }
+        solTableau[bestCol].push(...d.cards);
+        solMoves++;
+        solHintBox = null;
+        solUpdateHud();
+    }
+
+    solDraw();
+}
+
+function solInit() {
+    if (solInitialized) return;
+    solInitialized = true;
+
+    const canvas = document.getElementById('solCanvas');
+    if (canvas) {
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 2) return;
+            const pt = solGetCanvasPt(canvas, e.clientX, e.clientY);
+            const hit = solHitTest(pt.x, pt.y);
+            if (!hit) return;
+            if (hit.type === 'stock') {
+                solDrawStockClick();
+                return;
+            }
+            solDrag = {
+                sourceType: hit.type,
+                sourceIdx:  hit.sourceIdx ?? 0,
+                cardIdx:    hit.cardIdx ?? 0,
+                cards:      hit.cards,
+                startX:     pt.x,
+                startY:     pt.y,
+                curX:       pt.x,
+                curY:       pt.y,
+                offsetX:    pt.x - hit.rect.x,
+                offsetY:    pt.y - hit.rect.y,
+                moved:      false
+            };
+            solDraw();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!solDrag) return;
+            const pt = solGetCanvasPt(canvas, e.clientX, e.clientY);
+            solDrag.curX = pt.x;
+            solDrag.curY = pt.y;
+            if (Math.hypot(pt.x - solDrag.startX, pt.y - solDrag.startY) >= 8) {
+                solDrag.moved = true;
+            }
+            solDraw();
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!solDrag) return;
+            const pt = solGetCanvasPt(canvas, e.clientX, e.clientY);
+            solFinishDragDrop(pt.x, pt.y);
+        });
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const pt = solGetCanvasPt(canvas, e.clientX, e.clientY);
+            const hit = solHitTest(pt.x, pt.y);
+            if (hit && hit.type !== 'stock') {
+                solTryAutoMoveCard(hit.type, hit.sourceIdx ?? 0, hit.cardIdx ?? 0, true);
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (!e.touches[0]) return;
+            e.preventDefault();
+            const pt = solGetCanvasPt(canvas, e.touches[0].clientX, e.touches[0].clientY);
+            const hit = solHitTest(pt.x, pt.y);
+            if (!hit) return;
+            if (hit.type === 'stock') {
+                solDrawStockClick();
+                return;
+            }
+            solDrag = {
+                sourceType: hit.type,
+                sourceIdx:  hit.sourceIdx ?? 0,
+                cardIdx:    hit.cardIdx ?? 0,
+                cards:      hit.cards,
+                startX:     pt.x,
+                startY:     pt.y,
+                curX:       pt.x,
+                curY:       pt.y,
+                offsetX:    pt.x - hit.rect.x,
+                offsetY:    pt.y - hit.rect.y,
+                moved:      false
+            };
+            solDraw();
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!solDrag || !e.touches[0]) return;
+            e.preventDefault();
+            const pt = solGetCanvasPt(canvas, e.touches[0].clientX, e.touches[0].clientY);
+            solDrag.curX = pt.x;
+            solDrag.curY = pt.y;
+            if (Math.hypot(pt.x - solDrag.startX, pt.y - solDrag.startY) >= 8) {
+                solDrag.moved = true;
+            }
+            solDraw();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (!solDrag) return;
+            e.preventDefault();
+            solFinishDragDrop(solDrag.curX, solDrag.curY);
+        }, { passive: false });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (activeGameKey !== 'solitaire') return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target && e.target.tagName) || '')) return;
+        if (e.key === 'z' || e.key === 'Z') {
+            solUndo();
+        } else if (e.key === 'h' || e.key === 'H') {
+            solShowHint();
+        }
+    });
+
+    solNewGame();
+    requestAnimationFrame(solCascadeLoop);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboardRows(<?= json_encode($initialLeaderboard) ?>);
     renderFavoriteGameStars();
@@ -19499,6 +21019,7 @@ document.addEventListener('DOMContentLoaded', () => {
     flappyInit();
     abInit();
     mhInit();
+    solInit();
     imInit();
     lemInit();
     ninjaInit();
