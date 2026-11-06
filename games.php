@@ -1158,141 +1158,7 @@ $csrfToken = getCsrfToken();
 </style>
 
 <div class="space-y-6">
-    <!-- KOPFBEREICH & KOMFORT-SPIELAUSWAHL -->
-    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3.5">
-                <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shadow-xs shrink-0">
-                    🎮
-                </div>
-                <div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                            MiniCloud Spiele-Zentrale &amp; Pausenraum
-                        </h1>
-                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                            <?= count($gamesCatalog) ?> Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
-                        </span>
-                    </div>
-                    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                        100 % werbefrei &amp; lokal im Browser – wähle unten eine Kategorie, hefte deine Lieblingsspiele per <strong>⭐ Stern</strong> an oder wechsle direkt per Schnellauswahl.
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2.5 text-xs">
-                <!-- Direkt-Umschalter (auch sichtbar, wenn die große Übersicht eingeklappt ist) -->
-                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                    <span class="text-slate-500 dark:text-slate-400 font-semibold">Spiel:</span>
-                    <select id="quickGameSelect" onchange="selectCloudGame(this.value)"
-                            class="bg-transparent font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer">
-                        <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
-                            <option value="<?= e((string)$gKey) ?>" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                                <?= $gMeta['icon'] ?> <?= e($gMeta['title']) ?> (<?= e($gMeta['category']) ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                    <span class="text-slate-500 dark:text-slate-400">Meine Runden:</span>
-                    <strong class="ml-1 text-slate-900 dark:text-white" id="myTotalPlaysBadge"><?= $myTotalPlays ?></strong>
-                </div>
-
-                <button type="button" id="toggleCatalogBtn" onclick="toggleGamesCatalogCollapse()"
-                        class="px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/70 hover:bg-brand-100 dark:hover:bg-brand-900/70 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 font-bold cursor-pointer transition-colors">
-                    🔼 Übersicht einklappen
-                </button>
-
-                <button type="button" onclick="toggleGameFullscreen()"
-                        class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                        title="Aktuelles Spiel im Vollbildmodus öffnen (ideal für Smartphone & Tablet)">
-                    <span>⛶</span>
-                    <span>Vollbild</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- KATEGORIE-REITER, SUCHE & ÜBERSICHTLICHES 4-SPALTEN-KARTENRASTER -->
-        <div id="gamesCatalogWrapper" class="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                    <button type="button" onclick="filterGamesCatalog('all')" id="gameCatBtn-all"
-                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-brand-600 text-white shadow-2xs cursor-pointer transition-all">
-                        🌟 Alle Spiele (<?= count($gamesCatalog) ?>)
-                    </button>
-                    <button type="button" onclick="filterGamesCatalog('fav')" id="gameCatBtn-fav"
-                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        ⭐ Favoriten
-                    </button>
-                    <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
-                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🕹️ Retro &amp; Arcade (11)
-                    </button>
-                    <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
-                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🏎️ Rennspiel, Sport &amp; RPG (4)
-                    </button>
-                    <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
-                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
-                        🧠 Logik &amp; Duell (5)
-                    </button>
-                </div>
-
-                <div class="relative w-full sm:w-56">
-                    <input type="search" id="gameSearchInput" oninput="filterGamesCatalog(activeGameCategory)"
-                           placeholder="🔎 Spiel suchen…"
-                           class="w-full pl-3 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
-                </div>
-            </div>
-
-            <div id="gamesCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
-                    <?php
-                    $gKeyStr = (string)$gKey;
-                    $myBest  = $myBestByGame[$gKeyStr] ?? 0;
-                    $gGroup  = (string)($gMeta['group'] ?? 'arcade');
-                    ?>
-                    <div onclick="selectCloudGame('<?= e($gKeyStr) ?>')"
-                         id="gameTabBtn-<?= e($gKeyStr) ?>"
-                         data-game-key="<?= e($gKeyStr) ?>"
-                         data-game-group="<?= e($gGroup) ?>"
-                         data-game-search="<?= e(mb_strtolower($gMeta['title'] . ' ' . $gMeta['category'] . ' ' . $gMeta['desc'], 'UTF-8')) ?>"
-                         class="game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 <?= $gKeyStr === 'gummigeruch' ? 'bg-brand-600 text-white border-brand-600 shadow-md ring-2 ring-brand-400/50' : 'bg-slate-50/70 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-700/80 hover:border-brand-400 hover:bg-white dark:hover:bg-slate-800' ?>">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br <?= e($gMeta['color']) ?> text-white flex items-center justify-center text-xl shadow-xs shrink-0">
-                            <?= $gMeta['icon'] ?>
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center justify-between gap-1">
-                                <p class="text-xs sm:text-sm font-extrabold leading-tight truncate"><?= e($gMeta['title']) ?></p>
-                                <button type="button"
-                                        onclick="event.stopPropagation(); toggleFavoriteGame('<?= e($gKeyStr) ?>')"
-                                        id="gameFavStar-<?= e($gKeyStr) ?>"
-                                        class="text-sm opacity-60 hover:opacity-100 hover:scale-110 transition-transform cursor-pointer shrink-0"
-                                        title="Als Lieblingsspiel anheften / lösen">
-                                    ☆
-                                </button>
-                            </div>
-                            <p class="text-[11px] opacity-80 line-clamp-1 mt-0.5"><?= e($gMeta['desc']) ?></p>
-                            <div class="flex items-center justify-between gap-2 mt-1.5">
-                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
-                                    <?= e($gMeta['category']) ?>
-                                </span>
-                                <span class="text-[10px] font-bold opacity-90 truncate" id="myBestLabel-<?= e($gKeyStr) ?>">
-                                    <?= $myBest > 0 ? '🏆 ' . number_format($myBest, 0, ',', '.') : 'Noch ohne Wertung' ?>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-            <p id="gamesEmptyFilterHint" class="hidden text-center text-xs text-slate-400 py-3 italic">
-                Keine Spiele in dieser Ansicht gefunden. Klicke auf den ☆ Stern einer Spielkarte, um Favoriten zu markieren!
-            </p>
-        </div>
-    </div>
-
-    <!-- HAUPTBEREICH: LINKS DAS AKTIVE SPIEL (8 SPALTEN) / RECHTS DIE CLOUD-BESTENLISTE (4 SPALTEN) -->
+    <!-- HAUPTBEREICH OBEN: LINKS DAS AKTIVE SPIEL (8 SPALTEN) / RECHTS DIE CLOUD-BESTENLISTE (4 SPALTEN) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
         <!-- =============================================================== -->
@@ -3185,6 +3051,140 @@ $csrfToken = getCsrfToken();
             </div>
         </div>
     </div>
+
+    <!-- UNTERER BEREICH: KOMFORT-SPIELAUSWAHL (DROPDOWN STANDARD, KACHELN STANDARDMÄSSIG AUSGEBLENDET) -->
+    <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/70 border border-brand-200/70 dark:border-brand-800/70 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl shadow-xs shrink-0">
+                    🎮
+                </div>
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                            MiniCloud Spiele-Zentrale &amp; Spielauswahl
+                        </h1>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                            <?= count($gamesCatalog) ?> Spiele &middot; Cloud-Highscores &middot; Ghost- &amp; Live-Duelle
+                        </span>
+                    </div>
+                    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        Wechsle das Spiel direkt über das Dropdown-Menü oder blende bei Bedarf alle Spiel-Kacheln ein.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5 text-xs">
+                <!-- Direkt-Umschalter per Dropdown -->
+                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span class="text-slate-500 dark:text-slate-400 font-semibold">Spiel:</span>
+                    <select id="quickGameSelect" onchange="selectCloudGame(this.value, true)"
+                            class="bg-transparent font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer">
+                        <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
+                            <option value="<?= e((string)$gKey) ?>" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                <?= $gMeta['icon'] ?> <?= e($gMeta['title']) ?> (<?= e($gMeta['category']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span class="text-slate-500 dark:text-slate-400">Meine Runden:</span>
+                    <strong class="ml-1 text-slate-900 dark:text-white" id="myTotalPlaysBadge"><?= $myTotalPlays ?></strong>
+                </div>
+
+                <button type="button" id="toggleCatalogBtn" onclick="toggleGamesCatalogCollapse()"
+                        class="px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/70 hover:bg-brand-100 dark:hover:bg-brand-900/70 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 font-bold cursor-pointer transition-colors">
+                    🔽 Spiele-Kacheln einblenden
+                </button>
+
+                <button type="button" onclick="toggleGameFullscreen()"
+                        class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                        title="Aktuelles Spiel im Vollbildmodus öffnen (ideal für Smartphone & Tablet)">
+                    <span>⛶</span>
+                    <span>Vollbild</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- KATEGORIE-REITER, SUCHE & ÜBERSICHTLICHES 4-SPALTEN-KARTENRASTER (STANDARDMÄSSIG AUSGEBLENDET) -->
+        <div id="gamesCatalogWrapper" class="hidden pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                    <button type="button" onclick="filterGamesCatalog('all')" id="gameCatBtn-all"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-brand-600 text-white shadow-2xs cursor-pointer transition-all">
+                        🌟 Alle Spiele (<?= count($gamesCatalog) ?>)
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('fav')" id="gameCatBtn-fav"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        ⭐ Favoriten
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('arcade')" id="gameCatBtn-arcade"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🕹️ Retro &amp; Arcade
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('action')" id="gameCatBtn-action"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🏎️ Rennspiel, Sport &amp; Action
+                    </button>
+                    <button type="button" onclick="filterGamesCatalog('logic')" id="gameCatBtn-logic"
+                            class="game-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-all">
+                        🧠 Logik &amp; Duell
+                    </button>
+                </div>
+
+                <div class="relative w-full sm:w-56">
+                    <input type="search" id="gameSearchInput" oninput="filterGamesCatalog(activeGameCategory)"
+                           placeholder="🔎 Spiel suchen…"
+                           class="w-full pl-3 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+
+            <div id="gamesCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                <?php foreach ($gamesCatalog as $gKey => $gMeta): ?>
+                    <?php
+                    $gKeyStr = (string)$gKey;
+                    $myBest  = $myBestByGame[$gKeyStr] ?? 0;
+                    $gGroup  = (string)($gMeta['group'] ?? 'arcade');
+                    ?>
+                    <div onclick="selectCloudGame('<?= e($gKeyStr) ?>', true)"
+                         id="gameTabBtn-<?= e($gKeyStr) ?>"
+                         data-game-key="<?= e($gKeyStr) ?>"
+                         data-game-group="<?= e($gGroup) ?>"
+                         data-game-search="<?= e(mb_strtolower($gMeta['title'] . ' ' . $gMeta['category'] . ' ' . $gMeta['desc'], 'UTF-8')) ?>"
+                         class="game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 <?= $gKeyStr === 'gummigeruch' ? 'bg-brand-600 text-white border-brand-600 shadow-md ring-2 ring-brand-400/50' : 'bg-slate-50/70 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-700/80 hover:border-brand-400 hover:bg-white dark:hover:bg-slate-800' ?>">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br <?= e($gMeta['color']) ?> text-white flex items-center justify-center text-xl shadow-xs shrink-0">
+                            <?= $gMeta['icon'] ?>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1">
+                                <p class="text-xs sm:text-sm font-extrabold leading-tight truncate"><?= e($gMeta['title']) ?></p>
+                                <button type="button"
+                                        onclick="event.stopPropagation(); toggleFavoriteGame('<?= e($gKeyStr) ?>')"
+                                        id="gameFavStar-<?= e($gKeyStr) ?>"
+                                        class="text-sm opacity-60 hover:opacity-100 hover:scale-110 transition-transform cursor-pointer shrink-0"
+                                        title="Als Lieblingsspiel anheften / lösen">
+                                    ☆
+                                </button>
+                            </div>
+                            <p class="text-[11px] opacity-80 line-clamp-1 mt-0.5"><?= e($gMeta['desc']) ?></p>
+                            <div class="flex items-center justify-between gap-2 mt-1.5">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 truncate">
+                                    <?= e($gMeta['category']) ?>
+                                </span>
+                                <span class="text-[10px] font-bold opacity-90 truncate" id="myBestLabel-<?= e($gKeyStr) ?>">
+                                    <?= $myBest > 0 ? '🏆 ' . number_format($myBest, 0, ',', '.') : 'Noch ohne Wertung' ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <p id="gamesEmptyFilterHint" class="hidden text-center text-xs text-slate-400 py-3 italic">
+                Keine Spiele in dieser Ansicht gefunden. Klicke auf den ☆ Stern einer Spielkarte, um Favoriten zu markieren!
+            </p>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -3286,7 +3286,7 @@ function toggleGamesCatalogCollapse() {
     const btn  = document.getElementById('toggleCatalogBtn');
     if (!wrap || !btn) return;
     const isHidden = wrap.classList.toggle('hidden');
-    btn.textContent = isHidden ? '🔽 Spiele-Übersicht öffnen' : '🔼 Übersicht einklappen';
+    btn.textContent = isHidden ? '🔽 Spiele-Kacheln einblenden' : '🔼 Spiele-Kacheln ausblenden';
 }
 
 function syncGameFullscreenUi() {
@@ -3350,7 +3350,7 @@ document.addEventListener('keydown', (e) => {
 // =============================================================================
 // ZENTRALE SPIEL-UMSCHALTUNG & HIGHSCORE-API
 // =============================================================================
-function selectCloudGame(gameKey) {
+function selectCloudGame(gameKey, scrollToStage = false) {
     if (!GAMES_CATALOG[gameKey]) return;
     activeGameKey = gameKey;
 
@@ -3366,6 +3366,13 @@ function selectCloudGame(gameKey) {
     document.querySelectorAll('.game-panel').forEach((el) => el.classList.add('hidden'));
     const targetPanel = document.getElementById('gamePanel-' + gameKey);
     if (targetPanel) targetPanel.classList.remove('hidden');
+
+    if (scrollToStage) {
+        const stageCard = document.getElementById('gamesActiveStageCard');
+        if (stageCard) {
+            stageCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
 
     document.querySelectorAll('.game-tab-btn').forEach((btn) => {
         btn.className = 'game-tab-btn group relative text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 bg-slate-50/70 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-700/80 hover:border-brand-400 hover:bg-white dark:hover:bg-slate-800';
