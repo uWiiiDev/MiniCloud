@@ -5574,14 +5574,30 @@ async function revokeUserShare(userShareId) {
             progressText.textContent = `Lade ${itemsToUpload.length} Datei(en) in ${targetDisplay} hoch...`;
         }
 
+        const sfInput = uploadForm.querySelector('input[name="shared_folder_id"]');
+        const gfInput = uploadForm.querySelector('input[name="group_folder_id"]');
+
+        // Variante B: Über den globalen SharedWorker (upload_worker.js) starten,
+        // damit der Upload beim Wechsel auf andere MiniCloud-Seiten nahtlos weiterläuft!
+        if (window.McGlobalUpload && typeof window.McGlobalUpload.startUpload === 'function') {
+            isUploading = false;
+            window.McGlobalUpload.startUpload({
+                csrfToken: csrfToken,
+                targetFolder: effectiveFolder,
+                sharedFolderId: sfInput ? sfInput.value : '',
+                groupFolderId: gfInput ? gfInput.value : '',
+                targetDisplay: targetDisplay,
+                items: itemsToUpload
+            });
+            return;
+        }
+
         const formData = new FormData();
         formData.append('csrf_token', csrfToken);
         formData.append('target_folder', effectiveFolder);
-        const sfInput = uploadForm.querySelector('input[name="shared_folder_id"]');
         if (sfInput) {
             formData.append('shared_folder_id', sfInput.value);
         }
-        const gfInput = uploadForm.querySelector('input[name="group_folder_id"]');
         if (gfInput) {
             formData.append('group_folder_id', gfInput.value);
         }

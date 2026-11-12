@@ -2276,8 +2276,8 @@ if (
 
     window.McGlobalRadio = api;
 
-    // Klick-Interceptor im Hauptfenster: Wenn das Radio aktiv spielt, öffne Modulwechsel
-    // unterbrechungsfrei im Viewport, sodass der Audio-Stream zu 100 % ohne Aussetzer weiterläuft.
+    // Klick-Interceptor im Hauptfenster: Wenn das Radio aktiv spielt ODER ein Hintergrund-Upload läuft,
+    // öffne Modulwechsel unterbrechungsfrei im Viewport, sodass Stream & SharedWorker-Upload 100 % weiterlaufen.
     document.addEventListener('click', (ev) => {
         const anchor = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
         if (!anchor) return;
@@ -2287,8 +2287,9 @@ if (
             return;
         }
         const st = getState();
-        const isRadioActive = api.isPlaying() || Boolean(st && st.playing && st.streamUrl && !st.closed);
-        if (!isRadioActive) return;
+        const isRadioActive  = api.isPlaying() || Boolean(st && st.playing && st.streamUrl && !st.closed);
+        const isUploadActive = Boolean(window.McGlobalUpload && window.McGlobalUpload.isUploading());
+        if (!isRadioActive && !isUploadActive) return;
 
         if (shouldInterceptLinkClick(ev, anchor)) {
             ev.preventDefault();
@@ -2342,6 +2343,337 @@ if (
     } else {
         initAutoResume();
     }
+})();
+</script>
+
+<!-- ====================================================================== -->
+<!-- GLOBALER PERSISTENTER HINTERGRUND-UPLOAD-MONITOR (SHARED WORKER)       -->
+<!-- ====================================================================== -->
+<div id="mcGlobalUploadDock"
+     class="hidden fixed bottom-4 right-20 z-50 w-[calc(100vw-6.5rem)] sm:w-96 rounded-2xl bg-slate-900/95 text-white p-3.5 border border-brand-500/50 shadow-2xl backdrop-blur-md">
+    <div class="flex items-center justify-between gap-2 mb-1.5">
+        <div class="flex items-center gap-2 min-w-0">
+            <span id="mcGlobalUploadIcon" class="text-base shrink-0">📤</span>
+            <span id="mcGlobalUploadTitle" class="text-xs font-extrabold truncate">Hintergrund-Upload läuft…</span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+            <span id="mcGlobalUploadPct" class="text-xs font-mono font-extrabold text-brand-400">0%</span>
+            <a href="index.php" id="mcGlobalUploadOpenBtn"
+               class="hidden px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-colors">
+                📂 Öffnen
+            </a>
+            <button type="button" id="mcGlobalUploadActionBtn"
+                    onclick="window.McGlobalUpload && window.McGlobalUpload.cancelOrDismiss()"
+                    class="w-6 h-6 rounded-lg bg-white/10 hover:bg-rose-500/40 text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer"
+                    title="Abbrechen / Ausblenden">
+                ✕
+            </button>
+        </div>
+    </div>
+    <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-1.5">
+        <div id="mcGlobalUploadBar" class="h-full bg-gradient-to-r from-brand-500 to-emerald-400 transition-all duration-150" style="width: 0%"></div>
+    </div>
+    <div class="flex items-center justify-between gap-2 text-[11px] text-slate-300">
+        <span id="mcGlobalUploadSub" class="truncate">Bereite Übertragung vor…</span>
+        <span id="mcGlobalUploadSpeed" class="font-mono text-slate-400 shrink-0"></span>
+    </div>
+</div>
+
+<script>
+(() => {
+    try {
+        if (window.parent && window.parent !== window && window.parent.McGlobalUpload) {
+            window.McGlobalUpload = window.parent.McGlobalUpload;
+            window.parent.McGlobalUpload.registerChildDocument(window);
+            return;
+        }
+    } catch (e) {}
+
+    let workerPort = null;
+    let fallbackXhr = null;
+    let currentState = {
+        active: false,
+        status: 'idle',
+        pct: 0,
+        loaded: 0,
+        total: 0,
+        speedBps: 0,
+        fileCount: 0,
+        targetDisplay: 'Hauptverzeichnis',
+        redirectUrl: 'index.php',
+        message: ''
+    };
+    let lastStatus = 'idle';
+    let autoHideTimer = null;
+
+    const fmtBytes = (b) => {
+        const n = Math.max(0, Number(b) || 0);
+        if (n >= 1073741824) return (n / 1073741824).toFixed(2).replace('.', ',') + ' GB';
+        if (n >= 1048576) return (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
+        if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+        return n + ' B';
+    };
+
+    const getActiveContentWindow = () => {
+        try {
+            const rf = document.getElementById('mcRadioAppFrame');
+            if (rf && !rf.classList.contains('hidden') && rf.contentWindow) {
+                return rf.contentWindow;
+            }
+        } catch (e) {}
+        return window;
+    };
+
+    const isViewingFilesIndex = () => {
+        try {
+            const w = getActiveContentWindow();
+            const p = (w.location && w.location.pathname) || '';
+            return p.endsWith('/index.php') || p === '/' || p.endsWith('/');
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const renderDockInDoc = (doc, st, isChildFrame = false) => {
+        if (!doc) return;
+        const dock    = doc.getElementById('mcGlobalUploadDock');
+        const icon    = doc.getElementById('mcGlobalUploadIcon');
+        const title   = doc.getElementById('mcGlobalUploadTitle');
+        const pctEl   = doc.getElementById('mcGlobalUploadPct');
+        const bar     = doc.getElementById('mcGlobalUploadBar');
+        const sub     = doc.getElementById('mcGlobalUploadSub');
+        const spd     = doc.getElementById('mcGlobalUploadSpeed');
+        const openBtn = doc.getElementById('mcGlobalUploadOpenBtn');
+
+        // Falls auf index.php die große Fortschritts-Box existiert, ebenfalls synchronisieren
+        const idxWrap = doc.getElementById('uploadProgressWrapper');
+        const idxBar  = doc.getElementById('uploadProgressBar');
+        const idxPct  = doc.getElementById('uploadProgressPercent');
+        const idxTxt  = doc.getElementById('uploadProgressText');
+
+        if (st.status === 'idle') {
+            if (dock) dock.classList.add('hidden');
+            if (idxWrap) idxWrap.classList.add('hidden');
+            return;
+        }
+
+        // Im Child-Iframe das Dock ausgeblendet lassen, da das Eltern-Dock (z-50) bereits darüber schwebt
+        if (dock) {
+            dock.classList.toggle('hidden', Boolean(isChildFrame));
+        }
+
+        if (st.status === 'uploading') {
+            if (icon) icon.textContent = '📤';
+            if (title) title.textContent = `Upload (${st.fileCount} ${st.fileCount === 1 ? 'Datei' : 'Dateien'}) → ${st.targetDisplay}`;
+            if (pctEl) pctEl.textContent = `${st.pct}%`;
+            if (bar) bar.style.width = `${st.pct}%`;
+            if (sub) sub.textContent = `${fmtBytes(st.loaded)} von ${fmtBytes(st.total)}`;
+            if (spd) spd.textContent = st.speedBps > 0 ? `${fmtBytes(st.speedBps)}/s` : '';
+            if (openBtn) openBtn.classList.add('hidden');
+
+            if (idxWrap && idxBar && idxPct && idxTxt) {
+                idxWrap.classList.remove('hidden');
+                idxBar.style.width = `${st.pct}%`;
+                idxPct.textContent = `${st.pct}%`;
+                idxTxt.textContent = `Hochladen in ${st.targetDisplay} (${fmtBytes(st.loaded)} von ${fmtBytes(st.total)})…`;
+            }
+        } else if (st.status === 'done') {
+            if (icon) icon.textContent = '✅';
+            if (title) title.textContent = 'Upload abgeschlossen!';
+            if (pctEl) pctEl.textContent = '100%';
+            if (bar) bar.style.width = '100%';
+            if (sub) sub.textContent = st.message || `${st.fileCount} Datei(en) in ${st.targetDisplay} gespeichert.`;
+            if (spd) spd.textContent = '';
+            if (openBtn) {
+                openBtn.href = st.redirectUrl || 'index.php';
+                openBtn.classList.remove('hidden');
+            }
+        } else if (st.status === 'error' || st.status === 'cancelled') {
+            if (icon) icon.textContent = '⚠️';
+            if (title) title.textContent = st.status === 'cancelled' ? 'Upload abgebrochen' : 'Upload-Fehler';
+            if (sub) sub.textContent = st.message || 'Übertragung beendet.';
+            if (spd) spd.textContent = '';
+            if (openBtn) openBtn.classList.add('hidden');
+            if (idxWrap) idxWrap.classList.add('hidden');
+        }
+    };
+
+    const handleStateUpdate = (newState) => {
+        if (!newState) return;
+        const prevStatus = lastStatus;
+        currentState = Object.assign({}, currentState, newState);
+        lastStatus = currentState.status;
+
+        renderDockInDoc(document, currentState, false);
+        try {
+            const rf = document.getElementById('mcRadioAppFrame');
+            if (rf && rf.contentDocument) {
+                renderDockInDoc(rf.contentDocument, currentState, true);
+            }
+        } catch (e) {}
+
+        if (prevStatus === 'uploading' && currentState.status === 'done') {
+            if (isViewingFilesIndex()) {
+                // Wenn der Benutzer noch in der Dateiansicht ist, Dateiliste direkt aktualisieren
+                const w = getActiveContentWindow();
+                setTimeout(() => {
+                    w.location.href = currentState.redirectUrl || 'index.php';
+                }, 350);
+            }
+            if (autoHideTimer) clearTimeout(autoHideTimer);
+            autoHideTimer = setTimeout(() => {
+                api.cancelOrDismiss();
+            }, 9000);
+        }
+    };
+
+    // SharedWorker initialisieren (mit nahtlosem Fallback, falls der Browser keinen SharedWorker unterstützt)
+    try {
+        if (typeof SharedWorker !== 'undefined') {
+            const sw = new SharedWorker('upload_worker.js');
+            workerPort = sw.port;
+            workerPort.start();
+            workerPort.onmessage = (e) => {
+                const d = e.data || {};
+                if (d.type === 'upload_state' && d.state) {
+                    handleStateUpdate(d.state);
+                }
+            };
+        }
+    } catch (e) {
+        workerPort = null;
+    }
+
+    const startDirectFallbackUpload = (payload) => {
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        if (items.length === 0) return;
+        const totalBytes = items.reduce((acc, it) => acc + ((it.file && it.file.size) || 0), 0);
+        const startTs = Date.now();
+
+        handleStateUpdate({
+            active: true,
+            status: 'uploading',
+            pct: 0,
+            loaded: 0,
+            total: totalBytes,
+            speedBps: 0,
+            fileCount: items.length,
+            targetDisplay: payload.targetDisplay || 'Hauptverzeichnis',
+            redirectUrl: 'index.php',
+            message: ''
+        });
+
+        const fd = new FormData();
+        fd.append('csrf_token', payload.csrfToken || '');
+        fd.append('target_folder', payload.targetFolder || '');
+        fd.append('bg_worker', '1');
+        if (payload.sharedFolderId) fd.append('shared_folder_id', String(payload.sharedFolderId));
+        if (payload.groupFolderId) fd.append('group_folder_id', String(payload.groupFolderId));
+
+        for (const item of items) {
+            if (item && item.file) {
+                fd.append('files[]', item.file, item.file.name);
+                fd.append('relative_paths[]', item.relativePath || item.file.name);
+            }
+        }
+
+        const xhr = new XMLHttpRequest();
+        fallbackXhr = xhr;
+        xhr.open('POST', 'upload.php', true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.setRequestHeader('Accept', 'application/json');
+
+        xhr.upload.addEventListener('progress', (evt) => {
+            if (evt.lengthComputable) {
+                const pct = Math.min(99, Math.round((evt.loaded / Math.max(1, evt.total)) * 100));
+                const elapsed = Math.max(0.25, (Date.now() - startTs) / 1000);
+                handleStateUpdate({
+                    active: true,
+                    status: 'uploading',
+                    pct,
+                    loaded: evt.loaded,
+                    total: evt.total,
+                    speedBps: Math.round(evt.loaded / elapsed)
+                });
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            fallbackXhr = null;
+            let resp = null;
+            try { resp = JSON.parse(xhr.responseText); } catch (e) {}
+            const ok = resp ? Boolean(resp.success) : (xhr.status >= 200 && xhr.status < 300);
+            handleStateUpdate({
+                active: false,
+                status: ok ? 'done' : 'error',
+                pct: ok ? 100 : currentState.pct,
+                loaded: ok ? currentState.total : currentState.loaded,
+                redirectUrl: (resp && resp.redirect) ? resp.redirect : 'index.php',
+                message: (resp && resp.message) || (ok ? 'Upload abgeschlossen!' : 'Fehler beim Hochladen.')
+            });
+        });
+
+        xhr.addEventListener('error', () => {
+            fallbackXhr = null;
+            handleStateUpdate({ active: false, status: 'error', message: 'Netzwerkfehler beim Hochladen.' });
+        });
+
+        xhr.addEventListener('abort', () => {
+            fallbackXhr = null;
+            handleStateUpdate({ active: false, status: 'cancelled', message: 'Upload abgebrochen.' });
+        });
+
+        xhr.send(fd);
+    };
+
+    const api = {
+        isUploading: () => Boolean(currentState && currentState.active && currentState.status === 'uploading'),
+        startUpload: (payload) => {
+            if (autoHideTimer) {
+                clearTimeout(autoHideTimer);
+                autoHideTimer = null;
+            }
+            if (workerPort) {
+                try {
+                    workerPort.postMessage({ type: 'start_upload', payload });
+                    return;
+                } catch (e) {}
+            }
+            startDirectFallbackUpload(payload);
+        },
+        cancelOrDismiss: () => {
+            if (currentState.active) {
+                if (!confirm('Laufenden Hintergrund-Upload wirklich abbrechen?')) return;
+                if (workerPort) {
+                    workerPort.postMessage({ type: 'cancel_upload' });
+                } else if (fallbackXhr) {
+                    fallbackXhr.abort();
+                }
+            } else {
+                if (workerPort) {
+                    workerPort.postMessage({ type: 'dismiss' });
+                }
+                handleStateUpdate({ active: false, status: 'idle', pct: 0, loaded: 0, total: 0, message: '' });
+            }
+        },
+        registerChildDocument: (childWin) => {
+            try {
+                if (childWin && childWin.document) {
+                    renderDockInDoc(childWin.document, currentState, true);
+                }
+            } catch (e) {}
+        }
+    };
+
+    window.McGlobalUpload = api;
+
+    // Schutz vor versehentlichem Schließen des gesamten Browser-Tabs während eines laufenden Uploads
+    window.addEventListener('beforeunload', (e) => {
+        if (api.isUploading()) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
 })();
 </script>
 <?php endif; ?>

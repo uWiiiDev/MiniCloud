@@ -15,8 +15,11 @@ $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERV
  */
 function respondUpload(bool $success, string $message, bool $isAjax, string $redirectFolder = '', int $groupFolderId = 0, int $httpCode = 200, int $sharedFolderId = 0): never
 {
-    $type = $success ? 'success' : 'error';
-    setFlash($type, $message);
+    $isBgWorker = isset($_POST['bg_worker']) && (string)$_POST['bg_worker'] === '1';
+    if (!$isBgWorker) {
+        $type = $success ? 'success' : 'error';
+        setFlash($type, $message);
+    }
 
     $queryParams = [];
     if ($sharedFolderId > 0) {
@@ -68,6 +71,9 @@ if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
 
 $userId = (int)$_SESSION['user_id'];
 $isAdmin = isAdmin();
+if (isset($_POST['bg_worker']) && (string)$_POST['bg_worker'] === '1' && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 $pdo = getDB();
 
 // Optionaler freigegebener Ordner eines anderen Benutzers mit Schreibrecht (can_write = 1)
