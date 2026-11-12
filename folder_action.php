@@ -853,6 +853,14 @@ if ($action === 'batch_transfer_files') {
     $targetFolder = $targetSpec['folder'];
 
     if ($targetGfId !== null && !canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin)) {
+        if (isset($_POST['ajax']) && (string)$_POST['ajax'] === '1') {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok'      => false,
+                'message' => 'Sie besitzen keine Schreibberechtigung für den gewählten Ziel-Gruppenordner.',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         setFlash('error', 'Sie besitzen keine Schreibberechtigung für den gewählten Ziel-Gruppenordner.');
         header('Location: index.php');
         exit;
@@ -865,6 +873,8 @@ if ($action === 'batch_transfer_files') {
     $destLabel = formatTransferTargetLabel($pdo, $targetGfId, $targetFolder);
     $processedCount = 0;
     $processedFolderCount = 0;
+    $movedFileIds = [];
+    $movedTotalBytes = 0;
 
     // 6a. Ausgewählte Ordner verschieben oder kopieren (Überordner vor Unterordnern deduplizieren)
     if (!empty($rawFolders)) {
@@ -1118,6 +1128,8 @@ if ($action === 'batch_transfer_files') {
                 ':id'    => $fid,
             ]);
             $processedCount++;
+            $movedFileIds[]  = $fid;
+            $movedTotalBytes += (int)$file['file_size'];
         } else {
             $authFile = getAuthorizedFileForDownload($pdo, $userId, $fid, $isAdmin);
             if (!$authFile) {
@@ -1161,8 +1173,12 @@ if ($action === 'batch_transfer_files') {
                 ':enc'   => (int)($file['is_encrypted'] ?? 0),
             ]);
             $processedCount++;
+            $movedFileIds[]  = $fid;
+            $movedTotalBytes += $fileSize;
         }
     }
+
+    $isAjaxTransfer = isset($_POST['ajax']) && (string)$_POST['ajax'] === '1';
 
     if ($processedFolderCount > 0 || $processedCount > 0) {
         $parts = [];
@@ -1172,17 +1188,38 @@ if ($action === 'batch_transfer_files') {
         if ($processedCount > 0) {
             $parts[] = sprintf('%d %s', $processedCount, $processedCount === 1 ? 'Datei' : 'Dateien');
         }
-        setFlash(
-            'success',
-            sprintf(
-                '%s in %s %s.',
-                implode(' und ', $parts),
-                $destLabel,
-                $mode === 'move' ? 'verschoben' : 'kopiert'
-            )
+        $flashMsg = sprintf(
+            '%s in %s %s.',
+            implode(' und ', $parts),
+            $destLabel,
+            $mode === 'move' ? 'verschoben' : 'kopiert'
         );
+        if ($isAjaxTransfer) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok'          => true,
+                'mode'        => $mode,
+                'moved_ids'   => $movedFileIds,
+                'moved_count' => $processedCount,
+                'moved_bytes' => $movedTotalBytes,
+                'target_path' => $targetFolder,
+                'dest_label'  => $destLabel,
+                'message'     => $flashMsg,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        setFlash('success', $flashMsg);
     } else {
-        setFlash('warning', 'Es wurden keine Ordner oder Dateien übertragen (bereits am Zielort oder fehlende Berechtigung).');
+        $warnMsg = 'Es wurden keine Ordner oder Dateien übertragen (bereits am Zielort oder fehlende Berechtigung).';
+        if ($isAjaxTransfer) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok'      => false,
+                'message' => $warnMsg,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        setFlash('warning', $warnMsg);
     }
 
     $queryParams = [];

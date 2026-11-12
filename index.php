@@ -1697,6 +1697,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <tr
                             data-drop-folder="<?= e($subPath) ?>"
                             data-drop-folder-label="<?= e($subDisplayName) ?>"
+                            data-folder-count="<?= $subFileCount ?>"
+                            data-folder-bytes="<?= $subSize ?>"
                             oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>); }"
                             class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-all"
                         >
@@ -1736,8 +1738,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             <?php endif; ?>
                                         </div>
                                         <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[120px] sm:max-w-none">
-                                            <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?>
-                                            <span class="sm:hidden"> &bull; <?= e(formatBytes($subSize)) ?></span>
+                                            <span data-folder-count-text><?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?></span>
+                                            <span class="sm:hidden"> &bull; <span data-folder-size-mobile><?= e(formatBytes($subSize)) ?></span></span>
                                             <span class="hidden md:inline text-amber-700/70 dark:text-amber-400/70"> &bull; 📥 Drop-Zone</span>
                                         </p>
                                     </div>
@@ -1748,7 +1750,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 📁 <?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>
                             </td>
 
-                            <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
+                            <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell" data-folder-size-cell>
                                 <?= e(formatBytes($subSize)) ?>
                             </td>
 
@@ -2418,6 +2420,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     href="<?= $subUrl ?>"
                     data-drop-folder="<?= e($subPath) ?>"
                     data-drop-folder-label="<?= e($subDisplayName) ?>"
+                    data-folder-count="<?= $subFileCount ?>"
+                    data-folder-bytes="<?= $subSize ?>"
                     class="group flex flex-col justify-between p-3.5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 hover:border-amber-400 dark:hover:border-amber-600 transition-all shadow-2xs"
                     title="Ordner <?= e($subPath) ?> öffnen (oder Dateien per Drag & Drop direkt hierher ziehen)"
                 >
@@ -2430,7 +2434,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate" title="<?= e($subPath) ?>">
                             📁 <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
                         </p>
-                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5" data-folder-grid-meta>
                             <?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($subSize)) ?> &bull; 📥
                         </p>
                     </div>
@@ -5741,34 +5745,135 @@ async function revokeUserShare(userShareId) {
         });
     });
 
-    function submitInternalMoveToFolder(fileIds, targetFolderPath) {
+    function formatMovedBytesUi(bytes) {
+        const b = Math.max(0, Number(bytes) || 0);
+        if (b >= 1073741824) return (b / 1073741824).toFixed(2).replace('.', ',') + ' GB';
+        if (b >= 1048576) return (b / 1048576).toFixed(2).replace('.', ',') + ' MB';
+        if (b >= 1024) return (b / 1024).toFixed(1).replace('.', ',') + ' KB';
+        return b + ' B';
+    }
+
+    function showMoveToast(message, isSuccess = true) {
+        let toast = document.getElementById('mcDragMoveToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'mcDragMoveToast';
+            toast.className = 'fixed bottom-5 right-5 z-50 max-w-sm px-4 py-3 rounded-2xl shadow-xl border text-xs sm:text-sm font-semibold flex items-center gap-2.5 transition-all duration-300 opacity-0 translate-y-2 pointer-events-none';
+            document.body.appendChild(toast);
+        }
+        toast.className = 'fixed bottom-5 right-5 z-50 max-w-sm px-4 py-3 rounded-2xl shadow-xl border text-xs sm:text-sm font-semibold flex items-center gap-2.5 transition-all duration-300 '
+            + (isSuccess
+                ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/60'
+                : 'bg-amber-950/95 text-amber-100 border-amber-500/60');
+        toast.innerHTML = `<span>${isSuccess ? '✅' : '⚠️'}</span><span>${escapeHtml(message)}</span>`;
+        if (toast._hideTimer) clearTimeout(toast._hideTimer);
+        toast._hideTimer = setTimeout(() => {
+            toast.classList.add('opacity-0', 'translate-y-2');
+        }, 3200);
+    }
+
+    async function submitInternalMoveToFolder(fileIds, targetFolderPath) {
         if (!fileIds || fileIds.length === 0) return;
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'folder_action.php';
-        form.className = 'hidden';
 
-        const addField = (name, value) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = value;
-            form.appendChild(input);
-        };
+        // Sofortiges visuelles Feedback auf den gezogenen Datei-Elementen
+        fileIds.forEach((fid) => {
+            document.querySelectorAll(`[data-file-row-id="${fid}"], [data-drag-file-id="${fid}"]`).forEach((el) => {
+                el.classList.add('opacity-40', 'pointer-events-none', 'transition-all', 'duration-200');
+            });
+        });
 
-        addField('csrf_token', csrfToken);
-        addField('action', 'batch_transfer_files');
-        addField('batch_file_ids', fileIds.join(','));
-        addField('target_folder', 'move|' + (targetFolderPath !== '' ? targetFolderPath : '__root__'));
+        const fd = new FormData();
+        fd.append('ajax', '1');
+        fd.append('csrf_token', csrfToken);
+        fd.append('action', 'batch_transfer_files');
+        fd.append('batch_file_ids', fileIds.join(','));
+        fd.append('target_folder', 'move|' + (targetFolderPath !== '' ? targetFolderPath : '__root__'));
         if (defaultTargetFolder !== '') {
-            addField('return_folder', defaultTargetFolder);
+            fd.append('return_folder', defaultTargetFolder);
         }
         if (activeGroupFolderId !== null) {
-            addField('group_folder_id', String(activeGroupFolderId));
+            fd.append('group_folder_id', String(activeGroupFolderId));
         }
 
-        document.body.appendChild(form);
-        form.submit();
+        try {
+            const res = await fetch('folder_action.php', {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+
+            if (data && data.ok) {
+                const movedIds = Array.isArray(data.moved_ids) && data.moved_ids.length > 0
+                    ? data.moved_ids.map(String)
+                    : fileIds.map(String);
+                const movedCount = Number(data.moved_count) || movedIds.length;
+                const movedBytes = Number(data.moved_bytes) || 0;
+
+                // 1. Verschobene Datei-Zeilen & Kacheln sanft ausblenden und aus dem DOM entfernen
+                movedIds.forEach((fid) => {
+                    document.querySelectorAll(`input.file-select-checkbox[value="${fid}"]`).forEach((cb) => {
+                        cb.checked = false;
+                    });
+                    document.querySelectorAll(`[data-file-row-id="${fid}"], [data-drag-file-id="${fid}"]`).forEach((el) => {
+                        el.style.transition = 'opacity 180ms ease, transform 180ms ease';
+                        el.style.opacity = '0';
+                        el.style.transform = 'scale(0.96)';
+                        setTimeout(() => el.remove(), 190);
+                    });
+                });
+
+                if (typeof updateBatchSelection === 'function') {
+                    setTimeout(() => updateBatchSelection(), 200);
+                }
+
+                // 2. Zielordner-Zähler & Ordnergröße live aktualisieren + kurzes grünes Bestätigungs-Leuchten
+                document.querySelectorAll('[data-drop-folder]').forEach((fEl) => {
+                    if ((fEl.getAttribute('data-drop-folder') ?? '') === targetFolderPath) {
+                        fEl.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50/70', 'dark:bg-emerald-950/40');
+                        setTimeout(() => {
+                            fEl.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50/70', 'dark:bg-emerald-950/40');
+                        }, 950);
+
+                        if (fEl.hasAttribute('data-folder-count')) {
+                            const newCount = (parseInt(fEl.getAttribute('data-folder-count') || '0', 10) || 0) + movedCount;
+                            const newBytes = (parseInt(fEl.getAttribute('data-folder-bytes') || '0', 10) || 0) + movedBytes;
+                            fEl.setAttribute('data-folder-count', String(newCount));
+                            fEl.setAttribute('data-folder-bytes', String(newBytes));
+
+                            const countLabel = `${newCount} ${newCount === 1 ? 'Datei' : 'Dateien'}`;
+                            const sizeLabel  = formatMovedBytesUi(newBytes);
+
+                            const cntSpan = fEl.querySelector('[data-folder-count-text]');
+                            if (cntSpan) cntSpan.textContent = countLabel;
+                            const mobSize = fEl.querySelector('[data-folder-size-mobile]');
+                            if (mobSize) mobSize.textContent = sizeLabel;
+                            const cellSize = fEl.querySelector('[data-folder-size-cell]');
+                            if (cellSize) cellSize.textContent = sizeLabel;
+                            const gridMeta = fEl.querySelector('[data-folder-grid-meta]');
+                            if (gridMeta) gridMeta.innerHTML = `${countLabel} &bull; ${sizeLabel} &bull; 📥`;
+                        }
+                    }
+                });
+
+                showMoveToast(data.message || `${movedCount} ${movedCount === 1 ? 'Datei' : 'Dateien'} verschoben.`, true);
+            } else {
+                // Bei Warnung (z. B. bereits im Zielordner) Opazität wiederherstellen
+                fileIds.forEach((fid) => {
+                    document.querySelectorAll(`[data-file-row-id="${fid}"], [data-drag-file-id="${fid}"]`).forEach((el) => {
+                        el.classList.remove('opacity-40', 'pointer-events-none');
+                    });
+                });
+                showMoveToast((data && data.message) || 'Dateien konnten nicht verschoben werden.', false);
+            }
+        } catch (err) {
+            fileIds.forEach((fid) => {
+                document.querySelectorAll(`[data-file-row-id="${fid}"], [data-drag-file-id="${fid}"]`).forEach((el) => {
+                    el.classList.remove('opacity-40', 'pointer-events-none');
+                });
+            });
+            showMoveToast('Netzwerkfehler beim Verschieben.', false);
+        }
     }
 
     // 2. Direkte Drop-Zonen auf allen Ordner-Zeilen & Ordner-Kacheln ([data-drop-folder])
