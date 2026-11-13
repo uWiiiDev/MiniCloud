@@ -659,6 +659,452 @@ function renderEpubChapterSafeHtml(string $physicalPath, int $fileId, array $all
     return $bodyHtml;
 }
 
+/**
+ * Normalisiert den Sprachcode aus den EPUB-Metadaten (z. B. "de-DE", "ger", "en-US") auf einen 2-stelligen ISO-Code.
+ */
+function normalizeEpubTtsLanguage(string $rawLang): string
+{
+    $clean = strtolower(trim($rawLang));
+    if ($clean === '') {
+        return 'de';
+    }
+    $primary = preg_split('/[-_]/', $clean)[0] ?? 'de';
+    return match ($primary) {
+        'de', 'deu', 'ger' => 'de',
+        'en', 'eng'        => 'en',
+        'fr', 'fra', 'fre' => 'fr',
+        'es', 'spa'        => 'es',
+        'it', 'ita'        => 'it',
+        'nl', 'nld', 'dut' => 'nl',
+        'pl', 'pol'        => 'pl',
+        'pt', 'por'        => 'pt',
+        'ru', 'rus'        => 'ru',
+        'tr', 'tur'        => 'tr',
+        default            => (strlen($primary) === 2 ? $primary : 'de'),
+    };
+}
+
+/**
+ * Extrahiert den bereinigten Vorlesetext (Absätze & Gesamttext) eines EPUB-Kapitels für den Hörbuch-Modus.
+ *
+ * @param array<int, array{index: int, id: string, path: string, title: string}> $allChapters
+ * @return array{ok: bool, chapter_index: int, chapter_title: string, paragraphs: array<int, string>, full_text: string, char_count: int}
+ */
+function extractEpubChapterPlainText(string $physicalPath, array $allChapters, int $chapterIndex): array
+{
+    $fallbackTitle = 'Kapitel ' . ($chapterIndex + 1);
+    if (!isset($allChapters[$chapterIndex]) || !class_exists('ZipArchive')) {
+        return [
+            'ok'            => false,
+            'chapter_index' => $chapterIndex,
+            'chapter_title' => $fallbackTitle,
+            'paragraphs'    => [],
+            'full_text'     => '',
+            'char_count'    => 0,
+        ];
+    }
+
+    $chapMeta  = $allChapters[$chapterIndex];
+    $chapTitle = trim((string)($chapMeta['title'] ?? '')) ?: $fallbackTitle;
+
+    $zip = new ZipArchive();
+    if ($zip->open($physicalPath) !== true) {
+        return [
+            'ok'            => false,
+            'chapter_index' => $chapterIndex,
+            'chapter_title' => $chapTitle,
+            'paragraphs'    => [],
+            'full_text'     => '',
+            'char_count'    => 0,
+        ];
+    }
+
+    $rawHtml = getZipEntryContents($zip, (string)$chapMeta['path']);
+    $zip->close();
+
+    if (!is_string($rawHtml) || trim($rawHtml) === '') {
+        return [
+            'ok'            => true,
+            'chapter_index' => $chapterIndex,
+            'chapter_title' => $chapTitle,
+            'paragraphs'    => [],
+            'full_text'     => '',
+            'char_count'    => 0,
+        ];
+    }
+
+    if (preg_match('/<body[^>]*>(.*)<\/body>/isu', $rawHtml, $mBody)) {
+        $html = $mBody[1];
+    } else {
+        $html = $rawHtml;
+    }
+
+    // Unsichtbare Elemente entfernen
+    $html = preg_replace('#<(script|style|head|svg|math|noscript|iframe|object|embed)\b[^>]*>.*?</\1>#isu', ' ', $html) ?? $html;
+    // Block-Tags in Absatzumbrüche umwandeln
+    $html = preg_replace('#</(p|div|h[1-6]|li|blockquote|section|article|tr)>#iu', "\n\n", $html) ?? $html;
+    $html = preg_replace('#<br\s*/?>#iu', "\n", $html) ?? $html;
+
+    $decoded = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $lines   = preg_split('/\R{1,}/u', $decoded) ?: [];
+
+    $paragraphs = [];
+    foreach ($lines as $line) {
+        $cleanLine = trim(preg_replace('/\s+/u', ' ', $line) ?? '');
+        if ($cleanLine !== '' && mb_strlen($cleanLine, 'UTF-8') >= 2) {
+            $paragraphs[] = $cleanLine;
+        }
+    }
+
+    $fullText = implode("\n\n", $paragraphs);
+
+    return [
+        'ok'            => true,
+        'chapter_index' => $chapterIndex,
+        'chapter_title' => $chapTitle,
+        'paragraphs'    => $paragraphs,
+        'full_text'     => $fullText,
+        'char_count'    => mb_strlen($fullText, 'UTF-8'),
+    ];
+}
+
+/**
+ * Zerlegt einen Kapiteltext an Satz- und Wortgrenzen in kompakte Sprachsynthese-Segmente.
+ *
+ * @return array<int, string>
+ */
+function splitTextIntoTtsChunks(string $text, int $maxChars = 185): array
+{
+    $normalized = trim(preg_replace('/\s+/u', ' ', $text) ?? '');
+    if ($normalized === '') {
+        return [];
+    }
+
+    // Zuerst an Satzenden (. ! ? ; :) aufteilen
+    $sentences = preg_split('/(?<=[.!?;:])\s+/u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [$normalized];
+    $chunks    = [];
+    $current   = '';
+
+    foreach ($sentences as $sentence) {
+        $sentence = trim($sentence);
+        if ($sentence === '') {
+            continue;
+        }
+
+        if (mb_strlen($sentence, 'UTF-8') <= $maxChars) {
+            $candidate = $current === '' ? $sentence : ($current . ' ' . $sentence);
+            if (mb_strlen($candidate, 'UTF-8') <= $maxChars) {
+                $current = $candidate;
+            } else {
+                if ($current !== '') {
+                    $chunks[] = $current;
+                }
+                $current = $sentence;
+            }
+            continue;
+        }
+
+        // Überlanger Satz: zuerst bisherigen Puffer abschließen, dann an Kommas/Leerzeichen teilen
+        if ($current !== '') {
+            $chunks[] = $current;
+            $current  = '';
+        }
+
+        $words = preg_split('/\s+/u', $sentence, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        foreach ($words as $word) {
+            if (mb_strlen($word, 'UTF-8') > $maxChars) {
+                if ($current !== '') {
+                    $chunks[] = $current;
+                    $current  = '';
+                }
+                $parts = mb_str_split($word, $maxChars, 'UTF-8');
+                foreach ($parts as $p) {
+                    $chunks[] = $p;
+                }
+                continue;
+            }
+            $cand = $current === '' ? $word : ($current . ' ' . $word);
+            if (mb_strlen($cand, 'UTF-8') <= $maxChars) {
+                $current = $cand;
+            } else {
+                if ($current !== '') {
+                    $chunks[] = $current;
+                }
+                $current = $word;
+            }
+        }
+    }
+
+    if ($current !== '') {
+        $chunks[] = $current;
+    }
+
+    return $chunks;
+}
+
+/**
+ * Entfernt einen führenden ID3v2-Header aus einem MP3-Segment, damit aneinandergefügte
+ * MP3-Segmente nahtlos als durchgehender Audio-Stream abgespielt werden.
+ */
+function stripLeadingId3Tag(string $mp3Bytes): string
+{
+    if (strlen($mp3Bytes) > 10 && substr($mp3Bytes, 0, 3) === 'ID3') {
+        $b6 = ord($mp3Bytes[6]) & 0x7F;
+        $b7 = ord($mp3Bytes[7]) & 0x7F;
+        $b8 = ord($mp3Bytes[8]) & 0x7F;
+        $b9 = ord($mp3Bytes[9]) & 0x7F;
+        $id3Size = ($b6 << 21) | ($b7 << 14) | ($b8 << 7) | $b9;
+        $totalHeader = 10 + $id3Size;
+        if (strlen($mp3Bytes) > $totalHeader) {
+            return substr($mp3Bytes, $totalHeader);
+        }
+    }
+    return $mp3Bytes;
+}
+
+/**
+ * Erzeugt aus einem Text (beliebiger Länge) eine zusammenhängende MP3-Audiodatei
+ * mittels paralleler Chunk-Synthese (cURL Multi mit Fallback auf Stream-Context).
+ */
+function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|false
+{
+    $langCode = normalizeEpubTtsLanguage($lang);
+    $chunks   = splitTextIntoTtsChunks($text, 185);
+    if (empty($chunks)) {
+        return false;
+    }
+
+    // Sicherheitslimit pro Kapitel (max. 240 Segmente ~ ca. 42.000 Zeichen pro Kapitel)
+    if (count($chunks) > 240) {
+        $chunks = array_slice($chunks, 0, 240);
+    }
+
+    $mp3Parts  = [];
+    $batchSize = 6;
+    $batches   = array_chunk($chunks, $batchSize, true);
+
+    foreach ($batches as $batch) {
+        if (function_exists('curl_multi_init') && function_exists('curl_init')) {
+            $mh      = curl_multi_init();
+            $handles = [];
+
+            foreach ($batch as $idx => $chunkText) {
+                $url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+                    . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText);
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    CURLOPT_TIMEOUT        => 15,
+                    CURLOPT_CONNECTTIMEOUT => 8,
+                ]);
+                curl_multi_add_handle($mh, $ch);
+                $handles[$idx] = $ch;
+            }
+
+            $running = null;
+            do {
+                $status = curl_multi_exec($mh, $running);
+                if ($running) {
+                    curl_multi_select($mh, 0.25);
+                }
+            } while ($running > 0 && $status === CURLM_OK);
+
+            foreach ($handles as $idx => $ch) {
+                $body = curl_multi_getcontent($ch);
+                $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+
+                if ($code === 200 && is_string($body) && strlen($body) > 128) {
+                    $mp3Parts[$idx] = $idx > 0 ? stripLeadingId3Tag($body) : $body;
+                }
+            }
+            curl_multi_close($mh);
+        } else {
+            // Fallback ohne cURL
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'  => 'GET',
+                    'header'  => "User-Agent: Mozilla/5.0\r\n",
+                    'timeout' => 12,
+                ],
+            ]);
+            foreach ($batch as $idx => $chunkText) {
+                $url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+                    . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText);
+                $body = @file_get_contents($url, false, $ctx);
+                if (is_string($body) && strlen($body) > 128) {
+                    $mp3Parts[$idx] = $idx > 0 ? stripLeadingId3Tag($body) : $body;
+                }
+            }
+        }
+    }
+
+    if (empty($mp3Parts)) {
+        return false;
+    }
+
+    ksort($mp3Parts);
+    return implode('', $mp3Parts);
+}
+
+/**
+ * Speichert eine generierte Hörbuch-Kapiteldatei (.mp3 oder .wav) direkt im MiniCloud-Ordner
+ * "Hörbücher/<Buchtitel>/" des Benutzers (inkl. Duplikat-Aktualisierung bei erneutem Export).
+ *
+ * @return array{ok: bool, error?: string, file_id?: int, filename?: string, folder_path?: string, file_size?: int, file_size_formatted?: string}
+ */
+function saveGeneratedAudiobookFileToCloud(
+    PDO $pdo,
+    int $userId,
+    string $bookTitle,
+    int $chapterIndex,
+    int $totalChapters,
+    string $chapterTitle,
+    string $audioBinary,
+    string $ext = 'mp3',
+    string $mimeType = 'audio/mpeg'
+): array {
+    $audioSize = strlen($audioBinary);
+    if ($audioSize <= 0) {
+        return ['ok' => false, 'error' => 'Leere Audiodatei.'];
+    }
+
+    $stats = getUserStorageStats($pdo, $userId);
+    if ($audioSize > $stats['free']) {
+        return ['ok' => false, 'error' => 'Nicht genügend freier Cloud-Speicherplatz für diese Hörbuch-Datei vorhanden.'];
+    }
+
+    $cleanBookFolder = trim(preg_replace('/[^\p{L}\p{N}\s\-_()]/u', '', $bookTitle) ?? '');
+    $cleanBookFolder = trim(preg_replace('/\s+/u', ' ', $cleanBookFolder) ?? '');
+    if ($cleanBookFolder === '') {
+        $cleanBookFolder = 'Hörbuch';
+    }
+    $cleanBookFolder = mb_substr($cleanBookFolder, 0, 70, 'UTF-8');
+
+    $targetFolder = extractSanitizedFolderPath('Hörbücher/' . $cleanBookFolder . '/placeholder');
+    if ($targetFolder === '') {
+        $targetFolder = 'Hörbücher';
+    }
+    registerFolderHierarchy($pdo, $userId, $targetFolder, null);
+
+    $cleanChapTitle = trim(preg_replace('/[^\p{L}\p{N}\s\-_()]/u', '', $chapterTitle) ?? '');
+    $cleanChapTitle = trim(preg_replace('/\s+/u', ' ', $cleanChapTitle) ?? '');
+    if ($cleanChapTitle === '') {
+        $cleanChapTitle = 'Kapitel ' . ($chapterIndex + 1);
+    }
+    $cleanChapTitle = mb_substr($cleanChapTitle, 0, 80, 'UTF-8');
+
+    $padLen   = max(2, strlen((string)$totalChapters));
+    $origName = sprintf('Kapitel %0' . $padLen . 'd - %s.%s', $chapterIndex + 1, $cleanChapTitle, $ext);
+    $origName = sanitizeOriginalFilename($origName);
+
+    if (!is_dir(UPLOAD_DIR)) {
+        @mkdir(UPLOAD_DIR, 0750, true);
+    }
+
+    // Prüfen, ob genau diese Kapitel-Audiodatei im Zielordner bereits existiert -> überschreiben statt Duplikat anlegen
+    $stmtEx = $pdo->prepare(
+        "SELECT `id`, `filename` FROM `files`
+         WHERE `user_id` = :uid
+           AND `group_folder_id` IS NULL
+           AND `folder_path` = :fp
+           AND `original_name` = :orig
+           AND `deleted_at` IS NULL
+         LIMIT 1"
+    );
+    $stmtEx->execute([
+        ':uid'  => $userId,
+        ':fp'   => $targetFolder,
+        ':orig' => $origName,
+    ]);
+    $existing = $stmtEx->fetch();
+
+    if ($existing) {
+        $savedFileId    = (int)$existing['id'];
+        $storedFilename = (string)$existing['filename'];
+        $destPath       = UPLOAD_DIR . $storedFilename;
+        if (@file_put_contents($destPath, $audioBinary) === false) {
+            return ['ok' => false, 'error' => 'Audiodatei konnte auf dem Server nicht aktualisiert werden.'];
+        }
+        @chmod($destPath, 0640);
+
+        $stmtUpd = $pdo->prepare(
+            "UPDATE `files`
+             SET `file_size` = :sz, `mime_type` = :mime, `upload_date` = NOW()
+             WHERE `id` = :id"
+        );
+        $stmtUpd->execute([
+            ':sz'   => $audioSize,
+            ':mime' => $mimeType,
+            ':id'   => $savedFileId,
+        ]);
+    } else {
+        do {
+            $storedFilename = generateSafeStoredFilename();
+            $destPath       = UPLOAD_DIR . $storedFilename;
+        } while (file_exists($destPath));
+
+        if (@file_put_contents($destPath, $audioBinary) === false) {
+            return ['ok' => false, 'error' => 'Audiodatei konnte auf dem Server nicht gespeichert werden.'];
+        }
+        @chmod($destPath, 0640);
+
+        $stmtIns = $pdo->prepare(
+            "INSERT INTO `files` (`user_id`, `group_folder_id`, `filename`, `original_name`, `folder_path`, `file_size`, `mime_type`, `is_encrypted`)
+             VALUES (:uid, NULL, :fn, :orig, :fp, :sz, :mime, 0)"
+        );
+        $stmtIns->execute([
+            ':uid'  => $userId,
+            ':fn'   => $storedFilename,
+            ':orig' => $origName,
+            ':fp'   => $targetFolder,
+            ':sz'   => $audioSize,
+            ':mime' => $mimeType,
+        ]);
+        $savedFileId = (int)$pdo->lastInsertId();
+    }
+
+    return [
+        'ok'                  => true,
+        'file_id'             => $savedFileId,
+        'filename'            => $origName,
+        'folder_path'         => $targetFolder,
+        'file_size'           => $audioSize,
+        'file_size_formatted' => formatBytes($audioSize),
+    ];
+}
+
+// =============================================================================
+// 1b. AUDIO-STREAM-ENDPUNKT FÜR EINZELNE ABSÄTZE IM LIVE-HÖRBUCH-PLAYER (GET)
+// =============================================================================
+if (isset($_GET['action']) && $_GET['action'] === 'tts_chunk') {
+    @session_write_close();
+    $chunkText = trim((string)($_GET['text'] ?? ''));
+    $lang      = normalizeEpubTtsLanguage((string)($_GET['lang'] ?? 'de'));
+
+    if ($chunkText === '') {
+        http_response_code(400);
+        exit;
+    }
+
+    $chunkText = mb_substr($chunkText, 0, 750, 'UTF-8');
+    $mp3Data   = synthesizeTtsMp3FromText($chunkText, $lang);
+    if ($mp3Data === false || $mp3Data === '') {
+        http_response_code(502);
+        exit;
+    }
+
+    header('Content-Type: audio/mpeg');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, max-age=3600');
+    header('Content-Length: ' . strlen($mp3Data));
+    echo $mp3Data;
+    exit;
+}
+
 // =============================================================================
 // 1. ASSET-ENDPUNKT: BILDER INNERHALB EINES EPUBS AUSLIEFERN
 // =============================================================================
@@ -886,6 +1332,208 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
+    // 2d-2) Kapiteltext & Segmente für den Hörbuch-Generator abrufen (AJAX)
+    if ($postAction === 'get_chapter_tts_text') {
+        header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
+        $fileId     = (int)($_POST['file_id'] ?? 0);
+        $chapterIdx = max(0, (int)($_POST['chapter_index'] ?? 0));
+
+        $authFile = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+        if (!$authFile) {
+            echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Buch.']);
+            exit;
+        }
+
+        $physicalPath = UPLOAD_DIR . (string)$authFile['filename'];
+        $info = inspectEpubArchive($physicalPath, (string)$authFile['original_name']);
+        if (!$info['ok'] || !isset($info['chapters'][$chapterIdx])) {
+            echo json_encode(['ok' => false, 'error' => 'Kapitel konnte nicht gelesen werden.']);
+            exit;
+        }
+
+        $extracted = extractEpubChapterPlainText($physicalPath, $info['chapters'], $chapterIdx);
+        $chunks    = splitTextIntoTtsChunks($extracted['full_text'], 210);
+
+        echo json_encode([
+            'ok'             => true,
+            'book_title'     => $info['title'],
+            'language'       => normalizeEpubTtsLanguage($info['language']),
+            'chapter_index'  => $chapterIdx,
+            'total_chapters' => count($info['chapters']),
+            'chapter_title'  => $extracted['chapter_title'],
+            'paragraphs'     => $extracted['paragraphs'],
+            'chunks'         => $chunks,
+            'char_count'     => $extracted['char_count'],
+        ]);
+        exit;
+    }
+
+    // 2d-3) Kapitel als .mp3-Hörbuch synthetisieren & optional direkt in der MiniCloud speichern (AJAX)
+    if ($postAction === 'generate_chapter_mp3') {
+        header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
+        @set_time_limit(180);
+
+        $fileId      = (int)($_POST['file_id'] ?? 0);
+        $chapterIdx  = max(0, (int)($_POST['chapter_index'] ?? 0));
+        $saveToCloud = ((string)($_POST['save_to_cloud'] ?? '0') === '1');
+        $langOverride = trim((string)($_POST['lang'] ?? ''));
+
+        $authFile = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+        if (!$authFile) {
+            echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Buch.']);
+            exit;
+        }
+
+        $physicalPath = UPLOAD_DIR . (string)$authFile['filename'];
+        $info = inspectEpubArchive($physicalPath, (string)$authFile['original_name']);
+        if (!$info['ok'] || !isset($info['chapters'][$chapterIdx])) {
+            echo json_encode(['ok' => false, 'error' => 'Das gewählte Kapitel wurde im E-Book nicht gefunden.']);
+            exit;
+        }
+
+        $totalChapters = count($info['chapters']);
+        $extracted     = extractEpubChapterPlainText($physicalPath, $info['chapters'], $chapterIdx);
+        $chapTitle     = $extracted['chapter_title'];
+        $langCode      = normalizeEpubTtsLanguage($langOverride !== '' ? $langOverride : $info['language']);
+
+        // Falls ein Abschnitt nur ein Cover-Bild ohne Text enthält, beim Komplett-Export sauber überspringen
+        if ($extracted['char_count'] < 3) {
+            echo json_encode([
+                'ok'            => true,
+                'skipped'       => true,
+                'chapter_index' => $chapterIdx,
+                'chapter_title' => $chapTitle,
+                'reason'        => 'Abschnitt enthält keinen vorlesbaren Text (z. B. reines Buchcover).',
+            ]);
+            exit;
+        }
+
+        $spokenIntro = ($langCode === 'en' ? 'Chapter ' : 'Kapitel ') . ($chapterIdx + 1) . ': ' . $chapTitle . ".\n\n";
+        $spokenText  = $spokenIntro . $extracted['full_text'];
+
+        $mp3Binary = synthesizeTtsMp3FromText($spokenText, $langCode);
+        if ($mp3Binary === false || $mp3Binary === '') {
+            echo json_encode([
+                'ok'    => false,
+                'error' => 'Die MP3-Sprachsynthese konnte für dieses Kapitel nicht durchgeführt werden (bitte prüfen Sie die Internetverbindung des Servers oder nutzen Sie die lokale Browser-KI-Stimme).',
+            ]);
+            exit;
+        }
+
+        $padLen       = max(2, strlen((string)$totalChapters));
+        $cleanChapLbl = trim(preg_replace('/[^\p{L}\p{N}\s\-_()]/u', '', $chapTitle) ?? '') ?: ('Kapitel ' . ($chapterIdx + 1));
+        $downloadName = sanitizeOriginalFilename(sprintf('Kapitel %0' . $padLen . 'd - %s.mp3', $chapterIdx + 1, mb_substr($cleanChapLbl, 0, 75, 'UTF-8')));
+
+        if ($saveToCloud) {
+            $saveRes = saveGeneratedAudiobookFileToCloud(
+                $pdo,
+                $userId,
+                $info['title'],
+                $chapterIdx,
+                $totalChapters,
+                $chapTitle,
+                $mp3Binary,
+                'mp3',
+                'audio/mpeg'
+            );
+            if (!$saveRes['ok']) {
+                echo json_encode($saveRes);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'                  => true,
+                'saved_to_cloud'      => true,
+                'file_id'             => $saveRes['file_id'],
+                'filename'            => $saveRes['filename'],
+                'folder_path'         => $saveRes['folder_path'],
+                'file_size_formatted' => $saveRes['file_size_formatted'],
+                'download_url'        => 'download.php?id=' . (int)$saveRes['file_id'],
+                'stream_url'          => 'download.php?id=' . (int)$saveRes['file_id'] . '&inline=1',
+                'folder_url'          => 'index.php?folder=' . rawurlencode((string)$saveRes['folder_path']),
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'ok'                  => true,
+            'saved_to_cloud'      => false,
+            'filename'            => $downloadName,
+            'file_size_formatted' => formatBytes(strlen($mp3Binary)),
+            'audio_base64'        => base64_encode($mp3Binary),
+            'mime_type'           => 'audio/mpeg',
+        ]);
+        exit;
+    }
+
+    // 2d-4) Im Browser per lokaler KI-Stimme (Piper WebAssembly) erzeugte Audiodatei (.wav/.mp3) in der MiniCloud speichern (AJAX)
+    if ($postAction === 'save_browser_audiobook') {
+        header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
+
+        $fileId     = (int)($_POST['file_id'] ?? 0);
+        $chapterIdx = max(0, (int)($_POST['chapter_index'] ?? 0));
+        $ext        = strtolower(trim((string)($_POST['ext'] ?? 'wav'))) === 'mp3' ? 'mp3' : 'wav';
+        $mimeType   = $ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+
+        $authFile = getAuthorizedFileForDownload($pdo, $userId, $fileId, $isAdmin);
+        if (!$authFile) {
+            echo json_encode(['ok' => false, 'error' => 'Keine Berechtigung für dieses Buch.']);
+            exit;
+        }
+
+        if (!isset($_FILES['audio_blob']) || !is_array($_FILES['audio_blob']) || (int)($_FILES['audio_blob']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            echo json_encode(['ok' => false, 'error' => 'Keine gültige Audiodatei empfangen.']);
+            exit;
+        }
+
+        $tmpPath     = (string)$_FILES['audio_blob']['tmp_name'];
+        $audioBinary = @file_get_contents($tmpPath);
+        if (!is_string($audioBinary) || $audioBinary === '') {
+            echo json_encode(['ok' => false, 'error' => 'Audiodaten konnten nicht gelesen werden.']);
+            exit;
+        }
+
+        $physicalPath = UPLOAD_DIR . (string)$authFile['filename'];
+        $info = inspectEpubArchive($physicalPath, (string)$authFile['original_name']);
+        $bookTitle     = $info['ok'] ? $info['title'] : (pathinfo((string)$authFile['original_name'], PATHINFO_FILENAME) ?: 'Hörbuch');
+        $totalChapters = $info['ok'] ? max(1, count($info['chapters'])) : 1;
+        $chapTitle     = ($info['ok'] && isset($info['chapters'][$chapterIdx]))
+            ? (string)$info['chapters'][$chapterIdx]['title']
+            : ('Kapitel ' . ($chapterIdx + 1));
+
+        $saveRes = saveGeneratedAudiobookFileToCloud(
+            $pdo,
+            $userId,
+            $bookTitle,
+            $chapterIdx,
+            $totalChapters,
+            $chapTitle,
+            $audioBinary,
+            $ext,
+            $mimeType
+        );
+        if (!$saveRes['ok']) {
+            echo json_encode($saveRes);
+            exit;
+        }
+
+        echo json_encode([
+            'ok'                  => true,
+            'saved_to_cloud'      => true,
+            'file_id'             => $saveRes['file_id'],
+            'filename'            => $saveRes['filename'],
+            'folder_path'         => $saveRes['folder_path'],
+            'file_size_formatted' => $saveRes['file_size_formatted'],
+            'download_url'        => 'download.php?id=' . (int)$saveRes['file_id'],
+            'stream_url'          => 'download.php?id=' . (int)$saveRes['file_id'] . '&inline=1',
+            'folder_url'          => 'index.php?folder=' . rawurlencode((string)$saveRes['folder_path']),
+        ]);
+        exit;
+    }
+
     // 2e) Neue .epub-Datei direkt ins Bücherregal hochladen
     if ($postAction === 'upload_epub') {
         if (!isset($_FILES['epub_file']) || !is_array($_FILES['epub_file'])) {
@@ -1032,6 +1680,9 @@ if ($bookFileId > 0) {
     $chapterHtml  = renderEpubChapterSafeHtml($physicalPath, $bookFileId, $epubInfo['chapters'], $currentChIdx);
     $chapterTitle = $epubInfo['chapters'][$currentChIdx]['title'] ?? ('Kapitel ' . ($currentChIdx + 1));
     $overallPct   = round((($currentChIdx + ($initialScrollPct / 100.0)) / $totalChapters) * 100.0, 1);
+    $bookLangCode = normalizeEpubTtsLanguage($epubInfo['language']);
+    $autoPlayAudio   = isset($_GET['autoplay']) && $_GET['autoplay'] === '1';
+    $openAudioStudio = isset($_GET['audiostudio']) && $_GET['audiostudio'] === '1';
 
     $pageTitle = '📖 ' . $epubInfo['title'] . ' – E-Book-Reader';
     require_once __DIR__ . '/includes/header.php';
@@ -1085,6 +1736,25 @@ if ($bookFileId > 0) {
             margin: 1rem 0;
             font-style: italic;
         }
+
+        /* Hervorhebung des aktuell vorgelesenen Absatzes im Hörbuch-Modus */
+        .epub-tts-block {
+            transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+            border-radius: 0.6rem;
+        }
+        .epub-tts-clickable .epub-tts-block:hover {
+            background-color: rgba(59, 130, 246, 0.08);
+            cursor: pointer;
+        }
+        .epub-tts-active-block {
+            background-color: rgba(245, 158, 11, 0.22) !important;
+            box-shadow: -4px 0 0 0 #d97706, 0 0 0 6px rgba(245, 158, 11, 0.14);
+        }
+        .epub-surface-dusk .epub-tts-active-block,
+        .epub-surface-night .epub-tts-active-block {
+            background-color: rgba(56, 189, 248, 0.18) !important;
+            box-shadow: -4px 0 0 0 #38bdf8, 0 0 0 6px rgba(56, 189, 248, 0.14);
+        }
     </style>
 
     <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4" id="epubReaderWrapper">
@@ -1111,6 +1781,14 @@ if ($bookFileId > 0) {
 
             <!-- Aktions-Buttons rechts -->
             <div class="flex items-center gap-1.5">
+                <button type="button" onclick="toggleEpubDrawer('epubAudioDrawer')" id="epubAudioToolbarBtn"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/70 hover:bg-amber-100 dark:hover:bg-amber-900/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold cursor-pointer transition-colors"
+                        title="Hörbuch-Player &amp; Hörbuch-Generator (MP3 / WAV)">
+                    <span id="epubAudioToolbarIcon">🎧</span>
+                    <span class="hidden sm:inline">Hörbuch</span>
+                    <span id="epubAudioPlayingDot" class="hidden w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                </button>
+
                 <button type="button" onclick="toggleEpubDrawer('epubTocDrawer')"
                         class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
                         title="Inhaltsverzeichnis &amp; Kapitel">
@@ -1144,7 +1822,256 @@ if ($bookFileId > 0) {
             </div>
         </div>
 
-        <!-- AUSKLAPPBARE WERKZEUG-PANELS (Kapitel / Suche / Lesezeichen / Ansicht) -->
+        <!-- KOMPAKTE LIVE-HÖRBUCH-STEUERLEISTE (Erscheint automatisch während des Vorlesens) -->
+        <div id="epubLivePlayerBar" class="hidden mc-card bg-gradient-to-r from-amber-50 via-white to-orange-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 rounded-2xl border border-amber-300/80 dark:border-amber-800/80 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-3 sticky top-16 z-20">
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="epubTtsPrevBlock()"
+                        class="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-bold cursor-pointer"
+                        title="Vorheriger Absatz">
+                    ⏮
+                </button>
+                <button type="button" onclick="epubTtsTogglePlay()" id="epubMiniPlayBtn"
+                        class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer">
+                    <span id="epubMiniPlayIcon">⏸</span>
+                    <span id="epubMiniPlayLabel">Pause</span>
+                </button>
+                <button type="button" onclick="epubTtsNextBlock()"
+                        class="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-bold cursor-pointer"
+                        title="Nächster Absatz">
+                    ⏭
+                </button>
+                <button type="button" onclick="epubTtsStop()"
+                        class="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/60 border border-slate-200 dark:border-slate-700 text-rose-600 flex items-center justify-center text-xs font-bold cursor-pointer"
+                        title="Vorlesen beenden">
+                    ⏹
+                </button>
+            </div>
+
+            <div class="flex-1 min-w-[180px]">
+                <div class="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    <span id="epubLiveStatusText" class="truncate">🎧 Hörbuch-Wiedergabe aktiv…</span>
+                    <span id="epubLiveBlockCounter" class="text-amber-700 dark:text-amber-400 font-bold shrink-0 ml-2">0 / 0</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full bg-amber-200/70 dark:bg-slate-700 overflow-hidden mt-1">
+                    <div id="epubLiveBlockProgressBar" class="h-full bg-amber-600 transition-all duration-300" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <span id="epubSleepTimerBadge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300"></span>
+                <button type="button" onclick="toggleEpubDrawer('epubAudioDrawer')"
+                        class="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                    ⚙️ Studio
+                </button>
+            </div>
+        </div>
+
+        <!-- AUSKLAPPBARE WERKZEUG-PANELS (Hörbuch / Kapitel / Suche / Lesezeichen / Ansicht) -->
+        <!-- 0. HÖRBUCH-PLAYER (VARIANTE 1) & HÖRBUCH-DATEI-GENERATOR (VARIANTE 2) -->
+        <div id="epubAudioDrawer" class="<?= $openAudioStudio ? '' : 'hidden' ?> mc-card bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-slate-800 p-4 sm:p-5 shadow-lg space-y-4 text-xs">
+            <div class="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🎧</span>
+                    <div>
+                        <h2 class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                            Hörbuch-Player &amp; Hörbuch-Generator (MP3 / KI-WAV)
+                        </h2>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                            Lass dir das Buch live vorlesen (Variante 1) oder wandle Kapitel in echte Hörbuch-Dateien für deine Cloud um (Variante 2).
+                        </p>
+                    </div>
+                </div>
+                <button type="button" onclick="toggleEpubDrawer('epubAudioDrawer')" class="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- VARIANTE 1: LIVE-HÖRBUCH-PLAYER IM READER -->
+                <div class="p-4 rounded-2xl bg-amber-50/50 dark:bg-slate-800/60 border border-amber-200/80 dark:border-slate-700 space-y-3.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500 text-white">
+                            ▶️ Variante 1: Live-Vorleser
+                        </span>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Sofort ohne Wartezeit anhören</span>
+                    </div>
+
+                    <!-- Haupt-Steuerbuttons -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="epubTtsTogglePlay()" id="epubDrawerPlayBtn"
+                                class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-extrabold shadow-xs transition-colors cursor-pointer">
+                            <span id="epubDrawerPlayIcon">▶️</span>
+                            <span id="epubDrawerPlayLabel">Kapitel jetzt vorlesen</span>
+                        </button>
+                        <button type="button" onclick="epubTtsPrevBlock()"
+                                class="px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 font-bold cursor-pointer"
+                                title="Vorheriger Absatz">
+                            ⏮
+                        </button>
+                        <button type="button" onclick="epubTtsNextBlock()"
+                                class="px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 font-bold cursor-pointer"
+                                title="Nächster Absatz">
+                            ⏭
+                        </button>
+                        <button type="button" onclick="epubTtsStop()"
+                                class="px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 border border-slate-200 dark:border-slate-700 text-rose-600 font-bold cursor-pointer"
+                                title="Stopp">
+                            ⏹
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <!-- Stimmen-Quelle -->
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Vorlese-Stimme</label>
+                            <select id="epubLiveEngineSelect" onchange="onEpubLiveEngineChange()"
+                                    class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold">
+                                <option value="cloud_mp3">🎙️ Natürliche Cloud-Stimme (MP3-Stream)</option>
+                                <option value="webspeech">🗣️ Geräte-/Browser-Stimme (Offline)</option>
+                            </select>
+                        </div>
+
+                        <!-- Lesetempo -->
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Lesegeschwindigkeit</label>
+                            <select id="epubLiveRateSelect" onchange="onEpubLiveRateChange()"
+                                    class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold">
+                                <option value="0.8">0.8x (Entspannt)</option>
+                                <option value="0.9">0.9x (Ruhig)</option>
+                                <option value="1" selected>1.0x (Normal)</option>
+                                <option value="1.15">1.15x (Flüssig)</option>
+                                <option value="1.25">1.25x (Schnell)</option>
+                                <option value="1.5">1.5x (Sehr schnell)</option>
+                                <option value="1.75">1.75x (Express)</option>
+                                <option value="2">2.0x (Doppeltes Tempo)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Optionale Browser-Stimmenauswahl (wenn Geräte-Stimme gewählt) -->
+                    <div id="epubWebSpeechVoiceRow" class="hidden">
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Installierte Systemstimme</label>
+                        <select id="epubWebSpeechVoiceSelect"
+                                class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white">
+                        </select>
+                    </div>
+
+                    <!-- Schlaf-Timer & Komfort-Optionen -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">🌙 Schlaf-Timer</label>
+                            <select id="epubSleepTimerSelect" onchange="onEpubSleepTimerChange()"
+                                    class="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white">
+                                <option value="0">Aus (Durchgehend lesen)</option>
+                                <option value="chapter_end">Am Kapitelende stoppen</option>
+                                <option value="15">Nach 15 Minuten stoppen</option>
+                                <option value="30">Nach 30 Minuten stoppen</option>
+                                <option value="45">Nach 45 Minuten stoppen</option>
+                                <option value="60">Nach 60 Minuten stoppen</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col justify-end gap-1.5">
+                            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" id="epubAutoNextChapterChk" checked class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                <span class="font-semibold text-slate-700 dark:text-slate-300">Am Ende automatisch nächstes Kapitel</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" id="epubAutoScrollTtsChk" checked class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                <span class="font-semibold text-slate-700 dark:text-slate-300">Automatisch mitscrollen &amp; markieren</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                        💡 <strong>Tipp:</strong> Während der Vorleser läuft, kannst du im Buchtext auf jeden beliebigen Absatz klicken, um genau ab dieser Stelle weiterzuhören.
+                    </p>
+                </div>
+
+                <!-- VARIANTE 2: HÖRBUCH-DATEI-GENERATOR & CLOUD-EXPORT (.MP3 / .WAV) -->
+                <div class="p-4 rounded-2xl bg-indigo-50/50 dark:bg-slate-800/60 border border-indigo-200/80 dark:border-slate-700 space-y-3.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-indigo-600 text-white">
+                            💾 Variante 2: Hörbuch-Datei erzeugen
+                        </span>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400">Echte .mp3 / .wav Dateien</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <!-- Umfang -->
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Umfang der Umwandlung</label>
+                            <select id="epubExportScopeSelect"
+                                    class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold">
+                                <option value="current">📄 Nur aktuelles Kapitel (Kapitel <?= $currentChIdx + 1 ?>)</option>
+                                <option value="all">📚 Komplettes Buch (Alle <?= $totalChapters ?> Kapitel)</option>
+                            </select>
+                        </div>
+
+                        <!-- Synthese-Engine -->
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Sprach-Generator (Engine)</label>
+                            <select id="epubExportEngineSelect" onchange="onEpubExportEngineChange()"
+                                    class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold">
+                                <option value="server_mp3">⚡ Express-MP3-Synthese (.mp3 Datei)</option>
+                                <option value="piper_wasm">🤖 Lokale Piper KI-Stimme im Browser (.wav Datei)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Auswahl der lokalen Piper-KI-Stimme (falls piper_wasm aktiv) -->
+                    <div id="epubPiperVoiceRow" class="hidden">
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Neuronales KI-Sprachmodell (WebAssembly im Browser)</label>
+                        <select id="epubPiperVoiceSelect"
+                                class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white">
+                            <option value="de_DE-thorsten-medium" <?= $bookLangCode === 'de' ? 'selected' : '' ?>>🇩🇪 Deutsch – Thorsten (Männlich, natürlich – Medium)</option>
+                            <option value="de_DE-kerstin-low">🇩🇪 Deutsch – Kerstin (Weiblich, kompakt &amp; schnell)</option>
+                            <option value="en_US-hfc_female-medium" <?= $bookLangCode === 'en' ? 'selected' : '' ?>>🇺🇸 Englisch – HFC Female (Weiblich, natürlich)</option>
+                            <option value="en_US-hfc_male-medium">🇺🇸 Englisch – HFC Male (Männlich, natürlich)</option>
+                        </select>
+                    </div>
+
+                    <!-- Aktions-Buttons: In MiniCloud speichern ODER Direkt herunterladen -->
+                    <div class="flex flex-wrap items-center gap-2 pt-0.5">
+                        <button type="button" id="epubGenSaveCloudBtn" onclick="startAudiobookGeneration(true)"
+                                class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold shadow-xs transition-colors cursor-pointer">
+                            <span>☁️</span>
+                            <span>In MiniCloud speichern (Hörbücher/…)</span>
+                        </button>
+                        <button type="button" id="epubGenDownloadBtn" onclick="startAudiobookGeneration(false)"
+                                class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 font-bold transition-colors cursor-pointer">
+                            <span>⬇️</span>
+                            <span>Direkt herunterladen</span>
+                        </button>
+                        <button type="button" id="epubGenCancelBtn" onclick="cancelAudiobookGeneration()"
+                                class="hidden px-3 py-2.5 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold cursor-pointer">
+                            Abbrechen
+                        </button>
+                    </div>
+
+                    <!-- Fortschritt & Ergebnisse der Hörbuch-Generierung -->
+                    <div id="epubGenProgressBox" class="hidden p-3 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-slate-700 space-y-2">
+                        <div class="flex items-center justify-between text-[11px] font-bold">
+                            <span id="epubGenStatusLabel" class="text-indigo-700 dark:text-indigo-300 truncate">Bereite Hörbuch-Synthese vor…</span>
+                            <span id="epubGenPercentLabel" class="text-slate-600 dark:text-slate-400 shrink-0 ml-2">0 %</span>
+                        </div>
+                        <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div id="epubGenProgressBar" class="h-full bg-indigo-600 transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Vorschau-Player & Links zu gespeicherten Hörbuch-Dateien -->
+                    <div id="epubGenResultBox" class="hidden p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span id="epubGenResultTitle" class="font-bold text-emerald-800 dark:text-emerald-300 truncate">✅ Hörbuch-Datei bereit!</span>
+                            <a id="epubGenFolderLink" href="index.php" class="hidden px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shrink-0">
+                                📂 Im Datei-Manager öffnen
+                            </a>
+                        </div>
+                        <audio id="epubGenPreviewAudio" controls class="w-full h-9"></audio>
+                        <div id="epubGenFilesList" class="max-h-36 overflow-y-auto space-y-1 text-[11px]"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 1. INHALTSVERZEICHNIS -->
         <div id="epubTocDrawer" class="hidden mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-lg space-y-2.5">
             <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
@@ -1315,17 +2242,21 @@ if ($bookFileId > 0) {
 
     <script>
     const EPUB_FILE_ID        = <?= (int)$bookFileId ?>;
+    const EPUB_BOOK_TITLE     = <?= json_encode($epubInfo['title']) ?>;
+    const EPUB_BOOK_AUTHOR    = <?= json_encode($epubInfo['author']) ?>;
+    const EPUB_BOOK_LANG      = <?= json_encode($bookLangCode) ?>;
     const EPUB_CHAPTER_INDEX  = <?= (int)$currentChIdx ?>;
     const EPUB_CHAPTER_TITLE  = <?= json_encode($chapterTitle) ?>;
     const EPUB_TOTAL_CHAPTERS = <?= (int)$totalChapters ?>;
     const EPUB_INITIAL_SCROLL = <?= (float)$initialScrollPct ?>;
+    const EPUB_AUTOPLAY       = <?= $autoPlayAudio ? 'true' : 'false' ?>;
     const EPUB_CSRF           = <?= json_encode($csrfToken) ?>;
 
     let epubPrefs = <?= json_encode($savedPrefs) ?>;
     let saveProgressTimer = null;
 
     function toggleEpubDrawer(id) {
-        const ids = ['epubTocDrawer', 'epubSearchDrawer', 'epubBookmarkDrawer', 'epubPrefsDrawer'];
+        const ids = ['epubAudioDrawer', 'epubTocDrawer', 'epubSearchDrawer', 'epubBookmarkDrawer', 'epubPrefsDrawer'];
         ids.forEach((otherId) => {
             const el = document.getElementById(otherId);
             if (!el) return;
@@ -1476,8 +2407,702 @@ if ($bookFileId > 0) {
         }
     }
 
+    // =========================================================================
+    // VARIANTE 1: LIVE-HÖRBUCH-PLAYER IM E-BOOK-READER (CLOUD-MP3 & WEB SPEECH)
+    // =========================================================================
+    let epubTtsBlocks = [];
+    let epubTtsCurrentIdx = 0;
+    let epubTtsIsPlaying = false;
+    let epubTtsIsPaused = false;
+    let epubTtsAudioEl = null;
+    let epubTtsPreloadAudioEl = null;
+    let epubTtsPreloadIdx = -1;
+    let epubSleepTimerId = null;
+    let epubSleepEndTime = 0;
+    let epubWebSpeechVoices = [];
+
+    function initEpubTtsBlocks() {
+        const container = document.getElementById('epubChapterContent');
+        if (!container) return;
+
+        let candidates = Array.from(container.querySelectorAll('h1, h2, h3, h4, p, li, blockquote'));
+        // Fallback, falls ein EPUB nur reine <div>- oder Textknoten ohne <p> verwendet
+        if (candidates.length === 0) {
+            candidates = Array.from(container.querySelectorAll('div'));
+        }
+        if (candidates.length === 0) {
+            candidates = [container];
+        }
+
+        // Nur Blatt-Blockelemente mit vorlesbarem Text behalten (keine verschachtelten Duplikate)
+        epubTtsBlocks = [];
+        candidates.forEach((el) => {
+            const hasChildCandidate = candidates.some((other) => other !== el && el.contains(other));
+            if (hasChildCandidate) return;
+            const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (txt.length >= 2) {
+                el.classList.add('epub-tts-block');
+                const blockIndex = epubTtsBlocks.length;
+                el.dataset.ttsBlockIdx = String(blockIndex);
+                el.addEventListener('click', (ev) => {
+                    if (ev.target.closest('a')) return;
+                    if (epubTtsIsPlaying || epubTtsIsPaused) {
+                        epubTtsPlayBlock(blockIndex);
+                    }
+                });
+                epubTtsBlocks.push({ el, text: txt });
+            }
+        });
+
+        updateEpubLiveUiState();
+    }
+
+    function initWebSpeechVoices() {
+        if (!('speechSynthesis' in window)) return;
+        const populate = () => {
+            epubWebSpeechVoices = window.speechSynthesis.getVoices() || [];
+            const sel = document.getElementById('epubWebSpeechVoiceSelect');
+            if (!sel) return;
+            if (epubWebSpeechVoices.length === 0) {
+                sel.innerHTML = '<option value="">Keine lokale Systemstimme gefunden (Cloud-Stimme empfohlen)</option>';
+                return;
+            }
+            const sorted = [...epubWebSpeechVoices].sort((a, b) => {
+                const aMatch = a.lang.toLowerCase().startsWith(EPUB_BOOK_LANG) ? 0 : 1;
+                const bMatch = b.lang.toLowerCase().startsWith(EPUB_BOOK_LANG) ? 0 : 1;
+                if (aMatch !== bMatch) return aMatch - bMatch;
+                return a.name.localeCompare(b.name);
+            });
+            sel.innerHTML = sorted.map((v) =>
+                `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name} (${v.lang})</option>`
+            ).join('');
+        };
+        populate();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = populate;
+        }
+    }
+
+    function onEpubLiveEngineChange() {
+        const eng = document.getElementById('epubLiveEngineSelect')?.value || 'cloud_mp3';
+        const voiceRow = document.getElementById('epubWebSpeechVoiceRow');
+        if (voiceRow) {
+            voiceRow.classList.toggle('hidden', eng !== 'webspeech');
+        }
+        if (epubTtsIsPlaying) {
+            epubTtsPlayBlock(epubTtsCurrentIdx);
+        }
+    }
+
+    function onEpubLiveRateChange() {
+        const rate = parseFloat(document.getElementById('epubLiveRateSelect')?.value || '1') || 1.0;
+        if (epubTtsAudioEl) {
+            epubTtsAudioEl.playbackRate = rate;
+        }
+        if (epubTtsIsPlaying && (document.getElementById('epubLiveEngineSelect')?.value === 'webspeech')) {
+            epubTtsPlayBlock(epubTtsCurrentIdx);
+        }
+    }
+
+    function onEpubSleepTimerChange() {
+        const val = document.getElementById('epubSleepTimerSelect')?.value || '0';
+        const badge = document.getElementById('epubSleepTimerBadge');
+        if (epubSleepTimerId) {
+            clearInterval(epubSleepTimerId);
+            epubSleepTimerId = null;
+        }
+        epubSleepEndTime = 0;
+
+        if (val === '0') {
+            if (badge) badge.classList.add('hidden');
+            return;
+        }
+        if (val === 'chapter_end') {
+            if (badge) {
+                badge.textContent = '🌙 Stopp am Kapitelende';
+                badge.classList.remove('hidden');
+            }
+            return;
+        }
+
+        const mins = parseInt(val, 10) || 0;
+        if (mins > 0) {
+            epubSleepEndTime = Date.now() + mins * 60 * 1000;
+            const updateBadge = () => {
+                const remSec = Math.max(0, Math.round((epubSleepEndTime - Date.now()) / 1000));
+                if (remSec <= 0) {
+                    clearInterval(epubSleepTimerId);
+                    epubSleepTimerId = null;
+                    if (badge) badge.classList.add('hidden');
+                    epubTtsStop();
+                    return;
+                }
+                const m = Math.floor(remSec / 60);
+                const s = remSec % 60;
+                if (badge) {
+                    badge.textContent = `🌙 ${m}:${s < 10 ? '0' : ''}${s}`;
+                    badge.classList.remove('hidden');
+                }
+            };
+            updateBadge();
+            epubSleepTimerId = setInterval(updateBadge, 1000);
+        }
+    }
+
+    function highlightEpubTtsBlock(idx) {
+        epubTtsBlocks.forEach((b, i) => {
+            if (i === idx && (epubTtsIsPlaying || epubTtsIsPaused)) {
+                b.el.classList.add('epub-tts-active-block');
+            } else {
+                b.el.classList.remove('epub-tts-active-block');
+            }
+        });
+
+        const content = document.getElementById('epubChapterContent');
+        if (content) {
+            content.classList.toggle('epub-tts-clickable', epubTtsIsPlaying || epubTtsIsPaused);
+        }
+
+        const autoScroll = document.getElementById('epubAutoScrollTtsChk')?.checked ?? true;
+        if (autoScroll && epubTtsBlocks[idx] && (epubTtsIsPlaying || epubTtsIsPaused)) {
+            epubTtsBlocks[idx].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function updateEpubLiveUiState() {
+        const bar = document.getElementById('epubLivePlayerBar');
+        const dot = document.getElementById('epubAudioPlayingDot');
+        const miniIcon = document.getElementById('epubMiniPlayIcon');
+        const miniLbl  = document.getElementById('epubMiniPlayLabel');
+        const drwIcon  = document.getElementById('epubDrawerPlayIcon');
+        const drwLbl   = document.getElementById('epubDrawerPlayLabel');
+        const statusTxt = document.getElementById('epubLiveStatusText');
+        const counter   = document.getElementById('epubLiveBlockCounter');
+        const progBar   = document.getElementById('epubLiveBlockProgressBar');
+
+        const active = epubTtsIsPlaying || epubTtsIsPaused;
+        if (bar) bar.classList.toggle('hidden', !active);
+        if (dot) dot.classList.toggle('hidden', !epubTtsIsPlaying);
+
+        if (epubTtsIsPlaying) {
+            if (miniIcon) miniIcon.textContent = '⏸';
+            if (miniLbl)  miniLbl.textContent  = 'Pause';
+            if (drwIcon)  drwIcon.textContent  = '⏸️';
+            if (drwLbl)   drwLbl.textContent   = 'Vorlesen pausieren';
+        } else if (epubTtsIsPaused) {
+            if (miniIcon) miniIcon.textContent = '▶️';
+            if (miniLbl)  miniLbl.textContent  = 'Weiter';
+            if (drwIcon)  drwIcon.textContent  = '▶️';
+            if (drwLbl)   drwLbl.textContent   = 'Weiter vorlesen';
+        } else {
+            if (drwIcon)  drwIcon.textContent  = '▶️';
+            if (drwLbl)   drwLbl.textContent   = 'Kapitel jetzt vorlesen';
+        }
+
+        const total = epubTtsBlocks.length;
+        const curr  = total > 0 ? Math.min(total, epubTtsCurrentIdx + 1) : 0;
+        if (counter) counter.textContent = `${curr} / ${total}`;
+        if (progBar) progBar.style.width = total > 0 ? `${Math.round((curr / total) * 100)}%` : '0%';
+
+        if (statusTxt && epubTtsBlocks[epubTtsCurrentIdx]) {
+            const snippet = epubTtsBlocks[epubTtsCurrentIdx].text;
+            statusTxt.textContent = (epubTtsIsPaused ? '⏸ Pausiert: ' : '🔊 ') + snippet;
+        }
+    }
+
+    function updateMediaSessionMetadata() {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: EPUB_CHAPTER_TITLE,
+                artist: EPUB_BOOK_AUTHOR || 'MiniCloud Hörbuch',
+                album: EPUB_BOOK_TITLE,
+            });
+            navigator.mediaSession.setActionHandler('play', () => epubTtsTogglePlay());
+            navigator.mediaSession.setActionHandler('pause', () => epubTtsTogglePlay());
+            navigator.mediaSession.setActionHandler('previoustrack', () => epubTtsPrevBlock());
+            navigator.mediaSession.setActionHandler('nexttrack', () => epubTtsNextBlock());
+            navigator.mediaSession.setActionHandler('stop', () => epubTtsStop());
+        } catch (e) {}
+    }
+
+    function buildChunkTtsUrl(text) {
+        return `ebooks.php?action=tts_chunk&lang=${encodeURIComponent(EPUB_BOOK_LANG)}&text=${encodeURIComponent(text.slice(0, 700))}`;
+    }
+
+    function preloadNextEpubTtsBlock(nextIdx) {
+        if (nextIdx < 0 || nextIdx >= epubTtsBlocks.length) return;
+        if (epubTtsPreloadIdx === nextIdx) return;
+        epubTtsPreloadIdx = nextIdx;
+        const nextUrl = buildChunkTtsUrl(epubTtsBlocks[nextIdx].text);
+        epubTtsPreloadAudioEl = new Audio();
+        epubTtsPreloadAudioEl.preload = 'auto';
+        epubTtsPreloadAudioEl.src = nextUrl;
+        epubTtsPreloadAudioEl.load();
+    }
+
+    function stopCurrentTtsOutputs() {
+        if (epubTtsAudioEl) {
+            epubTtsAudioEl.onended = null;
+            epubTtsAudioEl.onerror = null;
+            epubTtsAudioEl.pause();
+            epubTtsAudioEl = null;
+        }
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+    }
+
+    function onEpubChapterTtsFinished() {
+        const sleepVal = document.getElementById('epubSleepTimerSelect')?.value || '0';
+        const autoNext = document.getElementById('epubAutoNextChapterChk')?.checked ?? true;
+        if (sleepVal === 'chapter_end' || !autoNext || (EPUB_CHAPTER_INDEX + 1 >= EPUB_TOTAL_CHAPTERS)) {
+            epubTtsStop();
+            return;
+        }
+        // Nahtlos ins nächste Kapitel blättern und automatisch weiterlesen
+        window.location.href = `ebooks.php?id=${EPUB_FILE_ID}&ch=${EPUB_CHAPTER_INDEX + 1}&autoplay=1`;
+    }
+
+    function epubTtsPlayBlock(idx) {
+        if (epubTtsBlocks.length === 0) {
+            initEpubTtsBlocks();
+        }
+        if (epubTtsBlocks.length === 0) return;
+
+        if (idx < 0) idx = 0;
+        if (idx >= epubTtsBlocks.length) {
+            onEpubChapterTtsFinished();
+            return;
+        }
+
+        stopCurrentTtsOutputs();
+        epubTtsCurrentIdx = idx;
+        epubTtsIsPlaying  = true;
+        epubTtsIsPaused   = false;
+
+        highlightEpubTtsBlock(idx);
+        updateEpubLiveUiState();
+        updateMediaSessionMetadata();
+        saveEpubProgressNow();
+
+        const engine = document.getElementById('epubLiveEngineSelect')?.value || 'cloud_mp3';
+        const rate   = parseFloat(document.getElementById('epubLiveRateSelect')?.value || '1') || 1.0;
+        const text   = epubTtsBlocks[idx].text;
+
+        if (engine === 'webspeech' && ('speechSynthesis' in window) && epubWebSpeechVoices.length > 0) {
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = EPUB_BOOK_LANG;
+            utter.rate = rate;
+            const wantedVoice = document.getElementById('epubWebSpeechVoiceSelect')?.value || '';
+            if (wantedVoice) {
+                const found = epubWebSpeechVoices.find((v) => v.name === wantedVoice);
+                if (found) utter.voice = found;
+            }
+            utter.onend = () => {
+                if (epubTtsIsPlaying) {
+                    epubTtsPlayBlock(idx + 1);
+                }
+            };
+            utter.onerror = () => {
+                if (epubTtsIsPlaying) {
+                    epubTtsPlayBlock(idx + 1);
+                }
+            };
+            window.speechSynthesis.speak(utter);
+            return;
+        }
+
+        // Standard: Natürlicher Cloud-MP3-Stream mit Preloading des nächsten Absatzes
+        if (epubTtsPreloadIdx === idx && epubTtsPreloadAudioEl) {
+            epubTtsAudioEl = epubTtsPreloadAudioEl;
+            epubTtsPreloadAudioEl = null;
+            epubTtsPreloadIdx = -1;
+        } else {
+            epubTtsAudioEl = new Audio(buildChunkTtsUrl(text));
+        }
+
+        epubTtsAudioEl.playbackRate = rate;
+        epubTtsAudioEl.onended = () => {
+            if (epubTtsIsPlaying) {
+                epubTtsPlayBlock(idx + 1);
+            }
+        };
+        epubTtsAudioEl.onerror = () => {
+            // Fallback auf Web Speech falls offline
+            if ('speechSynthesis' in window && epubWebSpeechVoices.length > 0) {
+                const utter = new SpeechSynthesisUtterance(text);
+                utter.lang = EPUB_BOOK_LANG;
+                utter.rate = rate;
+                utter.onend = () => { if (epubTtsIsPlaying) epubTtsPlayBlock(idx + 1); };
+                window.speechSynthesis.speak(utter);
+            } else if (epubTtsIsPlaying) {
+                epubTtsPlayBlock(idx + 1);
+            }
+        };
+
+        epubTtsAudioEl.play().catch(() => {});
+        preloadNextEpubTtsBlock(idx + 1);
+    }
+
+    function epubTtsTogglePlay() {
+        if (epubTtsBlocks.length === 0) {
+            initEpubTtsBlocks();
+        }
+        if (epubTtsIsPlaying) {
+            epubTtsIsPlaying = false;
+            epubTtsIsPaused  = true;
+            if (epubTtsAudioEl) {
+                epubTtsAudioEl.pause();
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.pause();
+            }
+            updateEpubLiveUiState();
+            return;
+        }
+        if (epubTtsIsPaused) {
+            epubTtsIsPlaying = true;
+            epubTtsIsPaused  = false;
+            const engine = document.getElementById('epubLiveEngineSelect')?.value || 'cloud_mp3';
+            if (engine === 'webspeech' && ('speechSynthesis' in window) && window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+                updateEpubLiveUiState();
+                return;
+            }
+            if (epubTtsAudioEl) {
+                epubTtsAudioEl.play().catch(() => epubTtsPlayBlock(epubTtsCurrentIdx));
+                updateEpubLiveUiState();
+                return;
+            }
+        }
+        epubTtsPlayBlock(epubTtsCurrentIdx);
+    }
+
+    function epubTtsPrevBlock() {
+        epubTtsPlayBlock(Math.max(0, epubTtsCurrentIdx - 1));
+    }
+
+    function epubTtsNextBlock() {
+        epubTtsPlayBlock(epubTtsCurrentIdx + 1);
+    }
+
+    function epubTtsStop() {
+        epubTtsIsPlaying = false;
+        epubTtsIsPaused  = false;
+        stopCurrentTtsOutputs();
+        highlightEpubTtsBlock(-1);
+        updateEpubLiveUiState();
+    }
+
+    // =========================================================================
+    // VARIANTE 2: HÖRBUCH-DATEI-GENERATOR (.MP3 SERVER & .WAV LOKALE KI PIPER)
+    // =========================================================================
+    let epubGenAbortFlag = false;
+
+    function onEpubExportEngineChange() {
+        const eng = document.getElementById('epubExportEngineSelect')?.value || 'server_mp3';
+        const piperRow = document.getElementById('epubPiperVoiceRow');
+        if (piperRow) {
+            piperRow.classList.toggle('hidden', eng !== 'piper_wasm');
+        }
+    }
+
+    function setEpubGenProgress(statusText, pct) {
+        const box = document.getElementById('epubGenProgressBox');
+        const lbl = document.getElementById('epubGenStatusLabel');
+        const pLbl = document.getElementById('epubGenPercentLabel');
+        const bar = document.getElementById('epubGenProgressBar');
+        if (box) box.classList.remove('hidden');
+        if (lbl) lbl.textContent = statusText;
+        const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+        if (pLbl) pLbl.textContent = clamped + ' %';
+        if (bar) bar.style.width = clamped + '%';
+    }
+
+    function cancelAudiobookGeneration() {
+        epubGenAbortFlag = true;
+        setEpubGenProgress('🛑 Hörbuch-Generierung wird abgebrochen…', 0);
+    }
+
+    function triggerBlobDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return url;
+    }
+
+    function base64ToBlob(b64, mimeType) {
+        const bin = atob(b64);
+        const len = bin.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = bin.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mimeType });
+    }
+
+    /**
+     * Fügt mehrere 16-Bit PCM WAV-Blobs (aus Piper WebAssembly TTS) inklusive kurzer Sprechpausen
+     * zu einer einzigen durchgehenden .wav-Audiodatei zusammen.
+     */
+    async function mergePiperWavBlobs(blobs, pauseMs = 220) {
+        if (!blobs || blobs.length === 0) return null;
+        const buffers = [];
+        let sampleRate = 22050;
+        let numChannels = 1;
+        let bitsPerSample = 16;
+
+        for (let i = 0; i < blobs.length; i++) {
+            const ab = await blobs[i].arrayBuffer();
+            if (ab.byteLength <= 44) continue;
+            const dv = new DataView(ab);
+            if (i === 0) {
+                numChannels   = dv.getUint16(22, true) || 1;
+                sampleRate    = dv.getUint32(24, true) || 22050;
+                bitsPerSample = dv.getUint16(34, true) || 16;
+            }
+            buffers.push(new Uint8Array(ab, 44));
+        }
+
+        const bytesPerSample = (bitsPerSample / 8) * numChannels;
+        const pauseBytesLen = Math.floor((sampleRate * (pauseMs / 1000)) * bytesPerSample);
+        const alignedPauseLen = pauseBytesLen - (pauseBytesLen % bytesPerSample);
+        const silenceChunk = new Uint8Array(alignedPauseLen);
+
+        let totalDataLen = 0;
+        buffers.forEach((b, idx) => {
+            totalDataLen += b.byteLength;
+            if (idx < buffers.length - 1) totalDataLen += silenceChunk.byteLength;
+        });
+
+        const outBuffer = new ArrayBuffer(44 + totalDataLen);
+        const view = new DataView(outBuffer);
+        const writeStr = (offset, str) => {
+            for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+        };
+
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + totalDataLen, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * bytesPerSample, true);
+        view.setUint16(32, bytesPerSample, true);
+        view.setUint16(34, bitsPerSample, true);
+        writeStr(36, 'data');
+        view.setUint32(40, totalDataLen, true);
+
+        const outBytes = new Uint8Array(outBuffer, 44);
+        let offset = 0;
+        buffers.forEach((b, idx) => {
+            outBytes.set(b, offset);
+            offset += b.byteLength;
+            if (idx < buffers.length - 1 && silenceChunk.byteLength > 0) {
+                outBytes.set(silenceChunk, offset);
+                offset += silenceChunk.byteLength;
+            }
+        });
+
+        return new Blob([outBuffer], { type: 'audio/wav' });
+    }
+
+    function appendGeneratedFileRow(filename, sizeFormatted, downloadUrl, streamUrl) {
+        const resBox = document.getElementById('epubGenResultBox');
+        const list   = document.getElementById('epubGenFilesList');
+        const audio  = document.getElementById('epubGenPreviewAudio');
+        if (resBox) resBox.classList.remove('hidden');
+        if (audio && streamUrl) {
+            audio.src = streamUrl;
+        }
+        if (list) {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200/70 dark:border-slate-700';
+            row.innerHTML = `
+                <span class="font-semibold text-slate-800 dark:text-slate-200 truncate">🎵 ${filename} <span class="text-slate-400 font-normal">(${sizeFormatted})</span></span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold cursor-pointer"
+                            onclick="const a=document.getElementById('epubGenPreviewAudio'); if(a){a.src='${streamUrl}'; a.play();}">▶️</button>
+                    <a href="${downloadUrl}" download="${filename}" class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold">⬇️</a>
+                </div>
+            `;
+            list.prepend(row);
+        }
+    }
+
+    async function startAudiobookGeneration(saveToCloud) {
+        epubGenAbortFlag = false;
+        const scope  = document.getElementById('epubExportScopeSelect')?.value || 'current';
+        const engine = document.getElementById('epubExportEngineSelect')?.value || 'server_mp3';
+
+        const btnCloud  = document.getElementById('epubGenSaveCloudBtn');
+        const btnDl     = document.getElementById('epubGenDownloadBtn');
+        const btnCancel = document.getElementById('epubGenCancelBtn');
+        const list      = document.getElementById('epubGenFilesList');
+
+        if (btnCloud)  btnCloud.disabled = true;
+        if (btnDl)     btnDl.disabled = true;
+        if (btnCancel) btnCancel.classList.remove('hidden');
+        if (list)      list.innerHTML = '';
+
+        const chaptersToProcess = [];
+        if (scope === 'all') {
+            for (let c = 0; c < EPUB_TOTAL_CHAPTERS; c++) chaptersToProcess.push(c);
+        } else {
+            chaptersToProcess.push(EPUB_CHAPTER_INDEX);
+        }
+
+        try {
+            if (engine === 'server_mp3') {
+                for (let i = 0; i < chaptersToProcess.length; i++) {
+                    if (epubGenAbortFlag) break;
+                    const chIdx = chaptersToProcess[i];
+                    const basePct = (i / chaptersToProcess.length) * 100;
+                    setEpubGenProgress(
+                        `🎙️ Synthetisiere Kapitel ${chIdx + 1} von ${EPUB_TOTAL_CHAPTERS} als .mp3…`,
+                        basePct + (40 / chaptersToProcess.length)
+                    );
+
+                    const fd = new FormData();
+                    fd.append('action', 'generate_chapter_mp3');
+                    fd.append('ajax', '1');
+                    fd.append('csrf_token', EPUB_CSRF);
+                    fd.append('file_id', String(EPUB_FILE_ID));
+                    fd.append('chapter_index', String(chIdx));
+                    fd.append('save_to_cloud', saveToCloud ? '1' : '0');
+                    fd.append('lang', EPUB_BOOK_LANG);
+
+                    const r = await fetch('ebooks.php', { method: 'POST', body: fd });
+                    const d = await r.json();
+
+                    if (!d || !d.ok) {
+                        alert(d?.error || `Fehler bei Kapitel ${chIdx + 1}.`);
+                        break;
+                    }
+
+                    if (d.skipped) {
+                        continue;
+                    }
+
+                    if (saveToCloud && d.saved_to_cloud) {
+                        const folderLink = document.getElementById('epubGenFolderLink');
+                        if (folderLink && d.folder_url) {
+                            folderLink.href = d.folder_url;
+                            folderLink.classList.remove('hidden');
+                        }
+                        appendGeneratedFileRow(d.filename, d.file_size_formatted, d.download_url, d.stream_url);
+                    } else if (d.audio_base64) {
+                        const blob = base64ToBlob(d.audio_base64, d.mime_type || 'audio/mpeg');
+                        const objUrl = triggerBlobDownload(blob, d.filename);
+                        appendGeneratedFileRow(d.filename, d.file_size_formatted, objUrl, objUrl);
+                    }
+                }
+            } else {
+                // Lokale Piper KI-Stimme im Browser (WebAssembly)
+                setEpubGenProgress('🤖 Lade lokales Piper KI-Sprachmodul (WebAssembly)…', 3);
+                if (!window._piperTtsModule) {
+                    window._piperTtsModule = await import('https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm');
+                }
+                const tts = window._piperTtsModule;
+                const voiceId = document.getElementById('epubPiperVoiceSelect')?.value || 'de_DE-thorsten-medium';
+
+                for (let i = 0; i < chaptersToProcess.length; i++) {
+                    if (epubGenAbortFlag) break;
+                    const chIdx = chaptersToProcess[i];
+
+                    const fdText = new FormData();
+                    fdText.append('action', 'get_chapter_tts_text');
+                    fdText.append('ajax', '1');
+                    fdText.append('csrf_token', EPUB_CSRF);
+                    fdText.append('file_id', String(EPUB_FILE_ID));
+                    fdText.append('chapter_index', String(chIdx));
+
+                    const rText = await fetch('ebooks.php', { method: 'POST', body: fdText });
+                    const dText = await rText.json();
+                    if (!dText || !dText.ok || !Array.isArray(dText.chunks) || dText.chunks.length === 0) {
+                        continue;
+                    }
+
+                    const chunks = [`Kapitel ${chIdx + 1}: ${dText.chapter_title}.`, ...dText.chunks];
+                    const wavBlobs = [];
+
+                    for (let s = 0; s < chunks.length; s++) {
+                        if (epubGenAbortFlag) break;
+                        const overallPct = ((i + (s / chunks.length)) / chaptersToProcess.length) * 100;
+                        setEpubGenProgress(
+                            `🤖 KI-Stimme (${voiceId}): Kapitel ${chIdx + 1}, Satz ${s + 1} / ${chunks.length}…`,
+                            overallPct
+                        );
+                        const wav = await tts.predict({ text: chunks[s], voiceId });
+                        if (wav) wavBlobs.push(wav);
+                    }
+
+                    if (epubGenAbortFlag || wavBlobs.length === 0) break;
+
+                    const mergedWav = await mergePiperWavBlobs(wavBlobs, 220);
+                    if (!mergedWav) continue;
+
+                    const sizeMb = (mergedWav.size / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB';
+                    const safeChap = (dText.chapter_title || `Kapitel ${chIdx + 1}`).replace(/[^\p{L}\p{N}\s\-_()]/gu, '').trim().slice(0, 70);
+                    const wavFilename = `Kapitel ${String(chIdx + 1).padStart(2, '0')} - ${safeChap}.wav`;
+
+                    if (saveToCloud) {
+                        setEpubGenProgress(`☁️ Speichere ${wavFilename} in deiner MiniCloud…`, 96);
+                        const fdUp = new FormData();
+                        fdUp.append('action', 'save_browser_audiobook');
+                        fdUp.append('ajax', '1');
+                        fdUp.append('csrf_token', EPUB_CSRF);
+                        fdUp.append('file_id', String(EPUB_FILE_ID));
+                        fdUp.append('chapter_index', String(chIdx));
+                        fdUp.append('ext', 'wav');
+                        fdUp.append('audio_blob', mergedWav, wavFilename);
+
+                        const rUp = await fetch('ebooks.php', { method: 'POST', body: fdUp });
+                        const dUp = await rUp.json();
+                        if (dUp && dUp.ok) {
+                            const folderLink = document.getElementById('epubGenFolderLink');
+                            if (folderLink && dUp.folder_url) {
+                                folderLink.href = dUp.folder_url;
+                                folderLink.classList.remove('hidden');
+                            }
+                            appendGeneratedFileRow(dUp.filename, dUp.file_size_formatted, dUp.download_url, dUp.stream_url);
+                        }
+                    } else {
+                        const objUrl = triggerBlobDownload(mergedWav, wavFilename);
+                        appendGeneratedFileRow(wavFilename, sizeMb, objUrl, objUrl);
+                    }
+                }
+            }
+
+            if (!epubGenAbortFlag) {
+                setEpubGenProgress(
+                    saveToCloud
+                        ? '✅ Hörbuch erfolgreich im Ordner „Hörbücher/…“ deiner MiniCloud gespeichert!'
+                        : '✅ Hörbuch-Audiodatei erfolgreich erstellt & heruntergeladen!',
+                    100
+                );
+            }
+        } catch (err) {
+            alert('Hinweis bei der Hörbuch-Erstellung: ' + (err?.message || err));
+        } finally {
+            if (btnCloud)  btnCloud.disabled = false;
+            if (btnDl)     btnDl.disabled = false;
+            if (btnCancel) btnCancel.classList.add('hidden');
+        }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
-        if (EPUB_INITIAL_SCROLL > 1) {
+        initEpubTtsBlocks();
+        initWebSpeechVoices();
+
+        if (EPUB_INITIAL_SCROLL > 1 && !EPUB_AUTOPLAY) {
             setTimeout(() => {
                 const doc = document.documentElement;
                 const maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
@@ -1486,6 +3111,13 @@ if ($bookFileId > 0) {
         }
         // Beim Öffnen des Kapitels Fortschritt direkt einmal sichern
         saveEpubProgressNow();
+
+        // Falls automatischer Kapitelwechsel im Hörbuch-Modus (&autoplay=1) aktiv ist -> sofort weiterlesen
+        if (EPUB_AUTOPLAY) {
+            setTimeout(() => {
+                epubTtsPlayBlock(0);
+            }, 350);
+        }
     });
 
     window.addEventListener('scroll', () => {
@@ -1793,10 +3425,17 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </div>
 
-            <a href="ebooks.php?id=<?= (int)$lastReadBook['id'] ?>"
-               class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors shrink-0">
-                📖 An letzter Stelle weiterlesen &rarr;
-            </a>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                <a href="ebooks.php?id=<?= (int)$lastReadBook['id'] ?>"
+                   class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors">
+                    📖 Weiterlesen &rarr;
+                </a>
+                <a href="ebooks.php?id=<?= (int)$lastReadBook['id'] ?>&amp;autoplay=1"
+                   class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-slate-600 text-xs sm:text-sm font-bold shadow-2xs transition-colors"
+                   title="Als Hörbuch an letzter Stelle weiterhören">
+                    🎧 Weiterhören
+                </a>
+            </div>
         </section>
     <?php endif; ?>
 
@@ -1934,13 +3573,23 @@ require_once __DIR__ . '/includes/header.php';
                                 </div>
                             </div>
 
-                            <div class="flex items-center justify-between gap-2 pt-0.5">
+                            <div class="flex items-center justify-between gap-1.5 pt-0.5">
                                 <a href="ebooks.php?id=<?= (int)$b['id'] ?>"
-                                   class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition-colors">
-                                    📖 <?= $b['progress_pct'] > 0 ? 'Weiterlesen' : 'Jetzt lesen' ?>
+                                   class="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition-colors">
+                                    📖 <?= $b['progress_pct'] > 0 ? 'Weiterlesen' : 'Lesen' ?>
+                                </a>
+                                <a href="ebooks.php?id=<?= (int)$b['id'] ?>&amp;autoplay=1"
+                                   class="px-2.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 hover:bg-amber-200 text-amber-800 dark:text-amber-300 text-xs font-bold transition-colors"
+                                   title="Als Hörbuch vorlesen lassen (Variante 1)">
+                                    🎧
+                                </a>
+                                <a href="ebooks.php?id=<?= (int)$b['id'] ?>&amp;audiostudio=1"
+                                   class="px-2.5 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 hover:bg-indigo-200 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-colors"
+                                   title="In .mp3 / .wav Hörbuch-Datei umwandeln (Variante 2)">
+                                    💾
                                 </a>
                                 <a href="download.php?id=<?= (int)$b['id'] ?>"
-                                   class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-xs font-semibold"
+                                   class="px-2 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-xs font-semibold"
                                    title=".epub herunterladen">
                                     ⬇️
                                 </a>

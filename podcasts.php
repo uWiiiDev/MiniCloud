@@ -249,8 +249,10 @@ function searchPodcastDirectory(string $query): array
 
 // ----------------------------------------------------------------------------
 // 3. LOKALE OFFLINE-EPISODE STREAMEN (?action=stream_local&id=...)
+//    ODER EXTERNE PODCAST-EPISODE ÜBER PROXY STREAMEN (?action=proxy_stream&url=...)
 // ----------------------------------------------------------------------------
 if (isset($_GET['action']) && $_GET['action'] === 'stream_local') {
+    @session_write_close();
     $dlId = (int)($_GET['id'] ?? 0);
     $stmtDl = $pdo->prepare('SELECT * FROM `podcast_downloads` WHERE `id` = :id AND `user_id` = :u LIMIT 1');
     $stmtDl->execute([':id' => $dlId, ':u' => $userId]);
@@ -266,6 +268,64 @@ if (isset($_GET['action']) && $_GET['action'] === 'stream_local') {
         }
     }
     http_response_code(404);
+    exit;
+}
+
+if (isset($_GET['action']) && $_GET['action'] === 'proxy_stream') {
+    @session_write_close();
+    @set_time_limit(0);
+    $remoteUrl = trim((string)($_GET['url'] ?? ''));
+    if (!isSafeExternalPodcastUrl($remoteUrl)) {
+        http_response_code(400);
+        exit;
+    }
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($remoteUrl);
+        $reqHeaders = ['User-Agent: MiniCloud-PodcastStudio/1.0'];
+        if (!empty($_SERVER['HTTP_RANGE']) && preg_match('/^bytes=\d*-\d*(,\d*-\d*)*$/', (string)$_SERVER['HTTP_RANGE'])) {
+            $reqHeaders[] = 'Range: ' . $_SERVER['HTTP_RANGE'];
+        }
+
+        $headersSent = false;
+        curl_setopt_array($ch, [
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 8,
+            CURLOPT_HTTPHEADER     => $reqHeaders,
+            CURLOPT_TIMEOUT        => 0,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_HEADERFUNCTION => static function ($curl, string $headerLine) use (&$headersSent): int {
+                $trim = trim($headerLine);
+                if ( stripos($trim, 'HTTP/') === 0 ) {
+                    if (preg_match('/HTTP\/\d+(?:\.\d+)?\s+(200|206)\b/i', $trim, $mCode)) {
+                        http_response_code((int)$mCode[1]);
+                    }
+                } elseif (preg_match('/^(Content-Type|Content-Length|Content-Range|Accept-Ranges):/i', $trim)) {
+                    header($trim, true);
+                    $headersSent = true;
+                }
+                return strlen($headerLine);
+            },
+            CURLOPT_WRITEFUNCTION  => static function ($curl, string $data) use (&$headersSent): int {
+                if (!$headersSent) {
+                    header('Content-Type: audio/mpeg');
+                    $headersSent = true;
+                }
+                echo $data;
+                if (ob_get_level() > 0) {
+                    @ob_flush();
+                }
+                flush();
+                return strlen($data);
+            },
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
+        exit;
+    }
+
+    header('Location: ' . $remoteUrl);
     exit;
 }
 
@@ -393,8 +453,13 @@ require_once __DIR__ . '/includes/header.php';
 <style>
 .pod-wrap { max-width: 1440px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
 .pod-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
-.pod-player-bar { background: linear-gradient(135deg, #1e1b4b, #0f172a); border: 1px solid rgba(139,92,246,0.45); border-radius: 16px; padding: 16px 20px; color: #f8fafc; }
+.pod-player-bar { background: linear-gradient(135deg, #1e1b4b, #0f172a); border: 1px solid rgba(139,92,246,0.55); border-radius: 16px; padding: 16px 20px; color: #f8fafc; position: sticky; top: 10px; z-index: 30; box-shadow: 0 10px 28px rgba(0,0,0,0.28); }
 .pod-grid { display: grid; grid-template-columns: 340px 1fr; gap: 18px; }
+.pod-ep-card { padding: 13px 15px; border-radius: 12px; background: rgba(15,23,42,0.5); border: 1px solid var(--border); transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease; }
+.pod-ep-card:hover { border-color: rgba(139,92,246,0.5); }
+.pod-ep-card.pod-ep-active { border-color: #8b5cf6 !important; background: rgba(139,92,246,0.14) !important; box-shadow: 0 0 0 2px rgba(139,92,246,0.2); }
+.pod-ep-title-btn { background: none; border: none; padding: 0; margin: 0; color: inherit; font: inherit; font-weight: 800; font-size: 0.95rem; text-align: left; cursor: pointer; transition: color 0.15s ease; }
+.pod-ep-title-btn:hover { color: #a78bfa; }
 @media (max-width: 1024px) { .pod-grid { grid-template-columns: 1fr; } }
 </style>
 
@@ -490,12 +555,25 @@ require_once __DIR__ . '/includes/header.php';
                 <h3 style="margin:20px 0 10px 0;font-size:1.0rem;color:#34d399;">💾 Offline gespeicherte Episoden (<?= count($offlineEpisodes) ?>)</h3>
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     <?php foreach ($offlineEpisodes as $oe): ?>
-                        <div style="padding:10px 12px;border-radius:10px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);">
-                            <div style="font-weight:700;font-size:0.84rem;"><?= e($oe['episode_title']) ?></div>
+                        <?php $oeStreamUrl = 'podcasts.php?action=stream_local&id=' . (int)$oe['id']; ?>
+                        <div class="pod-ep-card" data-ep-card-guid="<?= e((string)$oe['episode_guid']) ?>" style="padding:10px 12px;border-radius:10px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);">
+                            <button type="button" class="pod-ep-title-btn" style="font-size:0.84rem;"
+                                    data-audio-url="<?= e($oeStreamUrl) ?>"
+                                    data-ep-title="<?= e((string)$oe['episode_title']) ?>"
+                                    data-feed-title="<?= e((string)$oe['feed_title'] . ' (Offline)') ?>"
+                                    data-ep-guid="<?= e((string)$oe['episode_guid']) ?>"
+                                    onclick="playPodcastFromEl(this)">
+                                🎧 <?= e($oe['episode_title']) ?>
+                            </button>
                             <div class="text-muted" style="font-size:0.72rem;"><?= e($oe['feed_title']) ?> · <?= formatBytes((int)$oe['file_size']) ?></div>
                             <div style="display:flex;gap:6px;margin-top:6px;">
                                 <button type="button" class="btn btn-sm btn-primary" style="padding:3px 9px;font-size:0.75rem;"
-                                        onclick="playPodcastEpisode(<?= json_encode('podcasts.php?action=stream_local&id=' . (int)$oe['id']) ?>, <?= json_encode($oe['episode_title']) ?>, <?= json_encode($oe['feed_title'] . ' (Offline)') ?>, <?= json_encode($oe['episode_guid']) ?>)">
+                                        data-pod-play-btn="<?= e((string)$oe['episode_guid']) ?>"
+                                        data-audio-url="<?= e($oeStreamUrl) ?>"
+                                        data-ep-title="<?= e((string)$oe['episode_title']) ?>"
+                                        data-feed-title="<?= e((string)$oe['feed_title'] . ' (Offline)') ?>"
+                                        data-ep-guid="<?= e((string)$oe['episode_guid']) ?>"
+                                        onclick="playPodcastFromEl(this)">
                                     ▶️ Offline abspielen
                                 </button>
                                 <form method="post" style="margin:0;">
@@ -525,10 +603,23 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="text-muted" style="padding:20px;text-align:center;">Keine Episoden im RSS-Feed gefunden oder Feed vorübergehend nicht erreichbar.</div>
                     <?php endif; ?>
                     <?php foreach ($parsedFeed['episodes'] as $ep): ?>
-                        <?php $offlineRow = $offlineByGuid[$ep['guid']] ?? null; ?>
-                        <div style="padding:13px 15px;border-radius:12px;background:rgba(15,23,42,0.5);border:1px solid var(--border);">
+                        <?php
+                        $offlineRow  = $offlineByGuid[$ep['guid']] ?? null;
+                        $epStreamUrl = $offlineRow
+                            ? ('podcasts.php?action=stream_local&id=' . (int)$offlineRow['id'])
+                            : (string)$ep['audio_url'];
+                        ?>
+                        <div class="pod-ep-card" data-ep-card-guid="<?= e((string)$ep['guid']) ?>">
                             <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;">
-                                <strong style="font-size:0.95rem;"><?= e($ep['title']) ?></strong>
+                                <button type="button" class="pod-ep-title-btn"
+                                        data-audio-url="<?= e($epStreamUrl) ?>"
+                                        data-ep-title="<?= e((string)$ep['title']) ?>"
+                                        data-feed-title="<?= e((string)$activeFeed['title']) ?>"
+                                        data-ep-guid="<?= e((string)$ep['guid']) ?>"
+                                        onclick="playPodcastFromEl(this)"
+                                        title="Klicken zum Abspielen">
+                                    ▶️ <?= e($ep['title']) ?>
+                                </button>
                                 <div style="display:flex;gap:8px;align-items:center;">
                                     <?php if ($ep['date_fmt'] !== ''): ?>
                                         <span class="text-muted" style="font-size:0.76rem;">📅 <?= e($ep['date_fmt']) ?></span>
@@ -543,7 +634,12 @@ require_once __DIR__ . '/includes/header.php';
                             <?php endif; ?>
                             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
                                 <button type="button" class="btn btn-sm btn-primary"
-                                        onclick="playPodcastEpisode(<?= json_encode($offlineRow ? ('podcasts.php?action=stream_local&id=' . (int)$offlineRow['id']) : $ep['audio_url']) ?>, <?= json_encode($ep['title']) ?>, <?= json_encode($activeFeed['title']) ?>, <?= json_encode($ep['guid']) ?>)">
+                                        data-pod-play-btn="<?= e((string)$ep['guid']) ?>"
+                                        data-audio-url="<?= e($epStreamUrl) ?>"
+                                        data-ep-title="<?= e((string)$ep['title']) ?>"
+                                        data-feed-title="<?= e((string)$activeFeed['title']) ?>"
+                                        data-ep-guid="<?= e((string)$ep['guid']) ?>"
+                                        onclick="playPodcastFromEl(this)">
                                     ▶️ Episode abspielen
                                 </button>
                                 <?php if ($offlineRow): ?>
@@ -570,35 +666,97 @@ require_once __DIR__ . '/includes/header.php';
 
 <script>
 let currentPodGuid = null;
+let currentPodRawUrl = '';
+let currentPodProxyTried = false;
 const podAudio = document.getElementById('podAudioElement');
 
+function playPodcastFromEl(el) {
+    if (!el) return;
+    const url      = el.getAttribute('data-audio-url') || '';
+    const title    = el.getAttribute('data-ep-title') || 'Episode';
+    const showName = el.getAttribute('data-feed-title') || 'Podcast';
+    const guid     = el.getAttribute('data-ep-guid') || '';
+    playPodcastEpisode(url, title, showName, guid);
+}
+
+function updatePodcastActiveCards() {
+    const isPlaying = podAudio && !podAudio.paused && currentPodGuid;
+    document.querySelectorAll('[data-ep-card-guid]').forEach((card) => {
+        const g = card.getAttribute('data-ep-card-guid');
+        card.classList.toggle('pod-ep-active', g === currentPodGuid);
+    });
+    document.querySelectorAll('[data-pod-play-btn]').forEach((btn) => {
+        const g = btn.getAttribute('data-pod-play-btn');
+        if (g === currentPodGuid) {
+            btn.textContent = isPlaying ? '⏸️ Pausieren (Läuft)' : '▶️ Weiterhören';
+        } else {
+            const isOffline = (btn.getAttribute('data-audio-url') || '').includes('action=stream_local');
+            btn.textContent = isOffline ? '▶️ Offline abspielen' : '▶️ Episode abspielen';
+        }
+    });
+}
+
 function playPodcastEpisode(url, title, showName, guid) {
-    if (!podAudio) return;
+    if (!podAudio || !url) return;
+
+    // Falls dieselbe Episode bereits aktiv ist -> zwischen Play & Pause umschalten
+    if (currentPodGuid === guid && podAudio.src) {
+        if (podAudio.paused) {
+            podAudio.play().catch(() => {});
+        } else {
+            podAudio.pause();
+        }
+        updatePodcastActiveCards();
+        return;
+    }
+
     // Laufendes Webradio automatisch pausieren
     if (window.McGlobalRadio && typeof window.McGlobalRadio.pause === 'function') {
         try { window.McGlobalRadio.pause(); } catch (e) {}
     }
 
     currentPodGuid = guid;
-    document.getElementById('podNowPlayingTitle').textContent = title;
+    currentPodRawUrl = url;
+    currentPodProxyTried = false;
+
+    document.getElementById('podNowPlayingTitle').textContent = '🔊 ' + title;
     document.getElementById('podNowPlayingShow').textContent = showName;
 
     podAudio.src = url;
     const spd = parseFloat(document.getElementById('podSpeedSelect').value || '1.0');
     podAudio.playbackRate = spd;
 
-    // Gespeicherte Position wiederherstellen
-    try {
-        const savedSec = parseFloat(localStorage.getItem('mc_pod_pos_' + guid) || '0');
-        if (savedSec > 5) {
-            podAudio.currentTime = savedSec;
-        }
-    } catch (e) {}
+    const restoreSavedPosition = () => {
+        podAudio.removeEventListener('loadedmetadata', restoreSavedPosition);
+        try {
+            const savedSec = parseFloat(localStorage.getItem('mc_pod_pos_' + guid) || '0');
+            if (savedSec > 5 && (!podAudio.duration || savedSec < podAudio.duration - 5)) {
+                podAudio.currentTime = savedSec;
+            }
+        } catch (e) {}
+    };
+    podAudio.addEventListener('loadedmetadata', restoreSavedPosition);
 
+    updatePodcastActiveCards();
     podAudio.play().catch(() => {});
 }
 
 if (podAudio) {
+    podAudio.addEventListener('play', updatePodcastActiveCards);
+    podAudio.addEventListener('pause', updatePodcastActiveCards);
+    podAudio.addEventListener('ended', updatePodcastActiveCards);
+
+    // Automatischer Server-Proxy-Fallback, falls ein Browser-Adblocker/Tracking-Schutz die externe Podcast-URL blockiert
+    podAudio.addEventListener('error', () => {
+        if (!currentPodProxyTried && currentPodRawUrl && /^https?:\/\//i.test(currentPodRawUrl)) {
+            currentPodProxyTried = true;
+            podAudio.src = 'podcasts.php?action=proxy_stream&url=' + encodeURIComponent(currentPodRawUrl);
+            const spd = parseFloat(document.getElementById('podSpeedSelect').value || '1.0');
+            podAudio.playbackRate = spd;
+            podAudio.play().catch(() => {});
+        }
+    });
+
     podAudio.addEventListener('timeupdate', () => {
         if (currentPodGuid && podAudio.currentTime > 3) {
             try {

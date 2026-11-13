@@ -1484,11 +1484,11 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             return 'index.php?' . http_build_query($qParams);
         };
         ?>
-        <div id="fileListView" class="overflow-x-auto">
+        <div id="fileListView" class="overflow-x-hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
-                        <th class="py-3.5 pl-4 pr-2 sm:pl-6 w-9">
+                        <th class="py-3.5 pl-4 pr-2 sm:pl-6 w-9 whitespace-nowrap">
                             <?php if (!empty($files) || !empty($directSubfolders)): ?>
                                 <input
                                     type="checkbox"
@@ -1500,7 +1500,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 >
                             <?php endif; ?>
                         </th>
-                        <th class="py-3.5 px-2 sm:px-4">
+                        <th class="py-3.5 px-2 sm:px-4 w-full">
                             <a
                                 href="<?= e($buildSortHeaderUrl('name')) ?>"
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'name' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
@@ -1512,7 +1512,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </span>
                             </a>
                         </th>
-                        <th class="py-3.5 px-4 hidden md:table-cell">
+                        <th class="py-3.5 px-4 hidden md:table-cell whitespace-nowrap">
                             <a
                                 href="<?= e($buildSortHeaderUrl('folder')) ?>"
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'folder' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
@@ -1524,7 +1524,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </span>
                             </a>
                         </th>
-                        <th class="py-3.5 px-4 hidden sm:table-cell">
+                        <th class="py-3.5 px-4 hidden sm:table-cell whitespace-nowrap">
                             <a
                                 href="<?= e($buildSortHeaderUrl('size')) ?>"
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'size' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
@@ -1536,7 +1536,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </span>
                             </a>
                         </th>
-                        <th class="py-3.5 px-4 hidden lg:table-cell">
+                        <th class="py-3.5 px-4 hidden lg:table-cell whitespace-nowrap">
                             <a
                                 href="<?= e($buildSortHeaderUrl('date')) ?>"
                                 class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'date' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
@@ -1548,7 +1548,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </span>
                             </a>
                         </th>
-                        <th class="py-3.5 px-4 sm:px-6 text-right">Aktionen</th>
+                        <th class="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">Aktionen</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-sm">
@@ -1576,16 +1576,16 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             <?php endif; ?>
                             class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-all"
                         >
-                            <td class="py-2.5 px-4 sm:px-6" colspan="6">
-                                <div class="flex items-center justify-between gap-2">
-                                    <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
-                                        <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold">
+                            <td class="py-2.5 px-4 sm:px-6 max-w-0 overflow-hidden" colspan="6">
+                                <div class="flex items-center justify-between gap-2 min-w-0">
+                                    <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 min-w-0" title="Übergeordneter Ordner (<?= e($upLabel) ?>)">
+                                        <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold shrink-0">
                                             &crarr; ..
                                         </span>
-                                        <span>Übergeordneter Ordner (<?= e($upLabel) ?>)</span>
+                                        <span class="truncate">Übergeordneter Ordner (<?= e($upLabel) ?>)</span>
                                     </a>
                                     <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
-                                        <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500">
+                                        <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500 truncate shrink-0">
                                             📥 Dateien hierher ziehen zum Ablegen in <?= e($upLabel) ?>
                                         </span>
                                     <?php endif; ?>
@@ -1613,7 +1613,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
                                     <span class="text-xs text-blue-500">📁</span>
                                 </td>
-                                <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                                <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                     <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                                         <a href="index.php?shared_folder=<?= $usId ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Freigegebenen Ordner öffnen">
                                             <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -1621,18 +1621,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </svg>
                                         </a>
                                         <div class="min-w-0 flex-1">
-                                            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                                                <a href="index.php?shared_folder=<?= $usId ?>" class="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 truncate max-w-[130px] sm:max-w-xs md:max-w-md block">
+                                            <div class="flex items-center gap-1.5 min-w-0">
+                                                <a href="index.php?shared_folder=<?= $usId ?>" class="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 truncate min-w-0 block" title="<?= e($sfPath) ?>">
                                                     <?= e($sfPath) ?>
                                                 </a>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shrink-0">
                                                     👤 von <?= e($sfOwner) ?>
                                                 </span>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" title="<?= e($sfPermLabel) ?>">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0" title="<?= e($sfPermLabel) ?>">
                                                     <?= $sfPermIcon ?> <?= e($sfPermLabel) ?>
                                                 </span>
                                             </div>
-                                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[130px] sm:max-w-none">
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                                                 <?= $sfCount ?> <?= $sfCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($sfSize)) ?>
                                             </p>
                                         </div>
@@ -1714,7 +1714,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     aria-label="Ordner <?= e($subDisplayName) ?> auswählen"
                                 >
                             </td>
-                            <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                            <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                                     <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen (oder Dateien per Drag & Drop hier ablegen)">
                                         <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -1722,22 +1722,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </svg>
                                     </a>
                                     <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-1 sm:gap-1.5 min-w-0">
-                                            <a href="<?= $subUrl ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[115px] sm:max-w-xs md:max-w-md block" title="Ordner <?= e($subPath) ?> öffnen (oder Dateien direkt hierher ziehen)">
+                                        <div class="flex items-center gap-1 sm:gap-1.5 min-w-0">
+                                            <a href="<?= $subUrl ?>" class="font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate min-w-0 block" title="<?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>">
                                                 <?= e($searchQuery !== '' ? $subPath : $subDisplayName) ?>
                                             </a>
                                             <?php if ($subLinkShares > 0): ?>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300" title="<?= $subLinkShares ?> öffentliche(r) Freigabelink(s)">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0" title="<?= $subLinkShares ?> öffentliche(r) Freigabelink(s)">
                                                     🔗 <?= $subLinkShares ?>
                                                 </span>
                                             <?php endif; ?>
                                             <?php if ($subUserShares > 0): ?>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300" title="Mit <?= $subUserShares ?> Cloud-Benutzer(n) geteilt">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shrink-0" title="Mit <?= $subUserShares ?> Cloud-Benutzer(n) geteilt">
                                                     👤 <?= $subUserShares ?>
                                                 </span>
                                             <?php endif; ?>
                                         </div>
-                                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[120px] sm:max-w-none">
+                                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                                             <span data-folder-count-text><?= $subFileCount ?> <?= $subFileCount === 1 ? 'Datei' : 'Dateien' ?></span>
                                             <span class="sm:hidden"> &bull; <span data-folder-size-mobile><?= e(formatBytes($subSize)) ?></span></span>
                                             <span class="hidden md:inline text-amber-700/70 dark:text-amber-400/70"> &bull; 📥 Drop-Zone</span>
@@ -1747,7 +1747,9 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-amber-700 dark:text-amber-400 font-medium">
-                                📁 <?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>
+                                <span class="truncate block max-w-[140px] lg:max-w-[180px]" title="<?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>">
+                                    📁 <?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>
+                                </span>
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell" data-folder-size-cell>
@@ -1963,7 +1965,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     aria-label="Datei <?= e($origName) ?> auswählen"
                                 >
                             </td>
-                            <td class="py-3.5 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                            <td class="py-3.5 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                                     <?php if ($canManageThisFile): ?>
                                         <button
@@ -1987,22 +1989,22 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <?= e($badge['label']) ?>
                                     </button>
                                     <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-1 sm:gap-1.5 min-w-0">
+                                        <div class="flex items-center gap-1 sm:gap-1.5 min-w-0">
                                             <button
                                                 type="button"
                                                 onclick="openPreviewModal(<?= (int)$fileIdx ?>)"
-                                                class="font-medium text-left text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate max-w-[115px] sm:max-w-xs md:max-w-md block cursor-pointer transition-colors"
-                                                title="<?= e($origName) ?> (Klicken für Vorschau)"
+                                                class="font-medium text-left text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 truncate min-w-0 block cursor-pointer transition-colors"
+                                                title="<?= e($origName) ?>"
                                             >
                                                 <?= e($origName) ?>
                                             </button>
                                             <?php if ($largeFilesMode && !empty($duplicateIds[$fId])): ?>
                                                 <?php if (!empty($duplicateHashIds[$fId])): ?>
-                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800/70" title="Exakt identischer Dateiinhalt (SHA-256 Hash-Übereinstimmung)">
+                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800/70 shrink-0" title="Exakt identischer Dateiinhalt (SHA-256 Hash-Übereinstimmung)">
                                                         🧬 SHA-256 Duplikat
                                                     </span>
                                                 <?php else: ?>
-                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300" title="Potenzielles Duplikat (gleicher Dateiname &amp; gleiche Dateigröße)">
+                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0" title="Potenzielles Duplikat (gleicher Dateiname &amp; gleiche Dateigröße)">
                                                         👯 Duplikat
                                                     </span>
                                                 <?php endif; ?>
@@ -2011,19 +2013,19 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 <button
                                                     type="button"
                                                     onclick="openVaultModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, true, <?= $canManageThisFile ? 'true' : 'false' ?>)"
-                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/70 hover:bg-amber-200/70 cursor-pointer transition-colors"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/70 hover:bg-amber-200/70 cursor-pointer transition-colors shrink-0"
                                                     title="Tresor-geschützte Datei (AES-256 Zero-Knowledge)"
                                                 >
                                                     🔒 Tresor
                                                 </button>
                                             <?php endif; ?>
                                             <?php if ($linkShares > 0): ?>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300" title="<?= $linkShares ?> öffentliche(r) Freigabelink(s)">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0" title="<?= $linkShares ?> öffentliche(r) Freigabelink(s)">
                                                     🔗 <?= $linkShares ?>
                                                 </span>
                                             <?php endif; ?>
                                             <?php if ($userShares > 0): ?>
-                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300" title="Mit <?= $userShares ?> Cloud-Benutzer(n) geteilt">
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shrink-0" title="Mit <?= $userShares ?> Cloud-Benutzer(n) geteilt">
                                                     👤 <?= $userShares ?>
                                                 </span>
                                             <?php endif; ?>
@@ -2031,7 +2033,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 <button
                                                     type="button"
                                                     onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'versions')"
-                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 cursor-pointer transition-colors"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 cursor-pointer transition-colors shrink-0"
                                                     title="<?= $versionCount ?> frühere Dateiversion(en) verfügbar (Klicken für Zeitreise / Wiederherstellung)"
                                                 >
                                                     🕓 <?= $versionCount ?>
@@ -2041,29 +2043,29 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                                 <button
                                                     type="button"
                                                     onclick="openFileMetaModal(<?= $fId ?>, <?= e((string)json_encode($origName)) ?>, 'comments')"
-                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900 cursor-pointer transition-colors"
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900 cursor-pointer transition-colors shrink-0"
                                                     title="<?= $commentCount ?> Datei-Kommentar(e) / Notizen"
                                                 >
                                                     💬 <?= $commentCount ?>
                                                 </button>
                                             <?php endif; ?>
                                         </div>
-                                        <p class="text-[11px] text-slate-400 flex flex-wrap items-center gap-1 sm:gap-1.5 mt-0.5 min-w-0">
-                                            <span class="sm:hidden truncate max-w-[115px]"><?= e($formattedSize) ?> &bull; <?= e($formattedDate) ?></span>
-                                            <span class="hidden sm:inline truncate max-w-[220px]"><?= e($mimeType) ?></span>
+                                        <p class="text-[11px] text-slate-400 flex items-center gap-1 sm:gap-1.5 mt-0.5 min-w-0">
+                                            <span class="sm:hidden truncate"><?= e($formattedSize) ?> &bull; <?= e($formattedDate) ?></span>
+                                            <span class="hidden sm:inline truncate"><?= e($mimeType) ?></span>
                                             <?php if ($searchQuery !== '' || $onlyFavorites): ?>
-                                                <a href="<?= e($folderJumpUrl) ?>" class="md:hidden inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-medium truncate max-w-[115px]">
+                                                <a href="<?= e($folderJumpUrl) ?>" class="md:hidden inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-medium truncate">
                                                     &bull; <?= e($currentLocLabel) ?>
                                                 </a>
                                             <?php endif; ?>
                                             <?php if ($activeGroupFolder !== null || $activeSharedFolder !== null || $sharedWithMeMode): ?>
-                                                <span class="truncate max-w-[115px] sm:max-w-none">&bull; 👤 von <?= e((string)$file['uploader_name']) ?></span>
+                                                <span class="truncate">&bull; 👤 von <?= e((string)$file['uploader_name']) ?></span>
                                             <?php endif; ?>
                                         </p>
                                         <?php if ($searchQuery !== '' && !$isEncrypted && !empty($file['fsi_content_text'])): ?>
                                             <?php $ftSnip = buildFulltextSnippet((string)$file['fsi_content_text'], $searchQuery, 120); ?>
                                             <?php if ($ftSnip !== ''): ?>
-                                                <p class="text-[11px] italic text-indigo-600 dark:text-indigo-400 truncate max-w-[200px] sm:max-w-md mt-0.5" title="<?= e($ftSnip) ?>">
+                                                <p class="text-[11px] italic text-indigo-600 dark:text-indigo-400 truncate mt-0.5" title="<?= e($ftSnip) ?>">
                                                     🔎 „<?= e($ftSnip) ?>“
                                                 </p>
                                             <?php endif; ?>
@@ -2073,7 +2075,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
 
                             <td class="py-3.5 px-4 whitespace-nowrap hidden md:table-cell text-xs text-slate-600 dark:text-slate-300 font-medium">
-                                <a href="<?= e($folderJumpUrl) ?>" class="truncate block max-w-[180px] hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Zum Ordner wechseln: <?= e($currentLocLabel) ?>">
+                                <a href="<?= e($folderJumpUrl) ?>" class="truncate block max-w-[140px] lg:max-w-[180px] hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Zum Ordner wechseln: <?= e($currentLocLabel) ?>">
                                     <?= e($currentLocLabel) ?>
                                 </a>
                             </td>
@@ -2288,7 +2290,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
                                 <span class="text-xs text-blue-500 dark:text-blue-400" title="Systemordner für empfangene Benutzer-Freigaben (unten angeheftet)">👥</span>
                             </td>
-                            <td class="py-3 px-1.5 sm:px-4 max-w-[140px] sm:max-w-none overflow-hidden">
+                            <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                                     <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Von anderen Cloud-Benutzern für mich freigegebene Ordner &amp; Dateien öffnen">
                                         <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -2296,15 +2298,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </svg>
                                     </a>
                                     <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                                            <a href="index.php?shared_with_me=1" class="font-bold text-blue-900 dark:text-blue-200 hover:text-blue-600 dark:hover:text-blue-400 truncate max-w-[140px] sm:max-w-xs md:max-w-md block">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <a href="index.php?shared_with_me=1" class="font-bold text-blue-900 dark:text-blue-200 hover:text-blue-600 dark:hover:text-blue-400 truncate min-w-0 block" title="Für mich freigegeben (Von Cloud-Benutzern)">
                                                 Für mich freigegeben (Von Cloud-Benutzern)
                                             </a>
-                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold <?= $totalSharedWithMeCount > 0 ? 'bg-blue-600 text-white shadow-2xs' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' ?>">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 <?= $totalSharedWithMeCount > 0 ? 'bg-blue-600 text-white shadow-2xs' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' ?>">
                                                 👥 <?= $totalSharedWithMeCount ?>
                                             </span>
                                         </div>
-                                        <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5 truncate max-w-[140px] sm:max-w-none">
+                                        <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5 truncate">
                                             <?= count($sharedWithMeFolders) ?> <?= count($sharedWithMeFolders) === 1 ? 'Ordner' : 'Ordner' ?> &bull;
                                             <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
                                             <span class="sm:hidden"> &bull; <?= e(formatBytes($totalSharedWithMeSize)) ?></span>
