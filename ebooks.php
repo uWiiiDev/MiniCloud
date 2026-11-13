@@ -863,8 +863,63 @@ function stripLeadingId3Tag(string $mp3Bytes): string
 }
 
 /**
+ * Lädt ein einzelnes kurzes Textsegment (<= 190 Zeichen) als MP3-Audiodaten
+ * mit mehrstufigem Fallback (googleapis gtx -> google tw-ob -> stream_context).
+ */
+function fetchSingleTtsMp3Segment(string $chunkText, string $langCode): string|false
+{
+    $urls = [
+        'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=' . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText),
+        'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=' . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText),
+    ];
+
+    if (function_exists('curl_init')) {
+        foreach ($urls as $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                CURLOPT_TIMEOUT        => 12,
+                CURLOPT_CONNECTTIMEOUT => 6,
+            ]);
+            $body = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($code === 200 && is_string($body) && strlen($body) > 128) {
+                return $body;
+            }
+        }
+    }
+
+    $ctx = stream_context_create([
+        'http' => [
+            'method'        => 'GET',
+            'header'        => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n",
+            'timeout'       => 10,
+            'ignore_errors' => true,
+        ],
+        'ssl' => [
+            'verify_peer'      => false,
+            'verify_peer_name' => false,
+        ],
+    ]);
+
+    foreach ($urls as $url) {
+        $body = @file_get_contents($url, false, $ctx);
+        if (is_string($body) && strlen($body) > 128) {
+            return $body;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Erzeugt aus einem Text (beliebiger Länge) eine zusammenhängende MP3-Audiodatei
- * mittels paralleler Chunk-Synthese (cURL Multi mit Fallback auf Stream-Context).
+ * mittels paralleler Chunk-Synthese (cURL Multi mit Fallback auf Einzelabruf & Stream-Context).
  */
 function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|false
 {
@@ -872,6 +927,11 @@ function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|fal
     $chunks   = splitTextIntoTtsChunks($text, 185);
     if (empty($chunks)) {
         return false;
+    }
+
+    // Direktpfad für einzelne Sätze im Live-Hörbuch-Player (kein curl_multi-Overhead, reines Einzel-MP3)
+    if (count($chunks) === 1) {
+        return fetchSingleTtsMp3Segment($chunks[0], $langCode);
     }
 
     // Sicherheitslimit pro Kapitel (max. 240 Segmente ~ ca. 42.000 Zeichen pro Kapitel)
@@ -884,17 +944,19 @@ function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|fal
     $batches   = array_chunk($chunks, $batchSize, true);
 
     foreach ($batches as $batch) {
-        if (function_exists('curl_multi_init') && function_exists('curl_init')) {
+        if (function_exists('curl_multi_init') && function_exists('curl_init') && count($batch) > 1) {
             $mh      = curl_multi_init();
             $handles = [];
 
             foreach ($batch as $idx => $chunkText) {
-                $url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+                $url = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl='
                     . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText);
                 $ch = curl_init($url);
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => 0,
                     CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     CURLOPT_TIMEOUT        => 15,
                     CURLOPT_CONNECTTIMEOUT => 8,
@@ -907,7 +969,7 @@ function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|fal
             do {
                 $status = curl_multi_exec($mh, $running);
                 if ($running) {
-                    curl_multi_select($mh, 0.25);
+                    curl_multi_select($mh, 0.2);
                 }
             } while ($running > 0 && $status === CURLM_OK);
 
@@ -919,22 +981,17 @@ function synthesizeTtsMp3FromText(string $text, string $lang = 'de'): string|fal
 
                 if ($code === 200 && is_string($body) && strlen($body) > 128) {
                     $mp3Parts[$idx] = $idx > 0 ? stripLeadingId3Tag($body) : $body;
+                } else {
+                    $fbBody = fetchSingleTtsMp3Segment($batch[$idx], $langCode);
+                    if (is_string($fbBody) && strlen($fbBody) > 128) {
+                        $mp3Parts[$idx] = $idx > 0 ? stripLeadingId3Tag($fbBody) : $fbBody;
+                    }
                 }
             }
             curl_multi_close($mh);
         } else {
-            // Fallback ohne cURL
-            $ctx = stream_context_create([
-                'http' => [
-                    'method'  => 'GET',
-                    'header'  => "User-Agent: Mozilla/5.0\r\n",
-                    'timeout' => 12,
-                ],
-            ]);
             foreach ($batch as $idx => $chunkText) {
-                $url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
-                    . rawurlencode($langCode) . '&q=' . rawurlencode($chunkText);
-                $body = @file_get_contents($url, false, $ctx);
+                $body = fetchSingleTtsMp3Segment($chunkText, $langCode);
                 if (is_string($body) && strlen($body) > 128) {
                     $mp3Parts[$idx] = $idx > 0 ? stripLeadingId3Tag($body) : $body;
                 }
@@ -1090,17 +1147,49 @@ if (isset($_GET['action']) && $_GET['action'] === 'tts_chunk') {
         exit;
     }
 
-    $chunkText = mb_substr($chunkText, 0, 750, 'UTF-8');
-    $mp3Data   = synthesizeTtsMp3FromText($chunkText, $lang);
-    if ($mp3Data === false || $mp3Data === '') {
+    $chunkText = mb_substr($chunkText, 0, 500, 'UTF-8');
+
+    // Kurzzeit-Cache im Temp-Ordner (für Safari/iOS Range-Requests & Preloading ohne Doppel-Abruf)
+    $cacheKey  = 'mc_tts_' . md5($lang . '|' . $chunkText) . '.mp3';
+    $cacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/' . $cacheKey;
+    $mp3Data   = false;
+
+    if (is_file($cacheFile) && (time() - (int)filemtime($cacheFile)) < 900 && filesize($cacheFile) > 128) {
+        $mp3Data = @file_get_contents($cacheFile);
+    }
+
+    if (!is_string($mp3Data) || $mp3Data === '') {
+        $mp3Data = synthesizeTtsMp3FromText($chunkText, $lang);
+        if (is_string($mp3Data) && strlen($mp3Data) > 128) {
+            @file_put_contents($cacheFile, $mp3Data);
+        }
+    }
+
+    if (!is_string($mp3Data) || $mp3Data === '') {
         http_response_code(502);
         exit;
     }
 
+    $totalLen = strlen($mp3Data);
     header('Content-Type: audio/mpeg');
+    header('Accept-Ranges: bytes');
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, max-age=3600');
-    header('Content-Length: ' . strlen($mp3Data));
+
+    if (!empty($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d+)-(\d*)/i', (string)$_SERVER['HTTP_RANGE'], $m)) {
+        $start = (int)$m[1];
+        $end   = ($m[2] !== '') ? min($totalLen - 1, (int)$m[2]) : ($totalLen - 1);
+        if ($start >= 0 && $start <= $end && $end < $totalLen) {
+            $partLen = ($end - $start) + 1;
+            http_response_code(206);
+            header("Content-Range: bytes {$start}-{$end}/{$totalLen}");
+            header('Content-Length: ' . $partLen);
+            echo substr($mp3Data, $start, $partLen);
+            exit;
+        }
+    }
+
+    header('Content-Length: ' . $totalLen);
     echo $mp3Data;
     exit;
 }
@@ -1109,6 +1198,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'tts_chunk') {
 // 1. ASSET-ENDPUNKT: BILDER INNERHALB EINES EPUBS AUSLIEFERN
 // =============================================================================
 if (isset($_GET['action']) && $_GET['action'] === 'asset') {
+    @session_write_close();
     $fileId    = (int)($_GET['id'] ?? 0);
     $assetPath = ltrim(str_replace('\\', '/', trim((string)($_GET['path'] ?? ''))), '/');
 
@@ -1190,6 +1280,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     // 2a) Lesefortschritt & Lese-Einstellungen automatisch speichern (AJAX)
     if ($postAction === 'save_progress') {
         header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
         $fileId        = (int)($_POST['file_id'] ?? 0);
         $chapterIdx    = max(0, (int)($_POST['chapter_index'] ?? 0));
         $scrollPct     = max(0.0, min(100.0, (float)($_POST['scroll_pct'] ?? 0)));
@@ -1233,6 +1324,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     // 2b) Lesezeichen hinzufügen (AJAX)
     if ($postAction === 'add_bookmark') {
         header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
         $fileId       = (int)($_POST['file_id'] ?? 0);
         $chapterIdx   = max(0, (int)($_POST['chapter_index'] ?? 0));
         $chapterTitle = mb_substr(trim((string)($_POST['chapter_title'] ?? '')), 0, 180);
@@ -1268,6 +1360,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     // 2c) Lesezeichen löschen (AJAX)
     if ($postAction === 'delete_bookmark') {
         header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
         $bmId = (int)($_POST['bookmark_id'] ?? 0);
         $stmt = $pdo->prepare("DELETE FROM `ebook_bookmarks` WHERE `id` = :id AND `user_id` = :uid");
         $stmt->execute([':id' => $bmId, ':uid' => $userId]);
@@ -1278,6 +1371,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     // 2d) Volltextsuche über alle Kapitel eines EPUBs (AJAX)
     if ($postAction === 'search_book') {
         header('Content-Type: application/json; charset=UTF-8');
+        @session_write_close();
         $fileId = (int)($_POST['file_id'] ?? 0);
         $query  = trim((string)($_POST['query'] ?? ''));
 
@@ -1924,10 +2018,12 @@ if ($bookFileId > 0) {
                             <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Vorlese-Stimme</label>
                             <select id="epubLiveEngineSelect" onchange="onEpubLiveEngineChange()"
                                     class="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold">
+                                <option value="auto" selected>🎧 Automatisch (Sofort-Start + Cloud-Fallback)</option>
                                 <option value="cloud_mp3">🎙️ Natürliche Cloud-Stimme (MP3-Stream)</option>
                                 <option value="webspeech">🗣️ Geräte-/Browser-Stimme (Offline)</option>
                             </select>
                         </div>
+                        <audio id="epubLiveTtsAudioElement" class="hidden" preload="auto"></audio>
 
                         <!-- Lesetempo -->
                         <div>
@@ -2245,8 +2341,8 @@ if ($bookFileId > 0) {
     const EPUB_BOOK_TITLE     = <?= json_encode($epubInfo['title']) ?>;
     const EPUB_BOOK_AUTHOR    = <?= json_encode($epubInfo['author']) ?>;
     const EPUB_BOOK_LANG      = <?= json_encode($bookLangCode) ?>;
-    const EPUB_CHAPTER_INDEX  = <?= (int)$currentChIdx ?>;
-    const EPUB_CHAPTER_TITLE  = <?= json_encode($chapterTitle) ?>;
+    let   EPUB_CHAPTER_INDEX  = <?= (int)$currentChIdx ?>;
+    let   EPUB_CHAPTER_TITLE  = <?= json_encode($chapterTitle) ?>;
     const EPUB_TOTAL_CHAPTERS = <?= (int)$totalChapters ?>;
     const EPUB_INITIAL_SCROLL = <?= (float)$initialScrollPct ?>;
     const EPUB_AUTOPLAY       = <?= $autoPlayAudio ? 'true' : 'false' ?>;
@@ -2412,24 +2508,67 @@ if ($bookFileId > 0) {
     // =========================================================================
     let epubTtsBlocks = [];
     let epubTtsCurrentIdx = 0;
+    let epubTtsCurrentSubIdx = 0;
     let epubTtsIsPlaying = false;
     let epubTtsIsPaused = false;
     let epubTtsAudioEl = null;
     let epubTtsPreloadAudioEl = null;
-    let epubTtsPreloadIdx = -1;
+    let epubTtsPreloadUrl = '';
     let epubSleepTimerId = null;
     let epubSleepEndTime = 0;
     let epubWebSpeechVoices = [];
+
+    /**
+     * Zerlegt einen längeren Absatz in satzweise Einzel-Segmente (max. 175 Zeichen),
+     * damit jeder Audio-Stream-Abruf (tts_chunk) blitzschnell als einzelnes MP3 geladen wird
+     * und auch lange Absätze vollständig ohne Abschneiden vorgelesen werden.
+     */
+    function splitTextIntoClientSentences(rawText, maxChars = 175) {
+        const clean = (rawText || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return [];
+        if (clean.length <= maxChars) return [clean];
+
+        const rawParts = clean.split(/(?<=[.!?…;:])\s+/u);
+        const chunks = [];
+        let current = '';
+
+        for (const part of rawParts) {
+            const p = part.trim();
+            if (!p) continue;
+            const candidate = current ? (current + ' ' + p) : p;
+            if (candidate.length <= maxChars) {
+                current = candidate;
+                continue;
+            }
+            if (current) {
+                chunks.push(current);
+                current = '';
+            }
+            if (p.length <= maxChars) {
+                current = p;
+                continue;
+            }
+            const words = p.split(/\s+/u);
+            for (const w of words) {
+                if (!w) continue;
+                const wCand = current ? (current + ' ' + w) : w;
+                if (wCand.length <= maxChars) {
+                    current = wCand;
+                } else {
+                    if (current) chunks.push(current);
+                    current = w.slice(0, maxChars);
+                }
+            }
+        }
+        if (current) chunks.push(current);
+        return chunks.length > 0 ? chunks : [clean.slice(0, maxChars)];
+    }
 
     function initEpubTtsBlocks() {
         const container = document.getElementById('epubChapterContent');
         if (!container) return;
 
-        let candidates = Array.from(container.querySelectorAll('h1, h2, h3, h4, p, li, blockquote'));
-        // Fallback, falls ein EPUB nur reine <div>- oder Textknoten ohne <p> verwendet
-        if (candidates.length === 0) {
-            candidates = Array.from(container.querySelectorAll('div'));
-        }
+        let candidates = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote, div'));
         if (candidates.length === 0) {
             candidates = [container];
         }
@@ -2437,22 +2576,45 @@ if ($bookFileId > 0) {
         // Nur Blatt-Blockelemente mit vorlesbarem Text behalten (keine verschachtelten Duplikate)
         epubTtsBlocks = [];
         candidates.forEach((el) => {
-            const hasChildCandidate = candidates.some((other) => other !== el && el.contains(other));
+            const hasChildCandidate = candidates.some((other) => {
+                if (other === el || !el.contains(other)) return false;
+                const otherTxt = (other.innerText || other.textContent || '').replace(/\s+/g, ' ').trim();
+                return otherTxt.length >= 2;
+            });
             if (hasChildCandidate) return;
             const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
             if (txt.length >= 2) {
                 el.classList.add('epub-tts-block');
                 const blockIndex = epubTtsBlocks.length;
                 el.dataset.ttsBlockIdx = String(blockIndex);
-                el.addEventListener('click', (ev) => {
-                    if (ev.target.closest('a')) return;
-                    if (epubTtsIsPlaying || epubTtsIsPaused) {
-                        epubTtsPlayBlock(blockIndex);
-                    }
+                if (!el.dataset.ttsClickBound) {
+                    el.dataset.ttsClickBound = '1';
+                    el.addEventListener('click', (ev) => {
+                        if (ev.target.closest('a')) return;
+                        if (epubTtsIsPlaying || epubTtsIsPaused) {
+                            epubTtsPlayBlock(blockIndex);
+                        }
+                    });
+                }
+                epubTtsBlocks.push({
+                    el,
+                    text: txt,
+                    sentences: splitTextIntoClientSentences(txt, 175),
                 });
-                epubTtsBlocks.push({ el, text: txt });
             }
         });
+
+        // Falls das aktuelle Kapitel nur ein Buchcover / Bild ohne Text ist (z. B. Kapitel 1 = Cover):
+        // Buchtitel + Kapiteltitel vorlesen, damit danach automatisch ins erste Textkapitel geblättert wird!
+        if (epubTtsBlocks.length === 0) {
+            const authorPart = EPUB_BOOK_AUTHOR ? ` von ${EPUB_BOOK_AUTHOR}` : '';
+            const fallbackText = `${EPUB_BOOK_TITLE}${authorPart}. ${EPUB_CHAPTER_TITLE}.`;
+            epubTtsBlocks.push({
+                el: container,
+                text: fallbackText,
+                sentences: splitTextIntoClientSentences(fallbackText, 175),
+            });
+        }
 
         updateEpubLiveUiState();
     }
@@ -2464,7 +2626,7 @@ if ($bookFileId > 0) {
             const sel = document.getElementById('epubWebSpeechVoiceSelect');
             if (!sel) return;
             if (epubWebSpeechVoices.length === 0) {
-                sel.innerHTML = '<option value="">Keine lokale Systemstimme gefunden (Cloud-Stimme empfohlen)</option>';
+                sel.innerHTML = '<option value="">System-Standardstimme verwenden</option>';
                 return;
             }
             const sorted = [...epubWebSpeechVoices].sort((a, b) => {
@@ -2473,9 +2635,10 @@ if ($bookFileId > 0) {
                 if (aMatch !== bMatch) return aMatch - bMatch;
                 return a.name.localeCompare(b.name);
             });
-            sel.innerHTML = sorted.map((v) =>
-                `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name} (${v.lang})</option>`
-            ).join('');
+            sel.innerHTML = '<option value="">System-Standardstimme (' + EPUB_BOOK_LANG.toUpperCase() + ')</option>' +
+                sorted.map((v) =>
+                    `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name} (${v.lang})</option>`
+                ).join('');
         };
         populate();
         if (window.speechSynthesis.onvoiceschanged !== undefined) {
@@ -2484,10 +2647,10 @@ if ($bookFileId > 0) {
     }
 
     function onEpubLiveEngineChange() {
-        const eng = document.getElementById('epubLiveEngineSelect')?.value || 'cloud_mp3';
+        const eng = document.getElementById('epubLiveEngineSelect')?.value || 'auto';
         const voiceRow = document.getElementById('epubWebSpeechVoiceRow');
         if (voiceRow) {
-            voiceRow.classList.toggle('hidden', eng !== 'webspeech');
+            voiceRow.classList.toggle('hidden', eng === 'cloud_mp3');
         }
         if (epubTtsIsPlaying) {
             epubTtsPlayBlock(epubTtsCurrentIdx);
@@ -2627,41 +2790,230 @@ if ($bookFileId > 0) {
     }
 
     function buildChunkTtsUrl(text) {
-        return `ebooks.php?action=tts_chunk&lang=${encodeURIComponent(EPUB_BOOK_LANG)}&text=${encodeURIComponent(text.slice(0, 700))}`;
+        return `ebooks.php?action=tts_chunk&lang=${encodeURIComponent(EPUB_BOOK_LANG)}&text=${encodeURIComponent(text.slice(0, 220))}`;
     }
 
-    function preloadNextEpubTtsBlock(nextIdx) {
-        if (nextIdx < 0 || nextIdx >= epubTtsBlocks.length) return;
-        if (epubTtsPreloadIdx === nextIdx) return;
-        epubTtsPreloadIdx = nextIdx;
-        const nextUrl = buildChunkTtsUrl(epubTtsBlocks[nextIdx].text);
+    function preloadNextEpubTtsSentence(blockIdx, subIdx) {
+        const block = epubTtsBlocks[blockIdx];
+        if (!block) return;
+        let nextSentence = '';
+        if (Array.isArray(block.sentences) && subIdx < block.sentences.length) {
+            nextSentence = block.sentences[subIdx];
+        } else if (epubTtsBlocks[blockIdx + 1]) {
+            const nb = epubTtsBlocks[blockIdx + 1];
+            nextSentence = (nb.sentences && nb.sentences[0]) ? nb.sentences[0] : nb.text;
+        }
+        if (!nextSentence) return;
+        const nextUrl = buildChunkTtsUrl(nextSentence);
+        if (epubTtsPreloadUrl === nextUrl) return;
+        epubTtsPreloadUrl = nextUrl;
         epubTtsPreloadAudioEl = new Audio();
         epubTtsPreloadAudioEl.preload = 'auto';
         epubTtsPreloadAudioEl.src = nextUrl;
         epubTtsPreloadAudioEl.load();
     }
 
+    let epubSpeechWatchdog = null;
+
     function stopCurrentTtsOutputs() {
+        if (epubSpeechWatchdog) {
+            clearTimeout(epubSpeechWatchdog);
+            epubSpeechWatchdog = null;
+        }
         if (epubTtsAudioEl) {
             epubTtsAudioEl.onended = null;
             epubTtsAudioEl.onerror = null;
-            epubTtsAudioEl.pause();
-            epubTtsAudioEl = null;
+            try { epubTtsAudioEl.pause(); } catch (e) {}
         }
         if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
+            try {
+                if (window.speechSynthesis.speaking || window.speechSynthesis.pending || window.speechSynthesis.paused) {
+                    window.speechSynthesis.cancel();
+                }
+            } catch (e) {}
         }
     }
 
-    function onEpubChapterTtsFinished() {
+    async function onEpubChapterTtsFinished() {
         const sleepVal = document.getElementById('epubSleepTimerSelect')?.value || '0';
         const autoNext = document.getElementById('epubAutoNextChapterChk')?.checked ?? true;
-        if (sleepVal === 'chapter_end' || !autoNext || (EPUB_CHAPTER_INDEX + 1 >= EPUB_TOTAL_CHAPTERS)) {
+        const nextCh   = EPUB_CHAPTER_INDEX + 1;
+        if (sleepVal === 'chapter_end' || !autoNext || nextCh >= EPUB_TOTAL_CHAPTERS) {
             epubTtsStop();
             return;
         }
-        // Nahtlos ins nächste Kapitel blättern und automatisch weiterlesen
-        window.location.href = `ebooks.php?id=${EPUB_FILE_ID}&ch=${EPUB_CHAPTER_INDEX + 1}&autoplay=1`;
+
+        // Nahtloser Kapitelwechsel im Hintergrund per fetch(), damit das <audio>-Element seine Browser-Freigabe behält!
+        const nextUrl = `ebooks.php?id=${EPUB_FILE_ID}&ch=${nextCh}`;
+        try {
+            const statusTxt = document.getElementById('epubLiveStatusText');
+            if (statusTxt) statusTxt.textContent = `📖 Lade Kapitel ${nextCh + 1} von ${EPUB_TOTAL_CHAPTERS}…`;
+
+            const resp = await fetch(nextUrl, { credentials: 'same-origin' });
+            if (resp.ok) {
+                const html = await resp.text();
+                const doc  = new DOMParser().parseFromString(html, 'text/html');
+                const newContent = doc.getElementById('epubChapterContent');
+                const curContent = document.getElementById('epubChapterContent');
+                if (newContent && curContent) {
+                    curContent.innerHTML = newContent.innerHTML;
+                    EPUB_CHAPTER_INDEX = nextCh;
+
+                    const newSurfaceHeader = doc.querySelector('#epubPageSurface .pb-4.mb-6');
+                    const curSurfaceHeader = document.querySelector('#epubPageSurface .pb-4.mb-6');
+                    if (newSurfaceHeader && curSurfaceHeader) {
+                        curSurfaceHeader.innerHTML = newSurfaceHeader.innerHTML;
+                        const titleSpan = newSurfaceHeader.querySelector('span');
+                        if (titleSpan) EPUB_CHAPTER_TITLE = titleSpan.textContent.trim();
+                    }
+
+                    try { window.history.replaceState(null, '', nextUrl); } catch (e) {}
+                    initEpubTtsBlocks();
+                    epubTtsPlayBlock(0);
+                    return;
+                }
+            }
+        } catch (e) {}
+
+        // Fallback bei Netzwerkfehler
+        window.location.href = `${nextUrl}&autoplay=1`;
+    }
+
+    function playBlockViaCloudMp3(idx, text, rate, allowWebSpeechFallback, subIdx = 0) {
+        const block = epubTtsBlocks[idx];
+        const sentences = (block && Array.isArray(block.sentences) && block.sentences.length > 0)
+            ? block.sentences
+            : splitTextIntoClientSentences(text, 175);
+
+        if (subIdx >= sentences.length) {
+            if (epubTtsIsPlaying) {
+                epubTtsPlayBlock(idx + 1);
+            }
+            return;
+        }
+
+        epubTtsCurrentSubIdx = subIdx;
+        const sentenceText = sentences[subIdx];
+        const domAudio = document.getElementById('epubLiveTtsAudioElement');
+        epubTtsAudioEl = domAudio || new Audio();
+        epubTtsAudioEl.src = buildChunkTtsUrl(sentenceText);
+        epubTtsAudioEl.playbackRate = rate;
+
+        epubTtsAudioEl.onended = () => {
+            if (!epubTtsIsPlaying) return;
+            if (subIdx + 1 < sentences.length) {
+                playBlockViaCloudMp3(idx, text, rate, allowWebSpeechFallback, subIdx + 1);
+            } else {
+                epubTtsPlayBlock(idx + 1);
+            }
+        };
+        epubTtsAudioEl.onerror = () => {
+            if (allowWebSpeechFallback && ('speechSynthesis' in window)) {
+                playBlockViaWebSpeech(idx, text, rate, false);
+            } else {
+                const statusTxt = document.getElementById('epubLiveStatusText');
+                if (statusTxt) {
+                    statusTxt.textContent = '⚠️ Keine Sprachausgabe auf diesem Gerät verfügbar.';
+                }
+            }
+        };
+
+        const playPromise = epubTtsAudioEl.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(() => {
+                if (allowWebSpeechFallback && ('speechSynthesis' in window)) {
+                    playBlockViaWebSpeech(idx, text, rate, false);
+                }
+            });
+        }
+        preloadNextEpubTtsSentence(idx, subIdx + 1);
+    }
+
+    function playBlockViaWebSpeech(idx, text, rate, allowCloudFallback) {
+        if (!('speechSynthesis' in window)) {
+            if (allowCloudFallback) {
+                playBlockViaCloudMp3(idx, text, rate, false);
+            }
+            return;
+        }
+
+        const startUtterance = () => {
+            const utter = new SpeechSynthesisUtterance(text);
+            // Globale Referenz halten, damit der Garbage Collector in Chrome/Safari das Event nicht abbricht
+            window._activeEpubUtterance = utter;
+
+            const fullLang = EPUB_BOOK_LANG === 'de' ? 'de-DE' : (EPUB_BOOK_LANG === 'en' ? 'en-US' : EPUB_BOOK_LANG);
+            utter.lang = fullLang;
+            utter.rate = rate;
+
+            const voices = window.speechSynthesis.getVoices() || epubWebSpeechVoices || [];
+            const wantedVoice = document.getElementById('epubWebSpeechVoiceSelect')?.value || '';
+            if (wantedVoice && voices.length > 0) {
+                const found = voices.find((v) => v.name === wantedVoice);
+                if (found) utter.voice = found;
+            } else if (voices.length > 0) {
+                const bestLangVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith(EPUB_BOOK_LANG));
+                if (bestLangVoice) utter.voice = bestLangVoice;
+            }
+
+            let startedSpeaking = false;
+            utter.onstart = () => {
+                startedSpeaking = true;
+                if (epubSpeechWatchdog) {
+                    clearTimeout(epubSpeechWatchdog);
+                    epubSpeechWatchdog = null;
+                }
+            };
+            utter.onend = () => {
+                if (epubSpeechWatchdog) {
+                    clearTimeout(epubSpeechWatchdog);
+                    epubSpeechWatchdog = null;
+                }
+                if (epubTtsIsPlaying) {
+                    epubTtsPlayBlock(idx + 1);
+                }
+            };
+            utter.onerror = (ev) => {
+                if (epubSpeechWatchdog) {
+                    clearTimeout(epubSpeechWatchdog);
+                    epubSpeechWatchdog = null;
+                }
+                if (ev && (ev.error === 'interrupted' || ev.error === 'canceled')) {
+                    return;
+                }
+                if (allowCloudFallback && epubTtsIsPlaying) {
+                    playBlockViaCloudMp3(idx, text, rate, false);
+                }
+            };
+
+            try {
+                window.speechSynthesis.resume();
+                window.speechSynthesis.speak(utter);
+            } catch (e) {
+                if (allowCloudFallback) {
+                    playBlockViaCloudMp3(idx, text, rate, false);
+                }
+                return;
+            }
+
+            // Watchdog: Falls das Betriebssystem/der Browser trotz Web-Speech-API nach 1,8 Sek. keinen Ton startet
+            // (z. B. Linux ohne speech-dispatcher), automatisch auf den Cloud-MP3-Stream umschalten!
+            if (allowCloudFallback) {
+                epubSpeechWatchdog = setTimeout(() => {
+                    if (epubTtsIsPlaying && !startedSpeaking && !window.speechSynthesis.speaking) {
+                        try { window.speechSynthesis.cancel(); } catch (e) {}
+                        playBlockViaCloudMp3(idx, text, rate, false);
+                    }
+                }, 1800);
+            }
+        };
+
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            try { window.speechSynthesis.cancel(); } catch (e) {}
+            setTimeout(startUtterance, 40);
+        } else {
+            startUtterance();
+        }
     }
 
     function epubTtsPlayBlock(idx) {
@@ -2684,65 +3036,21 @@ if ($bookFileId > 0) {
         highlightEpubTtsBlock(idx);
         updateEpubLiveUiState();
         updateMediaSessionMetadata();
-        saveEpubProgressNow();
+        if (saveProgressTimer) clearTimeout(saveProgressTimer);
+        saveProgressTimer = setTimeout(saveEpubProgressNow, 2000);
 
-        const engine = document.getElementById('epubLiveEngineSelect')?.value || 'cloud_mp3';
+        const engine = document.getElementById('epubLiveEngineSelect')?.value || 'auto';
         const rate   = parseFloat(document.getElementById('epubLiveRateSelect')?.value || '1') || 1.0;
         const text   = epubTtsBlocks[idx].text;
 
-        if (engine === 'webspeech' && ('speechSynthesis' in window) && epubWebSpeechVoices.length > 0) {
-            const utter = new SpeechSynthesisUtterance(text);
-            utter.lang = EPUB_BOOK_LANG;
-            utter.rate = rate;
-            const wantedVoice = document.getElementById('epubWebSpeechVoiceSelect')?.value || '';
-            if (wantedVoice) {
-                const found = epubWebSpeechVoices.find((v) => v.name === wantedVoice);
-                if (found) utter.voice = found;
-            }
-            utter.onend = () => {
-                if (epubTtsIsPlaying) {
-                    epubTtsPlayBlock(idx + 1);
-                }
-            };
-            utter.onerror = () => {
-                if (epubTtsIsPlaying) {
-                    epubTtsPlayBlock(idx + 1);
-                }
-            };
-            window.speechSynthesis.speak(utter);
-            return;
-        }
-
-        // Standard: Natürlicher Cloud-MP3-Stream mit Preloading des nächsten Absatzes
-        if (epubTtsPreloadIdx === idx && epubTtsPreloadAudioEl) {
-            epubTtsAudioEl = epubTtsPreloadAudioEl;
-            epubTtsPreloadAudioEl = null;
-            epubTtsPreloadIdx = -1;
+        if (engine === 'cloud_mp3') {
+            playBlockViaCloudMp3(idx, text, rate, true, 0);
+        } else if (engine === 'webspeech') {
+            playBlockViaWebSpeech(idx, text, rate, false);
         } else {
-            epubTtsAudioEl = new Audio(buildChunkTtsUrl(text));
+            // 'auto': Zuerst Cloud-MP3 versuchen (natürliche Stimme auf allen Systemen) und bei Fehler sofort auf Web Speech umschalten
+            playBlockViaCloudMp3(idx, text, rate, true, 0);
         }
-
-        epubTtsAudioEl.playbackRate = rate;
-        epubTtsAudioEl.onended = () => {
-            if (epubTtsIsPlaying) {
-                epubTtsPlayBlock(idx + 1);
-            }
-        };
-        epubTtsAudioEl.onerror = () => {
-            // Fallback auf Web Speech falls offline
-            if ('speechSynthesis' in window && epubWebSpeechVoices.length > 0) {
-                const utter = new SpeechSynthesisUtterance(text);
-                utter.lang = EPUB_BOOK_LANG;
-                utter.rate = rate;
-                utter.onend = () => { if (epubTtsIsPlaying) epubTtsPlayBlock(idx + 1); };
-                window.speechSynthesis.speak(utter);
-            } else if (epubTtsIsPlaying) {
-                epubTtsPlayBlock(idx + 1);
-            }
-        };
-
-        epubTtsAudioEl.play().catch(() => {});
-        preloadNextEpubTtsBlock(idx + 1);
     }
 
     function epubTtsTogglePlay() {
@@ -2988,6 +3296,9 @@ if ($bookFileId > 0) {
                     }
 
                     if (d.skipped) {
+                        if (scope === 'current' && (chIdx + 1) < EPUB_TOTAL_CHAPTERS && !chaptersToProcess.includes(chIdx + 1)) {
+                            chaptersToProcess.push(chIdx + 1);
+                        }
                         continue;
                     }
 
