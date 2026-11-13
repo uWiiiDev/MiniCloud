@@ -2462,7 +2462,7 @@ require_once __DIR__ . '/includes/header.php';
             <input type="hidden" name="redactions_json" id="redactFormJson" value="{}">
 
             <!-- Obere Werkzeugleiste des PDF-Editors -->
-            <div class="sticky top-16 z-30 p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border border-slate-300 dark:border-slate-700 shadow-md space-y-3">
+            <div class="sticky top-16 sm:top-[4.25rem] z-20 p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border border-slate-300 dark:border-slate-700 shadow-md space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-xs font-bold text-slate-700 dark:text-slate-300 mr-1">Werkzeug:</span>

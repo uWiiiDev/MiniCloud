@@ -453,7 +453,8 @@ require_once __DIR__ . '/includes/header.php';
 <style>
 .pod-wrap { max-width: 1440px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
 .pod-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
-.pod-player-bar { background: linear-gradient(135deg, #1e1b4b, #0f172a); border: 1px solid rgba(139,92,246,0.55); border-radius: 16px; padding: 16px 20px; color: #f8fafc; position: sticky; top: 10px; z-index: 30; box-shadow: 0 10px 28px rgba(0,0,0,0.28); }
+.pod-player-bar { background: linear-gradient(135deg, #1e1b4b, #0f172a); border: 1px solid rgba(139,92,246,0.55); border-radius: 16px; padding: 16px 20px; color: #f8fafc; position: sticky; top: 4.5rem; z-index: 20; box-shadow: 0 10px 28px rgba(0,0,0,0.28); }
+@media (max-width: 639px) { .pod-player-bar { top: 3.9rem; } }
 .pod-grid { display: grid; grid-template-columns: 340px 1fr; gap: 18px; }
 .pod-ep-card { padding: 13px 15px; border-radius: 12px; background: rgba(15,23,42,0.5); border: 1px solid var(--border); transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease; }
 .pod-ep-card:hover { border-color: rgba(139,92,246,0.5); }

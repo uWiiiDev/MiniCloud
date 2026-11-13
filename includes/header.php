@@ -510,7 +510,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 <body class="min-h-full flex flex-col overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased selection:bg-brand-600 selection:text-white transition-colors duration-200">
 
 <!-- Top Navigation (Full Responsive) -->
-<header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-xs transition-colors">
+<header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 shadow-xs transition-colors">
     <div class="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-2">
         <!-- Brand Logo & Application Title -->
         <a href="index.php" class="flex items-center gap-2 sm:gap-3 group min-w-0 shrink">

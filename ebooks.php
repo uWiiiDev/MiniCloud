@@ -1853,7 +1853,7 @@ if ($bookFileId > 0) {
 
     <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4" id="epubReaderWrapper">
         <!-- OBERE READER-WERKZEUGLEISTE -->
-        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 sm:px-5 sm:py-3 shadow-xs flex flex-wrap items-center justify-between gap-2.5 sticky top-2 z-30">
+        <div class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 sm:px-5 sm:py-3 shadow-xs flex flex-wrap items-center justify-between gap-2.5 sticky top-16 sm:top-[4.25rem] z-20">
             <div class="flex items-center gap-2.5 min-w-0">
                 <a href="ebooks.php"
                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors shrink-0">
@@ -1917,7 +1917,7 @@ if ($bookFileId > 0) {
         </div>
 
         <!-- KOMPAKTE LIVE-HÖRBUCH-STEUERLEISTE (Erscheint automatisch während des Vorlesens) -->
-        <div id="epubLivePlayerBar" class="hidden mc-card bg-gradient-to-r from-amber-50 via-white to-orange-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 rounded-2xl border border-amber-300/80 dark:border-amber-800/80 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-3 sticky top-16 z-20">
+        <div id="epubLivePlayerBar" class="hidden mc-card bg-gradient-to-r from-amber-50 via-white to-orange-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 rounded-2xl border border-amber-300/80 dark:border-amber-800/80 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-3 sticky top-32 sm:top-[8.25rem] z-20">
             <div class="flex items-center gap-2">
                 <button type="button" onclick="epubTtsPrevBlock()"
                         class="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-bold cursor-pointer"
