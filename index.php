@@ -1484,7 +1484,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             return 'index.php?' . http_build_query($qParams);
         };
         ?>
-        <div id="fileListView" class="overflow-x-hidden">
+        <div id="fileListView" class="overflow-x-hidden" oncontextmenu="handleWorkspaceContextMenu(event)">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
@@ -1609,7 +1609,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             $sfPermLabel  = $sfCanDelete ? 'Lesen, Schreiben & Löschen' : ($sfCanWrite ? 'Lesen & Schreiben' : 'Nur Lesen');
                             $sfPermIcon   = $sfCanDelete ? '✏️🗑️' : ($sfCanWrite ? '✏️' : '👁️');
                             ?>
-                            <tr class="bg-blue-50/25 dark:bg-blue-950/15 hover:bg-blue-50/60 dark:hover:bg-blue-950/35 transition-all">
+                            <tr
+                                oncontextmenu="if (!event.target.closest('input')) { event.preventDefault(); event.stopPropagation(); openMobileFolderMenu(<?= e((string)json_encode($sfPath . ' (von ' . $sfOwner . ')')) ?>, <?= e((string)json_encode($sfPath)) ?>, <?= $sfCount ?>, false, false, false, event, <?= e((string)json_encode('index.php?shared_folder=' . $usId)) ?>, <?= $sfCount > 0 ? e((string)json_encode('download.php?user_share_id=' . $usId)) : 'null' ?>); }"
+                                class="bg-blue-50/25 dark:bg-blue-950/15 hover:bg-blue-50/60 dark:hover:bg-blue-950/35 transition-all"
+                            >
                                 <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
                                     <span class="text-xs text-blue-500">📁</span>
                                 </td>
@@ -1699,7 +1702,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             data-drop-folder-label="<?= e($subDisplayName) ?>"
                             data-folder-count="<?= $subFileCount ?>"
                             data-folder-bytes="<?= $subSize ?>"
-                            oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>); }"
+                            oncontextmenu="if (!event.target.closest('input')) { event.preventDefault(); event.stopPropagation(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>, event); }"
                             class="bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/25 transition-all"
                         >
                             <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle" onclick="event.stopPropagation()">
@@ -1946,7 +1949,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         <tr
                             class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
                             data-file-row-id="<?= $fId ?>"
-                            oncontextmenu="if (!event.target.closest('a, input')) { event.preventDefault(); openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>); }"
+                            oncontextmenu="if (!event.target.closest('input')) { event.preventDefault(); event.stopPropagation(); openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>, event); }"
                             <?php if ($canManageThisFile): ?>
                                 draggable="true"
                                 data-drag-file-id="<?= $fId ?>"
@@ -2338,7 +2341,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         </div>
 
         <!-- FOTO-GALERIE / KACHEL-ANSICHT (#fileGridView) -->
-        <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+        <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5" oncontextmenu="handleWorkspaceContextMenu(event)">
             <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null): ?>
                 <?php
                 if ($sharedWithMeMode) {
@@ -2390,6 +2393,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     ?>
                     <a
                         href="index.php?shared_folder=<?= $usId ?>"
+                        oncontextmenu="event.preventDefault(); event.stopPropagation(); openMobileFolderMenu(<?= e((string)json_encode($sfPath . ' (von ' . $sfOwner . ')')) ?>, <?= e((string)json_encode($sfPath)) ?>, <?= $sfCount ?>, false, false, false, event, <?= e((string)json_encode('index.php?shared_folder=' . $usId)) ?>, <?= $sfCount > 0 ? e((string)json_encode('download.php?user_share_id=' . $usId)) : 'null' ?>);"
                         class="group flex flex-col justify-between p-3.5 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/60 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
                         title="Freigegebenen Ordner <?= e($sfPath) ?> (von <?= e($sfOwner) ?>) öffnen"
                     >
@@ -2424,6 +2428,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     data-drop-folder-label="<?= e($subDisplayName) ?>"
                     data-folder-count="<?= $subFileCount ?>"
                     data-folder-bytes="<?= $subSize ?>"
+                    oncontextmenu="event.preventDefault(); event.stopPropagation(); openMobileFolderMenu(<?= e((string)json_encode($subDisplayName)) ?>, <?= e((string)json_encode($subPath)) ?>, <?= $subFileCount ?>, <?= ($activeGroupFolder === null && $subFileCount > 0) ? 'true' : 'false' ?>, <?= $activeGroupFolder === null ? 'true' : 'false' ?>, <?= ($canUploadHere && $activeGroupFolder === null) ? 'true' : 'false' ?>, event);"
                     class="group flex flex-col justify-between p-3.5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 hover:border-amber-400 dark:hover:border-amber-600 transition-all shadow-2xs"
                     title="Ordner <?= e($subPath) ?> öffnen (oder Dateien per Drag & Drop direkt hierher ziehen)"
                 >
@@ -2466,6 +2471,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 ?>
                 <div
                     class="group relative flex flex-col justify-between p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-brand-400 dark:hover:border-brand-500 transition-all shadow-2xs <?= $canManageThisFile ? 'cursor-grab active:cursor-grabbing' : '' ?>"
+                    oncontextmenu="if (!event.target.closest('input')) { event.preventDefault(); event.stopPropagation(); openMobileFileMenu(<?= (int)$fileIdx ?>, <?= $canDeleteThisFile ? 'true' : 'false' ?>, event); }"
                     <?php if ($canManageThisFile): ?>
                         draggable="true"
                         data-drag-file-id="<?= $fId ?>"
@@ -3410,7 +3416,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
-<!-- AKTIONSMENÜ & FAVORITEN-ICONS ANPASSEN (Über den ⋯ Button oder Rechtsklick pro Zeile) -->
+<!-- AKTIONSMENÜ & RECHTSKLICK-KONTEXTMENÜ (Über den ⋯ Button oder Rechtsklick im Dateimodul) -->
 <div
     id="mobileActionModal"
     class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs"
@@ -3418,10 +3424,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     aria-modal="true"
     aria-labelledby="mobileActionTitle"
 >
-    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div class="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+    <div id="mobileActionCard" class="mc-card bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
             <div class="min-w-0">
-                <h3 id="mobileActionTitle" class="text-sm font-bold text-slate-900 dark:text-white truncate"></h3>
+                <h3 id="mobileActionTitle" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate"></h3>
                 <p id="mobileActionSubtitle" class="text-[11px] text-slate-500 dark:text-slate-400 truncate"></p>
             </div>
             <button
@@ -3430,13 +3436,13 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
                 aria-label="Schließen"
             >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
             </button>
         </div>
 
-        <div class="px-4 py-2 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <div id="mobileActionPinHintBar" class="px-4 py-1.5 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <span>💡 Rechts auf <strong>⭐/☆</strong> klicken, um Icons außen anzuheften</span>
             <button
                 type="button"
@@ -3448,7 +3454,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
             </button>
         </div>
 
-        <div id="mobileActionList" class="p-3 space-y-1.5 overflow-y-auto"></div>
+        <div id="mobileActionList" class="p-2.5 space-y-1 overflow-y-auto"></div>
 
         <!-- Verstecktes Lösch-Formular für das mobile Aktionsmenü -->
         <form id="mobileDeleteForm" action="delete.php" method="post" class="hidden">
@@ -5042,10 +5048,88 @@ function resetPinnedFileActions() {
 
 applyPinnedFileActions();
 
+const mobileActionCard = document.getElementById('mobileActionCard');
+const mobileActionPinHintBar = document.getElementById('mobileActionPinHintBar');
+let activeContextTargetEl = null;
+
+function clearContextHighlight() {
+    if (activeContextTargetEl) {
+        activeContextTargetEl.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50/60', 'dark:bg-brand-950/35');
+        activeContextTargetEl = null;
+    }
+}
+
 function closeMobileActionModal() {
     if (!mobileActionModal) return;
+    clearContextHighlight();
     mobileActionModal.classList.add('hidden');
-    mobileActionModal.classList.remove('flex');
+    mobileActionModal.classList.remove('flex', 'bg-transparent', 'bg-slate-900/60', 'backdrop-blur-xs');
+    if (mobileActionCard) {
+        mobileActionCard.style.position = '';
+        mobileActionCard.style.left = '';
+        mobileActionCard.style.top = '';
+        mobileActionCard.style.width = '';
+        mobileActionCard.style.maxHeight = '';
+    }
+}
+
+/**
+ * Zeigt das Aktionsmenü entweder als schwebendes Desktop-Kontextmenü direkt am Mauszeiger (bei Rechtsklick)
+ * oder als zentriertes Modal / Bottom-Sheet (bei Klick auf den ⋯ Button).
+ */
+function showActionMenuAtEvent(ev, showPinHint = true) {
+    if (!mobileActionModal || !mobileActionCard) return;
+    clearContextHighlight();
+
+    if (mobileActionPinHintBar) {
+        mobileActionPinHintBar.classList.toggle('hidden', !showPinHint);
+    }
+
+    const isContextClick = Boolean(ev && typeof ev.clientX === 'number' && typeof ev.clientY === 'number' && window.innerWidth >= 640);
+
+    if (isContextClick) {
+        const rowOrCard = ev.currentTarget && ev.currentTarget !== document ? ev.currentTarget : (ev.target?.closest?.('tr, [data-drop-folder], [data-drag-file-id]') || null);
+        if (rowOrCard && rowOrCard.id !== 'fileListView' && rowOrCard.id !== 'fileGridView') {
+            activeContextTargetEl = rowOrCard;
+            activeContextTargetEl.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50/60', 'dark:bg-brand-950/35');
+        }
+
+        mobileActionModal.classList.remove('hidden', 'items-end', 'sm:items-center', 'justify-center', 'p-3', 'bg-slate-900/60', 'backdrop-blur-xs');
+        mobileActionModal.classList.add('block', 'bg-transparent');
+
+        const menuWidth = 336;
+        mobileActionCard.style.position = 'fixed';
+        mobileActionCard.style.width = menuWidth + 'px';
+        mobileActionCard.style.maxHeight = '80vh';
+
+        // Vorläufig platzieren, um reale Höhe zu messen und am Bildschirmrand einzupassen
+        let x = ev.clientX;
+        let y = ev.clientY;
+        mobileActionCard.style.left = x + 'px';
+        mobileActionCard.style.top = y + 'px';
+
+        requestAnimationFrame(() => {
+            const rect = mobileActionCard.getBoundingClientRect();
+            const pad = 12;
+            if (x + rect.width + pad > window.innerWidth) {
+                x = Math.max(pad, window.innerWidth - rect.width - pad);
+            }
+            if (y + rect.height + pad > window.innerHeight) {
+                y = Math.max(pad, window.innerHeight - rect.height - pad);
+            }
+            mobileActionCard.style.left = x + 'px';
+            mobileActionCard.style.top = y + 'px';
+        });
+    } else {
+        mobileActionCard.style.position = '';
+        mobileActionCard.style.left = '';
+        mobileActionCard.style.top = '';
+        mobileActionCard.style.width = '';
+        mobileActionCard.style.maxHeight = '';
+
+        mobileActionModal.classList.remove('hidden', 'block', 'bg-transparent');
+        mobileActionModal.classList.add('flex', 'items-end', 'sm:items-center', 'justify-center', 'p-3', 'bg-slate-900/60', 'backdrop-blur-xs');
+    }
 }
 
 if (mobileActionModal) {
@@ -5054,6 +5138,62 @@ if (mobileActionModal) {
             closeMobileActionModal();
         }
     });
+    // Wenn das Kontextmenü offen ist und der Nutzer direkt auf eine andere Datei/Ordner rechtsklickt -> nahtlos wechseln
+    mobileActionModal.addEventListener('contextmenu', (e) => {
+        if (e.target === mobileActionModal) {
+            e.preventDefault();
+            closeMobileActionModal();
+            const underEl = document.elementFromPoint(e.clientX, e.clientY);
+            if (underEl) {
+                const newEv = new MouseEvent('contextmenu', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: e.clientX,
+                    clientY: e.clientY
+                });
+                underEl.dispatchEvent(newEv);
+            }
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !mobileActionModal.classList.contains('hidden')) {
+            closeMobileActionModal();
+        }
+    });
+}
+
+function appendMenuSectionDivider(titleText) {
+    const div = document.createElement('div');
+    div.className = 'pt-2 pb-0.5 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t border-slate-200/70 dark:border-slate-800 mt-1';
+    div.textContent = titleText;
+    mobileActionList.appendChild(div);
+}
+
+function appendBatchSelectionContextActions() {
+    const checkedFileCbs = getSelectedFileCheckboxes();
+    const checkedFolderCbs = getSelectedFolderCheckboxes();
+    const totalChecked = checkedFileCbs.length + checkedFolderCbs.length;
+    if (totalChecked <= 1) return;
+
+    appendMenuSectionDivider(`☑️ Mehrfachauswahl (${totalChecked} markiert)`);
+    if (checkedFileCbs.length > 0) {
+        appendMenuActionRow(`📦 Ausgewählte Dateien als ZIP (${checkedFileCbs.length})`, 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+            downloadBatchZip();
+        }, null);
+    }
+    appendMenuActionRow(`⇄ Markierte Elemente verschieben / kopieren (${totalChecked})`, 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        openBatchTransferModal();
+    }, null);
+    const anyDeletable = [...checkedFileCbs, ...checkedFolderCbs].some(cb => cb.getAttribute('data-can-delete') === '1');
+    if (anyDeletable) {
+        appendMenuActionRow(`🗑️ Markierte Elemente löschen (${totalChecked})`, 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
+            deleteBatchFiles();
+        }, null);
+    }
+    appendMenuActionRow('☐ Auswahl aufheben', 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200', () => {
+        clearBatchSelection();
+    }, null);
 }
 
 function appendMenuActionRow(label, cls, onClickFn, pinKey = null) {
@@ -5062,7 +5202,7 @@ function appendMenuActionRow(label, cls, onClickFn, pinKey = null) {
 
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `flex-1 min-w-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
+    b.className = `flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-left ${cls}`;
     b.textContent = label;
     b.addEventListener('click', () => {
         closeMobileActionModal();
@@ -5075,7 +5215,7 @@ function appendMenuActionRow(label, cls, onClickFn, pinKey = null) {
         const starBtn = document.createElement('button');
         starBtn.type = 'button';
         starBtn.setAttribute('data-action-pin-star', pinKey);
-        starBtn.className = `w-9 h-9 rounded-xl border flex items-center justify-center text-sm transition-all hover:scale-110 cursor-pointer shrink-0 ${
+        starBtn.className = `w-8 h-8 rounded-xl border flex items-center justify-center text-sm transition-all hover:scale-110 cursor-pointer shrink-0 ${
             isPinned
                 ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800/70'
                 : 'text-slate-400 bg-white/70 dark:bg-slate-800/70 border-slate-200/80 dark:border-slate-700 hover:text-amber-500'
@@ -5091,7 +5231,7 @@ function appendMenuActionRow(label, cls, onClickFn, pinKey = null) {
     mobileActionList.appendChild(row);
 }
 
-function openMobileFileMenu(fileIdx, canDelete) {
+function openMobileFileMenu(fileIdx, canDelete, ev = null) {
     if (!previewItems || !previewItems[fileIdx] || !mobileActionModal) return;
     const item = previewItems[fileIdx];
     mobileActionTitle.textContent = item.name;
@@ -5102,6 +5242,18 @@ function openMobileFileMenu(fileIdx, canDelete) {
     appendMenuActionRow('👁️ Vorschau öffnen', 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 hover:bg-violet-100', () => {
         openPreviewModal(fileIdx);
     }, 'preview');
+
+    // 1b. E-Book-Reader & Hörbuch-Studio (für .epub Dateien)
+    <?php if (($appSettings['enable_ebooks'] ?? '1') === '1'): ?>
+    if (!item.isEncrypted && String(item.ext || '').toLowerCase() === 'epub') {
+        appendMenuActionRow('📖 Im E-Book-Reader lesen', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+            window.location.href = 'ebooks.php?id=' + Number(item.id);
+        }, null);
+        appendMenuActionRow('🎧 Als Hörbuch anhören / MP3 erzeugen', 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100', () => {
+            window.location.href = 'ebooks.php?id=' + Number(item.id) + '&audio=1';
+        }, null);
+    }
+    <?php endif; ?>
 
     // 2. Office Light (falls unterstützt & unverschlüsselt)
     if (item.officeUrl && item.officeUrl !== '') {
@@ -5181,19 +5333,26 @@ function openMobileFileMenu(fileIdx, canDelete) {
         }, 'delete');
     }
 
-    mobileActionModal.classList.remove('hidden');
-    mobileActionModal.classList.add('flex');
+    appendBatchSelectionContextActions();
+    showActionMenuAtEvent(ev, true);
 }
 
-function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare, canDelete) {
+function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare, canDelete, ev = null, customOpenUrl = null, customZipUrl = null) {
     if (!mobileActionModal) return;
     mobileActionTitle.textContent = '📁 ' + displayName;
     mobileActionSubtitle.textContent = `${fileCount} ${fileCount === 1 ? 'Datei' : 'Dateien'}`;
     mobileActionList.innerHTML = '';
 
-    if (canZip) {
+    const activeGfId = <?= $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : 'null' ?>;
+    const openUrl = customOpenUrl || ('index.php?' + (activeGfId !== null ? ('group_folder=' + activeGfId + '&') : '') + 'folder=' + encodeURIComponent(subPath));
+
+    appendMenuActionRow('📂 Ordner öffnen', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        window.location.href = openUrl;
+    }, null);
+
+    if (canZip || customZipUrl) {
         appendMenuActionRow('⬇️ Ordner als ZIP herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
-            window.location.href = 'download.php?folder=' + encodeURIComponent(subPath);
+            window.location.href = customZipUrl || ('download.php?folder=' + encodeURIComponent(subPath));
         }, 'download');
     }
 
@@ -5203,15 +5362,17 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
         }, 'share');
     }
 
-    if (canDelete || <?= ($canUploadHere && $activeSharedFolder === null) ? 'true' : 'false' ?>) {
+    if (canDelete || (customOpenUrl === null && <?= ($canUploadHere && $activeSharedFolder === null) ? 'true' : 'false' ?>)) {
         appendMenuActionRow('✏️ Ordner umbenennen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
             openRenameModal('folder', 0, displayName, subPath);
         }, 'rename');
     }
 
-    appendMenuActionRow('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
-        openTransferModal('folder', 0, displayName, subPath, canDelete);
-    }, 'move');
+    if (customOpenUrl === null) {
+        appendMenuActionRow('⇄ Ordner verschieben oder kopieren', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+            openTransferModal('folder', 0, displayName, subPath, canDelete);
+        }, 'move');
+    }
 
     if (canDelete) {
         appendMenuActionRow('🗑️ Ordner in den Papierkorb verschieben', 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100', () => {
@@ -5225,8 +5386,59 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
         }, 'delete');
     }
 
-    mobileActionModal.classList.remove('hidden');
-    mobileActionModal.classList.add('flex');
+    appendBatchSelectionContextActions();
+    showActionMenuAtEvent(ev, customOpenUrl === null);
+}
+
+/**
+ * Kontextmenü bei Rechtsklick auf freie Fläche / Hintergrund im Dateifenster.
+ */
+function handleWorkspaceContextMenu(ev) {
+    if (!ev || ev.defaultPrevented) return;
+    if (ev.target && ev.target.closest('input, select, textarea')) return;
+    ev.preventDefault();
+
+    const currentFolderLabel = <?= json_encode($currentFolder !== '' ? ('📁 ' . $currentFolder) : ($activeGroupFolder !== null ? ('👥 ' . (string)$activeGroupFolder['name']) : '🏠 Hauptverzeichnis')) ?>;
+    mobileActionTitle.textContent = currentFolderLabel;
+    mobileActionSubtitle.textContent = 'Verzeichnis- & Auswahl-Aktionen';
+    mobileActionList.innerHTML = '';
+
+    <?php if ($canUploadHere): ?>
+    appendMenuActionRow('📤 Dateien hochladen…', 'bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 hover:bg-brand-100', () => {
+        document.getElementById('fileInput')?.click();
+    }, null);
+    appendMenuActionRow('📁 Ganzen Ordner hochladen…', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        document.getElementById('folderInput')?.click();
+    }, null);
+    <?php if ($activeSharedFolder === null): ?>
+    appendMenuActionRow('➕ Neuen Ordner anlegen', 'bg-amber-50/80 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+        if (typeof toggleNewFolderBar === 'function') toggleNewFolderBar(true);
+    }, null);
+    <?php endif; ?>
+    appendMenuActionRow('📄 Neues Office-Dokument erstellen', 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100', () => {
+        openCreateOfficeModal();
+    }, null);
+    <?php if ($activeSharedFolder === null): ?>
+    appendMenuActionRow('☁️↓ Cloud-Link importieren (Dropbox / Nextcloud)', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
+        if (typeof toggleCloudImportBar === 'function') toggleCloudImportBar(true);
+    }, null);
+    <?php endif; ?>
+    <?php endif; ?>
+
+    const allCbs = document.querySelectorAll('.file-select-checkbox, .folder-select-checkbox');
+    if (allCbs.length > 0) {
+        const masterCb = document.getElementById('selectAllFilesCheckbox');
+        const allChecked = Boolean(masterCb && masterCb.checked);
+        appendMenuActionRow(allChecked ? '☐ Gesamte Auswahl aufheben' : '☑️ Alle Ordner & Dateien auswählen', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
+            if (masterCb) {
+                masterCb.checked = !allChecked;
+                toggleSelectAllFiles(masterCb);
+            }
+        }, null);
+    }
+
+    appendBatchSelectionContextActions();
+    showActionMenuAtEvent(ev, false);
 }
 
 // --- SHARE MODAL LOGIK (für Dateien UND Ordner) ---
