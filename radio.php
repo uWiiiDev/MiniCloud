@@ -176,6 +176,108 @@ function fetchIcyStreamTitle(string $streamUrl): string
     return $title;
 }
 
+/**
+ * Ruft Stationen über die Radio-Browser-API-Spiegelserver ab.
+ */
+function fetchRadioBrowserStations(array $params): ?array
+{
+    $endpoints = [
+        'https://de1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
+        'https://at1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
+        'https://nl1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
+    ];
+
+    foreach ($endpoints as $apiUrl) {
+        if (function_exists('curl_init')) {
+            $ch = curl_init($apiUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => 6,
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_USERAGENT      => 'MiniCloud-RadioModule/1.1',
+                CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+            ]);
+            $res  = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if (is_string($res) && $code >= 200 && $code < 300) {
+                $decoded = json_decode($res, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+            }
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'  => 'GET',
+                    'timeout' => 6,
+                    'header'  => "User-Agent: MiniCloud-RadioModule/1.1\r\nAccept: application/json\r\n",
+                ],
+            ]);
+            $res = @file_get_contents($apiUrl, false, $ctx);
+            if (is_string($res) && $res !== '') {
+                $decoded = json_decode($res, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Kuratierte Basis-Liste (40 deutsche, DACH- & Genre-Top-Sender).
+ */
+function getDefaultPresetRadioStations(): array
+{
+    return [
+        // Öffentlich-Rechtlich & Popwellen (ARD / Deutschlandradio)
+        ['name' => '1LIVE (WDR)',            'genre' => 'Pop, Charts & Newcomer',          'country' => 'DE', 'icon' => '🔥', 'stream_url' => 'https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3'],
+        ['name' => '1LIVE DIGGI',            'genre' => 'Young Pop, Dance & Charts',       'country' => 'DE', 'icon' => '⚡', 'stream_url' => 'https://wdr-1live-diggi.icecastssl.wdr.de/wdr/1live/diggi/mp3/128/stream.mp3'],
+        ['name' => 'WDR 2 Rheinland',        'genre' => 'Pop, Infos & Bundesliga',         'country' => 'DE', 'icon' => '📻', 'stream_url' => 'https://wdr-wdr2-rheinland.icecastssl.wdr.de/wdr/wdr2/rheinland/mp3/128/stream.mp3'],
+        ['name' => 'WDR 4',                  'genre' => 'Lieblingshits & Klassiker',       'country' => 'DE', 'icon' => '🎶', 'stream_url' => 'https://wdr-wdr4-live.icecastssl.wdr.de/wdr/wdr4/live/mp3/128/stream.mp3'],
+        ['name' => 'WDR 5',                  'genre' => 'Wort, Hintergrund & Kultur',      'country' => 'DE', 'icon' => '🎙️', 'stream_url' => 'https://wdr-wdr5-live.icecastssl.wdr.de/wdr/wdr5/live/mp3/128/stream.mp3'],
+        ['name' => 'SWR3',                   'genre' => 'Pop, Comedy & Aktuelles',         'country' => 'DE', 'icon' => '🦌', 'stream_url' => 'https://liveradio.swr.de/sw282p3/swr3/play.mp3'],
+        ['name' => 'SWR1 Baden-Württemberg', 'genre' => 'Größte Hits aller Zeiten',        'country' => 'DE', 'icon' => '💿', 'stream_url' => 'https://liveradio.swr.de/sw282p3/swr1bw/play.mp3'],
+        ['name' => 'DASDING (SWR)',          'genre' => 'Charts, Urban & Neue Musik',      'country' => 'DE', 'icon' => '🔊', 'stream_url' => 'https://liveradio.swr.de/sw282p3/dasding/play.mp3'],
+        ['name' => 'Bayern 1',               'genre' => '70er, 80er & Kulthits',           'country' => 'DE', 'icon' => '🥨', 'stream_url' => 'https://dispatcher.rndfnk.com/br/br1/obb/mp3/mid'],
+        ['name' => 'BAYERN 3',               'genre' => 'Hits & Neue Musik',               'country' => 'DE', 'icon' => '🎧', 'stream_url' => 'https://dispatcher.rndfnk.com/br/br3/live/mp3/mid'],
+        ['name' => 'BR24',                   'genre' => 'Nachrichten & Sport Live',        'country' => 'DE', 'icon' => '🗞️', 'stream_url' => 'https://dispatcher.rndfnk.com/br/br24/live/mp3/mid'],
+        ['name' => 'NDR 2',                  'genre' => 'Norddeutschlands Popwelle',       'country' => 'DE', 'icon' => '🌊', 'stream_url' => 'https://icecast.ndr.de/ndr/ndr2/niedersachsen/mp3/128/stream.mp3'],
+        ['name' => 'N-JOY (NDR)',            'genre' => 'Junge Hits aus dem Norden',       'country' => 'DE', 'icon' => '🎉', 'stream_url' => 'https://icecast.ndr.de/ndr/njoy/live/mp3/128/stream.mp3'],
+        ['name' => 'NDR Info',               'genre' => 'Nachrichten & Hintergrund',       'country' => 'DE', 'icon' => '🧭', 'stream_url' => 'https://icecast.ndr.de/ndr/ndrinfo/niedersachsen/mp3/128/stream.mp3'],
+        ['name' => 'hr3',                    'genre' => 'Pop & Hits aus Hessen',           'country' => 'DE', 'icon' => '🎵', 'stream_url' => 'https://dispatcher.rndfnk.com/hr/hr3/live/mp3/high'],
+        ['name' => 'YOU FM (hr)',            'genre' => 'Pop, Urban & Charts',             'country' => 'DE', 'icon' => '💥', 'stream_url' => 'https://dispatcher.rndfnk.com/hr/youfm/live/mp3/high'],
+        ['name' => 'MDR JUMP',               'genre' => 'Pop & Dance im Osten',            'country' => 'DE', 'icon' => '🚀', 'stream_url' => 'https://mdr-284280-1.sslcast.mdr.de/mdr/284280/1/mp3/high/stream.mp3'],
+        ['name' => 'rbb radioeins',          'genre' => 'Indie, Pop & Kultur Berlin',      'country' => 'DE', 'icon' => '🐻', 'stream_url' => 'https://dispatcher.rndfnk.com/rbb/radioeins/live/mp3/mid'],
+        ['name' => 'Fritz (rbb)',            'genre' => 'Young Sound aus Berlin',          'country' => 'DE', 'icon' => '⚡', 'stream_url' => 'https://dispatcher.rndfnk.com/rbb/fritz/live/mp3/mid'],
+        ['name' => 'Bremen Vier',            'genre' => 'Pop & Rock aus Bremen',           'country' => 'DE', 'icon' => '⚓', 'stream_url' => 'https://icecast.radiobremen.de/rb/bremenvier/live/mp3/128/stream.mp3'],
+        ['name' => 'Deutschlandfunk',        'genre' => 'Nachrichten, Politik & Kultur',   'country' => 'DE', 'icon' => '📰', 'stream_url' => 'https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3'],
+        ['name' => 'Deutschlandfunk Nova',   'genre' => 'Wissen, Indie & Elektropop',      'country' => 'DE', 'icon' => '🧠', 'stream_url' => 'https://st03.sslstream.dlf.de/dlf/03/128/mp3/stream.mp3'],
+        // Große Privatradios & Bundesweite Sender
+        ['name' => 'ANTENNE BAYERN',         'genre' => 'Beste Hits & Charts',             'country' => 'DE', 'icon' => '☀️', 'stream_url' => 'https://stream.antenne.de/antenne/stream/mp3'],
+        ['name' => 'HIT RADIO FFH',          'genre' => 'Pop, Hits & Hessen-Infos',        'country' => 'DE', 'icon' => '📻', 'stream_url' => 'https://mp3.ffh.de/radioffh/hqlivestream.mp3'],
+        ['name' => 'radio ffn',              'genre' => 'Niedersachsens Hit-Radio',        'country' => 'DE', 'icon' => '🌟', 'stream_url' => 'https://stream.ffn.de/ffn/mp3-192/'],
+        ['name' => 'bigFM',                  'genre' => 'Hip-Hop, Urban & Charts',         'country' => 'DE', 'icon' => '🎤', 'stream_url' => 'https://streams.bigfm.de/bigfm-deutschland-128-mp3'],
+        ['name' => 'ROCK ANTENNE',           'genre' => 'Classic & Modern Rock',           'country' => 'DE', 'icon' => '🎸', 'stream_url' => 'https://stream.rockantenne.de/rockantenne/stream/mp3'],
+        ['name' => 'RADIO BOB!',             'genre' => 'Rock, Metal & Hardrock',          'country' => 'DE', 'icon' => '🤘', 'stream_url' => 'https://streams.radiobob.de/bob-live/mp3-192/mediaplayer'],
+        ['name' => '80s80s Radio',           'genre' => '100 % 80er Kult-Hits',            'country' => 'DE', 'icon' => '🕹️', 'stream_url' => 'https://streams.80s80s.de/web/mp3-192/'],
+        ['name' => '90s90s Hits',            'genre' => 'Eurodance & 90er Hits',           'country' => 'DE', 'icon' => '💿', 'stream_url' => 'https://streams.90s90s.de/pop/mp3-192/'],
+        ['name' => 'sunshine live',          'genre' => 'Electronic, Techno & House',      'country' => 'DE', 'icon' => '🎛️', 'stream_url' => 'https://stream.sunshine-live.de/live/mp3-192'],
+        ['name' => 'Beats Radio',            'genre' => 'Deep House, Melodic & Chill',     'country' => 'DE', 'icon' => '🪩', 'stream_url' => 'https://stream.klassikradio.de/beats-radio/mp3-192'],
+        ['name' => 'Absolut TOP',            'genre' => '2000er, 2010er & Aktuelle Hits',  'country' => 'DE', 'icon' => '🚀', 'stream_url' => 'https://absolut-top.live-sm.absolutradio.de/absolut-top/stream/mp3'],
+        ['name' => 'Absolut relax',          'genre' => 'Soft Pop & Entspannung',          'country' => 'DE', 'icon' => '☕', 'stream_url' => 'https://absolut-relax.live-sm.absolutradio.de/absolut-relax/stream/mp3'],
+        ['name' => 'Klassik Radio',          'genre' => 'Klassik & Filmmusik',             'country' => 'DE', 'icon' => '🎻', 'stream_url' => 'https://stream.klassikradio.de/live/mp3-192'],
+        ['name' => 'Radio Schlagerparadies', 'genre' => 'Deutscher Schlager & Party',      'country' => 'DE', 'icon' => '🥳', 'stream_url' => 'https://irmedia.streamabc.net/irm-schlagerparadieslive-mp3-128-9657315'],
+        ['name' => 'Ballermann Radio',       'genre' => 'Party, Malle & Après-Ski',        'country' => 'DE', 'icon' => '🌴', 'stream_url' => 'https://stream.bmr-radio.de/ballermann-radio.mp3'],
+        ['name' => 'Radio Swiss Pop',        'genre' => 'Pop ohne Werbung (24/7 Musik)',   'country' => 'CH', 'icon' => '🇨🇭', 'stream_url' => 'https://stream.srg-ssr.ch/m/rsp/mp3_128'],
+        ['name' => 'Radio Swiss Jazz',       'genre' => 'Jazz, Soul & Blues (Werbefrei)',  'country' => 'CH', 'icon' => '🎷', 'stream_url' => 'https://stream.srg-ssr.ch/m/rsj/mp3_128'],
+        ['name' => 'SomaFM Groove Salad',    'genre' => 'Ambient, Chillout & Lo-Fi',       'country' => 'US', 'icon' => '🧘', 'stream_url' => 'https://ice2.somafm.com/groovesalad-128-mp3'],
+    ];
+}
+
 // ============================================================================
 // 3. AJAX-ENDPUNKTE (ICY-METADATEN & RADIO-BROWSER-SUCHE)
 // ============================================================================
@@ -198,22 +300,25 @@ if ($action === 'radio_search') {
     $query   = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
     $tag     = mb_substr(trim((string)($_GET['tag'] ?? '')), 0, 40);
     $country = strtoupper(mb_substr(trim((string)($_GET['country'] ?? 'DE')), 0, 4));
+    $noCache = (($_GET['nocache'] ?? '') === '1');
 
     $cacheKey = 'rb_' . md5(strtolower($query . '|' . $tag . '|' . $country));
-    $stmtC    = $pdo->prepare("SELECT payload, updated_at FROM tv_radio_cache WHERE cache_key = ?");
-    $stmtC->execute([$cacheKey]);
-    $rowC = $stmtC->fetch(PDO::FETCH_ASSOC);
+    if (!$noCache) {
+        $stmtC = $pdo->prepare("SELECT payload, updated_at FROM tv_radio_cache WHERE cache_key = ?");
+        $stmtC->execute([$cacheKey]);
+        $rowC = $stmtC->fetch(PDO::FETCH_ASSOC);
 
-    if ($rowC && (time() - (int)strtotime((string)$rowC['updated_at'])) < 1800) {
-        $cachedStations = json_decode((string)$rowC['payload'], true);
-        if (is_array($cachedStations)) {
-            echo json_encode(['ok' => true, 'stations' => $cachedStations, 'cached' => true]);
-            exit;
+        if ($rowC && (time() - (int)strtotime((string)$rowC['updated_at'])) < 1800) {
+            $cachedStations = json_decode((string)$rowC['payload'], true);
+            if (is_array($cachedStations)) {
+                echo json_encode(['ok' => true, 'stations' => $cachedStations, 'cached' => true]);
+                exit;
+            }
         }
     }
 
     $params = [
-        'limit'      => 36,
+        'limit'      => 48,
         'order'      => 'clickcount',
         'reverse'    => 'true',
         'hidebroken' => 'true',
@@ -229,81 +334,38 @@ if ($action === 'radio_search') {
         $params['countrycode'] = $country;
     }
 
-    $endpoints = [
-        'https://de1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
-        'https://at1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
-        'https://nl1.api.radio-browser.info/json/stations/search?' . http_build_query($params),
-    ];
-
-    $rawJson = null;
-    foreach ($endpoints as $apiUrl) {
-        if (function_exists('curl_init')) {
-            $ch = curl_init($apiUrl);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT        => 5,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_USERAGENT      => 'MiniCloud-RadioModule/1.0',
-                CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-            ]);
-            $res  = curl_exec($ch);
-            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if (is_string($res) && $code >= 200 && $code < 300) {
-                $rawJson = $res;
-                break;
-            }
-        } else {
-            $ctx = stream_context_create([
-                'http' => [
-                    'method'  => 'GET',
-                    'timeout' => 5,
-                    'header'  => "User-Agent: MiniCloud-RadioModule/1.0\r\nAccept: application/json\r\n",
-                ],
-            ]);
-            $res = @file_get_contents($apiUrl, false, $ctx);
-            if (is_string($res) && $res !== '') {
-                $rawJson = $res;
-                break;
-            }
-        }
-    }
-
+    $decoded  = fetchRadioBrowserStations($params);
     $stations = [];
-    if ($rawJson !== null) {
-        $decoded = json_decode($rawJson, true);
-        if (is_array($decoded)) {
-            $seenUrls = [];
-            foreach ($decoded as $st) {
-                $streamUrl = trim((string)($st['url_resolved'] ?? $st['url'] ?? ''));
-                $name      = trim((string)($st['name'] ?? ''));
-                if ($streamUrl === '' || $name === '' || !str_starts_with(strtolower($streamUrl), 'https://')) {
-                    continue;
-                }
-                if (isset($seenUrls[$streamUrl])) {
-                    continue;
-                }
-                $seenUrls[$streamUrl] = true;
-
-                $stations[] = [
-                    'name'       => mb_substr($name, 0, 120),
-                    'stream_url' => $streamUrl,
-                    'genre'      => mb_substr(trim((string)($st['tags'] ?? '')), 0, 90),
-                    'country'    => strtoupper(trim((string)($st['countrycode'] ?? 'DE'))),
-                    'bitrate'    => (int)($st['bitrate'] ?? 0),
-                    'codec'      => strtoupper(trim((string)($st['codec'] ?? 'MP3'))),
-                    'logo_url'   => trim((string)($st['favicon'] ?? '')),
-                ];
+    if (is_array($decoded)) {
+        $seenUrls = [];
+        foreach ($decoded as $st) {
+            $streamUrl = trim((string)($st['url_resolved'] ?? $st['url'] ?? ''));
+            $name      = trim((string)($st['name'] ?? ''));
+            if ($streamUrl === '' || $name === '' || !str_starts_with(strtolower($streamUrl), 'https://')) {
+                continue;
             }
+            if (isset($seenUrls[$streamUrl])) {
+                continue;
+            }
+            $seenUrls[$streamUrl] = true;
 
-            $up = $pdo->prepare("
-                INSERT INTO tv_radio_cache (cache_key, payload, updated_at)
-                VALUES (?, ?, NOW())
-                ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = NOW()
-            ");
-            $up->execute([$cacheKey, json_encode($stations, JSON_UNESCAPED_UNICODE)]);
+            $stations[] = [
+                'name'       => mb_substr($name, 0, 120),
+                'stream_url' => $streamUrl,
+                'genre'      => mb_substr(trim((string)($st['tags'] ?? '')), 0, 90),
+                'country'    => strtoupper(trim((string)($st['countrycode'] ?? 'DE'))),
+                'bitrate'    => (int)($st['bitrate'] ?? 0),
+                'codec'      => strtoupper(trim((string)($st['codec'] ?? 'MP3'))),
+                'logo_url'   => trim((string)($st['favicon'] ?? '')),
+            ];
         }
+
+        $up = $pdo->prepare("
+            INSERT INTO tv_radio_cache (cache_key, payload, updated_at)
+            VALUES (?, ?, NOW())
+            ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = NOW()
+        ");
+        $up->execute([$cacheKey, json_encode($stations, JSON_UNESCAPED_UNICODE)]);
     }
 
     echo json_encode(['ok' => true, 'stations' => $stations, 'cached' => false]);
@@ -391,37 +453,184 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         header('Location: radio.php');
         exit;
     }
+
+    // 4c) Gesamt-Senderliste & Stream-URLs live über Radio-Browser aktualisieren (Auto-Heal + Top-Sender Sync)
+    if ($action === 'refresh_station_directory') {
+        header('Content-Type: application/json; charset=UTF-8');
+
+        // 1. Alte Such-Caches leeren
+        $pdo->exec("DELETE FROM tv_radio_cache WHERE cache_key LIKE 'rb_%'");
+
+        $basePresets = getDefaultPresetRadioStations();
+        $topStations = fetchRadioBrowserStations([
+            'countrycode' => 'DE',
+            'order'       => 'clickcount',
+            'reverse'     => 'true',
+            'hidebroken'  => 'true',
+            'is_https'    => 'true',
+            'limit'       => 100,
+        ]);
+
+        // Index über normalisierten Sendernamen aufbauen
+        $normalizeName = static function (string $n): string {
+            $n = mb_strtolower(trim($n));
+            $n = preg_replace('/\([^)]*\)/u', '', $n) ?? $n;
+            $n = preg_replace('/[^a-z0-9äöüß]+/u', '', $n) ?? $n;
+            return $n;
+        };
+
+        $rbByNormName = [];
+        $rbTrending   = [];
+        if (is_array($topStations)) {
+            foreach ($topStations as $rbSt) {
+                $sUrl  = trim((string)($rbSt['url_resolved'] ?? $rbSt['url'] ?? ''));
+                $sName = trim((string)($rbSt['name'] ?? ''));
+                if ($sUrl === '' || $sName === '' || !str_starts_with(strtolower($sUrl), 'https://')) {
+                    continue;
+                }
+                $norm = $normalizeName($sName);
+                if ($norm !== '' && !isset($rbByNormName[$norm])) {
+                    $rbByNormName[$norm] = [
+                        'name'       => mb_substr($sName, 0, 90),
+                        'stream_url' => $sUrl,
+                        'genre'      => mb_substr(trim((string)($rbSt['tags'] ?? 'Live & Hits')), 0, 80),
+                        'country'    => strtoupper(trim((string)($rbSt['countrycode'] ?? 'DE'))),
+                    ];
+                }
+                $rbTrending[] = [
+                    'name'       => mb_substr($sName, 0, 90),
+                    'stream_url' => $sUrl,
+                    'genre'      => mb_substr(trim((string)($rbSt['tags'] ?? 'Pop & Live')), 0, 80) ?: 'Live-Radio',
+                    'country'    => strtoupper(trim((string)($rbSt['countrycode'] ?? 'DE'))),
+                    'icon'       => '📡',
+                    'norm'       => $norm,
+                ];
+            }
+        }
+
+        // 2. Kuratierte Hauptliste prüfen & ggf. neue Top-Sender aus Deutschland ergänzen
+        $seenNorms   = [];
+        $seenUrls    = [];
+        $updatedList = [];
+        $healedCount = 0;
+
+        foreach ($basePresets as $preset) {
+            $norm = $normalizeName((string)$preset['name']);
+            $seenNorms[$norm] = true;
+            $seenUrls[(string)$preset['stream_url']] = true;
+            $updatedList[] = $preset;
+        }
+
+        // Ergänze bis zu 8 weitere aktuell angesagte Top-Sender aus dem Radio-Browser-Ranking
+        $addedTrending = 0;
+        foreach ($rbTrending as $tr) {
+            if ($addedTrending >= 8) {
+                break;
+            }
+            $norm = $tr['norm'];
+            if ($norm === '' || isset($seenNorms[$norm]) || isset($seenUrls[$tr['stream_url']])) {
+                continue;
+            }
+            // Prüfe auch Teil-Namensgleichheit (z.B. "1LIVE" vs "WDR 1LIVE")
+            $isDuplicate = false;
+            foreach ($seenNorms as $existingNorm => $_) {
+                if ($existingNorm !== '' && (str_contains($norm, (string)$existingNorm) || str_contains((string)$existingNorm, $norm))) {
+                    $isDuplicate = true;
+                    break;
+                }
+            }
+            if ($isDuplicate) {
+                continue;
+            }
+            $seenNorms[$norm] = true;
+            $seenUrls[$tr['stream_url']] = true;
+            $updatedList[] = [
+                'name'       => $tr['name'],
+                'genre'      => $tr['genre'],
+                'country'    => $tr['country'],
+                'icon'       => '📻',
+                'stream_url' => $tr['stream_url'],
+            ];
+            $addedTrending++;
+        }
+
+        // 3. Gespeicherte Favoriten des Benutzers prüfen & bei Bedarf Stream-URL aktualisieren
+        $stmtFav = $pdo->prepare("SELECT * FROM tv_radio_stations WHERE user_id = ? ORDER BY name ASC");
+        $stmtFav->execute([$userId]);
+        $favRows = $stmtFav->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($favRows as &$fav) {
+            $fNorm = $normalizeName((string)$fav['name']);
+            if ($fNorm !== '' && isset($rbByNormName[$fNorm])) {
+                $newUrl = $rbByNormName[$fNorm]['stream_url'];
+                if ($newUrl !== '' && $newUrl !== (string)$fav['stream_url']) {
+                    $upFav = $pdo->prepare("UPDATE tv_radio_stations SET stream_url = ? WHERE id = ? AND user_id = ?");
+                    $upFav->execute([$newUrl, (int)$fav['id'], $userId]);
+                    $fav['stream_url'] = $newUrl;
+                    $healedCount++;
+                }
+            }
+        }
+        unset($fav);
+
+        // 4. Aktualisierte Gesamt-Senderliste persistent im Cache speichern
+        $upCache = $pdo->prepare("
+            INSERT INTO tv_radio_cache (cache_key, payload, updated_at)
+            VALUES ('preset_stations_synced_v1', ?, NOW())
+            ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = NOW()
+        ");
+        $upCache->execute([json_encode($updatedList, JSON_UNESCAPED_UNICODE)]);
+
+        $syncedTime = date('d.m.Y H:i');
+        echo json_encode([
+            'ok'            => true,
+            'presets'       => $updatedList,
+            'favorites'     => $favRows,
+            'added_count'   => $addedTrending,
+            'healed_count'  => $healedCount,
+            'total_count'   => count($updatedList),
+            'synced_at'     => $syncedTime,
+            'message'       => '✅ Gesamt-Senderliste erfolgreich aktualisiert (' . count($updatedList) . ' Direkt-Sender, Such-Cache erneuert' . ($healedCount > 0 ? ", {$healedCount} Favoriten-Streams repariert" : '') . ').',
+        ]);
+        exit;
+    }
+
+    // 4d) Gesamt-Senderliste auf Kuratierte Standard-Liste (40 Sender) zurücksetzen
+    if ($action === 'reset_station_directory') {
+        header('Content-Type: application/json; charset=UTF-8');
+        $pdo->exec("DELETE FROM tv_radio_cache WHERE cache_key = 'preset_stations_synced_v1' OR cache_key LIKE 'rb_%'");
+        $defaults = getDefaultPresetRadioStations();
+        echo json_encode([
+            'ok'          => true,
+            'presets'     => $defaults,
+            'total_count' => count($defaults),
+            'synced_at'   => 'Standard-Katalog',
+            'message'     => '↺ Senderliste auf die ' . count($defaults) . ' Standard-Sender zurückgesetzt.',
+        ]);
+        exit;
+    }
 }
 
 // ============================================================================
-// 5. KURATIERTE TOP-WEBRADIOSENDER & BENUTZER-FAVORITEN
+// 5. KURATIERTE TOP-WEBRADIOSENDER & BENUTZER-FAVORITEN LADEN
 // ============================================================================
-$presetRadioStations = [
-    // Öffentlich-Rechtlich & Popwellen
-    ['name' => '1LIVE (WDR)',           'genre' => 'Pop, Charts & Newcomer',          'country' => 'DE', 'icon' => '🔥', 'stream_url' => 'https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3'],
-    ['name' => 'WDR 2 Rheinland',       'genre' => 'Pop, Infos & Bundesliga',         'country' => 'DE', 'icon' => '📻', 'stream_url' => 'https://wdr-wdr2-rheinland.icecastssl.wdr.de/wdr/wdr2/rheinland/mp3/128/stream.mp3'],
-    ['name' => 'WDR 4',                 'genre' => 'Lieblingshits & Klassiker',       'country' => 'DE', 'icon' => '🎶', 'stream_url' => 'https://wdr-wdr4-live.icecastssl.wdr.de/wdr/wdr4/live/mp3/128/stream.mp3'],
-    ['name' => 'SWR3',                  'genre' => 'Pop, Comedy & Aktuelles',         'country' => 'DE', 'icon' => '⚡', 'stream_url' => 'https://liveradio.swr.de/sw282p3/swr3/play.mp3'],
-    ['name' => 'Bayern 1',              'genre' => '70er, 80er & Kulthits',           'country' => 'DE', 'icon' => '🥨', 'stream_url' => 'https://dispatcher.rndfnk.com/br/br1/obb/mp3/mid'],
-    ['name' => 'BAYERN 3',              'genre' => 'Hits & Neue Musik',               'country' => 'DE', 'icon' => '🎧', 'stream_url' => 'https://dispatcher.rndfnk.com/br/br3/live/mp3/mid'],
-    ['name' => 'NDR 2',                 'genre' => 'Norddeutschlands Popwelle',       'country' => 'DE', 'icon' => '🌊', 'stream_url' => 'https://icecast.ndr.de/ndr/ndr2/niedersachsen/mp3/128/stream.mp3'],
-    ['name' => 'hr3',                   'genre' => 'Pop & Hits aus Hessen',           'country' => 'DE', 'icon' => '🎵', 'stream_url' => 'https://dispatcher.rndfnk.com/hr/hr3/live/mp3/high'],
-    ['name' => 'MDR JUMP',              'genre' => 'Pop & Dance',                     'country' => 'DE', 'icon' => '🚀', 'stream_url' => 'https://mdr-284280-1.sslcast.mdr.de/mdr/284280/1/mp3/high/stream.mp3'],
-    ['name' => 'Deutschlandfunk',       'genre' => 'Nachrichten, Politik & Kultur',   'country' => 'DE', 'icon' => '📰', 'stream_url' => 'https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3'],
-    // Privat- & Genre-Sender
-    ['name' => 'ANTENNE BAYERN',        'genre' => 'Besten Hits & Charts',            'country' => 'DE', 'icon' => '☀️', 'stream_url' => 'https://stream.antenne.de/antenne/stream/mp3'],
-    ['name' => 'ROCK ANTENNE',          'genre' => 'Classic & Modern Rock',           'country' => 'DE', 'icon' => '🎸', 'stream_url' => 'https://stream.rockantenne.de/rockantenne/stream/mp3'],
-    ['name' => 'RADIO BOB!',            'genre' => 'Rock, Metal & Hardrock',          'country' => 'DE', 'icon' => '🤘', 'stream_url' => 'https://streams.radiobob.de/bob-live/mp3-192/mediaplayer'],
-    ['name' => '80s80s Radio',          'genre' => '100 % 80er Kult-Hits',            'country' => 'DE', 'icon' => '🕹️', 'stream_url' => 'https://streams.80s80s.de/web/mp3-192/'],
-    ['name' => '90s90s Hits',           'genre' => 'Eurodance & 90er Hits',           'country' => 'DE', 'icon' => '💿', 'stream_url' => 'https://streams.90s90s.de/pop/mp3-192/'],
-    ['name' => 'sunshine live',         'genre' => 'Electronic, Techno & House',      'country' => 'DE', 'icon' => '🎛️', 'stream_url' => 'https://stream.sunshine-live.de/live/mp3-192'],
-    ['name' => 'bigFM',                 'genre' => 'Hip-Hop, Urban & Charts',         'country' => 'DE', 'icon' => '🎤', 'stream_url' => 'https://streams.bigfm.de/bigfm-deutschland-128-mp3'],
-    ['name' => 'Klassik Radio',         'genre' => 'Klassik & Filmmusik',             'country' => 'DE', 'icon' => '🎻', 'stream_url' => 'https://stream.klassikradio.de/live/mp3-192'],
-    ['name' => 'Absolut relax',         'genre' => 'Soft Pop & Entspannung',          'country' => 'DE', 'icon' => '☕', 'stream_url' => 'https://absolut-relax.live-sm.absolutradio.de/absolut-relax/stream/mp3'],
-    ['name' => 'Radio Schlagerparadies','genre' => 'Deutscher Schlager & Party',      'country' => 'DE', 'icon' => '🥳', 'stream_url' => 'https://irmedia.streamabc.net/irm-schlagerparadieslive-mp3-128-9657315'],
-    ['name' => 'Radio Swiss Jazz',      'genre' => 'Jazz, Soul & Blues (Werbefrei)',  'country' => 'CH', 'icon' => '🎷', 'stream_url' => 'https://stream.srg-ssr.ch/m/rsj/mp3_128'],
-    ['name' => 'SomaFM Groove Salad',   'genre' => 'Ambient, Chillout & Lo-Fi',       'country' => 'US', 'icon' => '🌴', 'stream_url' => 'https://ice2.somafm.com/groovesalad-128-mp3'],
-];
+$presetRadioStations = getDefaultPresetRadioStations();
+$presetSyncedAt      = '';
+
+try {
+    $stmtSync = $pdo->prepare("SELECT payload, updated_at FROM tv_radio_cache WHERE cache_key = 'preset_stations_synced_v1' LIMIT 1");
+    $stmtSync->execute();
+    $rowSync = $stmtSync->fetch(PDO::FETCH_ASSOC);
+    if ($rowSync && !empty($rowSync['payload'])) {
+        $decodedPresets = json_decode((string)$rowSync['payload'], true);
+        if (is_array($decodedPresets) && count($decodedPresets) >= 20) {
+            $presetRadioStations = $decodedPresets;
+            $presetSyncedAt      = date('d.m.Y H:i', (int)strtotime((string)$rowSync['updated_at']));
+        }
+    }
+} catch (Throwable $e) {
+    // Fallback auf Standardliste
+}
 
 $myStationsStmt = $pdo->prepare("SELECT * FROM tv_radio_stations WHERE user_id = ? ORDER BY name ASC");
 $myStationsStmt->execute([$userId]);
@@ -642,19 +851,47 @@ require_once __DIR__ . '/includes/header.php';
         <!-- 3. BELIEBTESTE DEUTSCHE & GENRE-SENDER (SOFORT-START)              -->
         <!-- ================================================================== -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-sm space-y-4">
-            <div>
-                <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-                    📻 Beliebte deutsche Sender &amp; Musikrichtungen (1-Klick Start)
-                </h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">
-                    Klicke auf einen Sender, um den Live-Stream sofort im oberen Player zu starten.
-                </p>
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                        <span>📻 Beliebte deutsche Sender &amp; Musikrichtungen (1-Klick Start)</span>
+                        <span id="presetCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">
+                            <?= count($presetRadioStations) ?> Sender
+                        </span>
+                        <span id="presetSyncBadge" class="<?= $presetSyncedAt !== '' ? '' : 'hidden' ?> px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300">
+                            <?= $presetSyncedAt !== '' ? 'Aktualisiert: ' . e($presetSyncedAt) : '' ?>
+                        </span>
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Klicke auf einen Sender zum Starten oder aktualisiere die Gesamtliste live über das Radio-Browser-Verzeichnis.
+                    </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="text" id="presetFilterInput" oninput="filterPresetRadioCards(this.value)"
+                           placeholder="🔎 In Senderliste filtern…"
+                           class="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 w-44 sm:w-52">
+                    <button type="button" id="btnRefreshRadioCatalog" onclick="refreshRadioStationCatalog()"
+                            title="Gesamt-Senderliste, Top-Trends &amp; Favoriten-Streams live über Radio-Browser aktualisieren"
+                            class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-2xs transition cursor-pointer flex items-center gap-1.5">
+                        <span id="btnRefreshRadioCatalogIcon">🔄</span>
+                        <span id="btnRefreshRadioCatalogText">Senderliste aktualisieren</span>
+                    </button>
+                    <button type="button" onclick="resetRadioStationCatalog()"
+                            title="Auf die 40 kuratierten Standard-Sender zurücksetzen"
+                            class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition cursor-pointer">
+                        ↺ Standard
+                    </button>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div id="presetSyncStatusBox" class="hidden px-3.5 py-2.5 rounded-xl text-xs font-bold border"></div>
+
+            <div id="presetStationsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 <?php foreach ($presetRadioStations as $st): ?>
                     <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition-all flex items-center justify-between gap-2"
-                         data-radio-card="<?= e($st['stream_url']) ?>">
+                         data-radio-card="<?= e($st['stream_url']) ?>"
+                         data-search-text="<?= e(mb_strtolower($st['name'] . ' ' . $st['genre'] . ' ' . ($st['country'] ?? 'DE'))) ?>">
                         <button type="button"
                                 data-st-name="<?= e($st['name']) ?>"
                                 data-st-url="<?= e($st['stream_url']) ?>"
@@ -662,7 +899,7 @@ require_once __DIR__ . '/includes/header.php';
                                 onclick="playRadioStation(this.getAttribute('data-st-name'), this.getAttribute('data-st-url'), this.getAttribute('data-st-genre'))"
                                 class="flex items-center gap-3 min-w-0 text-left flex-1 cursor-pointer group">
                             <span class="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shadow-2xs group-hover:scale-105 transition-transform shrink-0">
-                                <?= $st['icon'] ?>
+                                <?= $st['icon'] ?? '📻' ?>
                             </span>
                             <span class="min-w-0">
                                 <span class="block text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
@@ -1089,6 +1326,153 @@ document.addEventListener('submit', async (ev) => {
         }
     } catch (e) {}
 });
+
+function filterPresetRadioCards(query) {
+    const q    = String(query || '').trim().toLowerCase();
+    const grid = document.getElementById('presetStationsGrid');
+    if (!grid) return;
+    grid.querySelectorAll('[data-radio-card]').forEach((card) => {
+        const hay = (card.getAttribute('data-search-text') || '').toLowerCase();
+        card.classList.toggle('hidden', q !== '' && !hay.includes(q));
+    });
+}
+
+function renderPresetStationsGrid(stations) {
+    const grid       = document.getElementById('presetStationsGrid');
+    const countBadge = document.getElementById('presetCountBadge');
+    if (countBadge && Array.isArray(stations)) {
+        countBadge.textContent = `${stations.length} Sender`;
+    }
+    if (!grid || !Array.isArray(stations)) return;
+
+    grid.innerHTML = stations.map((st) => {
+        const sName   = escapeHtml(st.name || 'Radio');
+        const sUrl    = escapeHtml(st.stream_url || '');
+        const sGenre  = escapeHtml(st.genre || 'Live');
+        const sCtry   = escapeHtml(st.country || 'DE');
+        const sIcon   = st.icon ? escapeHtml(st.icon) : '📻';
+        const sSearch = escapeHtml(`${st.name || ''} ${st.genre || ''} ${st.country || 'DE'}`.toLowerCase());
+        return `
+            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition-all flex items-center justify-between gap-2"
+                 data-radio-card="${sUrl}"
+                 data-search-text="${sSearch}">
+                <button type="button"
+                        data-st-name="${sName}"
+                        data-st-url="${sUrl}"
+                        data-st-genre="${sGenre}"
+                        onclick="playRadioStation(this.getAttribute('data-st-name'), this.getAttribute('data-st-url'), this.getAttribute('data-st-genre'))"
+                        class="flex items-center gap-3 min-w-0 text-left flex-1 cursor-pointer group">
+                    <span class="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                        ${sIcon}
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                            ${sName}
+                        </span>
+                        <span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                            ${sGenre}
+                        </span>
+                    </span>
+                </button>
+                <form method="post" action="radio.php" class="shrink-0">
+                    <input type="hidden" name="csrf_token" value="${escapeHtml(RADIO_CSRF)}">
+                    <input type="hidden" name="action" value="save_radio_station">
+                    <input type="hidden" name="name" value="${sName}">
+                    <input type="hidden" name="stream_url" value="${sUrl}">
+                    <input type="hidden" name="genre" value="${sGenre}">
+                    <input type="hidden" name="country" value="${sCtry}">
+                    <button type="submit" title="Zu meinen Favoriten hinzufügen"
+                            class="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-amber-500 cursor-pointer">
+                        ☆
+                    </button>
+                </form>
+            </div>
+        `;
+    }).join('');
+
+    const filterInp = document.getElementById('presetFilterInput');
+    if (filterInp && filterInp.value) {
+        filterPresetRadioCards(filterInp.value);
+    }
+}
+
+function showPresetSyncFeedback(msg, isError = false) {
+    const box = document.getElementById('presetSyncStatusBox');
+    if (!box) return;
+    box.textContent = msg;
+    box.className = 'px-3.5 py-2.5 rounded-xl text-xs font-bold border ' + (
+        isError
+            ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+            : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+    );
+    box.classList.remove('hidden');
+}
+
+async function refreshRadioStationCatalog() {
+    const btn  = document.getElementById('btnRefreshRadioCatalog');
+    const icon = document.getElementById('btnRefreshRadioCatalogIcon');
+    const txt  = document.getElementById('btnRefreshRadioCatalogText');
+    if (btn) btn.disabled = true;
+    if (icon) icon.textContent = '⏳';
+    if (txt) txt.textContent = 'Aktualisiere…';
+
+    try {
+        const fd = new FormData();
+        fd.set('csrf_token', RADIO_CSRF);
+        fd.set('action', 'refresh_station_directory');
+        fd.set('ajax', '1');
+
+        const res  = await fetch('radio.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+            if (Array.isArray(data.presets)) {
+                renderPresetStationsGrid(data.presets);
+            }
+            if (Array.isArray(data.favorites)) {
+                renderMyFavoriteStations(data.favorites);
+            }
+            const syncBadge = document.getElementById('presetSyncBadge');
+            if (syncBadge && data.synced_at) {
+                syncBadge.textContent = 'Aktualisiert: ' + data.synced_at;
+                syncBadge.classList.remove('hidden');
+            }
+            showPresetSyncFeedback(data.message || '✅ Gesamt-Senderliste erfolgreich aktualisiert!', false);
+        } else {
+            showPresetSyncFeedback((data && data.message) || '⚠️ Aktualisierung fehlgeschlagen.', true);
+        }
+    } catch (e) {
+        showPresetSyncFeedback('⚠️ Netzwerkfehler beim Aktualisieren der Senderliste.', true);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.textContent = '🔄';
+        if (txt) txt.textContent = 'Senderliste aktualisieren';
+    }
+}
+
+async function resetRadioStationCatalog() {
+    try {
+        const fd = new FormData();
+        fd.set('csrf_token', RADIO_CSRF);
+        fd.set('action', 'reset_station_directory');
+        fd.set('ajax', '1');
+        const res  = await fetch('radio.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (data && data.ok && Array.isArray(data.presets)) {
+            renderPresetStationsGrid(data.presets);
+            const syncBadge = document.getElementById('presetSyncBadge');
+            if (syncBadge) syncBadge.classList.add('hidden');
+            showPresetSyncFeedback(data.message || '↺ Auf Standard-Senderliste zurückgesetzt.', false);
+        }
+    } catch (e) {}
+}
 
 window.addEventListener('DOMContentLoaded', () => {
     syncRadioDockFromState();
