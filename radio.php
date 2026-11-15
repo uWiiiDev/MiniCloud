@@ -314,7 +314,14 @@ if ($action === 'radio_search') {
 // 4. BENUTZER-FAVORITEN & POST-AKTIONEN
 // ============================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $isAjaxReq = (strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest') || (($_POST['ajax'] ?? '') === '1');
+
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+        if ($isAjaxReq) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode(['ok' => false, 'message' => 'Ungültiges Sicherheits-Token.']);
+            exit;
+        }
         setFlash('error', 'Ungültiges Sicherheits-Token. Bitte versuche es erneut.');
         header('Location: radio.php');
         exit;
@@ -329,6 +336,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $stLogo    = mb_substr(trim((string)($_POST['logo_url'] ?? '')), 0, 500);
 
         if ($stName === '' || !preg_match('#^https?://#i', $stUrl)) {
+            if ($isAjaxReq) {
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode(['ok' => false, 'message' => 'Bitte gib einen gültigen Sendernamen und eine Stream-URL (http/https) an.']);
+                exit;
+            }
             setFlash('error', 'Bitte gib einen gültigen Sendernamen und eine Stream-URL (http/https) an.');
         } else {
             $chk = $pdo->prepare("SELECT id FROM tv_radio_stations WHERE user_id = ? AND stream_url = ? LIMIT 1");
@@ -339,6 +351,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     VALUES (?, ?, ?, ?, ?, ?)
                 ");
                 $ins->execute([$userId, $stName, $stUrl, $stGenre, $stCountry, $stLogo]);
+            }
+            if ($isAjaxReq) {
+                $stmtFav = $pdo->prepare("SELECT * FROM tv_radio_stations WHERE user_id = ? ORDER BY name ASC");
+                $stmtFav->execute([$userId]);
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode([
+                    'ok'        => true,
+                    'message'   => "⭐ Radiosender „{$stName}“ gespeichert!",
+                    'favorites' => $stmtFav->fetchAll(PDO::FETCH_ASSOC),
+                ]);
+                exit;
             }
             setFlash('success', "⭐ Radiosender „{$stName}“ wurde zu deinen Favoriten hinzugefügt!");
         }
@@ -352,6 +375,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($stId > 0) {
             $del = $pdo->prepare("DELETE FROM tv_radio_stations WHERE id = ? AND user_id = ?");
             $del->execute([$stId, $userId]);
+            if ($isAjaxReq) {
+                $stmtFav = $pdo->prepare("SELECT * FROM tv_radio_stations WHERE user_id = ? ORDER BY name ASC");
+                $stmtFav->execute([$userId]);
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode([
+                    'ok'        => true,
+                    'message'   => 'Radiosender aus Favoriten entfernt.',
+                    'favorites' => $stmtFav->fetchAll(PDO::FETCH_ASSOC),
+                ]);
+                exit;
+            }
             setFlash('success', 'Radiosender wurde aus deinen Favoriten entfernt.');
         }
         header('Location: radio.php');
@@ -529,7 +563,7 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                         <span>⭐ Meine gespeicherten Lieblingssender</span>
-                        <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                        <span id="myFavoriteCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
                             <?= count($myFavoriteStations) ?>
                         </span>
                     </h2>
@@ -570,6 +604,7 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </form>
 
+            <div id="myFavoriteStationsContainer">
             <?php if (empty($myFavoriteStations)): ?>
                 <p class="text-xs text-slate-400 italic">
                     Du hast noch keine eigenen Favoriten-Sender gespeichert. Klicke bei einem Sender auf „☆“ oder „⭐ Merken“, um ihn hier anzupinnen.
@@ -600,6 +635,7 @@ require_once __DIR__ . '/includes/header.php';
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+            </div>
         </div>
 
         <!-- ================================================================== -->
@@ -750,7 +786,7 @@ function getSharedRadioHost() {
 
 function readSavedRadioState() {
     try {
-        const raw = sessionStorage.getItem(RADIO_STATE_KEY);
+        const raw = sessionStorage.getItem(RADIO_STATE_KEY) || localStorage.getItem(RADIO_STATE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         return (parsed && typeof parsed === 'object') ? parsed : null;
@@ -763,7 +799,9 @@ function writeSavedRadioState(patch) {
     try {
         const prev = readSavedRadioState() || {};
         const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
-        sessionStorage.setItem(RADIO_STATE_KEY, JSON.stringify(next));
+        const serialized = JSON.stringify(next);
+        sessionStorage.setItem(RADIO_STATE_KEY, serialized);
+        try { localStorage.setItem(RADIO_STATE_KEY, serialized); } catch (e2) {}
         const host = getSharedRadioHost();
         if (host && typeof host.syncFromState === 'function') {
             host.syncFromState(next);
@@ -980,6 +1018,76 @@ window.addEventListener('online', () => {
             }
         }
     }
+});
+
+function renderMyFavoriteStations(favorites) {
+    const container = document.getElementById('myFavoriteStationsContainer');
+    const badge     = document.getElementById('myFavoriteCountBadge');
+    if (badge && Array.isArray(favorites)) {
+        badge.textContent = String(favorites.length);
+    }
+    if (!container || !Array.isArray(favorites)) return;
+    if (favorites.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Du hast noch keine eigenen Favoriten-Sender gespeichert. Klicke bei einem Sender auf „☆“ oder „⭐ Merken“, um ihn hier anzupinnen.</p>`;
+        return;
+    }
+    container.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">` + favorites.map((favSt) => {
+        const sName  = escapeHtml(favSt.name || 'Radio');
+        const sUrl   = escapeHtml(favSt.stream_url || '');
+        const sGenre = escapeHtml(favSt.genre || '');
+        const sSub   = escapeHtml(favSt.genre || favSt.country || 'Live');
+        const sId    = Number(favSt.id || 0);
+        return `
+            <div class="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300/70 dark:border-amber-800/60 flex items-center justify-between gap-2">
+                <button type="button"
+                        data-st-name="${sName}"
+                        data-st-url="${sUrl}"
+                        data-st-genre="${sGenre}"
+                        onclick="playRadioStation(this.getAttribute('data-st-name'), this.getAttribute('data-st-url'), this.getAttribute('data-st-genre'))"
+                        class="flex items-center gap-2.5 min-w-0 text-left flex-1 cursor-pointer group">
+                    <span class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:scale-105 transition-transform">▶️</span>
+                    <span class="min-w-0">
+                        <span class="block text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">${sName}</span>
+                        <span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${sSub}</span>
+                    </span>
+                </button>
+                <form method="post" action="radio.php" class="shrink-0">
+                    <input type="hidden" name="csrf_token" value="${escapeHtml(RADIO_CSRF)}">
+                    <input type="hidden" name="action" value="delete_radio_station">
+                    <input type="hidden" name="station_id" value="${sId}">
+                    <button type="submit" title="Aus Favoriten entfernen" class="p-1.5 text-slate-400 hover:text-rose-600 text-xs cursor-pointer">✕</button>
+                </form>
+            </div>
+        `;
+    }).join('') + `</div>`;
+}
+
+// Favoriten-Formulare im Hintergrund per AJAX absenden, damit der laufende Stream nicht unterbrochen wird
+document.addEventListener('submit', async (ev) => {
+    const form = ev.target;
+    if (!form || form.tagName !== 'FORM') return;
+    const actInput = form.querySelector('input[name="action"]');
+    const actVal   = actInput ? actInput.value : '';
+    if (actVal !== 'save_radio_station' && actVal !== 'delete_radio_station') return;
+
+    ev.preventDefault();
+    try {
+        const fd = new FormData(form);
+        fd.set('ajax', '1');
+        const res  = await fetch('radio.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (data && data.ok && Array.isArray(data.favorites)) {
+            renderMyFavoriteStations(data.favorites);
+            if (form.id === 'customRadioFormBox') {
+                form.reset();
+                form.classList.add('hidden');
+            }
+        }
+    } catch (e) {}
 });
 
 window.addEventListener('DOMContentLoaded', () => {

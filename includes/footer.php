@@ -1798,9 +1798,16 @@ if (
     let frozenTicksCount      = 0;
     let boundAudioEl          = null;
 
+    // Ursprüngliche Host-Seite des Hauptfensters merken (darf nicht durch history.replaceState überschrieben werden)
+    const INITIAL_HOST_PATH   = window.location.pathname;
+    const INITIAL_HOST_SEARCH = window.location.search;
+    const INITIAL_HOST_HREF   = window.location.href;
+    const INITIAL_HOST_TITLE  = document.title;
+    let currentViewportPath   = window.location.pathname;
+
     const getState = () => {
         try {
-            const raw = sessionStorage.getItem(STATE_KEY);
+            const raw = sessionStorage.getItem(STATE_KEY) || localStorage.getItem(STATE_KEY);
             return raw ? JSON.parse(raw) : null;
         } catch (e) {
             return null;
@@ -1811,7 +1818,9 @@ if (
         try {
             const prev = getState() || {};
             const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
-            sessionStorage.setItem(STATE_KEY, JSON.stringify(next));
+            const serialized = JSON.stringify(next);
+            sessionStorage.setItem(STATE_KEY, serialized);
+            try { localStorage.setItem(STATE_KEY, serialized); } catch (e2) {}
             return next;
         } catch (e) {
             return null;
@@ -1819,18 +1828,24 @@ if (
     };
 
     const getAudioEl = () => {
-        return document.getElementById('globalRadioAudio') || document.getElementById('mcGlobalPersistentAudio');
+        return document.getElementById('mcGlobalPersistentAudio') || document.getElementById('globalRadioAudio');
+    };
+
+    const isPathRadioPage = (p) => {
+        const clean = String(p || '');
+        return clean.endsWith('/radio.php') || clean === 'radio.php';
     };
 
     const isCurrentViewRadioPage = () => {
-        try {
-            if (appFrame && !appFrame.classList.contains('hidden') && appFrame.contentWindow) {
-                const p = appFrame.contentWindow.location.pathname || '';
-                return p.endsWith('/radio.php') || p === 'radio.php';
-            }
-        } catch (e) {}
-        const p = window.location.pathname || '';
-        return p.endsWith('/radio.php') || p === 'radio.php';
+        if (appFrame && !appFrame.classList.contains('hidden')) {
+            try {
+                if (appFrame.contentWindow && appFrame.contentWindow.location && appFrame.contentWindow.location.pathname && appFrame.contentWindow.location.pathname !== 'blank') {
+                    return isPathRadioPage(appFrame.contentWindow.location.pathname);
+                }
+            } catch (e) {}
+            return isPathRadioPage(currentViewportPath);
+        }
+        return isPathRadioPage(INITIAL_HOST_PATH);
     };
 
     const updateMiniBarUi = () => {
@@ -2069,19 +2084,31 @@ if (
 
     const openInSeamlessViewport = (targetUrl) => {
         const parsed = new URL(targetUrl, window.location.href);
-        const hostPath = window.location.pathname;
         const targetPath = parsed.pathname;
 
-        // Wenn das Ziel exakt die Basis-Host-Seite selbst ist (z.B. Rückkehr zu radio.php),
-        // blende das Viewport-Iframe einfach wieder aus.
-        if (appFrame && targetPath === hostPath && parsed.search === window.location.search) {
-            appFrame.classList.add('hidden');
+        // Wenn das Ziel exakt die ursprüngliche Basis-Host-Seite selbst ist (z.B. Rückkehr zu radio.php),
+        // blende das Viewport-Iframe einfach wieder aus (0 ms Unterbrechung, kein Doppel-Laden).
+        if (targetPath === INITIAL_HOST_PATH && parsed.search === INITIAL_HOST_SEARCH) {
+            currentViewportPath = INITIAL_HOST_PATH;
+            if (appFrame) {
+                appFrame.classList.add('hidden');
+            }
             document.documentElement.style.overflow = '';
             document.body.style.overflow = '';
-            window.history.pushState({ mcRadioShell: true }, '', parsed.href);
+            if (INITIAL_HOST_TITLE) {
+                document.title = INITIAL_HOST_TITLE;
+            }
+            if (window.location.href !== parsed.href) {
+                window.history.pushState({ mcRadioShell: true, url: parsed.href }, '', parsed.href);
+            }
             updateMiniBarUi();
+            if (typeof window.syncRadioDockFromState === 'function') {
+                window.syncRadioDockFromState();
+            }
             return;
         }
+
+        currentViewportPath = targetPath;
 
         if (!appFrame) {
             appFrame = document.createElement('iframe');
@@ -2094,11 +2121,14 @@ if (
         appFrame.classList.remove('hidden');
         document.documentElement.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
+        if (window.location.href !== parsed.href) {
+            window.history.pushState({ mcRadioShell: true, url: parsed.href }, '', parsed.href);
+        }
         appFrame.src = parsed.href;
         updateMiniBarUi();
     };
 
-    const shouldInterceptLinkClick = (ev, anchor) => {
+    const shouldInterceptLinkClick = (ev, anchor, refLocation) => {
         if (!anchor || !anchor.href) return false;
         if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return false;
         if (anchor.hasAttribute('download')) return false;
@@ -2108,13 +2138,14 @@ if (
         if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
             return false;
         }
+        const loc = refLocation || window.location;
         try {
-            const u = new URL(anchor.href, window.location.href);
+            const u = new URL(anchor.href, loc.href);
             if (u.origin !== window.location.origin) return false;
             if (u.pathname.endsWith('/logout.php') || u.pathname.endsWith('/login.php') || u.pathname.endsWith('/download.php')) {
                 return false;
             }
-            if (u.pathname === window.location.pathname && u.search === window.location.search && u.hash !== '') {
+            if (u.pathname === loc.pathname && u.search === loc.search && u.hash !== '') {
                 return false;
             }
             return true;
@@ -2125,6 +2156,8 @@ if (
 
     const api = {
         getAudio: () => getAudioEl(),
+        getState: () => getState(),
+        openInViewport: (targetUrl) => openInSeamlessViewport(targetUrl),
         isPlaying: () => {
             const a = getAudioEl();
             return Boolean(a && !a.paused);
@@ -2253,13 +2286,14 @@ if (
                     window.top.location.href = childHref;
                     return;
                 }
+                currentViewportPath = childPath || currentViewportPath;
                 if (childWin.document && childWin.document.title) {
                     document.title = childWin.document.title;
                 }
                 if (window.location.href !== childHref) {
-                    window.history.replaceState({ mcRadioShell: true }, '', childHref);
+                    window.history.replaceState({ mcRadioShell: true, url: childHref }, '', childHref);
                 }
-                // Abfangen von Logout-Klicks im Child-Dokument
+                // Abfangen von Navigation & Logout im Child-Dokument
                 childWin.document.addEventListener('click', (ev) => {
                     const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
                     if (!a) return;
@@ -2267,6 +2301,29 @@ if (
                     if (href.includes('logout.php')) {
                         api.stopAndClose();
                         window.top.location.href = a.href;
+                        return;
+                    }
+                    if (shouldInterceptLinkClick(ev, a, childWin.location)) {
+                        try {
+                            const u = new URL(a.href, childWin.location.href);
+                            // Wenn im Child-Iframe zurück auf die Host-Seite (z.B. radio.php) geklickt wird,
+                            // blende das Iframe nahtlos aus statt radio.php doppelt im Iframe zu laden.
+                            if (u.pathname === INITIAL_HOST_PATH && u.search === INITIAL_HOST_SEARCH) {
+                                ev.preventDefault();
+                                openInSeamlessViewport(u.href);
+                                return;
+                            }
+                            currentViewportPath = u.pathname;
+                            updateMiniBarUi();
+                        } catch (e2) {}
+                    }
+                }, true);
+
+                childWin.document.addEventListener('submit', (ev) => {
+                    const form = ev.target;
+                    if (form && form.action && String(form.action).includes('logout.php')) {
+                        api.stopAndClose();
+                        form.target = '_top';
                     }
                 }, true);
             } catch (e) {}
@@ -2289,18 +2346,36 @@ if (
         const st = getState();
         const isRadioActive  = api.isPlaying() || Boolean(st && st.playing && st.streamUrl && !st.closed);
         const isUploadActive = Boolean(window.McGlobalUpload && window.McGlobalUpload.isUploading());
-        if (!isRadioActive && !isUploadActive) return;
+        const isShellOpen    = Boolean(appFrame && !appFrame.classList.contains('hidden'));
+        if (!isRadioActive && !isUploadActive && !isShellOpen) return;
 
-        if (shouldInterceptLinkClick(ev, anchor)) {
+        if (shouldInterceptLinkClick(ev, anchor, window.location)) {
             ev.preventDefault();
             openInSeamlessViewport(anchor.href);
         }
     }, true);
 
     window.addEventListener('popstate', () => {
-        if (appFrame && !appFrame.classList.contains('hidden')) {
+        if (window.location.pathname === INITIAL_HOST_PATH && window.location.search === INITIAL_HOST_SEARCH) {
+            currentViewportPath = INITIAL_HOST_PATH;
+            if (appFrame) {
+                appFrame.classList.add('hidden');
+            }
+            document.documentElement.style.overflow = '';
+            document.body.style.overflow = '';
+            if (INITIAL_HOST_TITLE) {
+                document.title = INITIAL_HOST_TITLE;
+            }
+            updateMiniBarUi();
+            return;
+        }
+        if (appFrame) {
+            currentViewportPath = window.location.pathname;
+            appFrame.classList.remove('hidden');
+            document.documentElement.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden';
             try {
-                if (appFrame.contentWindow && appFrame.contentWindow.location.href !== window.location.href) {
+                if (!appFrame.contentWindow || appFrame.contentWindow.location.href !== window.location.href) {
                     appFrame.src = window.location.href;
                 }
             } catch (e) {}
@@ -2309,6 +2384,34 @@ if (
     });
 
     // Auto-Resume bei vollständigem Seiten-Reload (F5 / direkter Aufruf), falls Radio aktiv war
+    let unlockGestureBound = false;
+    const bindFirstGestureResume = () => {
+        if (unlockGestureBound) return;
+        unlockGestureBound = true;
+        const resumeOnGesture = () => {
+            unlockGestureBound = false;
+            document.removeEventListener('pointerdown', resumeOnGesture, true);
+            document.removeEventListener('keydown', resumeOnGesture, true);
+            const st = getState();
+            const a  = getAudioEl();
+            if (st && st.playing && !st.closed && st.streamUrl && a && a.paused) {
+                a.src = st.streamUrl;
+                a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
+                a.muted = Boolean(st.muted);
+                a.play().then(() => {
+                    lastAudioCurrentTime = a.currentTime;
+                    updateMiniBarUi();
+                    ensureIcyPolling();
+                    if (typeof window.syncRadioDockFromState === 'function') {
+                        window.syncRadioDockFromState();
+                    }
+                }).catch(() => {});
+            }
+        };
+        document.addEventListener('pointerdown', resumeOnGesture, true);
+        document.addEventListener('keydown', resumeOnGesture, true);
+    };
+
     const initAutoResume = () => {
         const st = getState();
         if (!st || !st.streamUrl || st.closed) return;
@@ -2327,12 +2430,14 @@ if (
                     lastAudioCurrentTime = a.currentTime;
                     updateMiniBarUi();
                     ensureIcyPolling();
-                    if (typeof syncRadioDockFromState === 'function') {
-                        syncRadioDockFromState();
+                    if (typeof window.syncRadioDockFromState === 'function') {
+                        window.syncRadioDockFromState();
                     }
                 }).catch(() => {
-                    // Falls der Browser nach F5 einen Klick benötigt, bleibt die Mini-Bar sichtbar (▶️ bereit)
+                    // Falls der Browser nach manuellem F5-Reload eine Interaktion verlangt,
+                    // starte sofort beim ersten Klick/Tastendruck weiter.
                     updateMiniBarUi();
+                    bindFirstGestureResume();
                 });
             }
         }

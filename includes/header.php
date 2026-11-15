@@ -1675,7 +1675,14 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
 
                         if (item.url) {
                             closeGlobalSearchModal();
-                            window.location.href = item.url;
+                            const rg = window.McGlobalRadio;
+                            const st = rg && typeof rg.getState === 'function' ? rg.getState() : null;
+                            const radioActive = Boolean(rg && ((typeof rg.isPlaying === 'function' && rg.isPlaying()) || (st && st.playing && st.streamUrl && !st.closed)));
+                            if (radioActive && rg && typeof rg.openInViewport === 'function') {
+                                rg.openInViewport(item.url);
+                            } else {
+                                window.location.href = item.url;
+                            }
                         }
                     };
 
