@@ -13,9 +13,16 @@ if (($appSettings['enable_banking'] ?? '1') !== '1' && !isAdmin()) {
     exit;
 }
 
-$userId   = (int)$_SESSION['user_id'];
-$username = (string)($_SESSION['username'] ?? 'Benutzer');
-$isAdmin  = isAdmin();
+$userId    = (int)$_SESSION['user_id'];
+$username  = (string)($_SESSION['username'] ?? 'Benutzer');
+$isAdmin   = isAdmin();
+$csrfToken = getCsrfToken();
+
+// Session-Lock sofort freigeben, damit parallele Requests (Header-Suche, Chat-Polling, Modulwechsel)
+// niemals auf banking.php warten müssen und der Browser-Ladekreis sofort stoppt.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    @session_write_close();
+}
 
 /**
  * Kategorien-Katalog für Kontoauszüge & Finanz-Analyse
@@ -45,8 +52,11 @@ function getBankingCategories(): array
 /**
  * Stellt sicher, dass alle Datenbanktabellen für das Kontoauszugs-Modul existieren
  * und legt bei Bedarf ein Standardkonto („Postbank Girokonto“) an.
+ * Nutzt `app_settings` (`banking_schema_v2`), damit DDL-Abfragen nur einmalig bei der Erstinstallation laufen.
+ *
+ * @param array<string, mixed> $appSettings
  */
-function ensureBankingSchema(PDO $pdo, int $userId): void
+function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): void
 {
     static $initialized = false;
     if ($initialized) {
@@ -54,106 +64,116 @@ function ensureBankingSchema(PDO $pdo, int $userId): void
     }
     $initialized = true;
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `bank_accounts` (
-            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `user_id` INT NOT NULL,
-            `name` VARCHAR(190) NOT NULL,
-            `bank_name` VARCHAR(120) NOT NULL DEFAULT 'Postbank',
-            `iban` VARCHAR(64) NOT NULL DEFAULT '',
-            `bic` VARCHAR(32) NOT NULL DEFAULT '',
-            `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
-            `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
-            `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-            `manual_current_balance` DECIMAL(12,2) DEFAULT NULL,
-            `manual_balance_updated_at` DATETIME DEFAULT NULL,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_bank_accounts_user` (`user_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+    if (($appSettings['banking_schema_v2'] ?? '0') !== '1') {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `bank_accounts` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` INT NOT NULL,
+                `name` VARCHAR(190) NOT NULL,
+                `bank_name` VARCHAR(120) NOT NULL DEFAULT 'Postbank',
+                `iban` VARCHAR(64) NOT NULL DEFAULT '',
+                `bic` VARCHAR(32) NOT NULL DEFAULT '',
+                `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
+                `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
+                `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `manual_current_balance` DECIMAL(12,2) DEFAULT NULL,
+                `manual_balance_updated_at` DATETIME DEFAULT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_bank_accounts_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
 
-    // Automatische Spalten-Migration für bestehende Installationen
-    try {
-        $colChk = $pdo->query("SHOW COLUMNS FROM `bank_accounts` LIKE 'manual_current_balance'");
-        if ($colChk && $colChk->rowCount() === 0) {
-            $pdo->exec("
-                ALTER TABLE `bank_accounts`
-                ADD COLUMN `manual_current_balance` DECIMAL(12,2) DEFAULT NULL AFTER `initial_balance`,
-                ADD COLUMN `manual_balance_updated_at` DATETIME DEFAULT NULL AFTER `manual_current_balance`
-            ");
+        // Automatische Spalten-Migration für bestehende Installationen
+        try {
+            $colChk = $pdo->query("SHOW COLUMNS FROM `bank_accounts` LIKE 'manual_current_balance'");
+            if ($colChk && $colChk->rowCount() === 0) {
+                $pdo->exec("
+                    ALTER TABLE `bank_accounts`
+                    ADD COLUMN `manual_current_balance` DECIMAL(12,2) DEFAULT NULL AFTER `initial_balance`,
+                    ADD COLUMN `manual_balance_updated_at` DATETIME DEFAULT NULL AFTER `manual_current_balance`
+                ");
+            }
+        } catch (Throwable $e) {
+            // Ignorieren, falls bereits vorhanden
         }
-    } catch (Throwable $e) {
-        // Ignorieren, falls bereits vorhanden
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `bank_statements` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `account_id` INT UNSIGNED NOT NULL,
+                `user_id` INT NOT NULL,
+                `file_id` INT DEFAULT NULL,
+                `filename` VARCHAR(255) NOT NULL,
+                `file_format` VARCHAR(16) NOT NULL DEFAULT 'pdf',
+                `statement_no` VARCHAR(64) NOT NULL DEFAULT '',
+                `statement_year` INT NOT NULL DEFAULT 0,
+                `period_start` VARCHAR(20) DEFAULT NULL,
+                `period_end` VARCHAR(20) DEFAULT NULL,
+                `start_balance` DECIMAL(12,2) DEFAULT NULL,
+                `end_balance` DECIMAL(12,2) DEFAULT NULL,
+                `tx_count` INT NOT NULL DEFAULT 0,
+                `total_income` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `total_expense` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `balance_check_ok` TINYINT DEFAULT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_bank_statements_user_acc` (`user_id`, `account_id`, `period_end`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `bank_transactions` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `account_id` INT UNSIGNED NOT NULL,
+                `statement_id` INT UNSIGNED DEFAULT NULL,
+                `user_id` INT NOT NULL,
+                `file_id` INT DEFAULT NULL,
+                `booking_date` VARCHAR(20) NOT NULL,
+                `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
+                `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
+                `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
+                `purpose` TEXT NOT NULL,
+                `iban` VARCHAR(64) NOT NULL DEFAULT '',
+                `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                `currency` VARCHAR(12) NOT NULL DEFAULT 'EUR',
+                `category` VARCHAR(64) NOT NULL DEFAULT 'other',
+                `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+                `note` VARCHAR(500) NOT NULL DEFAULT '',
+                `tx_hash` VARCHAR(64) NOT NULL DEFAULT '',
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_bank_tx_user_acc_date` (`user_id`, `account_id`, `booking_date`),
+                KEY `idx_bank_tx_hash` (`user_id`, `account_id`, `tx_hash`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `bank_rules` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` INT NOT NULL,
+                `keyword` VARCHAR(190) NOT NULL,
+                `category` VARCHAR(64) NOT NULL,
+                `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_bank_rules_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        if (function_exists('saveAppSetting')) {
+            try {
+                saveAppSetting($pdo, 'banking_schema_v2', '1');
+            } catch (Throwable $e) {
+                // Ignorieren
+            }
+        }
     }
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `bank_statements` (
-            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `account_id` INT UNSIGNED NOT NULL,
-            `user_id` INT NOT NULL,
-            `file_id` INT DEFAULT NULL,
-            `filename` VARCHAR(255) NOT NULL,
-            `file_format` VARCHAR(16) NOT NULL DEFAULT 'pdf',
-            `statement_no` VARCHAR(64) NOT NULL DEFAULT '',
-            `statement_year` INT NOT NULL DEFAULT 0,
-            `period_start` VARCHAR(20) DEFAULT NULL,
-            `period_end` VARCHAR(20) DEFAULT NULL,
-            `start_balance` DECIMAL(12,2) DEFAULT NULL,
-            `end_balance` DECIMAL(12,2) DEFAULT NULL,
-            `tx_count` INT NOT NULL DEFAULT 0,
-            `total_income` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-            `total_expense` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-            `balance_check_ok` TINYINT DEFAULT NULL,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_bank_statements_user_acc` (`user_id`, `account_id`, `period_end`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `bank_transactions` (
-            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `account_id` INT UNSIGNED NOT NULL,
-            `statement_id` INT UNSIGNED DEFAULT NULL,
-            `user_id` INT NOT NULL,
-            `file_id` INT DEFAULT NULL,
-            `booking_date` VARCHAR(20) NOT NULL,
-            `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
-            `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
-            `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
-            `purpose` TEXT NOT NULL,
-            `iban` VARCHAR(64) NOT NULL DEFAULT '',
-            `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-            `currency` VARCHAR(12) NOT NULL DEFAULT 'EUR',
-            `category` VARCHAR(64) NOT NULL DEFAULT 'other',
-            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
-            `note` VARCHAR(500) NOT NULL DEFAULT '',
-            `tx_hash` VARCHAR(64) NOT NULL DEFAULT '',
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_bank_tx_user_acc_date` (`user_id`, `account_id`, `booking_date`),
-            KEY `idx_bank_tx_hash` (`user_id`, `account_id`, `tx_hash`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `bank_rules` (
-            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `user_id` INT NOT NULL,
-            `keyword` VARCHAR(190) NOT NULL,
-            `category` VARCHAR(64) NOT NULL,
-            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_bank_rules_user` (`user_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-
     // Standard-Konto anlegen, falls der Benutzer noch kein Konto hat
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM bank_accounts WHERE user_id = :uid");
+    $stmt = $pdo->prepare("SELECT id FROM bank_accounts WHERE user_id = :uid LIMIT 1");
     $stmt->execute([':uid' => $userId]);
-    if ((int)$stmt->fetchColumn() === 0) {
+    if (!$stmt->fetchColumn()) {
         $ins = $pdo->prepare("
             INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance)
             VALUES (:uid, 'Postbank Girokonto', 'Postbank', '', 'PBNKDEFF', 'Girokonto', '#2563eb', 0.00)
@@ -162,7 +182,7 @@ function ensureBankingSchema(PDO $pdo, int $userId): void
     }
 }
 
-ensureBankingSchema($pdo, $userId);
+ensureBankingSchema($pdo, $userId, $appSettings);
 
 /**
  * Lädt benutzerdefinierte Kategorisierungs-Regeln.
@@ -717,16 +737,36 @@ function extractBankPdfTextServer(string $pdfPath): string
     }
 
     if (function_exists('shell_exec')) {
-        $pdftotext = trim((string)@shell_exec('command -v pdftotext 2>/dev/null'));
-        if ($pdftotext !== '') {
-            $out = (string)@shell_exec(escapeshellcmd($pdftotext) . ' -layout -enc UTF-8 ' . escapeshellarg($pdfPath) . ' - 2>/dev/null');
+        static $pdftotextBin = null;
+        static $gsBin        = null;
+
+        if ($pdftotextBin === null) {
+            $pdftotextBin = '';
+            foreach (['/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext'] as $cand) {
+                if (@is_executable($cand)) {
+                    $pdftotextBin = $cand;
+                    break;
+                }
+            }
+        }
+        if ($pdftotextBin !== '') {
+            $out = (string)@shell_exec(escapeshellcmd($pdftotextBin) . ' -layout -enc UTF-8 ' . escapeshellarg($pdfPath) . ' - 2>/dev/null');
             if (trim($out) !== '') {
                 return $out;
             }
         }
-        $gs = trim((string)@shell_exec('command -v gs 2>/dev/null'));
-        if ($gs !== '') {
-            $out = (string)@shell_exec(escapeshellcmd($gs) . ' -q -dNOPAUSE -dBATCH -sDEVICE=txtwrite -sOutputFile=- ' . escapeshellarg($pdfPath) . ' 2>/dev/null');
+
+        if ($gsBin === null) {
+            $gsBin = '';
+            foreach (['/usr/bin/gs', '/usr/local/bin/gs', '/bin/gs'] as $cand) {
+                if (@is_executable($cand)) {
+                    $gsBin = $cand;
+                    break;
+                }
+            }
+        }
+        if ($gsBin !== '') {
+            $out = (string)@shell_exec(escapeshellcmd($gsBin) . ' -q -dNOPAUSE -dBATCH -sDEVICE=txtwrite -sOutputFile=- ' . escapeshellarg($pdfPath) . ' 2>/dev/null');
             if (trim($out) !== '') {
                 return $out;
             }
@@ -1256,9 +1296,13 @@ function archiveStatementInCloudFiles(PDO $pdo, int $userId, string $accountName
     ]);
     $fileId = (int)$pdo->lastInsertId();
 
-    if ($fileId > 0 && function_exists('indexFileForFulltextSearch')) {
+    if ($fileId > 0) {
         try {
-            indexFileForFulltextSearch($pdo, $fileId);
+            if ($extractedText !== '' && function_exists('saveManualFileSearchIndexText')) {
+                saveManualFileSearchIndexText($pdo, $fileId, $extractedText);
+            } elseif (function_exists('indexFileForFulltextSearch')) {
+                indexFileForFulltextSearch($pdo, $fileId);
+            }
         } catch (Throwable $e) {
             // Ignorieren
         }
@@ -3630,14 +3674,8 @@ require_once __DIR__ . '/includes/header.php';
 
 </div>
 
-<!-- PDF.js für koordinatengenaue Tabellen-Extraktion aus Bank-PDFs direkt im Browser -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (function() {
-    if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-
     const initialTab = <?= json_encode($activeTab) ?>;
 
     window.switchBankingTab = function(tabName) {
@@ -3670,135 +3708,6 @@ require_once __DIR__ . '/includes/header.php';
     };
 
     switchBankingTab(initialTab);
-
-    /**
-     * Liest ein PDF-Dokument (ArrayBuffer oder URL) über PDF.js ein und gruppiert
-     * alle Text-Elemente jeder Seite exakt nach ihrer vertikalen Y-Koordinate (Toleranz 2.8pt)
-     * und sortiert sie horizontal nach X-Koordinate.
-     * Dadurch bleiben Postbank-Tabellenspalten ("Datum | Umsatzart / Empfänger | Betrag")
-     * exakt in derselben Zeile erhalten!
-     */
-    async function extractStructuredLinesFromPdfSource(src) {
-        if (!window.pdfjsLib) return '';
-        const loadingTask = window.pdfjsLib.getDocument(src);
-        const pdf = await loadingTask.promise;
-        const allPageLines = [];
-
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            const rows = [];
-
-            for (const item of textContent.items) {
-                const str = (item.str || '').trim();
-                if (!str || !item.transform) continue;
-                const x = Number(item.transform[4] || 0);
-                const y = Number(item.transform[5] || 0);
-
-                // Passende Zeile innerhalb von 2.8pt Y-Toleranz suchen
-                let targetRow = null;
-                for (const r of rows) {
-                    if (Math.abs(r.y - y) <= 2.8) {
-                        targetRow = r;
-                        break;
-                    }
-                }
-                if (!targetRow) {
-                    targetRow = { y: y, items: [] };
-                    rows.push(targetRow);
-                }
-                targetRow.items.push({ x: x, str: str });
-            }
-
-            // Von oben nach unten sortieren (in PDF ist Y=0 unten, also absteigend)
-            rows.sort((a, b) => b.y - a.y);
-
-            for (const r of rows) {
-                r.items.sort((a, b) => a.x - b.x);
-                const lineText = r.items.map(it => it.str).join('   ');
-                if (lineText.trim() !== '') {
-                    allPageLines.push(lineText.trim());
-                }
-            }
-        }
-        return allPageLines.join('\n');
-    }
-
-    // 1. Beim Auswählen von lokalen PDF-Dateien automatisch Textzeilen im Browser vor-extrahieren
-    const fileInput = document.getElementById('statementFilesInput');
-    const statusBox = document.getElementById('pdfExtractionStatusBox');
-    const hiddenJsonInput = document.getElementById('extractedPdfTextsJson');
-    const submitBtn = document.getElementById('bankUploadSubmitBtn');
-
-    if (fileInput && hiddenJsonInput) {
-        fileInput.addEventListener('change', async () => {
-            const files = Array.from(fileInput.files || []);
-            const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
-            if (pdfFiles.length === 0 || !window.pdfjsLib) {
-                hiddenJsonInput.value = '';
-                if (statusBox) statusBox.classList.add('hidden');
-                return;
-            }
-
-            if (statusBox) {
-                statusBox.classList.remove('hidden');
-                statusBox.textContent = `⏳ Lese ${pdfFiles.length} PDF-Kontoauszug/Kontoauszüge für die Tabellen-Analyse ein...`;
-            }
-            if (submitBtn) submitBtn.disabled = true;
-
-            const extractedMap = {};
-            for (const f of pdfFiles) {
-                try {
-                    const buf = await f.arrayBuffer();
-                    const text = await extractStructuredLinesFromPdfSource({ data: buf });
-                    if (text) {
-                        extractedMap[f.name] = text;
-                    }
-                } catch (err) {
-                    console.warn('PDF.js Extraktion Hinweis:', err);
-                }
-            }
-
-            hiddenJsonInput.value = JSON.stringify(extractedMap);
-            if (statusBox) {
-                const countOk = Object.keys(extractedMap).length;
-                statusBox.textContent = countOk > 0
-                    ? `✅ ${countOk} PDF-Kontoauszug/Kontoauszüge bereit zur Auswertung. Klicken Sie jetzt auf „Importieren & auswerten“.`
-                    : 'ℹ️ PDF wird direkt auf dem Server ausgewertet.';
-            }
-            if (submitBtn) submitBtn.disabled = false;
-        });
-    }
-
-    // 2. Beim Import einer bereits in der Cloud liegenden PDF-Datei ebenfalls PDF.js unterstützen
-    const cloudForm = document.getElementById('cloudImportForm');
-    const cloudSelect = document.getElementById('cloudFileSelect');
-    const cloudHiddenText = document.getElementById('cloudPdfExtractedText');
-    const cloudSubmitBtn = document.getElementById('cloudImportSubmitBtn');
-
-    if (cloudForm && cloudSelect && cloudHiddenText) {
-        cloudForm.addEventListener('submit', async (ev) => {
-            const opt = cloudSelect.options[cloudSelect.selectedIndex];
-            if (!opt || !opt.value) return;
-            const ext = opt.getAttribute('data-ext') || '';
-            if (ext !== 'pdf' || !window.pdfjsLib || cloudHiddenText.getAttribute('data-extracted-for') === opt.value) {
-                return;
-            }
-            ev.preventDefault();
-            if (cloudSubmitBtn) {
-                cloudSubmitBtn.disabled = true;
-                cloudSubmitBtn.textContent = '⏳ Lese PDF-Tabellenzeilen...';
-            }
-            try {
-                const text = await extractStructuredLinesFromPdfSource('download.php?id=' + encodeURIComponent(opt.value) + '&inline=1');
-                cloudHiddenText.value = text || '';
-            } catch (e) {
-                cloudHiddenText.value = '';
-            }
-            cloudHiddenText.setAttribute('data-extracted-for', opt.value);
-            cloudForm.submit();
-        });
-    }
 })();
 </script>
 
