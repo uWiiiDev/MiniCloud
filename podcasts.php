@@ -250,7 +250,45 @@ function searchPodcastDirectory(string $query): array
 // ----------------------------------------------------------------------------
 // 3. LOKALE OFFLINE-EPISODE STREAMEN (?action=stream_local&id=...)
 //    ODER EXTERNE PODCAST-EPISODE ÜBER PROXY STREAMEN (?action=proxy_stream&url=...)
+//    ODER HINTERGRUND-DOWNLOAD-STATUS ABFRAGEN (?action=download_status)
 // ----------------------------------------------------------------------------
+if (isset($_GET['action']) && $_GET['action'] === 'download_status') {
+    @session_write_close();
+    header('Content-Type: application/json; charset=utf-8');
+    $pattern = $podCacheDir . '/dl_status_u' . $userId . '_*.json';
+    $files   = glob($pattern) ?: [];
+    $now     = time();
+    $list    = [];
+
+    foreach ($files as $sf) {
+        $raw = @file_get_contents($sf);
+        if (!is_string($raw) || $raw === '') {
+            continue;
+        }
+        $data = @json_decode($raw, true);
+        if (!is_array($data)) {
+            continue;
+        }
+        $updatedAt = (int)($data['updated_at'] ?? filemtime($sf));
+        $status    = (string)($data['status'] ?? '');
+
+        // Abgeschlossene oder fehlgeschlagene Statusdateien nach 90 Sekunden aufräumen
+        if (in_array($status, ['done', 'error'], true) && ($now - $updatedAt) > 90) {
+            @unlink($sf);
+            continue;
+        }
+        // Verwaiste Downloads nach 15 Minuten aufräumen
+        if ($status === 'downloading' && ($now - $updatedAt) > 900) {
+            @unlink($sf);
+            continue;
+        }
+        $list[] = $data;
+    }
+
+    echo json_encode(['ok' => true, 'downloads' => $list], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (isset($_GET['action']) && $_GET['action'] === 'stream_local') {
     @session_write_close();
     $dlId = (int)($_GET['id'] ?? 0);
@@ -371,31 +409,198 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'download_episode') {
+        $isAjax    = (!empty($_POST['ajax']) && $_POST['ajax'] === '1')
+            || (strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest');
         $audioUrl  = trim((string)($_POST['audio_url'] ?? ''));
         $epTitle   = mb_substr(trim((string)($_POST['episode_title'] ?? 'Episode')), 0, 240);
         $epGuid    = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($_POST['episode_guid'] ?? '')) ?: substr(md5($audioUrl), 0, 24);
         $feedTitle = mb_substr(trim((string)($_POST['feed_title'] ?? 'Podcast')), 0, 180);
 
-        if (isSafeExternalPodcastUrl($audioUrl)) {
-            $localName = 'pod_u' . $userId . '_' . $epGuid . '.mp3';
-            $destPath  = $podEpDir . '/' . $localName;
+        // WICHTIG: PHP-Session-Sperre sofort freigeben und Abbruch bei Seitenwechsel ignorieren!
+        // Dadurch bleibt die gesamte MiniCloud während des Downloads zu 100 % reaktionsfähig
+        // und der Download läuft auf dem Server selbst dann weiter, wenn der Nutzer das Modul wechselt.
+        @ignore_user_abort(true);
+        @set_time_limit(0);
+        @session_write_close();
 
-            $ctx = stream_context_create(['http' => ['timeout' => 25.0, 'ignore_errors' => true, 'user_agent' => 'MiniCloud/1.0']]);
-            $bytes = @file_get_contents($audioUrl, false, $ctx);
-            if (is_string($bytes) && strlen($bytes) > 1024 && strlen($bytes) <= 80 * 1024 * 1024) {
-                @file_put_contents($destPath, $bytes);
-                $fSize = (int)filesize($destPath);
-                $stmt = $pdo->prepare(
-                    'INSERT INTO `podcast_downloads` (`user_id`, `feed_title`, `episode_title`, `episode_guid`, `local_filename`, `file_size`)
-                     VALUES (:u, :ft, :et, :eg, :lf, :fs)
-                     ON DUPLICATE KEY UPDATE `file_size` = VALUES(`file_size`)'
-                );
-                $stmt->execute([':u' => $userId, ':ft' => $feedTitle, ':et' => $epTitle, ':eg' => $epGuid, ':lf' => $localName, ':fs' => $fSize]);
-                setFlash('success', 'Episode „' . $epTitle . '“ für den Offline-Betrieb auf dem Server gespeichert.');
-            } else {
-                setFlash('error', 'Download der Episode fehlgeschlagen oder Datei zu groß (> 80 MB).');
+        if (!isSafeExternalPodcastUrl($audioUrl)) {
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'error' => 'Ungültige Audio-URL.']);
+                exit;
+            }
+            header('Location: podcasts.php');
+            exit;
+        }
+
+        $localName  = 'pod_u' . $userId . '_' . $epGuid . '.mp3';
+        $destPath   = $podEpDir . '/' . $localName;
+        $tempPath   = $destPath . '.part';
+        $statusFile = $podCacheDir . '/dl_status_u' . $userId . '_' . $epGuid . '.json';
+
+        $writeStatus = static function (array $state) use ($statusFile, $epGuid, $epTitle, $feedTitle): void {
+            $payload = array_merge([
+                'guid'       => $epGuid,
+                'title'      => $epTitle,
+                'feed_title' => $feedTitle,
+                'updated_at' => time(),
+            ], $state);
+            @file_put_contents($statusFile, json_encode($payload, JSON_UNESCAPED_UNICODE));
+        };
+
+        $writeStatus([
+            'status'     => 'downloading',
+            'downloaded' => 0,
+            'total'      => 0,
+            'percent'    => 0,
+        ]);
+
+        $maxBytes = 250 * 1024 * 1024; // Bis zu 250 MB pro Podcast-Episode erlauben
+        $downloadSuccess = false;
+        $errorMsg = 'Download der Episode fehlgeschlagen.';
+
+        if (function_exists('curl_init')) {
+            $fp = @fopen($tempPath, 'wb');
+            if ($fp !== false) {
+                $lastStatusWrite = 0.0;
+                $ch = curl_init($audioUrl);
+                curl_setopt_array($ch, [
+                    CURLOPT_FILE             => $fp,
+                    CURLOPT_FOLLOWLOCATION   => true,
+                    CURLOPT_MAXREDIRS        => 8,
+                    CURLOPT_TIMEOUT          => 600,
+                    CURLOPT_CONNECTTIMEOUT   => 15,
+                    CURLOPT_USERAGENT        => 'MiniCloud-PodcastStudio/1.0',
+                    CURLOPT_SSL_VERIFYPEER   => false,
+                    CURLOPT_SSL_VERIFYHOST   => 0,
+                    CURLOPT_NOPROGRESS       => false,
+                    CURLOPT_PROGRESSFUNCTION => static function ($resource, $dlTotal, $dlNow, $ulTotal, $ulNow) use (&$lastStatusWrite, $writeStatus, $maxBytes): int {
+                        $dlTotal = (int)$dlTotal;
+                        $dlNow   = (int)$dlNow;
+                        if ($dlNow > $maxBytes || ($dlTotal > $maxBytes)) {
+                            return 1; // Abbruch falls > 250 MB
+                        }
+                        $nowMicro = microtime(true);
+                        if (($nowMicro - $lastStatusWrite) >= 0.45) {
+                            $lastStatusWrite = $nowMicro;
+                            $pct = $dlTotal > 0 ? min(99, (int)round(($dlNow / $dlTotal) * 100)) : 0;
+                            $writeStatus([
+                                'status'     => 'downloading',
+                                'downloaded' => $dlNow,
+                                'total'      => $dlTotal,
+                                'percent'    => $pct,
+                            ]);
+                        }
+                        return 0;
+                    },
+                ]);
+                $ok   = curl_exec($ch);
+                $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                fclose($fp);
+
+                if ($ok && $code >= 200 && $code < 400 && is_file($tempPath) && filesize($tempPath) > 1024) {
+                    @rename($tempPath, $destPath);
+                    $downloadSuccess = true;
+                } else {
+                    @unlink($tempPath);
+                }
+            }
+        } else {
+            $ctx = stream_context_create([
+                'http' => ['timeout' => 300.0, 'ignore_errors' => true, 'user_agent' => 'MiniCloud-PodcastStudio/1.0'],
+                'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
+            ]);
+            $in  = @fopen($audioUrl, 'rb', false, $ctx);
+            $out = $in ? @fopen($tempPath, 'wb') : false;
+            if ($in && $out) {
+                $copied = 0;
+                $lastStatusWrite = 0.0;
+                while (!feof($in)) {
+                    $chunk = fread($in, 65536);
+                    if ($chunk === false || $chunk === '') {
+                        break;
+                    }
+                    fwrite($out, $chunk);
+                    $copied += strlen($chunk);
+                    if ($copied > $maxBytes) {
+                        break;
+                    }
+                    $nowMicro = microtime(true);
+                    if (($nowMicro - $lastStatusWrite) >= 0.5) {
+                        $lastStatusWrite = $nowMicro;
+                        $writeStatus([
+                            'status'     => 'downloading',
+                            'downloaded' => $copied,
+                            'total'      => 0,
+                            'percent'    => 0,
+                        ]);
+                    }
+                }
+                fclose($in);
+                fclose($out);
+                if ($copied > 1024 && $copied <= $maxBytes) {
+                    @rename($tempPath, $destPath);
+                    $downloadSuccess = true;
+                } else {
+                    @unlink($tempPath);
+                }
             }
         }
+
+        if ($downloadSuccess && is_file($destPath)) {
+            $fSize = (int)filesize($destPath);
+            $pdo   = getDB();
+            $stmt  = $pdo->prepare(
+                'INSERT INTO `podcast_downloads` (`user_id`, `feed_title`, `episode_title`, `episode_guid`, `local_filename`, `file_size`)
+                 VALUES (:u, :ft, :et, :eg, :lf, :fs)
+                 ON DUPLICATE KEY UPDATE `file_size` = VALUES(`file_size`), `local_filename` = VALUES(`local_filename`)'
+            );
+            $stmt->execute([':u' => $userId, ':ft' => $feedTitle, ':et' => $epTitle, ':eg' => $epGuid, ':lf' => $localName, ':fs' => $fSize]);
+
+            $idStmt = $pdo->prepare('SELECT `id` FROM `podcast_downloads` WHERE `user_id` = :u AND `episode_guid` = :eg LIMIT 1');
+            $idStmt->execute([':u' => $userId, ':eg' => $epGuid]);
+            $dlId = (int)$idStmt->fetchColumn();
+
+            $streamUrl = 'podcasts.php?action=stream_local&id=' . $dlId;
+            $sizeFmt   = formatBytes($fSize);
+
+            $writeStatus([
+                'status'     => 'done',
+                'downloaded' => $fSize,
+                'total'      => $fSize,
+                'percent'    => 100,
+                'dl_id'      => $dlId,
+                'size_fmt'   => $sizeFmt,
+                'stream_url' => $streamUrl,
+            ]);
+
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'ok'         => true,
+                    'status'     => 'done',
+                    'guid'       => $epGuid,
+                    'title'      => $epTitle,
+                    'feed_title' => $feedTitle,
+                    'dl_id'      => $dlId,
+                    'size_fmt'   => $sizeFmt,
+                    'stream_url' => $streamUrl,
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        } else {
+            $writeStatus([
+                'status' => 'error',
+                'error'  => $errorMsg,
+            ]);
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'guid' => $epGuid, 'error' => $errorMsg], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        }
+
         header('Location: podcasts.php');
         exit;
     }
@@ -643,19 +848,21 @@ require_once __DIR__ . '/includes/header.php';
                                         onclick="playPodcastFromEl(this)">
                                     ▶️ Episode abspielen
                                 </button>
+                                <span data-pod-dl-slot="<?= e((string)$ep['guid']) ?>">
                                 <?php if ($offlineRow): ?>
                                     <span class="badge" style="background:rgba(16,185,129,0.2);color:#34d399;font-size:0.75rem;">✅ Offline auf Server gespeichert</span>
                                 <?php else: ?>
-                                    <form method="post" style="margin:0;">
+                                    <form method="post" style="margin:0;display:inline;" onsubmit="return startPodcastOfflineDownloadForm(event, this);">
                                         <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                                         <input type="hidden" name="action" value="download_episode">
                                         <input type="hidden" name="audio_url" value="<?= e($ep['audio_url']) ?>">
                                         <input type="hidden" name="episode_title" value="<?= e($ep['title']) ?>">
                                         <input type="hidden" name="episode_guid" value="<?= e($ep['guid']) ?>">
                                         <input type="hidden" name="feed_title" value="<?= e($activeFeed['title']) ?>">
-                                        <button type="submit" class="btn btn-sm btn-secondary">💾 Offline in Cloud speichern</button>
+                                        <button type="submit" class="btn btn-sm btn-secondary" data-pod-dl-btn="<?= e((string)$ep['guid']) ?>">💾 Offline in Cloud speichern</button>
                                     </form>
                                 <?php endif; ?>
+                                </span>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -776,5 +983,175 @@ function setPodcastSpeed(val) {
     if (!podAudio) return;
     podAudio.playbackRate = parseFloat(val) || 1.0;
 }
+
+// =========================================================================
+// 🚀 HINTERGRUND-DOWNLOAD FÜR OFFLINE-EPISODEN (NICHT-BLOCKIEREND)
+// =========================================================================
+let podBgPollTimer = null;
+const completedPodGuids = new Set();
+
+function formatPodBytes(bytes) {
+    const b = Math.max(0, Number(bytes) || 0);
+    if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+    if (b >= 1024) return Math.round(b / 1024) + ' KB';
+    return b + ' B';
+}
+
+function ensurePodBgToast() {
+    let toast = document.getElementById('podBgDownloadToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'podBgDownloadToast';
+        toast.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:35;max-width:360px;width:calc(100vw - 36px);background:rgba(15,23,42,0.96);border:1px solid rgba(139,92,246,0.6);border-radius:14px;padding:12px 15px;color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.4);backdrop-filter:blur(8px);display:none;font-size:0.8rem;';
+        document.body.appendChild(toast);
+    }
+    return toast;
+}
+
+function markEpisodeOfflineReady(guid, streamUrl, sizeFmt) {
+    completedPodGuids.add(guid);
+    const slot = document.querySelector(`[data-pod-dl-slot="${guid}"]`);
+    if (slot) {
+        slot.innerHTML = `<span class="badge" style="background:rgba(16,185,129,0.2);color:#34d399;font-size:0.75rem;">✅ Offline gespeichert${sizeFmt ? ' (' + sizeFmt + ')' : ''}</span>`;
+    }
+    if (streamUrl) {
+        document.querySelectorAll(`[data-ep-card-guid="${guid}"] [data-audio-url]`).forEach(el => {
+            el.setAttribute('data-audio-url', streamUrl);
+        });
+        updatePodcastActiveCards();
+    }
+}
+
+function updatePodDownloadUi(dlList) {
+    const toast = ensurePodBgToast();
+    const activeDls = [];
+
+    for (const item of (dlList || [])) {
+        const guid = String(item.guid || '');
+        if (!guid) continue;
+
+        if (item.status === 'downloading' && !completedPodGuids.has(guid)) {
+            activeDls.push(item);
+            const btn = document.querySelector(`[data-pod-dl-btn="${guid}"]`);
+            const pct = Number(item.percent || 0);
+            const dlBytes = Number(item.downloaded || 0);
+            const label = pct > 0
+                ? `⏳ Im Hintergrund: ${pct}% (${formatPodBytes(dlBytes)})`
+                : `⏳ Lädt im Hintergrund… (${formatPodBytes(dlBytes)})`;
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = label;
+            }
+        } else if (item.status === 'done') {
+            markEpisodeOfflineReady(guid, item.stream_url || '', item.size_fmt || '');
+        } else if (item.status === 'error') {
+            const btn = document.querySelector(`[data-pod-dl-btn="${guid}"]`);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '⚠️ Erneut versuchen';
+            }
+        }
+    }
+
+    if (activeDls.length > 0) {
+        const first = activeDls[0];
+        const pct = Number(first.percent || 0);
+        const dlInfo = first.total > 0
+            ? `${formatPodBytes(first.downloaded)} / ${formatPodBytes(first.total)} (${pct}%)`
+            : `${formatPodBytes(first.downloaded)} geladen`;
+        toast.style.display = 'block';
+        toast.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+                <strong style="color:#c4b5fd;">📥 Offline-Download im Hintergrund (${activeDls.length})</strong>
+                <span style="font-size:0.72rem;color:#34d399;">MiniCloud frei nutzbar</span>
+            </div>
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;margin-bottom:4px;">${first.title || 'Episode'}</div>
+            <div style="width:100%;height:6px;background:rgba(255,255,255,0.12);border-radius:999px;overflow:hidden;margin-bottom:4px;">
+                <div style="height:100%;width:${pct > 0 ? pct : 35}%;background:linear-gradient(90deg,#8b5cf6,#10b981);transition:width 0.3s ease;"></div>
+            </div>
+            <div style="font-size:0.72rem;color:#94a3b8;">${dlInfo} · Läuft auf dem Server weiter, auch bei Modulwechsel</div>
+        `;
+    } else {
+        if (toast.style.display === 'block') {
+            toast.innerHTML = `<div style="color:#34d399;font-weight:700;">✅ Offline-Download im Hintergrund abgeschlossen!</div>`;
+            setTimeout(() => { toast.style.display = 'none'; }, 3500);
+        }
+        if (podBgPollTimer) {
+            clearInterval(podBgPollTimer);
+            podBgPollTimer = null;
+        }
+    }
+}
+
+async function pollPodcastDownloads() {
+    try {
+        const res = await fetch('podcasts.php?action=download_status', { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data && data.ok && Array.isArray(data.downloads)) {
+            updatePodDownloadUi(data.downloads);
+            return data.downloads;
+        }
+    } catch (e) {}
+    return [];
+}
+
+function ensurePodBgPolling() {
+    if (!podBgPollTimer) {
+        podBgPollTimer = setInterval(pollPodcastDownloads, 1200);
+    }
+}
+
+function startPodcastOfflineDownloadForm(ev, formEl) {
+    if (ev) ev.preventDefault();
+    if (!formEl) return false;
+
+    const fd = new FormData(formEl);
+    fd.append('ajax', '1');
+    const rawGuid = String(fd.get('episode_guid') || '');
+    const guid = rawGuid.replace(/[^a-zA-Z0-9_-]/g, '');
+    const title = String(fd.get('episode_title') || 'Episode');
+
+    const btn = formEl.querySelector('button[type="submit"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.setAttribute('data-pod-dl-btn', guid);
+        btn.textContent = '⏳ Startet im Hintergrund…';
+    }
+    const slot = formEl.closest('[data-pod-dl-slot]');
+    if (slot && guid) {
+        slot.setAttribute('data-pod-dl-slot', guid);
+    }
+
+    updatePodDownloadUi([{ guid: guid, title: title, status: 'downloading', downloaded: 0, total: 0, percent: 0 }]);
+    ensurePodBgPolling();
+
+    fetch('podcasts.php', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        body: fd
+    }).then(r => r.json()).then(d => {
+        if (d && d.ok && d.status === 'done') {
+            markEpisodeOfflineReady(d.guid || guid, d.stream_url || '', d.size_fmt || '');
+            pollPodcastDownloads();
+        } else if (d && !d.ok) {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '⚠️ Fehler – Erneut versuchen';
+            }
+        }
+    }).catch(() => {
+        // Selbst wenn der Nutzer zwischendurch die Seite wechselt, läuft der Server-Download weiter
+    });
+
+    return false;
+}
+
+// Beim Öffnen der Seite prüfen, ob bereits ein Hintergrund-Download auf dem Server läuft
+document.addEventListener('DOMContentLoaded', async () => {
+    const list = await pollPodcastDownloads();
+    if (list.some(it => it.status === 'downloading')) {
+        ensurePodBgPolling();
+    }
+});
 </script>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
