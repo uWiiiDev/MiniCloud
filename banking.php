@@ -65,11 +65,27 @@ function ensureBankingSchema(PDO $pdo, int $userId): void
             `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
             `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
             `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `manual_current_balance` DECIMAL(12,2) DEFAULT NULL,
+            `manual_balance_updated_at` DATETIME DEFAULT NULL,
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             KEY `idx_bank_accounts_user` (`user_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    // Automatische Spalten-Migration für bestehende Installationen
+    try {
+        $colChk = $pdo->query("SHOW COLUMNS FROM `bank_accounts` LIKE 'manual_current_balance'");
+        if ($colChk && $colChk->rowCount() === 0) {
+            $pdo->exec("
+                ALTER TABLE `bank_accounts`
+                ADD COLUMN `manual_current_balance` DECIMAL(12,2) DEFAULT NULL AFTER `initial_balance`,
+                ADD COLUMN `manual_balance_updated_at` DATETIME DEFAULT NULL AFTER `manual_current_balance`
+            ");
+        }
+    } catch (Throwable $e) {
+        // Ignorieren, falls bereits vorhanden
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `bank_statements` (
@@ -1807,25 +1823,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $activeTab    = 'statements';
         }
 
+        // 7b. Aktuellen Kontostand (Endsaldo) direkt festlegen & Eröffnungskontostand automatisch rückrechnen
+        elseif ($action === 'set_current_balance' && $activeAccount !== null) {
+            $balanceMode = trim((string)($_POST['balance_mode'] ?? 'current'));
+            $returnTab   = trim((string)($_POST['return_tab'] ?? 'cockpit'));
+            if (!in_array($returnTab, ['cockpit', 'transactions', 'statements', 'settings'], true)) {
+                $returnTab = 'cockpit';
+            }
+
+            $sumStmt = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM bank_transactions WHERE user_id = :uid AND account_id = :aid");
+            $sumStmt->execute([':uid' => $userId, ':aid' => $selectedAccountId]);
+            $sumAllTx = round((float)$sumStmt->fetchColumn(), 2);
+
+            if ($balanceMode === 'auto_statement') {
+                $upd = $pdo->prepare("
+                    UPDATE bank_accounts
+                    SET manual_current_balance = NULL, manual_balance_updated_at = NULL
+                    WHERE id = :id AND user_id = :uid
+                ");
+                $upd->execute([':id' => $selectedAccountId, ':uid' => $userId]);
+                $flashSuccess = '🔄 Kontostand wird wieder automatisch aus den Kontoauszügen bzw. dem Startsaldo berechnet.';
+            } elseif ($balanceMode === 'opening') {
+                $enteredOpening = parseGermanAmountString((string)($_POST['balance_input'] ?? ''));
+                if ($enteredOpening === null) {
+                    $flashError = 'Bitte geben Sie einen gültigen Betrag ein (z.B. 1.250,00).';
+                } else {
+                    $upd = $pdo->prepare("
+                        UPDATE bank_accounts
+                        SET initial_balance = :ibal, manual_current_balance = NULL, manual_balance_updated_at = NOW()
+                        WHERE id = :id AND user_id = :uid
+                    ");
+                    $upd->execute([
+                        ':ibal' => $enteredOpening,
+                        ':id'   => $selectedAccountId,
+                        ':uid'  => $userId,
+                    ]);
+                    $calcEnd = round($enteredOpening + $sumAllTx, 2);
+                    $flashSuccess = sprintf(
+                        '✅ Eröffnungskontostand (vor 1. Buchung) auf %s € gesetzt → Daraus errechneter aktueller Kontostand: %s €.',
+                        number_format($enteredOpening, 2, ',', '.'),
+                        number_format($calcEnd, 2, ',', '.')
+                    );
+                }
+            } else {
+                // Standard & empfohlen: Aktuellen Kontostand (Endsaldo) eingeben -> Eröffnungskontostand automatisch rückrechnen
+                $enteredCurrent = parseGermanAmountString((string)($_POST['balance_input'] ?? ''));
+                if ($enteredCurrent === null) {
+                    $flashError = 'Bitte geben Sie Ihren aktuellen Kontostand als gültigen Betrag ein (z.B. 2.450,80).';
+                } else {
+                    $backCalculatedInitial = round($enteredCurrent - $sumAllTx, 2);
+                    $upd = $pdo->prepare("
+                        UPDATE bank_accounts
+                        SET manual_current_balance = :mbal,
+                            initial_balance = :ibal,
+                            manual_balance_updated_at = NOW()
+                        WHERE id = :id AND user_id = :uid
+                    ");
+                    $upd->execute([
+                        ':mbal' => $enteredCurrent,
+                        ':ibal' => $backCalculatedInitial,
+                        ':id'   => $selectedAccountId,
+                        ':uid'  => $userId,
+                    ]);
+                    $flashSuccess = sprintf(
+                        '✅ Aktueller Kontostand auf %s € festgelegt! Der unbekannte Eröffnungskontostand (vor der 1. Buchung) wurde automatisch auf %s € rückgerechnet, sodass die Endabrechnung centgenau stimmt.',
+                        number_format($enteredCurrent, 2, ',', '.'),
+                        ($backCalculatedInitial >= 0 ? '+' : '') . number_format($backCalculatedInitial, 2, ',', '.')
+                    );
+                }
+            }
+
+            // Aktives Konto neu laden
+            $accStmt->execute([':uid' => $userId]);
+            $accounts = $accStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($accounts as $acc) {
+                if ((int)$acc['id'] === $selectedAccountId) {
+                    $activeAccount = $acc;
+                    break;
+                }
+            }
+            $activeTab = $returnTab;
+        }
+
         // 8. Neues Bankkonto anlegen oder aktualisieren
         elseif ($action === 'save_account') {
-            $editId   = (int)($_POST['edit_account_id'] ?? 0);
-            $name     = trim((string)($_POST['name'] ?? ''));
-            $bankName = trim((string)($_POST['bank_name'] ?? 'Postbank'));
-            $iban     = preg_replace('/\s+/', '', strtoupper(trim((string)($_POST['iban'] ?? '')))) ?? '';
-            $bic      = strtoupper(trim((string)($_POST['bic'] ?? '')));
-            $accType  = trim((string)($_POST['account_type'] ?? 'Girokonto'));
-            $color    = trim((string)($_POST['color'] ?? '#2563eb'));
-            $initBal  = parseGermanAmountString((string)($_POST['initial_balance'] ?? '0')) ?? 0.0;
+            $editId     = (int)($_POST['edit_account_id'] ?? 0);
+            $name       = trim((string)($_POST['name'] ?? ''));
+            $bankName   = trim((string)($_POST['bank_name'] ?? 'Postbank'));
+            $iban       = preg_replace('/\s+/', '', strtoupper(trim((string)($_POST['iban'] ?? '')))) ?? '';
+            $bic        = strtoupper(trim((string)($_POST['bic'] ?? '')));
+            $accType    = trim((string)($_POST['account_type'] ?? 'Girokonto'));
+            $color      = trim((string)($_POST['color'] ?? '#2563eb'));
+            $initBal    = parseGermanAmountString((string)($_POST['initial_balance'] ?? '0')) ?? 0.0;
+            $currBalRaw = trim((string)($_POST['current_balance_override'] ?? ''));
+            $currBalVal = $currBalRaw !== '' ? parseGermanAmountString($currBalRaw) : null;
 
             if ($name === '') {
                 $flashError = 'Bitte geben Sie einen Kontonamen ein (z.B. Postbank Girokonto).';
             } else {
                 if ($editId > 0) {
+                    if ($currBalVal !== null) {
+                        $sStmt = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM bank_transactions WHERE user_id = :uid AND account_id = :aid");
+                        $sStmt->execute([':uid' => $userId, ':aid' => $editId]);
+                        $initBal = round($currBalVal - (float)$sStmt->fetchColumn(), 2);
+                    }
                     $upd = $pdo->prepare("
                         UPDATE bank_accounts
                         SET name = :name, bank_name = :bank, iban = :iban, bic = :bic,
-                            account_type = :type, color = :color, initial_balance = :ibal
+                            account_type = :type, color = :color, initial_balance = :ibal,
+                            manual_current_balance = :mbal,
+                            manual_balance_updated_at = CASE WHEN :mbal2 IS NOT NULL THEN NOW() ELSE manual_balance_updated_at END
                         WHERE id = :id AND user_id = :uid
                     ");
                     $upd->execute([
@@ -1836,14 +1943,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':type'  => $accType,
                         ':color' => $color,
                         ':ibal'  => $initBal,
+                        ':mbal'  => $currBalVal,
+                        ':mbal2' => $currBalVal,
                         ':id'    => $editId,
                         ':uid'   => $userId,
                     ]);
                     $flashSuccess = '✅ Kontodaten wurden aktualisiert.';
                 } else {
+                    if ($currBalVal !== null) {
+                        $initBal = $currBalVal;
+                    }
                     $ins = $pdo->prepare("
-                        INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance)
-                        VALUES (:uid, :name, :bank, :iban, :bic, :type, :color, :ibal)
+                        INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance, manual_current_balance, manual_balance_updated_at)
+                        VALUES (:uid, :name, :bank, :iban, :bic, :type, :color, :ibal, :mbal, CASE WHEN :mbal2 IS NOT NULL THEN NOW() ELSE NULL END)
                     ");
                     $ins->execute([
                         ':uid'   => $userId,
@@ -1854,6 +1966,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':type'  => $accType,
                         ':color' => $color,
                         ':ibal'  => $initBal,
+                        ':mbal'  => $currBalVal,
+                        ':mbal2' => $currBalVal,
                     ]);
                     $selectedAccountId = (int)$pdo->lastInsertId();
                     $flashSuccess = '✅ Neues Bankkonto „' . $name . '“ wurde angelegt.';
@@ -1953,7 +2067,7 @@ if (empty($availableYears)) {
     $availableYears = [(string)date('Y')];
 }
 
-// Alle Buchungen des aktiven Kontos (für Cockpit-Diagramme & Fixkosten-Radar)
+// Alle Buchungen des aktiven Kontos (für Cockpit-Diagramme, Saldo-Verlauf & Fixkosten-Radar)
 $allTxStmt = $pdo->prepare("
     SELECT t.*, s.filename AS statement_filename
     FROM bank_transactions t
@@ -1964,13 +2078,79 @@ $allTxStmt = $pdo->prepare("
 $allTxStmt->execute([':uid' => $userId, ':aid' => $selectedAccountId]);
 $allAccountTransactions = $allTxStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-// Gefilterte Buchungen bestimmen
+// Kontoauszüge laden
+$stmtListQuery = $pdo->prepare("
+    SELECT * FROM bank_statements
+    WHERE user_id = :uid AND account_id = :aid
+    ORDER BY COALESCE(period_end, created_at) DESC, id DESC
+");
+$stmtListQuery->execute([':uid' => $userId, ':aid' => $selectedAccountId]);
+$accountStatements = $stmtListQuery->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+// Gesamtsumme aller gespeicherten Buchungen dieses Kontos berechnen
+$totalAccountIncome  = 0.0;
+$totalAccountExpense = 0.0;
+$totalAccountTxSum   = 0.0;
+foreach ($allAccountTransactions as $txItem) {
+    $a = (float)$txItem['amount'];
+    $totalAccountTxSum += $a;
+    if ($a >= 0) {
+        $totalAccountIncome += $a;
+    } else {
+        $totalAccountExpense += abs($a);
+    }
+}
+$totalAccountIncome  = round($totalAccountIncome, 2);
+$totalAccountExpense = round($totalAccountExpense, 2);
+$totalAccountTxSum   = round($totalAccountTxSum, 2);
+
+// Kontostands- & Endabrechnungs-Logik:
+// 1. Hat der Nutzer den aktuellen Kontostand manuell eingegeben (`manual_current_balance`), hat dieser Vorrang
+//    und der unbekannte Eröffnungskontostand vor der 1. Buchung wird exakt rückgerechnet.
+// 2. Sonst wird der `end_balance` des neuesten Kontoauszugs genutzt (falls vorhanden).
+// 3. Sonst wird `initial_balance + Summe aller Umsätze` gerechnet.
+$latestStatementBalanceInfo = null;
+foreach ($accountStatements as $st) {
+    if ($st['end_balance'] !== null) {
+        $latestStatementBalanceInfo = $st;
+        break;
+    }
+}
+
+$hasManualCurrentBalance = isset($activeAccount['manual_current_balance']) && $activeAccount['manual_current_balance'] !== null && $activeAccount['manual_current_balance'] !== '';
+$balanceSourceLabel      = '';
+
+if ($hasManualCurrentBalance) {
+    $currentAccountBalance    = round((float)$activeAccount['manual_current_balance'], 2);
+    $calculatedOpeningBalance = round($currentAccountBalance - $totalAccountTxSum, 2);
+    $balanceSourceLabel       = 'Manuell festgelegter Kontostand';
+} elseif ($latestStatementBalanceInfo !== null) {
+    $currentAccountBalance    = round((float)$latestStatementBalanceInfo['end_balance'], 2);
+    $calculatedOpeningBalance = round($currentAccountBalance - $totalAccountTxSum, 2);
+    $balanceSourceLabel       = 'Lt. Auszug „' . (string)$latestStatementBalanceInfo['filename'] . '“';
+} else {
+    $calculatedOpeningBalance = round((float)($activeAccount['initial_balance'] ?? 0.0), 2);
+    $currentAccountBalance    = round($calculatedOpeningBalance + $totalAccountTxSum, 2);
+    $balanceSourceLabel       = 'Startsaldo + ' . count($allAccountTransactions) . ' Buchungen';
+}
+
+// Laufenden Kontostand (vor und nach jeder einzelnen Buchung) rückwärts vom aktuellen Kontostand berechnen
+$runningBalanceCursor = $currentAccountBalance;
+foreach ($allAccountTransactions as $idx => $txRow) {
+    $amt = round((float)$txRow['amount'], 2);
+    $allAccountTransactions[$idx]['balance_after']  = $runningBalanceCursor;
+    $allAccountTransactions[$idx]['balance_before'] = round($runningBalanceCursor - $amt, 2);
+    $runningBalanceCursor = $allAccountTransactions[$idx]['balance_before'];
+}
+
+// Gefilterte Buchungen & Zeitraum-Salden bestimmen
 $filteredTransactions = [];
 $filteredIncome       = 0.0;
 $filteredExpense      = 0.0;
 $filteredFixedExpense = 0.0;
 $categoryTotals       = [];
 $counterpartyTotals   = [];
+$datePeriodTransactions = [];
 
 foreach ($allAccountTransactions as $tx) {
     $bDate = (string)$tx['booking_date'];
@@ -1986,6 +2166,9 @@ foreach ($allAccountTransactions as $tx) {
     if ($filterMonth !== 'all' && str_pad($filterMonth, 2, '0', STR_PAD_LEFT) !== $mo) {
         continue;
     }
+
+    $datePeriodTransactions[] = $tx;
+
     if ($filterCategory !== 'all' && $cat !== $filterCategory) {
         continue;
     }
@@ -2025,6 +2208,17 @@ foreach ($allAccountTransactions as $tx) {
     }
 }
 
+// Anfangs- und Endsaldo des gewählten Zeitraums (aus der rückwärts berechneten Kontostands-Kette)
+if (!empty($datePeriodTransactions)) {
+    $newestInPeriod       = $datePeriodTransactions[0];
+    $oldestInPeriod       = $datePeriodTransactions[count($datePeriodTransactions) - 1];
+    $periodClosingBalance = round((float)$newestInPeriod['balance_after'], 2);
+    $periodOpeningBalance = round((float)$oldestInPeriod['balance_before'], 2);
+} else {
+    $periodOpeningBalance = $calculatedOpeningBalance;
+    $periodClosingBalance = $currentAccountBalance;
+}
+
 arsort($categoryTotals);
 usort($counterpartyTotals, static fn($a, $b) => $b['total'] <=> $a['total']);
 $topCounterparties = array_slice($counterpartyTotals, 0, 8);
@@ -2053,32 +2247,6 @@ foreach ($allAccountTransactions as $tx) {
 ksort($monthlySeries);
 if (count($monthlySeries) > 12) {
     $monthlySeries = array_slice($monthlySeries, -12, 12, true);
-}
-
-// Kontostands-Berechnung:
-// Entweder der `end_balance` des neuesten Kontoauszugs + seitdem gebuchte Umsätze,
-// oder `initial_balance` + Summe aller Umsätze.
-$stmtListQuery = $pdo->prepare("
-    SELECT * FROM bank_statements
-    WHERE user_id = :uid AND account_id = :aid
-    ORDER BY COALESCE(period_end, created_at) DESC, id DESC
-");
-$stmtListQuery->execute([':uid' => $userId, ':aid' => $selectedAccountId]);
-$accountStatements = $stmtListQuery->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-$currentAccountBalance = (float)($activeAccount['initial_balance'] ?? 0);
-$latestStatementBalanceInfo = null;
-foreach ($accountStatements as $st) {
-    if ($st['end_balance'] !== null) {
-        $currentAccountBalance = (float)$st['end_balance'];
-        $latestStatementBalanceInfo = $st;
-        break;
-    }
-}
-if ($latestStatementBalanceInfo === null) {
-    $sumAllStmt = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM bank_transactions WHERE user_id = :uid AND account_id = :aid");
-    $sumAllStmt->execute([':uid' => $userId, ':aid' => $selectedAccountId]);
-    $currentAccountBalance = round((float)($activeAccount['initial_balance'] ?? 0) + (float)$sumAllStmt->fetchColumn(), 2);
 }
 
 // =========================================================================
@@ -2374,21 +2542,26 @@ require_once __DIR__ . '/includes/header.php';
         $savingsRate = $filteredIncome > 0 ? round(max(-100, min(100, (($filteredIncome - $filteredExpense) / $filteredIncome) * 100)), 1) : 0.0;
         ?>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Aktueller Kontostand -->
+            <!-- Aktueller Kontostand (mit direkter manueller Eingabe & Rückrechnung des Eröffnungssaldos) -->
             <div class="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-4 shadow-2xs">
-                <div class="flex items-center justify-between">
-                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kontostand</span>
-                    <span class="text-lg">🏦</span>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Aktueller Kontostand</span>
+                    <button
+                        type="button"
+                        onclick="document.getElementById('quickBalanceModalBox')?.classList.toggle('hidden')"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-brand-50 dark:bg-brand-950/70 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900 border border-brand-200/70 dark:border-brand-800 transition-colors cursor-pointer"
+                        title="Aktuellen Kontostand manuell eingeben (der unbekannte Eröffnungskontostand wird daraus automatisch rückgerechnet)"
+                    >
+                        <span>✏️</span>
+                        <span>Eingeben</span>
+                    </button>
                 </div>
                 <p class="mt-2 text-2xl font-extrabold <?= $currentAccountBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-600 dark:text-red-400' ?>">
                     <?= number_format($currentAccountBalance, 2, ',', '.') ?> €
                 </p>
-                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                    <?php if ($latestStatementBalanceInfo !== null): ?>
-                        Lt. Auszug „<?= e((string)$latestStatementBalanceInfo['filename']) ?>“
-                    <?php else: ?>
-                        Startsaldo + <?= count($allAccountTransactions) ?> Buchungen
-                    <?php endif; ?>
+                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate" title="<?= e($balanceSourceLabel) ?>">
+                    <?= e($balanceSourceLabel) ?>
+                    · Eröffnung: <strong><?= ($calculatedOpeningBalance >= 0 ? '+' : '') . number_format($calculatedOpeningBalance, 2, ',', '.') ?> €</strong>
                 </p>
             </div>
 
@@ -2432,6 +2605,102 @@ require_once __DIR__ . '/includes/header.php';
                 <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                     Sparquote: <strong><?= number_format($savingsRate, 1, ',', '.') ?> %</strong> (<?= count($filteredTransactions) ?> Umsätze)
                 </p>
+            </div>
+        </div>
+
+        <!-- Ausklappbare Box: Aktuellen Kontostand manuell eingeben & Endabrechnungs-Kette -->
+        <div id="quickBalanceModalBox" class="hidden rounded-2xl bg-brand-50/70 dark:bg-slate-900 border border-brand-200 dark:border-brand-800/80 p-4 sm:p-5 space-y-3 shadow-xs">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>🎯</span>
+                        <span>Aktuellen Kontostand eingeben (Automatische Rückrechnung des Eröffnungskontostands)</span>
+                    </h3>
+                    <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                        Da der ursprüngliche Eröffnungskontostand älterer Konten oft nicht bekannt ist, geben Sie hier einfach Ihren <strong>aktuellen Kontostand</strong> (lt. Online-Banking oder neuestem Auszug) ein. Die MiniCloud berechnet daraus automatisch den rechnerischen Anfangssaldo vor der ersten importierten Buchung, sodass die Endabrechnung und jeder Zwischensaldo centgenau stimmen.
+                    </p>
+                </div>
+                <button type="button" onclick="document.getElementById('quickBalanceModalBox')?.classList.add('hidden')" class="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer text-sm">✕</button>
+            </div>
+
+            <form method="post" action="banking.php" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end pt-1">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="set_current_balance">
+                <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
+                <input type="hidden" name="return_tab" value="cockpit">
+
+                <div class="sm:col-span-5">
+                    <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Berechnungs-Modus</label>
+                    <select name="balance_mode" class="w-full px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100">
+                        <option value="current">🎯 Aktuellen Kontostand (Endsaldo heute) festlegen → Eröffnungssaldo rückrechnen</option>
+                        <option value="opening">🏁 Start-/Eröffnungskontostand (vor 1. Buchung) festlegen → Endsaldo vorwärts rechnen</option>
+                        <option value="auto_statement">📄 Manuelle Vorgabe löschen (automatisch aus Auszug lesen)</option>
+                    </select>
+                </div>
+
+                <div class="sm:col-span-4">
+                    <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Betrag in EUR (z.B. 2.450,80 oder -120,00)</label>
+                    <input
+                        type="text"
+                        name="balance_input"
+                        value="<?= number_format($currentAccountBalance, 2, ',', '.') ?>"
+                        placeholder="z.B. 2.450,80"
+                        class="w-full px-3 py-2 rounded-xl text-xs font-extrabold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    >
+                </div>
+
+                <div class="sm:col-span-3 flex items-center gap-2">
+                    <button type="submit" class="w-full py-2 px-4 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-2xs cursor-pointer">
+                        💾 Kontostand speichern
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 🧮 Kontostands- & Endabrechnungs-Leiste (Anfangssaldo + Einnahmen - Ausgaben = Endsaldo) -->
+        <div class="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 px-4 py-3.5 shadow-2xs">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🧮</span>
+                    <div>
+                        <span class="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                            Vollständige Kontostands-Endabrechnung <?= ($filterYear !== 'all' || $filterMonth !== 'all') ? '(Gewählter Zeitraum)' : '(Gesamtzeitraum)' ?>:
+                        </span>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400 block sm:inline sm:ml-1">
+                            Der Anfangssaldo wird automatisch aus Ihrem aktuellen Kontostand rückgerechnet.
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+                    <div class="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block">Anfangssaldo (vor Zeitraum)</span>
+                        <span class="font-bold text-slate-800 dark:text-slate-100">
+                            <?= ($periodOpeningBalance >= 0 ? '+' : '') . number_format($periodOpeningBalance, 2, ',', '.') ?> €
+                        </span>
+                    </div>
+                    <span class="font-bold text-slate-400">+</span>
+                    <div class="px-2.5 py-1 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60">
+                        <span class="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Einnahmen</span>
+                        <span class="font-bold text-emerald-700 dark:text-emerald-300">
+                            +<?= number_format($filteredIncome, 2, ',', '.') ?> €
+                        </span>
+                    </div>
+                    <span class="font-bold text-slate-400">−</span>
+                    <div class="px-2.5 py-1 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/60">
+                        <span class="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 block">Ausgaben</span>
+                        <span class="font-bold text-rose-700 dark:text-rose-300">
+                            −<?= number_format($filteredExpense, 2, ',', '.') ?> €
+                        </span>
+                    </div>
+                    <span class="font-bold text-slate-400">=</span>
+                    <div class="px-3 py-1 rounded-xl bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-800">
+                        <span class="text-[10px] uppercase font-bold text-brand-600 dark:text-brand-400 block">Endkontostand</span>
+                        <span class="font-extrabold text-slate-900 dark:text-white">
+                            <?= number_format(($filterCategory === 'all' && $filterType === 'all' && $searchQuery === '') ? $periodClosingBalance : round($periodOpeningBalance + $filteredIncome - $filteredExpense, 2), 2, ',', '.') ?> €
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2728,14 +2997,28 @@ require_once __DIR__ . '/includes/header.php';
 
         <!-- Umsatztabelle -->
         <div class="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden">
-            <div class="p-4 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <div class="p-4 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                         📑 Gebuchte Umsätze (<?= count($filteredTransactions) ?>)
                     </h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Klicken Sie auf ✏️ bei einer Buchung, um die Kategorie zu ändern oder als dauerhafte Regel für diesen Empfänger zu speichern.
+                        Inklusive rückwärts berechnetem <strong>Kontostand nach jeder Buchung</strong>. Klicken Sie auf ✏️ bei einer Buchung, um die Kategorie oder Regel anzupassen.
                     </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
+                        Eröffnung: <strong><?= ($periodOpeningBalance >= 0 ? '+' : '') . number_format($periodOpeningBalance, 2, ',', '.') ?> €</strong>
+                        &rarr; Aktuell: <strong><?= number_format($currentAccountBalance, 2, ',', '.') ?> €</strong>
+                    </span>
+                    <button
+                        type="button"
+                        onclick="switchBankingTab('cockpit'); document.getElementById('quickBalanceModalBox')?.classList.remove('hidden');"
+                        class="px-2.5 py-1 rounded-xl font-bold bg-brand-50 dark:bg-brand-950/70 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-800 hover:bg-brand-100 cursor-pointer"
+                    >
+                        ✏️ Kontostand eingeben
+                    </button>
                 </div>
             </div>
 
@@ -2753,16 +3036,18 @@ require_once __DIR__ . '/includes/header.php';
                                 <th class="py-3 px-3">Kategorie</th>
                                 <th class="py-3 px-3">Auszug</th>
                                 <th class="py-3 px-3 text-right">Betrag</th>
+                                <th class="py-3 px-3 text-right">Saldo danach</th>
                                 <th class="py-3 px-3 text-right">Aktion</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800">
                             <?php foreach ($filteredTransactions as $tx):
-                                $amt   = (float)$tx['amount'];
-                                $cKey  = (string)$tx['category'];
-                                $cMeta = $bankingCategories[$cKey] ?? $bankingCategories['other'];
-                                $txId  = (int)$tx['id'];
-                                $fId   = (int)($tx['file_id'] ?? 0);
+                                $amt      = (float)$tx['amount'];
+                                $balAfter = (float)($tx['balance_after'] ?? 0.0);
+                                $cKey     = (string)$tx['category'];
+                                $cMeta    = $bankingCategories[$cKey] ?? $bankingCategories['other'];
+                                $txId     = (int)$tx['id'];
+                                $fId      = (int)($tx['file_id'] ?? 0);
                             ?>
                                 <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 align-top">
                                     <td class="py-3 px-3 whitespace-nowrap">
@@ -2827,6 +3112,10 @@ require_once __DIR__ . '/includes/header.php';
                                         <?= ($amt >= 0 ? '+' : '') . number_format($amt, 2, ',', '.') ?> €
                                     </td>
 
+                                    <td class="py-3 px-3 whitespace-nowrap text-right font-semibold text-xs <?= $balAfter >= 0 ? 'text-slate-700 dark:text-slate-300' : 'text-red-600 dark:text-red-400' ?>" title="Kontostand unmittelbar nach dieser Buchung">
+                                        <?= number_format($balAfter, 2, ',', '.') ?> €
+                                    </td>
+
                                     <td class="py-3 px-3 whitespace-nowrap text-right">
                                         <button
                                             type="button"
@@ -2841,7 +3130,7 @@ require_once __DIR__ . '/includes/header.php';
 
                                 <!-- Ausklappbare Bearbeitungszeile -->
                                 <tr id="txEditRow_<?= $txId ?>" class="hidden bg-slate-50 dark:bg-slate-800/70">
-                                    <td colspan="6" class="p-3">
+                                    <td colspan="7" class="p-3">
                                         <div class="flex flex-wrap items-center justify-between gap-3">
                                             <form method="post" action="banking.php" class="flex flex-wrap items-center gap-2.5 flex-1">
                                                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
@@ -3181,7 +3470,11 @@ require_once __DIR__ . '/includes/header.php';
                                     <span class="px-2 py-0.2 rounded bg-slate-200/70 dark:bg-slate-700 text-[10px]"><?= e((string)$acc['bank_name']) ?></span>
                                 </div>
                                 <div class="text-[11px] text-slate-500 mt-0.5">
-                                    IBAN: <?= trim((string)$acc['iban']) !== '' ? e((string)$acc['iban']) : '—' ?> · Startsaldo: <?= number_format((float)$acc['initial_balance'], 2, ',', '.') ?> €
+                                    IBAN: <?= trim((string)$acc['iban']) !== '' ? e((string)$acc['iban']) : '—' ?>
+                                    · Errechneter Eröffnungssaldo: <?= number_format((float)$acc['initial_balance'], 2, ',', '.') ?> €
+                                    <?php if ($acc['manual_current_balance'] !== null && $acc['manual_current_balance'] !== ''): ?>
+                                        · <strong>Aktueller Kontostand: <?= number_format((float)$acc['manual_current_balance'], 2, ',', '.') ?> €</strong>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php if (count($accounts) > 1): ?>
@@ -3231,10 +3524,14 @@ require_once __DIR__ . '/includes/header.php';
                             <input type="text" name="iban" placeholder="DE..." class="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                         </div>
                         <div>
-                            <label class="block text-[11px] font-bold text-slate-500 mb-1">Startsaldo (falls kein PDF-Endsaldo vorliegt)</label>
-                            <input type="text" name="initial_balance" value="0,00" class="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            <label class="block text-[11px] font-bold text-brand-600 dark:text-brand-400 mb-1">🎯 Aktueller Kontostand heute (Endsaldo, empfohlen)</label>
+                            <input type="text" name="current_balance_override" placeholder="z.B. 2.450,80 (rechnet Startsaldo rückwärts)" class="w-full px-3 py-2 rounded-xl text-xs font-bold bg-brand-50/40 dark:bg-slate-800 border border-brand-200 dark:border-brand-800">
                         </div>
                         <div>
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">Oder Start-/Eröffnungssaldo (falls bekannt)</label>
+                            <input type="text" name="initial_balance" value="0,00" class="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        </div>
+                        <div class="sm:col-span-2">
                             <label class="block text-[11px] font-bold text-slate-500 mb-1">Kontoart</label>
                             <select name="account_type" class="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                                 <option value="Girokonto">Girokonto</option>
