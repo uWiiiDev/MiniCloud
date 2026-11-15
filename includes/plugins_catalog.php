@@ -587,10 +587,11 @@ function fetchPluginFileFromGitHub(string $relativePath, string $repo = 'uWiiiDe
     }
 
     $url = sprintf(
-        'https://raw.githubusercontent.com/%s/%s/%s',
+        'https://raw.githubusercontent.com/%s/%s/%s?cb=%d',
         trim($repo, '/'),
         rawurlencode($branch),
-        implode('/', array_map('rawurlencode', explode('/', $cleanPath)))
+        implode('/', array_map('rawurlencode', explode('/', $cleanPath))),
+        time()
     );
 
     if (function_exists('curl_init')) {
@@ -602,6 +603,7 @@ function fetchPluginFileFromGitHub(string $relativePath, string $repo = 'uWiiiDe
             CURLOPT_TIMEOUT        => 25,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_USERAGENT      => 'MiniCloud-PluginManager/1.5 (+https://github.com/uWiiiDev/MiniCloud)',
+            CURLOPT_HTTPHEADER     => ['Cache-Control: no-cache, no-store, must-revalidate', 'Pragma: no-cache'],
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
         $body = curl_exec($ch);
@@ -700,7 +702,14 @@ function installMiniCloudPluginFromGitHub(PDO $pdo, string $pluginId): array
             @unlink($tmpPath);
             return ['ok' => false, 'message' => 'Datei konnte nicht aktiviert werden: ' . $relFile];
         }
+        if (function_exists('opcache_invalidate') && str_ends_with(strtolower($destPath), '.php')) {
+            @opcache_invalidate($destPath, true);
+        }
         $installedFiles++;
+    }
+
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
     }
 
     // Modul in den Systemeinstellungen aktivieren

@@ -18,12 +18,6 @@ $username  = (string)($_SESSION['username'] ?? 'Benutzer');
 $isAdmin   = isAdmin();
 $csrfToken = getCsrfToken();
 
-// Session-Lock sofort freigeben, damit parallele Requests (Header-Suche, Chat-Polling, Modulwechsel)
-// niemals auf banking.php warten müssen und der Browser-Ladekreis sofort stoppt.
-if (session_status() === PHP_SESSION_ACTIVE) {
-    @session_write_close();
-}
-
 /**
  * Kategorien-Katalog für Kontoauszüge & Finanz-Analyse
  *
@@ -59,130 +53,133 @@ function getBankingCategories(): array
 function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): void
 {
     static $initialized = false;
-    if ($initialized) {
+    if (
+        $initialized ||
+        (!empty($_SESSION['_mc_banking_schema_v3_ok']) && $_SESSION['_mc_banking_schema_v3_ok'] === 1) ||
+        (($appSettings['banking_schema_v2'] ?? '0') === '1')
+    ) {
+        $initialized = true;
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_banking_schema_v3_ok'] = 1;
+        }
         return;
     }
     $initialized = true;
 
-    if (($appSettings['banking_schema_v2'] ?? '0') !== '1') {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS `bank_accounts` (
-                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                `user_id` INT NOT NULL,
-                `name` VARCHAR(190) NOT NULL,
-                `bank_name` VARCHAR(120) NOT NULL DEFAULT 'Postbank',
-                `iban` VARCHAR(64) NOT NULL DEFAULT '',
-                `bic` VARCHAR(32) NOT NULL DEFAULT '',
-                `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
-                `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
-                `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                `manual_current_balance` DECIMAL(12,2) DEFAULT NULL,
-                `manual_balance_updated_at` DATETIME DEFAULT NULL,
-                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                KEY `idx_bank_accounts_user` (`user_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `bank_accounts` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT NOT NULL,
+            `name` VARCHAR(190) NOT NULL,
+            `bank_name` VARCHAR(120) NOT NULL DEFAULT 'Postbank',
+            `iban` VARCHAR(64) NOT NULL DEFAULT '',
+            `bic` VARCHAR(32) NOT NULL DEFAULT '',
+            `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
+            `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
+            `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `manual_current_balance` DECIMAL(12,2) DEFAULT NULL,
+            `manual_balance_updated_at` DATETIME DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_accounts_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
-        // Automatische Spalten-Migration für bestehende Installationen
-        try {
-            $colChk = $pdo->query("SHOW COLUMNS FROM `bank_accounts` LIKE 'manual_current_balance'");
-            if ($colChk && $colChk->rowCount() === 0) {
-                $pdo->exec("
-                    ALTER TABLE `bank_accounts`
-                    ADD COLUMN `manual_current_balance` DECIMAL(12,2) DEFAULT NULL AFTER `initial_balance`,
-                    ADD COLUMN `manual_balance_updated_at` DATETIME DEFAULT NULL AFTER `manual_current_balance`
-                ");
-            }
-        } catch (Throwable $e) {
-            // Ignorieren, falls bereits vorhanden
+    // Automatische Spalten-Migration für bestehende Installationen
+    try {
+        $colChk = $pdo->query("SHOW COLUMNS FROM `bank_accounts` LIKE 'manual_current_balance'");
+        if ($colChk && $colChk->rowCount() === 0) {
+            $pdo->exec("
+                ALTER TABLE `bank_accounts`
+                ADD COLUMN `manual_current_balance` DECIMAL(12,2) DEFAULT NULL AFTER `initial_balance`,
+                ADD COLUMN `manual_balance_updated_at` DATETIME DEFAULT NULL AFTER `manual_current_balance`
+            ");
         }
-
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS `bank_statements` (
-                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                `account_id` INT UNSIGNED NOT NULL,
-                `user_id` INT NOT NULL,
-                `file_id` INT DEFAULT NULL,
-                `filename` VARCHAR(255) NOT NULL,
-                `file_format` VARCHAR(16) NOT NULL DEFAULT 'pdf',
-                `statement_no` VARCHAR(64) NOT NULL DEFAULT '',
-                `statement_year` INT NOT NULL DEFAULT 0,
-                `period_start` VARCHAR(20) DEFAULT NULL,
-                `period_end` VARCHAR(20) DEFAULT NULL,
-                `start_balance` DECIMAL(12,2) DEFAULT NULL,
-                `end_balance` DECIMAL(12,2) DEFAULT NULL,
-                `tx_count` INT NOT NULL DEFAULT 0,
-                `total_income` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                `total_expense` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                `balance_check_ok` TINYINT DEFAULT NULL,
-                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                KEY `idx_bank_statements_user_acc` (`user_id`, `account_id`, `period_end`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS `bank_transactions` (
-                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                `account_id` INT UNSIGNED NOT NULL,
-                `statement_id` INT UNSIGNED DEFAULT NULL,
-                `user_id` INT NOT NULL,
-                `file_id` INT DEFAULT NULL,
-                `booking_date` VARCHAR(20) NOT NULL,
-                `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
-                `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
-                `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
-                `purpose` TEXT NOT NULL,
-                `iban` VARCHAR(64) NOT NULL DEFAULT '',
-                `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                `currency` VARCHAR(12) NOT NULL DEFAULT 'EUR',
-                `category` VARCHAR(64) NOT NULL DEFAULT 'other',
-                `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
-                `note` VARCHAR(500) NOT NULL DEFAULT '',
-                `tx_hash` VARCHAR(64) NOT NULL DEFAULT '',
-                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                KEY `idx_bank_tx_user_acc_date` (`user_id`, `account_id`, `booking_date`),
-                KEY `idx_bank_tx_hash` (`user_id`, `account_id`, `tx_hash`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS `bank_rules` (
-                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                `user_id` INT NOT NULL,
-                `keyword` VARCHAR(190) NOT NULL,
-                `category` VARCHAR(64) NOT NULL,
-                `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
-                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                KEY `idx_bank_rules_user` (`user_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-
-        if (function_exists('saveAppSetting')) {
-            try {
-                saveAppSetting($pdo, 'banking_schema_v2', '1');
-            } catch (Throwable $e) {
-                // Ignorieren
-            }
-        }
+    } catch (Throwable $e) {
+        // Ignorieren, falls bereits vorhanden
     }
 
-    // Standard-Konto anlegen, falls der Benutzer noch kein Konto hat
-    $stmt = $pdo->prepare("SELECT id FROM bank_accounts WHERE user_id = :uid LIMIT 1");
-    $stmt->execute([':uid' => $userId]);
-    if (!$stmt->fetchColumn()) {
-        $ins = $pdo->prepare("
-            INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance)
-            VALUES (:uid, 'Postbank Girokonto', 'Postbank', '', 'PBNKDEFF', 'Girokonto', '#2563eb', 0.00)
-        ");
-        $ins->execute([':uid' => $userId]);
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `bank_statements` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `account_id` INT UNSIGNED NOT NULL,
+            `user_id` INT NOT NULL,
+            `file_id` INT DEFAULT NULL,
+            `filename` VARCHAR(255) NOT NULL,
+            `file_format` VARCHAR(16) NOT NULL DEFAULT 'pdf',
+            `statement_no` VARCHAR(64) NOT NULL DEFAULT '',
+            `statement_year` INT NOT NULL DEFAULT 0,
+            `period_start` VARCHAR(20) DEFAULT NULL,
+            `period_end` VARCHAR(20) DEFAULT NULL,
+            `start_balance` DECIMAL(12,2) DEFAULT NULL,
+            `end_balance` DECIMAL(12,2) DEFAULT NULL,
+            `tx_count` INT NOT NULL DEFAULT 0,
+            `total_income` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `total_expense` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `balance_check_ok` TINYINT DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_statements_user_acc` (`user_id`, `account_id`, `period_end`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `bank_transactions` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `account_id` INT UNSIGNED NOT NULL,
+            `statement_id` INT UNSIGNED DEFAULT NULL,
+            `user_id` INT NOT NULL,
+            `file_id` INT DEFAULT NULL,
+            `booking_date` VARCHAR(20) NOT NULL,
+            `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
+            `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
+            `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
+            `purpose` TEXT NOT NULL,
+            `iban` VARCHAR(64) NOT NULL DEFAULT '',
+            `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `currency` VARCHAR(12) NOT NULL DEFAULT 'EUR',
+            `category` VARCHAR(64) NOT NULL DEFAULT 'other',
+            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+            `note` VARCHAR(500) NOT NULL DEFAULT '',
+            `tx_hash` VARCHAR(64) NOT NULL DEFAULT '',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_tx_user_acc_date` (`user_id`, `account_id`, `booking_date`),
+            KEY `idx_bank_tx_hash` (`user_id`, `account_id`, `tx_hash`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `bank_rules` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT NOT NULL,
+            `keyword` VARCHAR(190) NOT NULL,
+            `category` VARCHAR(64) NOT NULL,
+            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_rules_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    if (function_exists('saveAppSetting')) {
+        try {
+            saveAppSetting($pdo, 'banking_schema_v2', '1');
+        } catch (Throwable $e) {
+            // Ignorieren
+        }
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_mc_banking_schema_v3_ok'] = 1;
     }
 }
 
 ensureBankingSchema($pdo, $userId, $appSettings);
+
+// Session-Lock sofort freigeben, damit parallele Requests niemals blockiert werden
+if (session_status() === PHP_SESSION_ACTIVE) {
+    @session_write_close();
+}
 
 /**
  * Lädt benutzerdefinierte Kategorisierungs-Regeln.
@@ -1461,6 +1458,15 @@ function importParsedBankStatement(
 $accStmt = $pdo->prepare("SELECT * FROM bank_accounts WHERE user_id = :uid ORDER BY id ASC");
 $accStmt->execute([':uid' => $userId]);
 $accounts = $accStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+if (empty($accounts)) {
+    $insDef = $pdo->prepare("
+        INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance)
+        VALUES (:uid, 'Postbank Girokonto', 'Postbank', '', 'PBNKDEFF', 'Girokonto', '#2563eb', 0.00)
+    ");
+    $insDef->execute([':uid' => $userId]);
+    $accStmt->execute([':uid' => $userId]);
+    $accounts = $accStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
 
 $selectedAccountId = isset($_REQUEST['account_id']) ? (int)$_REQUEST['account_id'] : (int)($accounts[0]['id'] ?? 0);
 $activeAccount = null;
@@ -2397,7 +2403,7 @@ require_once __DIR__ . '/includes/header.php';
                 </p>
             </div>
 
-            <!-- Kontowahl & Schnell-Buttons -->
+            <!-- Kontowahl, Direkt-Eingabe Aktueller Kontostand & Schnell-Buttons -->
             <div class="flex flex-wrap items-center gap-2.5">
                 <form method="get" action="banking.php" class="flex items-center gap-2">
                     <input type="hidden" name="tab" value="<?= e($activeTab) ?>">
@@ -2414,6 +2420,33 @@ require_once __DIR__ . '/includes/header.php';
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </form>
+
+                <!-- Direkt-Eingabefeld für den aktuellen Kontostand (auf allen Tabs oben sichtbar) -->
+                <form method="post" action="banking.php" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-brand-50/90 dark:bg-slate-800/90 border border-brand-200 dark:border-brand-800/80 shadow-2xs" title="Aktuellen Kontostand hier eintragen – der unbekannte Eröffnungskontostand wird automatisch rückgerechnet">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+                    <input type="hidden" name="action" value="set_current_balance">
+                    <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
+                    <input type="hidden" name="balance_mode" value="current">
+                    <input type="hidden" name="return_tab" id="topBalanceReturnTab" value="<?= e($activeTab) ?>">
+                    <label for="topCurrentBalanceInput" class="text-[11px] font-extrabold text-brand-700 dark:text-brand-300 whitespace-nowrap">
+                        💰 Aktueller Kontostand:
+                    </label>
+                    <input
+                        type="text"
+                        id="topCurrentBalanceInput"
+                        name="balance_input"
+                        value="<?= number_format($currentAccountBalance, 2, ',', '.') ?>"
+                        placeholder="z.B. 2.450,80"
+                        class="w-28 px-2 py-1 rounded-lg text-xs font-extrabold text-right bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-brand-300 dark:border-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                    <span class="text-xs font-bold text-slate-600 dark:text-slate-300">€</span>
+                    <button
+                        type="submit"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer transition-colors whitespace-nowrap"
+                    >
+                        💾 Speichern
+                    </button>
                 </form>
 
                 <button
@@ -2594,19 +2627,35 @@ require_once __DIR__ . '/includes/header.php';
                         type="button"
                         onclick="document.getElementById('quickBalanceModalBox')?.classList.toggle('hidden')"
                         class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-brand-50 dark:bg-brand-950/70 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900 border border-brand-200/70 dark:border-brand-800 transition-colors cursor-pointer"
-                        title="Aktuellen Kontostand manuell eingeben (der unbekannte Eröffnungskontostand wird daraus automatisch rückgerechnet)"
+                        title="Erweiterte Kontostands-Optionen öffnen"
                     >
-                        <span>✏️</span>
-                        <span>Eingeben</span>
+                        <span>⚙️</span>
+                        <span>Optionen</span>
                     </button>
                 </div>
-                <p class="mt-2 text-2xl font-extrabold <?= $currentAccountBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-600 dark:text-red-400' ?>">
+                <p class="mt-1.5 text-2xl font-extrabold <?= $currentAccountBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-600 dark:text-red-400' ?>">
                     <?= number_format($currentAccountBalance, 2, ',', '.') ?> €
                 </p>
-                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate" title="<?= e($balanceSourceLabel) ?>">
-                    <?= e($balanceSourceLabel) ?>
-                    · Eröffnung: <strong><?= ($calculatedOpeningBalance >= 0 ? '+' : '') . number_format($calculatedOpeningBalance, 2, ',', '.') ?> €</strong>
+                <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 truncate" title="<?= e($balanceSourceLabel) ?>">
+                    Errechneter Eröffnungssaldo: <strong><?= ($calculatedOpeningBalance >= 0 ? '+' : '') . number_format($calculatedOpeningBalance, 2, ',', '.') ?> €</strong>
                 </p>
+                <form method="post" action="banking.php" class="mt-2.5 flex items-center gap-1.5">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+                    <input type="hidden" name="action" value="set_current_balance">
+                    <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
+                    <input type="hidden" name="balance_mode" value="current">
+                    <input type="hidden" name="return_tab" value="cockpit">
+                    <input
+                        type="text"
+                        name="balance_input"
+                        value="<?= number_format($currentAccountBalance, 2, ',', '.') ?>"
+                        placeholder="Aktueller Stand (z.B. 2.450,80)"
+                        class="w-full px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    >
+                    <button type="submit" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer shrink-0">
+                        💾 Setzen
+                    </button>
+                </form>
             </div>
 
             <!-- Einnahmen im Zeitraum -->
@@ -3163,66 +3212,17 @@ require_once __DIR__ . '/includes/header.php';
                                     <td class="py-3 px-3 whitespace-nowrap text-right">
                                         <button
                                             type="button"
-                                            onclick="toggleTxEditRow(<?= $txId ?>)"
+                                            onclick="toggleTxEditRow(this)"
+                                            data-tx-id="<?= $txId ?>"
+                                            data-tx-cat="<?= e($cKey) ?>"
+                                            data-tx-note="<?= e((string)$tx['note']) ?>"
+                                            data-tx-fixed="<?= (int)$tx['is_fixed_cost'] === 1 ? '1' : '0' ?>"
+                                            data-tx-cparty="<?= e(mb_substr((string)$tx['counterparty'], 0, 28, 'UTF-8')) ?>"
                                             class="px-2 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
                                             title="Kategorie, Fixkosten-Status oder Notiz bearbeiten"
                                         >
                                             ✏️
                                         </button>
-                                    </td>
-                                </tr>
-
-                                <!-- Ausklappbare Bearbeitungszeile -->
-                                <tr id="txEditRow_<?= $txId ?>" class="hidden bg-slate-50 dark:bg-slate-800/70">
-                                    <td colspan="7" class="p-3">
-                                        <div class="flex flex-wrap items-center justify-between gap-3">
-                                            <form method="post" action="banking.php" class="flex flex-wrap items-center gap-2.5 flex-1">
-                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                                <input type="hidden" name="action" value="update_tx">
-                                                <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
-                                                <input type="hidden" name="tx_id" value="<?= $txId ?>">
-
-                                                <select name="category" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                                                    <?php foreach ($bankingCategories as $k => $m): ?>
-                                                        <option value="<?= e($k) ?>" <?= $k === $cKey ? 'selected' : '' ?>>
-                                                            <?= e($m['icon'] . ' ' . $m['label']) ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-
-                                                <input
-                                                    type="text"
-                                                    name="note"
-                                                    value="<?= e((string)$tx['note']) ?>"
-                                                    placeholder="Eigene Notiz / Kommentar..."
-                                                    class="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 w-48 sm:w-64"
-                                                >
-
-                                                <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
-                                                    <input type="checkbox" name="is_fixed_cost" value="1" <?= (int)$tx['is_fixed_cost'] === 1 ? 'checked' : '' ?> class="rounded border-slate-300 text-brand-600">
-                                                    <span>🔄 Fixkosten</span>
-                                                </label>
-
-                                                <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 cursor-pointer">
-                                                    <input type="checkbox" name="save_as_rule" value="1" class="rounded border-slate-300 text-indigo-600">
-                                                    <span>✨ Für „<?= e(mb_substr((string)$tx['counterparty'], 0, 28, 'UTF-8')) ?>“ als Regel merken</span>
-                                                </label>
-
-                                                <button type="submit" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">
-                                                    💾 Speichern
-                                                </button>
-                                            </form>
-
-                                            <form method="post" action="banking.php" onsubmit="return confirm('Diese Buchung wirklich löschen?');">
-                                                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                                <input type="hidden" name="action" value="delete_tx">
-                                                <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
-                                                <input type="hidden" name="tx_id" value="<?= $txId ?>">
-                                                <button type="submit" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100 cursor-pointer">
-                                                    🗑️ Löschen
-                                                </button>
-                                            </form>
-                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -3677,6 +3677,13 @@ require_once __DIR__ . '/includes/header.php';
 <script>
 (function() {
     const initialTab = <?= json_encode($activeTab) ?>;
+    const csrfToken = <?= json_encode($csrfToken) ?>;
+    const selectedAccountId = <?= (int)$selectedAccountId ?>;
+    const categoryOptions = <?= json_encode(array_map(static fn($m) => $m['icon'] . ' ' . $m['label'], $bankingCategories), JSON_UNESCAPED_UNICODE) ?>;
+
+    function escAttr(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     window.switchBankingTab = function(tabName) {
         const tabs = ['cockpit', 'transactions', 'statements', 'settings'];
@@ -3700,11 +3707,71 @@ require_once __DIR__ . '/includes/header.php';
         if (tabInp && (tabName === 'cockpit' || tabName === 'transactions')) {
             tabInp.value = tabName;
         }
+        const topRet = document.getElementById('topBalanceReturnTab');
+        if (topRet) {
+            topRet.value = tabName;
+        }
     };
 
-    window.toggleTxEditRow = function(txId) {
-        const row = document.getElementById('txEditRow_' + txId);
-        if (row) row.classList.toggle('hidden');
+    window.toggleTxEditRow = function(btn) {
+        if (!btn) return;
+        const txId = btn.getAttribute('data-tx-id');
+        if (!txId) return;
+        const existing = document.getElementById('txEditRow_' + txId);
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        const parentTr = btn.closest('tr');
+        if (!parentTr) return;
+
+        const curCat = btn.getAttribute('data-tx-cat') || 'other';
+        const curNote = btn.getAttribute('data-tx-note') || '';
+        const isFixed = btn.getAttribute('data-tx-fixed') === '1';
+        const cparty = btn.getAttribute('data-tx-cparty') || '';
+
+        let optHtml = '';
+        Object.keys(categoryOptions).forEach(k => {
+            const sel = k === curCat ? ' selected' : '';
+            optHtml += '<option value="' + escAttr(k) + '"' + sel + '>' + escAttr(categoryOptions[k]) + '</option>';
+        });
+
+        const editTr = document.createElement('tr');
+        editTr.id = 'txEditRow_' + txId;
+        editTr.className = 'bg-slate-50 dark:bg-slate-800/70';
+        editTr.innerHTML =
+            '<td colspan="7" class="p-3">' +
+                '<div class="flex flex-wrap items-center justify-between gap-3">' +
+                    '<form method="post" action="banking.php" class="flex flex-wrap items-center gap-2.5 flex-1">' +
+                        '<input type="hidden" name="csrf_token" value="' + escAttr(csrfToken) + '">' +
+                        '<input type="hidden" name="action" value="update_tx">' +
+                        '<input type="hidden" name="account_id" value="' + selectedAccountId + '">' +
+                        '<input type="hidden" name="tx_id" value="' + escAttr(txId) + '">' +
+                        '<select name="category" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">' +
+                            optHtml +
+                        '</select>' +
+                        '<input type="text" name="note" value="' + escAttr(curNote) + '" placeholder="Eigene Notiz / Kommentar..." class="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 w-48 sm:w-64">' +
+                        '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">' +
+                            '<input type="checkbox" name="is_fixed_cost" value="1"' + (isFixed ? ' checked' : '') + ' class="rounded border-slate-300 text-brand-600">' +
+                            '<span>🔄 Fixkosten</span>' +
+                        '</label>' +
+                        '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 cursor-pointer">' +
+                            '<input type="checkbox" name="save_as_rule" value="1" class="rounded border-slate-300 text-indigo-600">' +
+                            '<span>✨ Für „' + escAttr(cparty) + '“ als Regel merken</span>' +
+                        '</label>' +
+                        '<button type="submit" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">💾 Speichern</button>' +
+                    '</form>' +
+                    '<form method="post" action="banking.php" onsubmit="return confirm(\'Diese Buchung wirklich löschen?\');">' +
+                        '<input type="hidden" name="csrf_token" value="' + escAttr(csrfToken) + '">' +
+                        '<input type="hidden" name="action" value="delete_tx">' +
+                        '<input type="hidden" name="account_id" value="' + selectedAccountId + '">' +
+                        '<input type="hidden" name="tx_id" value="' + escAttr(txId) + '">' +
+                        '<button type="submit" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100 cursor-pointer">🗑️ Löschen</button>' +
+                    '</form>' +
+                '</div>' +
+            '</td>';
+
+        parentTr.insertAdjacentElement('afterend', editTr);
     };
 
     switchBankingTab(initialTab);

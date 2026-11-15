@@ -499,7 +499,7 @@ function checkGitHubUpdates(PDO $pdo, string $repo = 'uWiiiDev/MiniCloud'): arra
     }
 
     $err = null;
-    $apiUrl = sprintf('https://api.github.com/repos/%s/commits?sha=main&per_page=15', $repo);
+    $apiUrl = sprintf('https://api.github.com/repos/%s/commits?sha=main&per_page=15&_cb=%d', $repo, time());
     $rawJson = fetchUrlBytes($apiUrl, $err);
     if ($rawJson === null) {
         return [
@@ -903,9 +903,9 @@ function performGitHubUpdate(
         }
     }
 
-    $zipUrl = $cleanTargetSha !== ''
+    $zipUrl = $installSha !== ''
         ? sprintf('https://github.com/%s/archive/%s.zip', $repo, $installSha)
-        : sprintf('https://github.com/%s/archive/refs/heads/main.zip', $repo);
+        : sprintf('https://github.com/%s/archive/refs/heads/main.zip?_cb=%d', $repo, time());
 
     $dlErr = null;
     $zipBytes = fetchUrlBytes($zipUrl, $dlErr);
@@ -1016,6 +1016,9 @@ function performGitHubUpdate(
         }
 
         if (@file_put_contents($destPath, $fileContent) !== false) {
+            if (function_exists('opcache_invalidate') && str_ends_with(strtolower($destPath), '.php')) {
+                @opcache_invalidate($destPath, true);
+            }
             $updatedFilesCount++;
         }
     }

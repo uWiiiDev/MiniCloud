@@ -742,6 +742,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'github_repo'                   => 'uWiiiDev/MiniCloud',
         'installed_commit_sha'          => '',
         'installed_commit_date'         => '',
+        'banking_schema_v2'             => '0',
     ];
 
     try {
