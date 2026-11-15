@@ -5271,6 +5271,15 @@ function openMobileFileMenu(fileIdx, canDelete, ev = null) {
     }
     <?php endif; ?>
 
+    // 2c. Als Kontoauszug importieren & auswerten (für PDF- und CSV-Dateien)
+    <?php if (($appSettings['enable_banking'] ?? '1') === '1'): ?>
+    if (!item.isEncrypted && ['pdf', 'csv'].includes(String(item.ext || '').toLowerCase())) {
+        appendMenuActionRow('🏦 Als Kontoauszug importieren & auswerten', 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100', () => {
+            window.location.href = 'banking.php?import_file_id=' + Number(item.id);
+        }, null);
+    }
+    <?php endif; ?>
+
     // 3. Herunterladen
     appendMenuActionRow(item.isEncrypted ? '🔓 Entschlüsseln & Herunterladen' : '⬇️ Datei herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
         if (item.isEncrypted) {

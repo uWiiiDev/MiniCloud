@@ -276,6 +276,17 @@ function getMiniCloudPluginCatalog(): array
             'setting_key'      => 'enable_budget',
             'description'      => 'Einnahmen, Ausgaben, Fixkosten, Sparziele und Monatsbudgets mit Diagrammen und CSV-Export übersichtlich verwalten.',
         ],
+        'banking' => [
+            'id'               => 'banking',
+            'name'             => 'Kontoauszüge & Finanz-Analyse (PDF & CSV)',
+            'icon'             => '🏦',
+            'category'         => 'finance_club',
+            'entry_file'       => 'banking.php',
+            'extra_files'      => [],
+            'needs_map_assets' => false,
+            'setting_key'      => 'enable_banking',
+            'description'      => 'Kontoauszüge im PDF- oder CSV-Format (Postbank, Sparkasse, Volksbank, ING, DKB u.v.m.) hochladen, archivieren, Saldo prüfen und Umsätze automatisch auswerten.',
+        ],
         'split' => [
             'id'               => 'split',
             'name'             => 'Reisekasse & Kostenaufteilung (Split)',

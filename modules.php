@@ -382,6 +382,18 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
+        'key'      => 'banking',
+        'enabled'  => ($appSettings['enable_banking'] ?? '1') === '1',
+        'title'    => 'Kontoauszüge & Analyse',
+        'shortSub' => 'PDF & CSV (Postbank, Sparkasse, VR, ING)',
+        'icon'     => '🏦',
+        'url'      => 'banking.php',
+        'category' => 'finance_club',
+        'desc'     => 'Kontoauszüge im PDF- oder CSV-Format hochladen, automatisch im Ordner Kontoauszüge/ archivieren, Umsätze kategorisieren, Saldo prüfen & Fixkosten/Abos auswerten.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300',
+    ],
+    [
         'key'      => 'club',
         'enabled'  => ($appSettings['enable_club'] ?? '1') === '1',
         'title'    => 'Vereinsverwaltung',
