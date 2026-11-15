@@ -776,6 +776,18 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </a>
                         <?php endif; ?>
 
+                        <?php if ($canUploadHere && $activeFolderMeta !== null && (int)$activeFolderMeta['file_count'] > 0): ?>
+                            <button
+                                type="button"
+                                onclick="openArchiveZipModal({ sourceFolder: <?= e((string)json_encode($currentFolder)) ?>, defaultName: <?= e((string)json_encode(basename($currentFolder) . '.zip')) ?>, summaryText: <?= e((string)json_encode('📁 ' . $currentFolder . ' (' . (int)$activeFolderMeta['file_count'] . ' Dateien)')) ?>, canDelete: <?= ($canUploadHere && $activeGroupFolder === null) || $canWriteActiveGf ? 'true' : 'false' ?> })"
+                                title="Diesen Ordner als ZIP-Archiv komprimieren &amp; Originale optional löschen"
+                                aria-label="Ordner als ZIP archivieren"
+                                class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/70 text-teal-700 dark:text-teal-300 border border-teal-200/70 dark:border-teal-800/60 transition-colors cursor-pointer text-xs leading-none"
+                            >
+                                🗜️
+                            </button>
+                        <?php endif; ?>
+
                         <?php if ($canUploadHere): ?>
                             <button
                                 type="button"
@@ -1850,6 +1862,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </a>
                                     <?php endif; ?>
 
+                                    <?php if ($canUploadHere && $activeSharedFolder === null && $subFileCount > 0): ?>
+                                        <!-- ORDNER ALS ZIP ARCHIVIEREN BUTTON (Anheftbar über ⭐) -->
+                                        <button
+                                            type="button"
+                                            data-file-action="archive"
+                                            onclick="openArchiveZipModal({ sourceFolder: <?= e((string)json_encode($subPath)) ?>, defaultName: <?= e((string)json_encode($subDisplayName . '.zip')) ?>, summaryText: <?= e((string)json_encode('📁 ' . $subPath . ' (' . $subFileCount . ' Dateien · ' . formatBytes($subSize) . ')')) ?>, canDelete: <?= ($canUploadHere && $activeGroupFolder === null) || $canWriteActiveGf ? 'true' : 'false' ?> })"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/70 text-teal-700 dark:text-teal-300 transition-colors cursor-pointer"
+                                            title="Ordner als ZIP archivieren &amp; Original optional löschen"
+                                            aria-label="Ordner als ZIP archivieren"
+                                        >
+                                            <span class="text-xs leading-none">🗜️</span>
+                                        </button>
+                                    <?php endif; ?>
+
                                     <?php if ($canUploadHere && $activeSharedFolder === null): ?>
                                         <!-- ORDNER UMBENENNEN BUTTON (Anheftbar über ⭐) -->
                                         <button
@@ -2256,6 +2282,20 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                     >
                                         <span class="text-xs leading-none">💬</span>
                                     </button>
+
+                                    <?php if ($canManageThisFile && !$isEncrypted && strtolower(pathinfo($origName, PATHINFO_EXTENSION)) !== 'zip'): ?>
+                                        <!-- ALS ZIP ARCHIVIEREN BUTTON (Anheftbar über ⭐) -->
+                                        <button
+                                            type="button"
+                                            data-file-action="archive"
+                                            onclick="openArchiveZipModal({ fileIds: [<?= $fId ?>], defaultName: <?= e((string)json_encode(pathinfo($origName, PATHINFO_FILENAME) . '.zip')) ?>, summaryText: <?= e((string)json_encode('📄 ' . $origName . ' (' . $formattedSize . ')')) ?>, canDelete: <?= $canDeleteThisFile ? 'true' : 'false' ?> })"
+                                            class="hidden items-center justify-center w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/70 text-teal-700 dark:text-teal-300 transition-colors cursor-pointer"
+                                            title="Als ZIP komprimieren &amp; Original optional löschen"
+                                            aria-label="Als ZIP komprimieren / archivieren"
+                                        >
+                                            <span class="text-xs leading-none">🗜️</span>
+                                        </button>
+                                    <?php endif; ?>
 
                                     <?php if ($canManageThisFile): ?>
                                         <!-- DATEI UMBENENNEN BUTTON (Anheftbar über ⭐) -->
@@ -2716,6 +2756,15 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         title="Ausgewählte Dateien als ZIP herunterladen"
     >
         <span>⬇️ ZIP</span>
+    </button>
+    <button
+        type="button"
+        id="btnBatchArchive"
+        onclick="openBatchArchiveModal()"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+        title="Ausgewählte Ordner &amp; Dateien direkt in der Cloud als ZIP-Archiv komprimieren und Originale optional löschen"
+    >
+        <span>🗜️ Archivieren</span>
     </button>
     <button
         type="button"
@@ -3403,6 +3452,156 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
     </div>
 </div>
 
+<!-- ALS ZIP ARCHIVIEREN MODAL (Ordner, Einzeldateien oder Mehrfachauswahl direkt in der Cloud komprimieren & Originale optional löschen) -->
+<div
+    id="archiveZipModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="archiveZipModalTitle"
+>
+    <div class="mc-card bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-bold text-base shrink-0">
+                    🗜️
+                </span>
+                <div class="min-w-0">
+                    <h3 id="archiveZipModalTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                        Als ZIP-Archiv komprimieren
+                    </h3>
+                    <p id="archiveZipModalSub" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onclick="closeArchiveZipModal()"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                aria-label="Schließen"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <form
+            id="archiveZipForm"
+            action="folder_action.php"
+            method="post"
+            onsubmit="const btn = document.getElementById('archiveZipSubmitBtn'); if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Komprimiere...'; }"
+            class="p-5 space-y-4"
+        >
+            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+            <input type="hidden" name="action" value="create_zip_archive">
+            <input type="hidden" name="source_folder" id="archiveZipSourceFolder" value="">
+            <input type="hidden" name="batch_file_ids" id="archiveZipFileIds" value="">
+            <input type="hidden" name="batch_folders" id="archiveZipFolders" value="">
+            <input type="hidden" name="return_folder" value="<?= e($currentFolder) ?>">
+            <?php if ($activeGroupFolder !== null): ?>
+                <input type="hidden" name="group_folder_id" value="<?= (int)$activeGroupFolder['id'] ?>">
+            <?php endif; ?>
+
+            <div>
+                <label for="archiveZipNameInput" class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Name des neuen ZIP-Archivs
+                </label>
+                <input
+                    type="text"
+                    id="archiveZipNameInput"
+                    name="archive_name"
+                    required
+                    maxlength="240"
+                    autocomplete="off"
+                    placeholder="z.B. Steuer_2023.zip"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                    Die Endung <code>.zip</code> wird automatisch ergänzt. Das Archiv kann später jederzeit direkt im Browser inspiziert oder mit 1 Klick wieder entpackt werden.
+                </p>
+            </div>
+
+            <div class="space-y-2">
+                <span class="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Was soll nach dem Komprimieren mit den Originalen passieren?
+                </span>
+
+                <label id="archiveOptTrashWrap" class="flex items-start gap-3 p-3 rounded-xl border border-teal-300 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950/50 transition-colors">
+                    <input
+                        type="radio"
+                        name="after_mode"
+                        id="archiveOptTrash"
+                        value="trash"
+                        checked
+                        class="mt-0.5 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                    >
+                    <div class="text-xs">
+                        <span class="font-bold text-slate-900 dark:text-white block">
+                            🗑️ Originale in den Papierkorb verschieben (Empfohlen)
+                        </span>
+                        <span class="text-slate-500 dark:text-slate-400">
+                            Räumt den Ordner sofort sauber auf. Die Originaldateien bleiben zur Sicherheit noch im Papierkorb wiederherstellbar.
+                        </span>
+                    </div>
+                </label>
+
+                <label id="archiveOptDeletePermWrap" class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 cursor-pointer hover:border-rose-300 dark:hover:border-rose-800 transition-colors">
+                    <input
+                        type="radio"
+                        name="after_mode"
+                        id="archiveOptDeletePerm"
+                        value="delete_permanent"
+                        class="mt-0.5 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    >
+                    <div class="text-xs">
+                        <span class="font-bold text-slate-900 dark:text-white block">
+                            🔥 Originale sofort endgültig löschen (Speicherplatz sofort freigeben)
+                        </span>
+                        <span class="text-slate-500 dark:text-slate-400">
+                            Löscht die unkomprimierten Originale nach erfolgreicher Prüfung des ZIP-Archivs direkt vom Server – spart sofort Speicherplatz &amp; Dateianzahl.
+                        </span>
+                    </div>
+                </label>
+
+                <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                        type="radio"
+                        name="after_mode"
+                        id="archiveOptKeep"
+                        value="keep"
+                        class="mt-0.5 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                    >
+                    <div class="text-xs">
+                        <span class="font-bold text-slate-900 dark:text-white block">
+                            📋 Originale behalten (nur zusätzlich als .zip speichern)
+                        </span>
+                        <span class="text-slate-500 dark:text-slate-400">
+                            Lässt alle Originaldateien und Ordner unverändert und legt das ZIP-Archiv zusätzlich ab.
+                        </span>
+                    </div>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeArchiveZipModal()"
+                    class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                >
+                    Abbrechen
+                </button>
+                <button
+                    type="submit"
+                    id="archiveZipSubmitBtn"
+                    class="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                    🗜️ Jetzt archivieren
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- OFFICE LIGHT: NEUES DOKUMENT / NEUE TABELLE ANLEGEN MODAL -->
 <div
     id="createOfficeModal"
@@ -3843,7 +4042,7 @@ function isZipPreviewable(item) {
         || item.mime === 'application/x-zip-compressed';
 }
 
-function submitZipExtract(fileId, intoSubfolder) {
+function submitZipExtract(fileId, intoSubfolder, deleteZipAfter = null) {
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = 'folder_action.php';
@@ -3857,10 +4056,16 @@ function submitZipExtract(fileId, intoSubfolder) {
         form.appendChild(input);
     };
 
+    const delCb = document.getElementById('zipExtractDeleteAfterCb');
+    const shouldDeleteZip = deleteZipAfter !== null ? Boolean(deleteZipAfter) : Boolean(delCb && delCb.checked);
+
     addField('csrf_token', csrfToken);
     addField('action', 'extract_zip');
     addField('file_id', String(fileId));
     addField('into_subfolder', intoSubfolder ? '1' : '0');
+    if (shouldDeleteZip) {
+        addField('delete_zip_after', '1');
+    }
     const curF = <?= json_encode($currentFolder) ?>;
     if (curF !== '') {
         addField('return_folder', curF);
@@ -4037,23 +4242,29 @@ async function renderPreviewItem(index) {
                                 </p>
                             </div>
                             ${item.canManage ? `
-                                <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-                                    <button
-                                        type="button"
-                                        onclick="submitZipExtract(${Number(item.id)}, true)"
-                                        class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                                        title="Erstellt einen eigenen Unterordner mit dem Namen des ZIP-Archivs und entpackt alle Dateien dorthin"
-                                    >
-                                        📂 In Unterordner entpacken
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onclick="submitZipExtract(${Number(item.id)}, false)"
-                                        class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 text-xs font-semibold transition-colors cursor-pointer"
-                                        title="Entpackt den Inhalt direkt in das aktuelle Verzeichnis"
-                                    >
-                                        📥 Direkt hierhin
-                                    </button>
+                                <div class="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <button
+                                            type="button"
+                                            onclick="submitZipExtract(${Number(item.id)}, true)"
+                                            class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                                            title="Erstellt einen eigenen Unterordner mit dem Namen des ZIP-Archivs und entpackt alle Dateien dorthin"
+                                        >
+                                            📂 In Unterordner entpacken
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onclick="submitZipExtract(${Number(item.id)}, false)"
+                                            class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+                                            title="Entpackt den Inhalt direkt in das aktuelle Verzeichnis"
+                                        >
+                                            📥 Direkt hierhin
+                                        </button>
+                                    </div>
+                                    <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                                        <input type="checkbox" id="zipExtractDeleteAfterCb" class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                                        <span>🗑️ ZIP-Archiv nach dem Entpacken löschen (Papierkorb)</span>
+                                    </label>
                                 </div>
                             ` : ''}
                         </div>
@@ -5000,6 +5211,138 @@ if (renameModal) {
     });
 }
 
+// --- ALS ZIP ARCHIVIEREN MODAL LOGIK ---
+const archiveZipModal = document.getElementById('archiveZipModal');
+const archiveZipModalSub = document.getElementById('archiveZipModalSub');
+const archiveZipSourceFolder = document.getElementById('archiveZipSourceFolder');
+const archiveZipFileIds = document.getElementById('archiveZipFileIds');
+const archiveZipFolders = document.getElementById('archiveZipFolders');
+const archiveZipNameInput = document.getElementById('archiveZipNameInput');
+const archiveOptTrash = document.getElementById('archiveOptTrash');
+const archiveOptDeletePerm = document.getElementById('archiveOptDeletePerm');
+const archiveOptKeep = document.getElementById('archiveOptKeep');
+const archiveOptTrashWrap = document.getElementById('archiveOptTrashWrap');
+const archiveOptDeletePermWrap = document.getElementById('archiveOptDeletePermWrap');
+
+function openArchiveZipModal({ sourceFolder = '', fileIds = [], folders = [], defaultName = '', summaryText = '', canDelete = true } = {}) {
+    if (!archiveZipModal || !archiveZipNameInput) return;
+
+    if (archiveZipSourceFolder) archiveZipSourceFolder.value = sourceFolder || '';
+    if (archiveZipFileIds) archiveZipFileIds.value = Array.isArray(fileIds) ? fileIds.join(',') : '';
+    if (archiveZipFolders) archiveZipFolders.value = (Array.isArray(folders) && folders.length > 0) ? JSON.stringify(folders) : '';
+    if (archiveZipModalSub) archiveZipModalSub.textContent = summaryText || (sourceFolder ? ('📁 ' + sourceFolder) : '');
+
+    const today = <?= json_encode(date('Y-m-d')) ?>;
+    let suggested = defaultName || '';
+    if (!suggested) {
+        if (sourceFolder) {
+            const parts = sourceFolder.split('/').filter(Boolean);
+            suggested = (parts[parts.length - 1] || 'Ordner') + '.zip';
+        } else if (Array.isArray(folders) && folders.length === 1 && (!fileIds || fileIds.length === 0)) {
+            const parts = String(folders[0]).split('/').filter(Boolean);
+            suggested = (parts[parts.length - 1] || 'Ordner') + '.zip';
+        } else {
+            suggested = 'Archiv_' + today + '.zip';
+        }
+    }
+    if (!suggested.toLowerCase().endsWith('.zip')) {
+        suggested += '.zip';
+    }
+    archiveZipNameInput.value = suggested;
+
+    if (archiveOptTrash && archiveOptDeletePerm && archiveOptKeep) {
+        archiveOptTrash.disabled = !canDelete;
+        archiveOptDeletePerm.disabled = !canDelete;
+        if (archiveOptTrashWrap) {
+            archiveOptTrashWrap.classList.toggle('opacity-45', !canDelete);
+            archiveOptTrashWrap.classList.toggle('pointer-events-none', !canDelete);
+        }
+        if (archiveOptDeletePermWrap) {
+            archiveOptDeletePermWrap.classList.toggle('opacity-45', !canDelete);
+            archiveOptDeletePermWrap.classList.toggle('pointer-events-none', !canDelete);
+        }
+        if (canDelete) {
+            archiveOptTrash.checked = true;
+        } else {
+            archiveOptKeep.checked = true;
+        }
+    }
+
+    const submitBtn = document.getElementById('archiveZipSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '🗜️ Jetzt archivieren';
+    }
+
+    archiveZipModal.classList.remove('hidden');
+    archiveZipModal.classList.add('flex');
+
+    setTimeout(() => {
+        archiveZipNameInput.focus();
+        const val = archiveZipNameInput.value;
+        const dotIdx = val.toLowerCase().lastIndexOf('.zip');
+        if (dotIdx > 0) {
+            archiveZipNameInput.setSelectionRange(0, dotIdx);
+        } else {
+            archiveZipNameInput.select();
+        }
+    }, 50);
+}
+
+function closeArchiveZipModal() {
+    if (!archiveZipModal) return;
+    archiveZipModal.classList.add('hidden');
+    archiveZipModal.classList.remove('flex');
+}
+
+function openBatchArchiveModal() {
+    const checkedFileCbs = getSelectedFileCheckboxes();
+    const checkedFolderCbs = getSelectedFolderCheckboxes();
+    const checkedCbs = [...checkedFolderCbs, ...checkedFileCbs];
+    if (checkedCbs.length === 0) return;
+
+    const ids = checkedFileCbs.map(cb => cb.value);
+    const folders = checkedFolderCbs.map(cb => cb.value);
+    const allCanDelete = checkedCbs.every(cb => cb.getAttribute('data-can-delete') === '1');
+
+    let summary = '';
+    if (folders.length > 0 && ids.length > 0) {
+        summary = `☑️ ${folders.length} Ordner & ${ids.length} ${ids.length === 1 ? 'Datei' : 'Dateien'}`;
+    } else if (folders.length > 0) {
+        summary = `☑️ ${folders.length} ${folders.length === 1 ? 'ausgewählter Ordner' : 'ausgewählte Ordner'}`;
+    } else {
+        summary = `☑️ ${ids.length} ${ids.length === 1 ? 'ausgewählte Datei' : 'ausgewählte Dateien'}`;
+    }
+
+    const curFolder = <?= json_encode($currentFolder) ?>;
+    const today = <?= json_encode(date('Y-m-d')) ?>;
+    let defaultZipName = 'Archiv_' + today + '.zip';
+    if (folders.length === 1 && ids.length === 0) {
+        const parts = String(folders[0]).split('/').filter(Boolean);
+        defaultZipName = (parts[parts.length - 1] || 'Ordner') + '.zip';
+    } else if (curFolder !== '') {
+        const parts = curFolder.split('/').filter(Boolean);
+        defaultZipName = (parts[parts.length - 1] || 'Archiv') + '_' + today + '.zip';
+    }
+
+    openArchiveZipModal({
+        sourceFolder: '',
+        fileIds: ids,
+        folders: folders,
+        defaultName: defaultZipName,
+        summaryText: summary,
+        canDelete: allCanDelete
+    });
+}
+
+if (archiveZipModal) {
+    archiveZipModal.addEventListener('click', (e) => {
+        if (e.target === archiveZipModal) {
+            closeArchiveZipModal();
+        }
+    });
+}
+
 // --- OFFICE LIGHT MODAL (Neues Dokument / Neue Tabelle anlegen) ---
 const createOfficeModal = document.getElementById('createOfficeModal');
 const officeCreateNameInput = document.getElementById('officeCreateName');
@@ -5064,7 +5407,7 @@ const mobileDeleteFolder = document.getElementById('mobileDeleteFolder');
 
 const PINNED_FILE_ACTIONS_STORAGE_KEY = 'mc_pinned_file_actions_u<?= (int)$userId ?>';
 const DEFAULT_PINNED_FILE_ACTIONS = ['preview', 'download', 'rename', 'share'];
-const ALL_PINNABLE_FILE_ACTIONS = ['preview', 'office', 'download', 'rename', 'vault', 'meta', 'move', 'share', 'delete'];
+const ALL_PINNABLE_FILE_ACTIONS = ['preview', 'office', 'download', 'archive', 'rename', 'vault', 'meta', 'move', 'share', 'delete'];
 
 function getPinnedFileActions() {
     try {
@@ -5271,6 +5614,9 @@ function appendBatchSelectionContextActions() {
             downloadBatchZip();
         }, null);
     }
+    appendMenuActionRow(`🗜️ Markierte Elemente als ZIP archivieren (${totalChecked})`, 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100', () => {
+        openBatchArchiveModal();
+    }, null);
     appendMenuActionRow(`⇄ Markierte Elemente verschieben / kopieren (${totalChecked})`, 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
         openBatchTransferModal();
     }, null);
@@ -5406,6 +5752,31 @@ function openMobileFileMenu(fileIdx, canDelete, ev = null) {
         }, 'rename');
     }
 
+    // 7a-zip. ZIP entpacken (für .zip Archive) ODER als ZIP komprimieren / archivieren (für alle anderen Dateien)
+    if (!item.isEncrypted && item.canManage) {
+        if (isZipPreviewable(item)) {
+            appendMenuActionRow('📂 ZIP in Unterordner entpacken', 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+                submitZipExtract(item.id, true, false);
+            }, null);
+            if (canDelete) {
+                appendMenuActionRow('📂 ZIP entpacken & ZIP-Archiv löschen', 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100', () => {
+                    submitZipExtract(item.id, true, true);
+                }, null);
+            }
+        } else {
+            const stemIdx = item.name.lastIndexOf('.');
+            const zipDefName = (stemIdx > 0 ? item.name.substring(0, stemIdx) : item.name) + '.zip';
+            appendMenuActionRow('🗜️ Als ZIP komprimieren / archivieren', 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100', () => {
+                openArchiveZipModal({
+                    fileIds: [item.id],
+                    defaultName: zipDefName,
+                    summaryText: `📄 ${item.name} (${item.size})`,
+                    canDelete: Boolean(canDelete)
+                });
+            }, 'archive');
+        }
+    }
+
     // 7b. Verschieben / Kopieren
     appendMenuActionRow('⇄ Verschieben oder kopieren', 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200', () => {
         openTransferModal('file', item.id, item.name, item.rawFolder || '', item.canManage);
@@ -5452,6 +5823,17 @@ function openMobileFolderMenu(displayName, subPath, fileCount, canZip, canShare,
         appendMenuActionRow('⬇️ Ordner als ZIP herunterladen', 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
             window.location.href = customZipUrl || ('download.php?folder=' + encodeURIComponent(subPath));
         }, 'download');
+    }
+
+    if (customOpenUrl === null && fileCount > 0 && <?= $canUploadHere ? 'true' : 'false' ?>) {
+        appendMenuActionRow('🗜️ Ordner als ZIP archivieren', 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100', () => {
+            openArchiveZipModal({
+                sourceFolder: subPath,
+                defaultName: displayName + '.zip',
+                summaryText: `📁 ${subPath} (${fileCount} ${fileCount === 1 ? 'Datei' : 'Dateien'})`,
+                canDelete: Boolean(canDelete || <?= $canWriteActiveGf ? 'true' : 'false' ?>)
+            });
+        }, 'archive');
     }
 
     if (canShare) {

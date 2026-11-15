@@ -1301,9 +1301,10 @@ if ($action === 'inspect_zip') {
 
 // 8. ZIP-Archiv direkt auf dem Server in die Cloud entpacken
 if ($action === 'extract_zip') {
-    $fileId       = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
-    $intoSub      = isset($_POST['into_subfolder']) && (int)$_POST['into_subfolder'] === 1;
-    $returnFolder = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
+    $fileId         = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+    $intoSub        = isset($_POST['into_subfolder']) && (int)$_POST['into_subfolder'] === 1;
+    $deleteZipAfter = isset($_POST['delete_zip_after']) && (int)$_POST['delete_zip_after'] === 1;
+    $returnFolder   = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
 
     if (!class_exists('ZipArchive')) {
         setFlash('error', 'Die PHP-Erweiterung ZipArchive ist auf diesem Server nicht aktiviert.');
@@ -1447,13 +1448,28 @@ if ($action === 'extract_zip') {
 
     $zip->close();
 
+    $trashedZip = false;
+    if ($deleteZipAfter && $extractedCount > 0) {
+        $canDeleteZip = ((int)$file['user_id'] === $userId)
+            || ($targetGfId !== null && canUserAccessGroupFolder($pdo, $userId, $targetGfId, true, $isAdmin))
+            || canUserDeleteSharedFileOrFolder($pdo, $userId, (int)$file['user_id'], $fileId, (string)$file['folder_path']);
+        if ($canDeleteZip) {
+            $pdo->prepare('UPDATE files SET deleted_at = NOW() WHERE id = :id')->execute([':id' => $fileId]);
+            $trashedZip = true;
+        }
+    }
+
     logAuditEvent(
         $pdo,
         'zip_extract',
-        sprintf('ZIP-Archiv "%s" entpackt (%d Dateien in %s)', (string)$file['original_name'], $extractedCount, $baseFolder !== '' ? ('"' . $baseFolder . '"') : 'Hauptverzeichnis')
+        sprintf('ZIP-Archiv "%s" entpackt (%d Dateien in %s)%s', (string)$file['original_name'], $extractedCount, $baseFolder !== '' ? ('"' . $baseFolder . '"') : 'Hauptverzeichnis', $trashedZip ? ', ZIP in Papierkorb verschoben' : '')
     );
 
-    setFlash('success', sprintf('ZIP-Archiv "%s" wurde erfolgreich entpackt (%d %s).', (string)$file['original_name'], $extractedCount, $extractedCount === 1 ? 'Datei' : 'Dateien'));
+    if ($trashedZip) {
+        setFlash('success', sprintf('ZIP-Archiv "%s" wurde entpackt (%d %s) und das ZIP-Archiv in den Papierkorb verschoben.', (string)$file['original_name'], $extractedCount, $extractedCount === 1 ? 'Datei' : 'Dateien'));
+    } else {
+        setFlash('success', sprintf('ZIP-Archiv "%s" wurde erfolgreich entpackt (%d %s).', (string)$file['original_name'], $extractedCount, $extractedCount === 1 ? 'Datei' : 'Dateien'));
+    }
 
     $queryParams = [];
     if ($targetGfId !== null) {
@@ -1464,6 +1480,481 @@ if ($action === 'extract_zip') {
         $queryParams['folder'] = $redirectFolder;
     }
     header('Location: index.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : ''));
+    exit;
+}
+
+// 8b. Dateien / Ordner direkt in der Cloud als ZIP-Archiv komprimieren und Originale optional löschen (Archivieren)
+if ($action === 'create_zip_archive') {
+    $rawArchiveName = isset($_POST['archive_name']) ? trim((string)$_POST['archive_name']) : '';
+    $afterMode      = isset($_POST['after_mode']) ? trim((string)$_POST['after_mode']) : 'trash';
+    if (!in_array($afterMode, ['trash', 'delete_permanent', 'keep'], true)) {
+        $afterMode = 'trash';
+    }
+
+    $sourceFolder   = isset($_POST['source_folder']) ? sanitizeFolderPathInput((string)$_POST['source_folder']) : '';
+    $returnFolder   = isset($_POST['return_folder']) ? sanitizeFolderPathInput((string)$_POST['return_folder']) : '';
+    $rawIds         = isset($_POST['batch_file_ids']) && trim((string)$_POST['batch_file_ids']) !== ''
+        ? explode(',', (string)$_POST['batch_file_ids'])
+        : [];
+    $rawFolders     = [];
+    if (!empty($_POST['batch_folders']) && is_string($_POST['batch_folders'])) {
+        $decodedFolders = json_decode($_POST['batch_folders'], true);
+        if (is_array($decodedFolders)) {
+            $rawFolders = $decodedFolders;
+        }
+    }
+
+    if (!class_exists('ZipArchive')) {
+        setFlash('error', 'Die PHP-Erweiterung ZipArchive ist auf diesem Server nicht aktiviert.');
+        header('Location: index.php');
+        exit;
+    }
+
+    if ($groupFolderId !== null && !canUserAccessGroupFolder($pdo, $userId, $groupFolderId, true, $isAdmin)) {
+        setFlash('error', 'Sie besitzen keine Schreibberechtigung in diesem Gruppenordner.');
+        header('Location: index.php?group_folder=' . $groupFolderId);
+        exit;
+    }
+
+    // Ordnerliste normalisieren & deduplizieren (Überordner vor Unterordnern)
+    $cleanFolders = [];
+    if ($sourceFolder !== '') {
+        $cleanFolders[$sourceFolder] = $sourceFolder;
+    }
+    foreach ($rawFolders as $rf) {
+        $sf = sanitizeFolderPathInput((string)$rf);
+        if ($sf !== '') {
+            $cleanFolders[$sf] = $sf;
+        }
+    }
+    $cleanFolders = array_values($cleanFolders);
+    usort($cleanFolders, static fn(string $a, string $b): int => strlen($a) <=> strlen($b));
+    $foldersToArchive = [];
+    foreach ($cleanFolders as $candFolder) {
+        $covered = false;
+        foreach ($foldersToArchive as $rootPath) {
+            if (str_starts_with($candFolder, $rootPath . '/')) {
+                $covered = true;
+                break;
+            }
+        }
+        if (!$covered) {
+            $foldersToArchive[] = $candFolder;
+        }
+    }
+
+    // Zielordner für das neue .zip-Archiv bestimmen
+    $isSingleFolderMode = ($sourceFolder !== '' && count($foldersToArchive) === 1 && empty($rawIds));
+    if ($isSingleFolderMode) {
+        $targetZipFolder = str_contains($sourceFolder, '/') ? sanitizeFolderPathInput(dirname($sourceFolder)) : '';
+    } else {
+        $targetZipFolder = $returnFolder;
+        foreach ($foldersToArchive as $archRoot) {
+            if ($targetZipFolder === $archRoot || str_starts_with($targetZipFolder, $archRoot . '/')) {
+                $targetZipFolder = str_contains($archRoot, '/') ? sanitizeFolderPathInput(dirname($archRoot)) : '';
+                break;
+            }
+        }
+    }
+
+    // Standard-Archivnamen bilden und bereinigen
+    if ($rawArchiveName === '') {
+        if ($isSingleFolderMode) {
+            $rawArchiveName = basename($sourceFolder) . '.zip';
+        } else {
+            $rawArchiveName = 'Archiv_' . date('Y-m-d_H-i') . '.zip';
+        }
+    }
+    if (!str_ends_with(strtolower($rawArchiveName), '.zip')) {
+        $rawArchiveName .= '.zip';
+    }
+    $cleanArchiveName = sanitizeOriginalFilename($rawArchiveName);
+    if (!str_ends_with(strtolower($cleanArchiveName), '.zip')) {
+        $cleanArchiveName .= '.zip';
+    }
+
+    // Alle zu archivierenden Dateien sammeln (Rechte prüfen & nach Datei-ID deduplizieren)
+    $filesById = [];
+    $zipRelPathById = [];
+
+    foreach ($foldersToArchive as $archFolder) {
+        if ($groupFolderId !== null) {
+            $stmtFolderFiles = $pdo->prepare(
+                'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+                 FROM files
+                 WHERE group_folder_id = :gf_id AND deleted_at IS NULL
+                   AND (folder_path = :exact OR folder_path LIKE :prefix)
+                 ORDER BY folder_path ASC, original_name ASC'
+            );
+            $stmtFolderFiles->execute([
+                ':gf_id'  => $groupFolderId,
+                ':exact'  => $archFolder,
+                ':prefix' => $archFolder . '/%',
+            ]);
+        } else {
+            $stmtFolderFiles = $pdo->prepare(
+                'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+                 FROM files
+                 WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL
+                   AND (folder_path = :exact OR folder_path LIKE :prefix)
+                 ORDER BY folder_path ASC, original_name ASC'
+            );
+            $stmtFolderFiles->execute([
+                ':uid'    => $userId,
+                ':exact'  => $archFolder,
+                ':prefix' => $archFolder . '/%',
+            ]);
+        }
+
+        foreach ($stmtFolderFiles->fetchAll() as $fRow) {
+            $fid = (int)$fRow['id'];
+            $fPath = (string)$fRow['folder_path'];
+            $subRel = ltrim(substr($fPath, strlen($archFolder)), '/');
+            if ($isSingleFolderMode) {
+                $relDirInZip = $subRel;
+            } else {
+                $relDirInZip = basename($archFolder) . ($subRel !== '' ? '/' . $subRel : '');
+            }
+            $filesById[$fid]      = $fRow;
+            $zipRelPathById[$fid] = $relDirInZip;
+        }
+    }
+
+    // Einzelne ausgewählte Dateien hinzufügen
+    if (!empty($rawIds)) {
+        $stmtOne = $pdo->prepare(
+            'SELECT id, user_id, group_folder_id, filename, original_name, folder_path, file_size, mime_type, is_encrypted
+             FROM files
+             WHERE id = :id AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        foreach ($rawIds as $rawId) {
+            $fid = (int)trim((string)$rawId);
+            if ($fid <= 0 || isset($filesById[$fid])) {
+                continue;
+            }
+            $stmtOne->execute([':id' => $fid]);
+            $fRow = $stmtOne->fetch();
+            if (!$fRow) {
+                continue;
+            }
+            $fGfId = !empty($fRow['group_folder_id']) ? (int)$fRow['group_folder_id'] : null;
+            $canAccessFile = ((int)$fRow['user_id'] === $userId)
+                || ($fGfId !== null && canUserAccessGroupFolder($pdo, $userId, $fGfId, $afterMode !== 'keep', $isAdmin))
+                || ($afterMode === 'keep'
+                    ? (getAuthorizedFileForDownload($pdo, $userId, $fid, $isAdmin) !== null)
+                    : canUserDeleteSharedFileOrFolder($pdo, $userId, (int)$fRow['user_id'], $fid, (string)$fRow['folder_path']));
+            if (!$canAccessFile) {
+                continue;
+            }
+            $filesById[$fid]      = $fRow;
+            $zipRelPathById[$fid] = '';
+        }
+    }
+
+    $redirectParams = [];
+    if ($groupFolderId !== null) {
+        $redirectParams['group_folder'] = (string)$groupFolderId;
+    }
+    if ($targetZipFolder !== '') {
+        $redirectParams['folder'] = $targetZipFolder;
+    }
+    $redirectUrl = 'index.php' . (!empty($redirectParams) ? '?' . http_build_query($redirectParams) : '');
+
+    if (empty($filesById)) {
+        setFlash('error', 'Es wurden keine archivierbaren Dateien in der Auswahl gefunden.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    ensureUploadDirReady();
+    $newStoredZip = generateSafeStoredFilename();
+    $destZipPath  = UPLOAD_DIR . $newStoredZip;
+
+    $zip = new ZipArchive();
+    if ($zip->open($destZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        setFlash('error', 'Das ZIP-Archiv konnte auf dem Server nicht angelegt werden.');
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $archivedFileRows  = [];
+    $skippedVaultNames = [];
+    $usedZipEntries    = [];
+    $totalOrigBytes    = 0;
+
+    foreach ($filesById as $fid => $fRow) {
+        $storedName   = basename((string)$fRow['filename']);
+        $physicalPath = UPLOAD_DIR . $storedName;
+        if (!is_file($physicalPath) || !is_readable($physicalPath)) {
+            continue;
+        }
+
+        $origFileName = sanitizeOriginalFilename((string)$fRow['original_name']);
+        $relDir       = $zipRelPathById[$fid] ?? '';
+        $entryPath    = ($relDir !== '' ? $relDir . '/' : '') . $origFileName;
+
+        // Tresor-verschlüsselte Dateien nicht unverschlüsselt packen und niemals löschen!
+        if ((int)($fRow['is_encrypted'] ?? 0) === 1 || isVaultEncryptedFile($physicalPath)) {
+            $skippedVaultNames[] = $entryPath;
+            continue;
+        }
+
+        // Namenskollisionen innerhalb desselben ZIP-Ordners eindeutig auflösen
+        $lowerKey = strtolower($entryPath);
+        if (isset($usedZipEntries[$lowerKey])) {
+            $dotPos   = strrpos($origFileName, '.');
+            $basePart = $dotPos !== false ? substr($origFileName, 0, $dotPos) : $origFileName;
+            $extPart  = $dotPos !== false ? substr($origFileName, $dotPos) : '';
+            $counter  = 2;
+            do {
+                $candName = $basePart . ' (' . $counter . ')' . $extPart;
+                $entryPath = ($relDir !== '' ? $relDir . '/' : '') . $candName;
+                $lowerKey  = strtolower($entryPath);
+                $counter++;
+            } while (isset($usedZipEntries[$lowerKey]));
+        }
+        $usedZipEntries[$lowerKey] = true;
+
+        if ($zip->addFile($physicalPath, $entryPath)) {
+            $archivedFileRows[$fid] = $fRow;
+            $totalOrigBytes += (int)$fRow['file_size'];
+        }
+    }
+
+    $zip->close();
+
+    if (empty($archivedFileRows) || !is_file($destZipPath)) {
+        @unlink($destZipPath);
+        if (!empty($skippedVaultNames)) {
+            setFlash('error', 'Tresor-verschlüsselte Dateien können aus Sicherheitsgründen nicht in ein unverschlüsseltes ZIP-Archiv gepackt werden.');
+        } else {
+            setFlash('error', 'Keine lesbaren Dateien für das ZIP-Archiv gefunden.');
+        }
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    @chmod($destZipPath, 0640);
+    clearstatcache(true, $destZipPath);
+    $zipFileSize = max(0, (int)@filesize($destZipPath));
+    $zipFileHash = @hash_file('sha256', $destZipPath) ?: null;
+
+    // Speicherplatz-Kontingent im persönlichen Bereich prüfen
+    if ($groupFolderId === null) {
+        $stats = getUserStorageStats($pdo, $userId);
+        $netRequiredBytes = ($afterMode === 'delete_permanent')
+            ? max(0, $zipFileSize - $totalOrigBytes)
+            : $zipFileSize;
+
+        if ($netRequiredBytes > (int)$stats['free']) {
+            @unlink($destZipPath);
+            $hint = ($afterMode !== 'delete_permanent')
+                ? ' Tipp: Wählen Sie „Originale sofort endgültig löschen“, um den Speicherplatz der Originaldateien direkt gegenzurechnen.'
+                : '';
+            setFlash(
+                'error',
+                sprintf(
+                    'Nicht genügend freier Speicherplatz für das ZIP-Archiv (%s benötigt, %s frei).%s',
+                    formatBytes($netRequiredBytes),
+                    formatBytes((int)$stats['free']),
+                    $hint
+                )
+            );
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+    }
+
+    if ($targetZipFolder !== '') {
+        registerFolderHierarchy($pdo, $userId, $targetZipFolder, $groupFolderId);
+    }
+
+    // Falls im Zielordner bereits eine gleichnamige .zip-Datei liegt -> Namen eindeutig machen
+    $finalArchiveName = $cleanArchiveName;
+    if ($groupFolderId !== null) {
+        $stmtDupZip = $pdo->prepare(
+            'SELECT COUNT(*) FROM files WHERE group_folder_id = :gf_id AND folder_path = :fp AND original_name = :orig AND deleted_at IS NULL'
+        );
+    } else {
+        $stmtDupZip = $pdo->prepare(
+            'SELECT COUNT(*) FROM files WHERE user_id = :uid AND group_folder_id IS NULL AND folder_path = :fp AND original_name = :orig AND deleted_at IS NULL'
+        );
+    }
+    $dupSuffix = 2;
+    $zipStem   = substr($cleanArchiveName, 0, -4);
+    while (true) {
+        $paramsDup = [
+            ':fp'   => $targetZipFolder,
+            ':orig' => $finalArchiveName,
+        ];
+        if ($groupFolderId !== null) {
+            $paramsDup[':gf_id'] = $groupFolderId;
+        } else {
+            $paramsDup[':uid'] = $userId;
+        }
+        $stmtDupZip->execute($paramsDup);
+        if ((int)$stmtDupZip->fetchColumn() === 0) {
+            break;
+        }
+        $finalArchiveName = $zipStem . ' (' . $dupSuffix . ').zip';
+        $dupSuffix++;
+    }
+
+    // Neues ZIP-Archiv in Datenbank eintragen
+    $stmtInsertZip = $pdo->prepare(
+        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :fhash, :mime, 0)'
+    );
+    $stmtInsertZip->execute([
+        ':uid'   => $userId,
+        ':gf_id' => $groupFolderId,
+        ':fn'    => $newStoredZip,
+        ':orig'  => $finalArchiveName,
+        ':fp'    => $targetZipFolder,
+        ':sz'    => $zipFileSize,
+        ':fhash' => $zipFileHash,
+        ':mime'  => 'application/zip',
+    ]);
+    $newZipFileId = (int)$pdo->lastInsertId();
+
+    // Nachbehandlung der Originaldateien & Originalordner gemäß $afterMode
+    $archivedCount = count($archivedFileRows);
+    $removedFoldersCount = 0;
+
+    if ($afterMode === 'trash') {
+        $stmtTrash = $pdo->prepare('UPDATE files SET deleted_at = NOW() WHERE id = :id');
+        foreach ($archivedFileRows as $fid => $fRow) {
+            $stmtTrash->execute([':id' => $fid]);
+        }
+    } elseif ($afterMode === 'delete_permanent') {
+        $stmtDelPerm = $pdo->prepare('DELETE FROM files WHERE id = :id');
+        foreach ($archivedFileRows as $fid => $fRow) {
+            deletePhysicalFileVersions($pdo, $fid);
+            $phys = UPLOAD_DIR . basename((string)$fRow['filename']);
+            if (is_file($phys)) {
+                @unlink($phys);
+            }
+            $stmtDelPerm->execute([':id' => $fid]);
+        }
+    }
+
+    // Aufgelöste Quellordner bereinigen, sofern keine aktiven Dateien (z.B. übersprungene Tresor-Dateien) mehr darin liegen
+    if ($afterMode !== 'keep' && !empty($foldersToArchive)) {
+        foreach ($foldersToArchive as $archFolder) {
+            if ($groupFolderId !== null) {
+                $stmtRem = $pdo->prepare(
+                    'SELECT COUNT(*) FROM files
+                     WHERE group_folder_id = :gf_id AND deleted_at IS NULL
+                       AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                );
+                $stmtRem->execute([
+                    ':gf_id'  => $groupFolderId,
+                    ':exact'  => $archFolder,
+                    ':prefix' => $archFolder . '/%',
+                ]);
+                $remainingActive = (int)$stmtRem->fetchColumn();
+                if ($remainingActive === 0) {
+                    $pdo->prepare(
+                        'DELETE FROM user_folders
+                         WHERE group_folder_id = :gf_id AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    )->execute([
+                        ':gf_id'  => $groupFolderId,
+                        ':exact'  => $archFolder,
+                        ':prefix' => $archFolder . '/%',
+                    ]);
+                    $removedFoldersCount++;
+                }
+            } else {
+                $stmtRem = $pdo->prepare(
+                    'SELECT COUNT(*) FROM files
+                     WHERE user_id = :uid AND group_folder_id IS NULL AND deleted_at IS NULL
+                       AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                );
+                $stmtRem->execute([
+                    ':uid'    => $userId,
+                    ':exact'  => $archFolder,
+                    ':prefix' => $archFolder . '/%',
+                ]);
+                $remainingActive = (int)$stmtRem->fetchColumn();
+                if ($remainingActive === 0) {
+                    $pdo->prepare(
+                        'DELETE FROM user_folders
+                         WHERE user_id = :uid AND group_folder_id IS NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    )->execute([
+                        ':uid'    => $userId,
+                        ':exact'  => $archFolder,
+                        ':prefix' => $archFolder . '/%',
+                    ]);
+                    $pdo->prepare(
+                        'DELETE FROM shares
+                         WHERE user_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    )->execute([
+                        ':uid'    => $userId,
+                        ':exact'  => $archFolder,
+                        ':prefix' => $archFolder . '/%',
+                    ]);
+                    $pdo->prepare(
+                        'DELETE FROM user_shares
+                         WHERE owner_id = :uid AND folder_path IS NOT NULL AND (folder_path = :exact OR folder_path LIKE :prefix)'
+                    )->execute([
+                        ':uid'    => $userId,
+                        ':exact'  => $archFolder,
+                        ':prefix' => $archFolder . '/%',
+                    ]);
+                    $removedFoldersCount++;
+                }
+            }
+        }
+    }
+
+    $savedBytes = max(0, $totalOrigBytes - $zipFileSize);
+    $savedPct   = $totalOrigBytes > 0 ? round(($savedBytes / $totalOrigBytes) * 100) : 0;
+    $savingsInfo = $savedBytes > 0
+        ? sprintf(', %s / %d%% kleiner', formatBytes($savedBytes), (int)$savedPct)
+        : '';
+
+    if ($afterMode === 'delete_permanent') {
+        $afterText = 'und die Originale sofort endgültig gelöscht';
+    } elseif ($afterMode === 'trash') {
+        $afterText = 'und die Originale in den Papierkorb verschoben';
+    } else {
+        $afterText = '(Originale wurden behalten)';
+    }
+
+    $vaultWarnText = !empty($skippedVaultNames)
+        ? sprintf(' Hinweis: %d Tresor-geschützte Datei(en) wurden aus Sicherheitsgründen unberührt gelassen.', count($skippedVaultNames))
+        : '';
+
+    logAuditEvent(
+        $pdo,
+        'zip_archive_create',
+        sprintf(
+            'ZIP-Archiv "%s" erstellt (%d Dateien, %s -> %s, Modus: %s, Datei-ID #%d)',
+            $finalArchiveName,
+            $archivedCount,
+            formatBytes($totalOrigBytes),
+            formatBytes($zipFileSize),
+            $afterMode,
+            $newZipFileId
+        )
+    );
+
+    setFlash(
+        'success',
+        sprintf(
+            '🗜️ Archiv „%s“ (%s aus %d %s%s) wurde erstellt %s.%s',
+            $finalArchiveName,
+            formatBytes($zipFileSize),
+            $archivedCount,
+            $archivedCount === 1 ? 'Datei' : 'Dateien',
+            $savingsInfo,
+            $afterText,
+            $vaultWarnText
+        )
+    );
+
+    header('Location: ' . $redirectUrl);
     exit;
 }
 
