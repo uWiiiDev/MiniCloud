@@ -462,7 +462,7 @@ function getMiniCloudPluginCatalog(): array
             'icon'             => '📻',
             'category'         => 'media_fun',
             'entry_file'       => 'radio.php',
-            'extra_files'      => [],
+            'extra_files'      => ['includes/footer.php', 'includes/header.php'],
             'needs_map_assets' => false,
             'setting_key'      => 'enable_radio',
             'description'      => 'Über 30.000 Radiosender weltweit live hören – inkl. Mini-Player in der Fußzeile, damit die Musik beim Ordner-Wechseln weiterläuft.',
