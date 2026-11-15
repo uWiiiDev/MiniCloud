@@ -61,6 +61,18 @@ function ensureRadioSchema(PDO $pdo): void
             KEY idx_user (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS tv_radio_saved_songs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            song_title VARCHAR(255) NOT NULL,
+            station_name VARCHAR(160) NOT NULL DEFAULT '',
+            genre VARCHAR(120) NOT NULL DEFAULT '',
+            saved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_user_saved (user_id, saved_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 ensureRadioSchema($pdo);
@@ -609,10 +621,79 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         ]);
         exit;
     }
+
+    // 4e) Aktuell laufenden Song in der persönlichen Song-Merkliste speichern
+    if ($action === 'save_radio_song') {
+        header('Content-Type: application/json; charset=UTF-8');
+        $songTitle   = trim((string)($_POST['song_title'] ?? ''));
+        $stationName = trim((string)($_POST['station_name'] ?? 'Live-Webradio'));
+        $genre       = trim((string)($_POST['genre'] ?? ''));
+        $streamUrl   = trim((string)($_POST['stream_url'] ?? ''));
+
+        // Falls der Client noch keinen konkreten ICY-Songtitel hat, frisch vom Stream abfragen
+        $isGenericTitle = ($songTitle === ''
+            || str_starts_with($songTitle, 'Live-Übertragung')
+            || str_starts_with($songTitle, 'Bereit zum Abspielen')
+            || str_starts_with($songTitle, 'Verbinde mit')
+            || str_starts_with($songTitle, 'Live •')
+            || str_starts_with($songTitle, '📡')
+            || str_starts_with($songTitle, '🔄'));
+
+        if ($isGenericTitle && $streamUrl !== '' && preg_match('~^https?://~i', $streamUrl)) {
+            $freshIcy = fetchIcyStreamTitle($streamUrl);
+            if ($freshIcy !== '') {
+                $songTitle = $freshIcy;
+            }
+        }
+
+        if ($songTitle === '' || str_starts_with($songTitle, 'Bereit zum Abspielen')) {
+            $songTitle = $stationName . ' – Live-Mitschnitt (' . date('d.m. H:i') . ' Uhr)';
+        }
+
+        $insSong = $pdo->prepare("
+            INSERT INTO tv_radio_saved_songs (user_id, song_title, station_name, genre, stream_url)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $insSong->execute([
+            $userId,
+            mb_substr($songTitle, 0, 255),
+            mb_substr($stationName !== '' ? $stationName : 'Webradio', 0, 140),
+            mb_substr($genre, 0, 80),
+            mb_substr($streamUrl, 0, 500),
+        ]);
+
+        $songsStmt = $pdo->prepare("SELECT * FROM tv_radio_saved_songs WHERE user_id = ? ORDER BY saved_at DESC, id DESC LIMIT 100");
+        $songsStmt->execute([$userId]);
+        echo json_encode([
+            'ok'         => true,
+            'saved_song' => $songTitle,
+            'message'    => '❤️ Gemerkt: ' . $songTitle,
+            'songs'      => $songsStmt->fetchAll(PDO::FETCH_ASSOC),
+        ]);
+        exit;
+    }
+
+    // 4f) Gespeicherten Song aus der Song-Merkliste löschen
+    if ($action === 'delete_radio_song') {
+        header('Content-Type: application/json; charset=UTF-8');
+        $songId = (int)($_POST['song_id'] ?? 0);
+        if ($songId > 0) {
+            $delSong = $pdo->prepare("DELETE FROM tv_radio_saved_songs WHERE id = ? AND user_id = ?");
+            $delSong->execute([$songId, $userId]);
+        }
+        $songsStmt = $pdo->prepare("SELECT * FROM tv_radio_saved_songs WHERE user_id = ? ORDER BY saved_at DESC, id DESC LIMIT 100");
+        $songsStmt->execute([$userId]);
+        echo json_encode([
+            'ok'      => true,
+            'message' => 'Song aus der Merkliste entfernt.',
+            'songs'   => $songsStmt->fetchAll(PDO::FETCH_ASSOC),
+        ]);
+        exit;
+    }
 }
 
 // ============================================================================
-// 5. KURATIERTE TOP-WEBRADIOSENDER & BENUTZER-FAVORITEN LADEN
+// 5. KURATIERTE TOP-WEBRADIOSENDER, BENUTZER-FAVORITEN & SONG-MERKLISTE LADEN
 // ============================================================================
 $presetRadioStations = getDefaultPresetRadioStations();
 $presetSyncedAt      = '';
@@ -635,6 +716,10 @@ try {
 $myStationsStmt = $pdo->prepare("SELECT * FROM tv_radio_stations WHERE user_id = ? ORDER BY name ASC");
 $myStationsStmt->execute([$userId]);
 $myFavoriteStations = $myStationsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$mySavedSongsStmt = $pdo->prepare("SELECT * FROM tv_radio_saved_songs WHERE user_id = ? ORDER BY saved_at DESC, id DESC LIMIT 100");
+$mySavedSongsStmt->execute([$userId]);
+$mySavedSongs = $mySavedSongsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $csrfToken = getCsrfToken();
 $pageTitle = '📻 Live-Webradio';
@@ -747,6 +832,14 @@ require_once __DIR__ . '/includes/header.php';
                     </select>
                     <span id="radioSleepCountdown" class="hidden text-[11px] font-mono font-bold text-amber-300"></span>
 
+                    <!-- Aktuellen Song auf die persönliche Song-Merkliste setzen -->
+                    <button type="button" id="btnBookmarkCurrentSong" onclick="bookmarkCurrentRadioSong()"
+                            title="Aktuell laufenden Song (Interpret – Titel + Sender) in deiner Song-Merkliste speichern"
+                            class="px-3 py-1.5 rounded-xl bg-rose-500/25 hover:bg-rose-500/45 border border-rose-400/40 text-xs font-extrabold text-rose-100 cursor-pointer transition flex items-center gap-1.5">
+                        <span id="btnBookmarkCurrentSongIcon">❤️</span>
+                        <span id="btnBookmarkCurrentSongLabel">Song merken</span>
+                    </button>
+
                     <!-- Live-Verkehrsfunk mit Audio-Ducking -->
                     <button type="button" id="btnRadioTrafficBulletin" onclick="triggerRadioTrafficBulletin()"
                             title="Aktuellen Autobahn-Verkehrsfunk über der laufenden Musik ansagen (Musik wird automatisch auf 18% abgesenkt)"
@@ -759,6 +852,7 @@ require_once __DIR__ . '/includes/header.php';
                     </a>
                 </div>
             </div>
+            <div id="radioSongSaveToast" class="hidden mt-2.5 px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-400/40 text-xs font-bold text-rose-100"></div>
             <audio id="globalRadioAudio" preload="none"></audio>
         </div>
     </div>
@@ -840,6 +934,79 @@ require_once __DIR__ . '/includes/header.php';
                                 <input type="hidden" name="station_id" value="<?= (int)$favSt['id'] ?>">
                                 <button type="submit" title="Aus Favoriten entfernen" class="p-1.5 text-slate-400 hover:text-rose-600 text-xs cursor-pointer">✕</button>
                             </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- ================================================================== -->
+        <!-- 2b. MEINE SONG-MERKLISTE (GEHÖRTE LIEBLINGSSONGS)                  -->
+        <!-- ================================================================== -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-sm space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>🎵 Meine Song-Merkliste (Gehörte Lieblingssongs)</span>
+                        <span id="mySavedSongsCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300">
+                            <?= count($mySavedSongs) ?>
+                        </span>
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Klicke oben im Player (oder unten links in der Mini-Leiste) auf „❤️ Song merken“, um den aktuell gespielten Radiotitel samt Sender &amp; Uhrzeit festzuhalten.
+                    </p>
+                </div>
+            </div>
+
+            <div id="mySavedSongsContainer">
+            <?php if (empty($mySavedSongs)): ?>
+                <p class="text-xs text-slate-400 italic">
+                    Noch keine Songs gemerkt. Sobald ein guter Song im Radio läuft, klicke einfach auf „❤️ Song merken“!
+                </p>
+            <?php else: ?>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <?php foreach ($mySavedSongs as $sRow):
+                        $sTitle   = (string)$sRow['song_title'];
+                        $sStation = (string)$sRow['station_name'];
+                        $sTime    = !empty($sRow['saved_at']) ? date('d.m.Y H:i', (int)strtotime((string)$sRow['saved_at'])) : '';
+                        $ytUrl    = 'https://www.youtube.com/results?search_query=' . rawurlencode($sTitle);
+                        $spUrl    = 'https://open.spotify.com/search/' . rawurlencode($sTitle);
+                    ?>
+                        <div class="p-3 rounded-xl bg-rose-50/40 dark:bg-rose-950/15 border border-rose-200/80 dark:border-rose-900/50 flex items-center justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                                <div class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate" title="<?= e($sTitle) ?>">
+                                    🎶 <?= e($sTitle) ?>
+                                </div>
+                                <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                    📻 <?= e($sStation) ?><?= $sTime !== '' ? ' • 🕒 ' . e($sTime) . ' Uhr' : '' ?>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <a href="<?= e($ytUrl) ?>" target="_blank" rel="noopener noreferrer"
+                                   title="Auf YouTube suchen &amp; anhören"
+                                   class="px-2 py-1 rounded-lg bg-red-100 dark:bg-red-950/70 hover:bg-red-200 text-red-700 dark:text-red-300 text-[11px] font-bold">
+                                    ▶️ YT
+                                </a>
+                                <a href="<?= e($spUrl) ?>" target="_blank" rel="noopener noreferrer"
+                                   title="Auf Spotify suchen"
+                                   class="px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 hover:bg-emerald-200 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold">
+                                    🟢 Spotify
+                                </a>
+                                <button type="button"
+                                        data-song-title="<?= e($sTitle) ?>"
+                                        onclick="copySavedSongTitle(this.getAttribute('data-song-title'), this)"
+                                        title="Songtitel in die Zwischenablage kopieren"
+                                        class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold cursor-pointer">
+                                    📋
+                                </button>
+                                <button type="button"
+                                        onclick="deleteSavedRadioSong(<?= (int)$sRow['id'] ?>)"
+                                        title="Aus der Song-Merkliste entfernen"
+                                        class="p-1.5 text-slate-400 hover:text-rose-600 text-xs cursor-pointer">
+                                    ✕
+                                </button>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -1472,6 +1639,171 @@ async function resetRadioStationCatalog() {
             showPresetSyncFeedback(data.message || '↺ Auf Standard-Senderliste zurückgesetzt.', false);
         }
     } catch (e) {}
+}
+
+function renderMySavedSongs(songs) {
+    const container = document.getElementById('mySavedSongsContainer');
+    const badge     = document.getElementById('mySavedSongsCountBadge');
+    if (badge && Array.isArray(songs)) {
+        badge.textContent = String(songs.length);
+    }
+    if (!container || !Array.isArray(songs)) return;
+
+    if (songs.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Noch keine Songs gemerkt. Sobald ein guter Song im Radio läuft, klicke einfach auf „❤️ Song merken“!</p>`;
+        return;
+    }
+
+    const cards = songs.map((s) => {
+        const sTitle   = String(s.song_title || '');
+        const sStation = String(s.station_name || 'Webradio');
+        const safeTit  = escapeHtml(sTitle);
+        const safeSt   = escapeHtml(sStation);
+        const ytUrl    = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(sTitle);
+        const spUrl    = 'https://open.spotify.com/search/' + encodeURIComponent(sTitle);
+
+        let timeStr = '';
+        if (s.saved_at) {
+            const d = new Date(String(s.saved_at).replace(' ', 'T'));
+            if (!isNaN(d.getTime())) {
+                const pad = (n) => String(n).padStart(2, '0');
+                timeStr = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr`;
+            } else {
+                timeStr = escapeHtml(String(s.saved_at));
+            }
+        }
+
+        return `
+            <div class="p-3 rounded-xl bg-rose-50/40 dark:bg-rose-950/15 border border-rose-200/80 dark:border-rose-900/50 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate" title="${safeTit}">
+                        🎶 ${safeTit}
+                    </div>
+                    <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        📻 ${safeSt}${timeStr ? ' • 🕒 ' + timeStr : ''}
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <a href="${escapeHtml(ytUrl)}" target="_blank" rel="noopener noreferrer"
+                       title="Auf YouTube suchen &amp; anhören"
+                       class="px-2 py-1 rounded-lg bg-red-100 dark:bg-red-950/70 hover:bg-red-200 text-red-700 dark:text-red-300 text-[11px] font-bold">
+                        ▶️ YT
+                    </a>
+                    <a href="${escapeHtml(spUrl)}" target="_blank" rel="noopener noreferrer"
+                       title="Auf Spotify suchen"
+                       class="px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 hover:bg-emerald-200 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold">
+                        🟢 Spotify
+                    </a>
+                    <button type="button"
+                            data-song-title="${safeTit}"
+                            onclick="copySavedSongTitle(this.getAttribute('data-song-title'), this)"
+                            title="Songtitel in die Zwischenablage kopieren"
+                            class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold cursor-pointer">
+                        📋
+                    </button>
+                    <button type="button"
+                            onclick="deleteSavedRadioSong(${Number(s.id)})"
+                            title="Aus der Song-Merkliste entfernen"
+                            class="p-1.5 text-slate-400 hover:text-rose-600 text-xs cursor-pointer">
+                        ✕
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">${cards}</div>`;
+}
+window.renderMySavedSongs = renderMySavedSongs;
+
+async function bookmarkCurrentRadioSong() {
+    const btn   = document.getElementById('btnBookmarkCurrentSong');
+    const icon  = document.getElementById('btnBookmarkCurrentSongIcon');
+    const label = document.getElementById('btnBookmarkCurrentSongLabel');
+    const toast = document.getElementById('radioSongSaveToast');
+
+    const st = readSavedRadioState() || activeRadioStation || DEFAULT_RADIO_STATION || {};
+    const domSongEl = document.getElementById('radioCurrentSongTitle');
+    const domStEl   = document.getElementById('radioCurrentStationName');
+
+    const songTitle   = (st.songTitle || (domSongEl ? domSongEl.textContent : '') || '').trim();
+    const stationName = (st.name || (domStEl ? domStEl.textContent : '') || 'Live-Webradio').trim();
+    const genre       = (st.genre || '').trim();
+    const streamUrl   = (st.streamUrl || st.stream_url || '').trim();
+
+    if (btn) btn.disabled = true;
+    if (icon) icon.textContent = '⏳';
+
+    try {
+        const fd = new FormData();
+        fd.set('csrf_token', RADIO_CSRF);
+        fd.set('action', 'save_radio_song');
+        fd.set('song_title', songTitle);
+        fd.set('station_name', stationName);
+        fd.set('genre', genre);
+        fd.set('stream_url', streamUrl);
+
+        const res  = await fetch('radio.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+            if (Array.isArray(data.songs)) {
+                renderMySavedSongs(data.songs);
+            }
+            if (data.saved_song && domSongEl) {
+                domSongEl.textContent = data.saved_song;
+                writeSavedRadioState({ songTitle: data.saved_song });
+            }
+            if (icon) icon.textContent = '✅';
+            if (label) label.textContent = 'Gemerkt!';
+            if (toast) {
+                toast.textContent = data.message || '❤️ Song in deiner Merkliste gespeichert!';
+                toast.classList.remove('hidden');
+                setTimeout(() => toast.classList.add('hidden'), 4500);
+            }
+        }
+    } catch (e) {
+    } finally {
+        setTimeout(() => {
+            if (btn) btn.disabled = false;
+            if (icon) icon.textContent = '❤️';
+            if (label) label.textContent = 'Song merken';
+        }, 1600);
+    }
+}
+
+async function deleteSavedRadioSong(songId) {
+    try {
+        const fd = new FormData();
+        fd.set('csrf_token', RADIO_CSRF);
+        fd.set('action', 'delete_radio_song');
+        fd.set('song_id', String(songId));
+        const res  = await fetch('radio.php', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (data && data.ok && Array.isArray(data.songs)) {
+            renderMySavedSongs(data.songs);
+        }
+    } catch (e) {}
+}
+
+function copySavedSongTitle(title, btnEl) {
+    if (!title) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(title).then(() => {
+            if (btnEl) {
+                const orig = btnEl.textContent;
+                btnEl.textContent = '✅';
+                setTimeout(() => { btnEl.textContent = orig; }, 1400);
+            }
+        }).catch(() => {});
+    }
 }
 
 window.addEventListener('DOMContentLoaded', () => {

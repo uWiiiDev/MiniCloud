@@ -1760,6 +1760,13 @@ if (
                    class="hidden sm:block w-14 accent-emerald-400 cursor-pointer">
         </div>
 
+        <!-- Aktuellen Song auf die persönliche Song-Merkliste setzen -->
+        <button type="button" id="mcMiniRadioBookmarkBtn" onclick="window.McGlobalRadio && window.McGlobalRadio.bookmarkCurrentSong(this)"
+                class="w-8 h-8 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+                title="Aktuellen Song in deiner Song-Merkliste speichern">
+            ❤️
+        </button>
+
         <!-- Zum Radio-Modul öffnen -->
         <a href="radio.php" id="mcMiniRadioOpenBtn"
            class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition-colors shrink-0"
@@ -1780,6 +1787,7 @@ if (
 <script>
 (() => {
     const STATE_KEY = 'mc_global_radio_state_v1';
+    const GLOBAL_RADIO_CSRF = <?= json_encode(function_exists('getCsrfToken') ? getCsrfToken() : ($_SESSION['csrf_token'] ?? '')) ?>;
 
     // Falls diese Seite bereits im nahtlosen Radio-Viewport-Iframe läuft,
     // nutze direkt die Audio-Instanz des Elternfensters (0 ms Unterbrechung).
@@ -2278,6 +2286,44 @@ if (
         },
         syncFromState: () => {
             updateMiniBarUi();
+        },
+        bookmarkCurrentSong: async (btnEl) => {
+            const st = getState() || {};
+            const btn = btnEl || document.getElementById('mcMiniRadioBookmarkBtn');
+            if (btn) btn.textContent = '⏳';
+            try {
+                const fd = new FormData();
+                fd.set('csrf_token', GLOBAL_RADIO_CSRF);
+                fd.set('action', 'save_radio_song');
+                fd.set('song_title', String(st.songTitle || ''));
+                fd.set('station_name', String(st.name || 'Live-Webradio'));
+                fd.set('genre', String(st.genre || ''));
+                fd.set('stream_url', String(st.streamUrl || ''));
+                const res = await fetch('radio.php', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: fd
+                });
+                const d = await res.json();
+                if (d && d.ok) {
+                    if (d.saved_song) {
+                        saveState({ songTitle: d.saved_song });
+                        updateMiniBarUi();
+                    }
+                    if (typeof window.renderMySavedSongs === 'function' && Array.isArray(d.songs)) {
+                        window.renderMySavedSongs(d.songs);
+                    }
+                    if (btn) btn.textContent = '✅';
+                } else if (btn) {
+                    btn.textContent = '⚠️';
+                }
+            } catch (e) {
+                if (btn) btn.textContent = '⚠️';
+            } finally {
+                setTimeout(() => {
+                    if (btn) btn.textContent = '❤️';
+                }, 1500);
+            }
         },
         notifyChildPageLoaded: (childWin) => {
             try {

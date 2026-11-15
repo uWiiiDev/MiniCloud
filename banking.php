@@ -55,12 +55,12 @@ function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): vo
     static $initialized = false;
     if (
         $initialized ||
-        (!empty($_SESSION['_mc_banking_schema_v3_ok']) && $_SESSION['_mc_banking_schema_v3_ok'] === 1) ||
-        (($appSettings['banking_schema_v2'] ?? '0') === '1')
+        (!empty($_SESSION['_mc_banking_schema_v4_ok']) && $_SESSION['_mc_banking_schema_v4_ok'] === 1) ||
+        (($appSettings['banking_schema_v4'] ?? '0') === '1')
     ) {
         $initialized = true;
         if (session_status() === PHP_SESSION_ACTIVE) {
-            $_SESSION['_mc_banking_schema_v3_ok'] = 1;
+            $_SESSION['_mc_banking_schema_v4_ok'] = 1;
         }
         return;
     }
@@ -130,6 +130,7 @@ function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): vo
             `statement_id` INT UNSIGNED DEFAULT NULL,
             `user_id` INT NOT NULL,
             `file_id` INT DEFAULT NULL,
+            `receipt_file_id` INT DEFAULT NULL,
             `booking_date` VARCHAR(20) NOT NULL,
             `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
             `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
@@ -149,6 +150,16 @@ function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): vo
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    // Automatische Spalten-Migration für PDF-/Beleg-Anhang pro Buchung (receipt_file_id)
+    try {
+        $colChkTx = $pdo->query("SHOW COLUMNS FROM `bank_transactions` LIKE 'receipt_file_id'");
+        if ($colChkTx && $colChkTx->rowCount() === 0) {
+            $pdo->exec("ALTER TABLE `bank_transactions` ADD COLUMN `receipt_file_id` INT DEFAULT NULL AFTER `file_id`");
+        }
+    } catch (Throwable $e) {
+        // Ignorieren, falls bereits vorhanden
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `bank_rules` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -165,12 +176,13 @@ function ensureBankingSchema(PDO $pdo, int $userId, array $appSettings = []): vo
     if (function_exists('saveAppSetting')) {
         try {
             saveAppSetting($pdo, 'banking_schema_v2', '1');
+            saveAppSetting($pdo, 'banking_schema_v4', '1');
         } catch (Throwable $e) {
             // Ignorieren
         }
     }
     if (session_status() === PHP_SESSION_ACTIVE) {
-        $_SESSION['_mc_banking_schema_v3_ok'] = 1;
+        $_SESSION['_mc_banking_schema_v4_ok'] = 1;
     }
 }
 
@@ -1309,6 +1321,95 @@ function archiveStatementInCloudFiles(PDO $pdo, int $userId, string $accountName
 }
 
 /**
+ * Speichert einen hochgeladenen Rechnungs-/Quittungs-Beleg im Cloud-Dateisystem unter Belege & Rechnungen/<Jahr>/
+ * und gibt die neue `files.id` zurück.
+ */
+function archiveReceiptInCloudFiles(PDO $pdo, int $userId, int $year, string $originalName, string $tmpOrSourcePath): ?int
+{
+    if (!is_file($tmpOrSourcePath)) {
+        return null;
+    }
+    $size = (int)@filesize($tmpOrSourcePath);
+    if ($size <= 0) {
+        return null;
+    }
+
+    $ext = strtolower((string)pathinfo($originalName, PATHINFO_EXTENSION));
+    $allowedReceiptExts = [
+        'pdf'  => 'application/pdf',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png'  => 'image/png',
+        'webp' => 'image/webp',
+        'doc'  => 'application/msword',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'txt'  => 'text/plain',
+    ];
+    if (!isset($allowedReceiptExts[$ext])) {
+        return null;
+    }
+    $mimeType = $allowedReceiptExts[$ext];
+
+    $yearFolder = ($year >= 2000 && $year <= 2100) ? (string)$year : date('Y');
+    $folderPath = extractSanitizedFolderPath('Belege & Rechnungen/' . $yearFolder . '/placeholder');
+
+    if (!is_dir(UPLOAD_DIR)) {
+        @mkdir(UPLOAD_DIR, 0750, true);
+    }
+
+    do {
+        $storedName = generateSafeStoredFilename();
+        $destPath   = UPLOAD_DIR . $storedName;
+    } while (file_exists($destPath));
+
+    if (!@copy($tmpOrSourcePath, $destPath)) {
+        return null;
+    }
+    @chmod($destPath, 0640);
+
+    $fileHash      = @hash_file('sha256', $destPath) ?: null;
+    $cleanOrigName = sanitizeOriginalFilename($originalName);
+
+    try {
+        $parts = explode('/', $folderPath);
+        $accum = '';
+        foreach ($parts as $p) {
+            if ($p === '') {
+                continue;
+            }
+            $accum = $accum === '' ? $p : ($accum . '/' . $p);
+            $fStmt = $pdo->prepare("INSERT IGNORE INTO user_folders (user_id, folder_path) VALUES (:uid, :fp)");
+            $fStmt->execute([':uid' => $userId, ':fp' => $accum]);
+        }
+    } catch (Throwable $e) {
+    }
+
+    $ins = $pdo->prepare("
+        INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+        VALUES (:uid, NULL, :stored, :orig, :folder, :size, :hash, :mime, 0)
+    ");
+    $ins->execute([
+        ':uid'    => $userId,
+        ':stored' => $storedName,
+        ':orig'   => $cleanOrigName,
+        ':folder' => $folderPath,
+        ':size'   => $size,
+        ':hash'   => $fileHash,
+        ':mime'   => $mimeType,
+    ]);
+    $fileId = (int)$pdo->lastInsertId();
+
+    if ($fileId > 0 && function_exists('indexFileForFulltextSearch')) {
+        try {
+            indexFileForFulltextSearch($pdo, $fileId);
+        } catch (Throwable $e) {
+        }
+    }
+
+    return $fileId > 0 ? $fileId : null;
+}
+
+/**
  * Speichert geparste Umsätze und den Kontoauszugs-Datensatz in der Datenbank,
  * führt die automatische Kategorisierung sowie die Cent-genaue Saldo-Prüfung durch.
  *
@@ -1766,14 +1867,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $fixed = $auto['is_fixed_cost'];
                     }
                 }
+
+                // Optionaler PDF-/Bild-Beleg (entweder vorhandene Cloud-Datei oder Direkt-Upload)
+                $receiptFileId = null;
+                $reqReceiptId  = (int)($_POST['receipt_file_id'] ?? 0);
+                if ($reqReceiptId > 0) {
+                    $chkF = $pdo->prepare("SELECT id FROM files WHERE id = :fid AND user_id = :uid AND deleted_at IS NULL LIMIT 1");
+                    $chkF->execute([':fid' => $reqReceiptId, ':uid' => $userId]);
+                    if ($chkF->fetchColumn()) {
+                        $receiptFileId = $reqReceiptId;
+                    }
+                }
+                if (
+                    isset($_FILES['receipt_upload']) &&
+                    is_array($_FILES['receipt_upload']) &&
+                    (int)($_FILES['receipt_upload']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK &&
+                    !empty($_FILES['receipt_upload']['tmp_name'])
+                ) {
+                    $txYear = (int)substr($bDate, 0, 4) ?: (int)date('Y');
+                    $upId   = archiveReceiptInCloudFiles(
+                        $pdo,
+                        $userId,
+                        $txYear,
+                        (string)($_FILES['receipt_upload']['name'] ?? 'Beleg.pdf'),
+                        (string)$_FILES['receipt_upload']['tmp_name']
+                    );
+                    if ($upId !== null) {
+                        $receiptFileId = $upId;
+                    }
+                }
+
                 $hash = buildBankTransactionHash($bDate, $amt, $cparty, $purp, random_int(100, 999999));
                 $ins  = $pdo->prepare("
                     INSERT INTO bank_transactions (
-                        account_id, statement_id, user_id, file_id, booking_date, valuta_date,
+                        account_id, statement_id, user_id, file_id, receipt_file_id, booking_date, valuta_date,
                         booking_type, counterparty, purpose, iban, amount, currency,
                         category, is_fixed_cost, note, tx_hash
                     ) VALUES (
-                        :aid, NULL, :uid, NULL, :bdate, :bdate,
+                        :aid, NULL, :uid, NULL, :rfid, :bdate, :bdate,
                         :btype, :cparty, :purp, '', :amt, 'EUR',
                         :cat, :fixed, :note, :hash
                     )
@@ -1781,6 +1912,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute([
                     ':aid'    => $selectedAccountId,
                     ':uid'    => $userId,
+                    ':rfid'   => $receiptFileId,
                     ':bdate'  => $bDate,
                     ':btype'  => $btype,
                     ':cparty' => $cparty,
@@ -1791,12 +1923,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':note'   => $note,
                     ':hash'   => $hash,
                 ]);
-                $flashSuccess = '✅ Buchung wurde gespeichert.';
+                $flashSuccess = '✅ Buchung wurde gespeichert' . ($receiptFileId !== null ? ' (inkl. verknüpftem Beleg).' : '.');
             }
             $activeTab = 'transactions';
         }
 
-        // 5. Buchung inline aktualisieren (Kategorie, Fixkosten-Flag, Notiz + optional als Regel merken)
+        // 5. Buchung inline aktualisieren (Kategorie, Fixkosten-Flag, Notiz, PDF-/Rechnungs-Beleg + optional als Regel merken)
         elseif ($action === 'update_tx') {
             $txId       = (int)($_POST['tx_id'] ?? 0);
             $newCat     = trim((string)($_POST['category'] ?? 'other'));
@@ -1813,18 +1945,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $txRow = $txStmt->fetch(PDO::FETCH_ASSOC);
 
             if ($txRow) {
+                $receiptFileId = isset($txRow['receipt_file_id']) && (int)$txRow['receipt_file_id'] > 0
+                    ? (int)$txRow['receipt_file_id']
+                    : null;
+
+                if (array_key_exists('receipt_file_id', $_POST)) {
+                    $reqReceiptId = (int)$_POST['receipt_file_id'];
+                    if ($reqReceiptId <= 0) {
+                        $receiptFileId = null;
+                    } else {
+                        $chkF = $pdo->prepare("SELECT id FROM files WHERE id = :fid AND user_id = :uid AND deleted_at IS NULL LIMIT 1");
+                        $chkF->execute([':fid' => $reqReceiptId, ':uid' => $userId]);
+                        if ($chkF->fetchColumn()) {
+                            $receiptFileId = $reqReceiptId;
+                        }
+                    }
+                }
+
+                $uploadedNewReceipt = false;
+                if (
+                    isset($_FILES['receipt_upload']) &&
+                    is_array($_FILES['receipt_upload']) &&
+                    (int)($_FILES['receipt_upload']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK &&
+                    !empty($_FILES['receipt_upload']['tmp_name'])
+                ) {
+                    $txYear = (int)substr((string)($txRow['booking_date'] ?? ''), 0, 4) ?: (int)date('Y');
+                    $upId   = archiveReceiptInCloudFiles(
+                        $pdo,
+                        $userId,
+                        $txYear,
+                        (string)($_FILES['receipt_upload']['name'] ?? 'Beleg.pdf'),
+                        (string)$_FILES['receipt_upload']['tmp_name']
+                    );
+                    if ($upId !== null) {
+                        $receiptFileId      = $upId;
+                        $uploadedNewReceipt = true;
+                    }
+                }
+
                 $upd = $pdo->prepare("
                     UPDATE bank_transactions
-                    SET category = :cat, is_fixed_cost = :fixed, note = :note
+                    SET category = :cat, is_fixed_cost = :fixed, note = :note, receipt_file_id = :rfid
                     WHERE id = :id AND user_id = :uid
                 ");
                 $upd->execute([
                     ':cat'   => $newCat,
                     ':fixed' => $isFixed,
                     ':note'  => $note,
+                    ':rfid'  => $receiptFileId,
                     ':id'    => $txId,
                     ':uid'   => $userId,
                 ]);
+
+                $receiptHint = $uploadedNewReceipt
+                    ? ' (Beleg in „Belege & Rechnungen“ archiviert & angehängt)'
+                    : ($receiptFileId !== null ? ' (inkl. verknüpftem Beleg)' : '');
 
                 if ($saveAsRule && trim((string)$txRow['counterparty']) !== '') {
                     $kw = trim((string)$txRow['counterparty']);
@@ -1843,9 +2018,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':uid'    => $userId,
                         ':kwlike' => '%' . mb_strtolower($kw, 'UTF-8') . '%',
                     ]);
-                    $flashSuccess = sprintf('✅ Buchung aktualisiert und Regel für „%s“ auf alle passenden Umsätze angewendet.', $kw);
+                    $flashSuccess = sprintf('✅ Buchung aktualisiert%s und Regel für „%s“ auf alle passenden Umsätze angewendet.', $receiptHint, $kw);
                 } else {
-                    $flashSuccess = '✅ Buchung aktualisiert.';
+                    $flashSuccess = '✅ Buchung aktualisiert' . $receiptHint . '.';
                 }
             }
             $activeTab = 'transactions';
@@ -2119,9 +2294,10 @@ if (empty($availableYears)) {
 
 // Alle Buchungen des aktiven Kontos (für Cockpit-Diagramme, Saldo-Verlauf & Fixkosten-Radar)
 $allTxStmt = $pdo->prepare("
-    SELECT t.*, s.filename AS statement_filename
+    SELECT t.*, s.filename AS statement_filename, rf.original_name AS receipt_filename
     FROM bank_transactions t
     LEFT JOIN bank_statements s ON s.id = t.statement_id
+    LEFT JOIN files rf ON rf.id = t.receipt_file_id AND rf.deleted_at IS NULL
     WHERE t.user_id = :uid AND t.account_id = :aid
     ORDER BY t.booking_date DESC, t.id DESC
 ");
@@ -2371,6 +2547,26 @@ $cloudDocsStmt = $pdo->prepare("
 ");
 $cloudDocsStmt->execute([':uid' => $userId]);
 $cloudBankCandidateFiles = $cloudDocsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+// Vorhandene Beleg-/Rechnungs-Dateien (PDF, Bilder, Dokumente) in der Cloud für die Beleg-Verknüpfung an Buchungen laden
+$cloudReceiptsStmt = $pdo->prepare("
+    SELECT id, original_name, folder_path, file_size, upload_date
+    FROM files
+    WHERE user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0
+      AND (
+          LOWER(original_name) LIKE '%.pdf'
+          OR LOWER(original_name) LIKE '%.jpg'
+          OR LOWER(original_name) LIKE '%.jpeg'
+          OR LOWER(original_name) LIKE '%.png'
+          OR LOWER(original_name) LIKE '%.webp'
+          OR LOWER(original_name) LIKE '%.doc'
+          OR LOWER(original_name) LIKE '%.docx'
+      )
+    ORDER BY upload_date DESC
+    LIMIT 150
+");
+$cloudReceiptsStmt->execute([':uid' => $userId]);
+$cloudReceiptCandidateFiles = $cloudReceiptsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $preselectedCloudFileId = isset($_GET['import_file_id']) ? (int)$_GET['import_file_id'] : 0;
 if ($preselectedCloudFileId > 0 && $_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -3042,9 +3238,9 @@ require_once __DIR__ . '/includes/header.php';
         <!-- Manuelle Buchung erfassen (ausklappbar) -->
         <details class="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-4">
             <summary class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 cursor-pointer select-none">
-                ➕ Einzelne Buchung manuell nachtragen
+                ➕ Einzelne Buchung manuell nachtragen (optional mit PDF-/Rechnungs-Beleg)
             </summary>
-            <form method="post" action="banking.php" class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <form method="post" action="banking.php" enctype="multipart/form-data" class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
                 <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
                 <input type="hidden" name="action" value="add_manual_tx">
                 <input type="hidden" name="account_id" value="<?= (int)$selectedAccountId ?>">
@@ -3074,15 +3270,20 @@ require_once __DIR__ . '/includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="sm:col-span-2 flex items-center gap-2 pt-4">
+                <div class="sm:col-span-2">
+                    <label class="block text-[11px] font-bold text-slate-500 mb-1">📎 Beleg / Rechnung hochladen (optional)</label>
+                    <input type="file" name="receipt_upload" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                           class="w-full px-2.5 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                </div>
+                <div class="sm:col-span-1 flex items-center gap-2 pt-4">
                     <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
                         <input type="checkbox" name="is_fixed_cost" value="1" class="rounded border-slate-300 text-brand-600">
-                        <span>🔄 Als regelmäßige Fixkosten / Abo markieren</span>
+                        <span>🔄 Fixkosten</span>
                     </label>
                 </div>
-                <div class="sm:col-span-2 text-right">
-                    <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">
-                        💾 Buchung speichern
+                <div class="sm:col-span-1 text-right">
+                    <button type="submit" class="w-full px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">
+                        💾 Speichern
                     </button>
                 </div>
             </form>
@@ -3096,7 +3297,7 @@ require_once __DIR__ . '/includes/header.php';
                         📑 Gebuchte Umsätze (<?= count($filteredTransactions) ?>)
                     </h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                        Inklusive rückwärts berechnetem <strong>Kontostand nach jeder Buchung</strong>. Klicken Sie auf ✏️ bei einer Buchung, um die Kategorie oder Regel anzupassen.
+                        Inklusive rückwärts berechnetem <strong>Kontostand nach jeder Buchung</strong>. Klicken Sie auf 📎 oder ✏️ bei einer Buchung, um einen PDF-Beleg / eine Rechnung anzuhängen oder die Kategorie anzupassen.
                     </p>
                 </div>
 
@@ -3127,7 +3328,7 @@ require_once __DIR__ . '/includes/header.php';
                                 <th class="py-3 px-3">Datum</th>
                                 <th class="py-3 px-3">Empfänger / Auftraggeber &amp; Verwendungszweck</th>
                                 <th class="py-3 px-3">Kategorie</th>
-                                <th class="py-3 px-3">Auszug</th>
+                                <th class="py-3 px-3">Auszug &amp; Beleg</th>
                                 <th class="py-3 px-3 text-right">Betrag</th>
                                 <th class="py-3 px-3 text-right">Saldo danach</th>
                                 <th class="py-3 px-3 text-right">Aktion</th>
@@ -3135,12 +3336,14 @@ require_once __DIR__ . '/includes/header.php';
                         </thead>
                         <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800">
                             <?php foreach ($filteredTransactions as $tx):
-                                $amt      = (float)$tx['amount'];
-                                $balAfter = (float)($tx['balance_after'] ?? 0.0);
-                                $cKey     = (string)$tx['category'];
-                                $cMeta    = $bankingCategories[$cKey] ?? $bankingCategories['other'];
-                                $txId     = (int)$tx['id'];
-                                $fId      = (int)($tx['file_id'] ?? 0);
+                                $amt         = (float)$tx['amount'];
+                                $balAfter    = (float)($tx['balance_after'] ?? 0.0);
+                                $cKey        = (string)$tx['category'];
+                                $cMeta       = $bankingCategories[$cKey] ?? $bankingCategories['other'];
+                                $txId        = (int)$tx['id'];
+                                $fId         = (int)($tx['file_id'] ?? 0);
+                                $receiptId   = (int)($tx['receipt_file_id'] ?? 0);
+                                $receiptName = trim((string)($tx['receipt_filename'] ?? ''));
                             ?>
                                 <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 align-top">
                                     <td class="py-3 px-3 whitespace-nowrap">
@@ -3173,6 +3376,16 @@ require_once __DIR__ . '/includes/header.php';
                                                 📝 <?= e((string)$tx['note']) ?>
                                             </p>
                                         <?php endif; ?>
+                                        <?php if ($receiptId > 0): ?>
+                                            <div class="mt-1">
+                                                <a href="download.php?id=<?= $receiptId ?>&amp;inline=1"
+                                                   target="_blank"
+                                                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/70 hover:bg-emerald-100">
+                                                    <span>📎 Beleg:</span>
+                                                    <span class="truncate max-w-[200px]"><?= e($receiptName !== '' ? $receiptName : ('Datei #' . $receiptId)) ?></span>
+                                                </a>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
 
                                     <td class="py-3 px-3 whitespace-nowrap">
@@ -3182,22 +3395,36 @@ require_once __DIR__ . '/includes/header.php';
                                         </span>
                                     </td>
 
-                                    <td class="py-3 px-3 whitespace-nowrap">
-                                        <?php if ($fId > 0): ?>
-                                            <a
-                                                href="download.php?id=<?= $fId ?>&amp;inline=1"
-                                                target="_blank"
-                                                class="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
-                                                title="Original-Kontoauszug (<?= e((string)($tx['statement_filename'] ?? 'PDF/CSV')) ?>) öffnen"
-                                            >
-                                                📄 Original öffnen
-                                            </a>
-                                        <?php elseif (!empty($tx['statement_filename'])): ?>
-                                            <span class="text-[11px] text-slate-400 truncate max-w-[120px] inline-block">
-                                                <?= e((string)$tx['statement_filename']) ?>
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="text-[11px] text-slate-400">Manuell</span>
+                                    <td class="py-3 px-3 whitespace-nowrap space-y-1">
+                                        <div>
+                                            <?php if ($fId > 0): ?>
+                                                <a
+                                                    href="download.php?id=<?= $fId ?>&amp;inline=1"
+                                                    target="_blank"
+                                                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                                                    title="Original-Kontoauszug (<?= e((string)($tx['statement_filename'] ?? 'PDF/CSV')) ?>) öffnen"
+                                                >
+                                                    📄 Auszug öffnen
+                                                </a>
+                                            <?php elseif (!empty($tx['statement_filename'])): ?>
+                                                <span class="text-[11px] text-slate-400 truncate max-w-[120px] inline-block">
+                                                    <?= e((string)$tx['statement_filename']) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-[11px] text-slate-400">Manuell</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if ($receiptId > 0): ?>
+                                            <div>
+                                                <a
+                                                    href="download.php?id=<?= $receiptId ?>&amp;inline=1"
+                                                    target="_blank"
+                                                    class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                                                    title="Angehängten Beleg / Rechnung (<?= e($receiptName !== '' ? $receiptName : 'Beleg') ?>) öffnen"
+                                                >
+                                                    📎 Beleg öffnen
+                                                </a>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
 
@@ -3210,19 +3437,36 @@ require_once __DIR__ . '/includes/header.php';
                                     </td>
 
                                     <td class="py-3 px-3 whitespace-nowrap text-right">
-                                        <button
-                                            type="button"
-                                            onclick="toggleTxEditRow(this)"
-                                            data-tx-id="<?= $txId ?>"
-                                            data-tx-cat="<?= e($cKey) ?>"
-                                            data-tx-note="<?= e((string)$tx['note']) ?>"
-                                            data-tx-fixed="<?= (int)$tx['is_fixed_cost'] === 1 ? '1' : '0' ?>"
-                                            data-tx-cparty="<?= e(mb_substr((string)$tx['counterparty'], 0, 28, 'UTF-8')) ?>"
-                                            class="px-2 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
-                                            title="Kategorie, Fixkosten-Status oder Notiz bearbeiten"
-                                        >
-                                            ✏️
-                                        </button>
+                                        <div class="inline-flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onclick="toggleTxEditRow(this, true)"
+                                                data-tx-id="<?= $txId ?>"
+                                                data-tx-cat="<?= e($cKey) ?>"
+                                                data-tx-note="<?= e((string)$tx['note']) ?>"
+                                                data-tx-fixed="<?= (int)$tx['is_fixed_cost'] === 1 ? '1' : '0' ?>"
+                                                data-tx-receipt="<?= $receiptId ?>"
+                                                data-tx-cparty="<?= e(mb_substr((string)$tx['counterparty'], 0, 28, 'UTF-8')) ?>"
+                                                class="px-2 py-1 rounded-lg text-xs <?= $receiptId > 0 ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> hover:bg-emerald-200 dark:hover:bg-slate-700 cursor-pointer"
+                                                title="PDF-Beleg / Rechnung an diese Buchung anhängen oder ändern"
+                                            >
+                                                📎
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onclick="toggleTxEditRow(this, false)"
+                                                data-tx-id="<?= $txId ?>"
+                                                data-tx-cat="<?= e($cKey) ?>"
+                                                data-tx-note="<?= e((string)$tx['note']) ?>"
+                                                data-tx-fixed="<?= (int)$tx['is_fixed_cost'] === 1 ? '1' : '0' ?>"
+                                                data-tx-receipt="<?= $receiptId ?>"
+                                                data-tx-cparty="<?= e(mb_substr((string)$tx['counterparty'], 0, 28, 'UTF-8')) ?>"
+                                                class="px-2 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                                                title="Kategorie, Beleg, Fixkosten-Status oder Notiz bearbeiten"
+                                            >
+                                                ✏️
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -3680,6 +3924,10 @@ require_once __DIR__ . '/includes/header.php';
     const csrfToken = <?= json_encode($csrfToken) ?>;
     const selectedAccountId = <?= (int)$selectedAccountId ?>;
     const categoryOptions = <?= json_encode(array_map(static fn($m) => $m['icon'] . ' ' . $m['label'], $bankingCategories), JSON_UNESCAPED_UNICODE) ?>;
+    const cloudReceiptOptions = <?= json_encode(array_map(static fn($f) => [
+        'id'    => (int)$f['id'],
+        'label' => ((string)$f['folder_path'] !== '' ? ((string)$f['folder_path'] . '/') : '') . (string)$f['original_name'],
+    ], $cloudReceiptCandidateFiles), JSON_UNESCAPED_UNICODE) ?>;
 
     function escAttr(str) {
         return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -3713,7 +3961,7 @@ require_once __DIR__ . '/includes/header.php';
         }
     };
 
-    window.toggleTxEditRow = function(btn) {
+    window.toggleTxEditRow = function(btn, focusReceipt = false) {
         if (!btn) return;
         const txId = btn.getAttribute('data-tx-id');
         if (!txId) return;
@@ -3725,10 +3973,11 @@ require_once __DIR__ . '/includes/header.php';
         const parentTr = btn.closest('tr');
         if (!parentTr) return;
 
-        const curCat = btn.getAttribute('data-tx-cat') || 'other';
-        const curNote = btn.getAttribute('data-tx-note') || '';
-        const isFixed = btn.getAttribute('data-tx-fixed') === '1';
-        const cparty = btn.getAttribute('data-tx-cparty') || '';
+        const curCat     = btn.getAttribute('data-tx-cat') || 'other';
+        const curNote    = btn.getAttribute('data-tx-note') || '';
+        const isFixed    = btn.getAttribute('data-tx-fixed') === '1';
+        const curReceipt = parseInt(btn.getAttribute('data-tx-receipt') || '0', 10) || 0;
+        const cparty     = btn.getAttribute('data-tx-cparty') || '';
 
         let optHtml = '';
         Object.keys(categoryOptions).forEach(k => {
@@ -3736,32 +3985,58 @@ require_once __DIR__ . '/includes/header.php';
             optHtml += '<option value="' + escAttr(k) + '"' + sel + '>' + escAttr(categoryOptions[k]) + '</option>';
         });
 
+        let receiptOptHtml = '<option value="0">— Kein Cloud-Beleg verknüpft —</option>';
+        let foundCurrentReceipt = (curReceipt === 0);
+        if (Array.isArray(cloudReceiptOptions)) {
+            cloudReceiptOptions.forEach(rf => {
+                const rid = Number(rf.id) || 0;
+                const sel = rid === curReceipt ? ' selected' : '';
+                if (rid === curReceipt) foundCurrentReceipt = true;
+                receiptOptHtml += '<option value="' + rid + '"' + sel + '>📄 ' + escAttr(rf.label) + '</option>';
+            });
+        }
+        if (!foundCurrentReceipt && curReceipt > 0) {
+            receiptOptHtml += '<option value="' + curReceipt + '" selected>📎 Aktuell verknüpfter Beleg (#' + curReceipt + ')</option>';
+        }
+
         const editTr = document.createElement('tr');
         editTr.id = 'txEditRow_' + txId;
         editTr.className = 'bg-slate-50 dark:bg-slate-800/70';
         editTr.innerHTML =
-            '<td colspan="7" class="p-3">' +
-                '<div class="flex flex-wrap items-center justify-between gap-3">' +
-                    '<form method="post" action="banking.php" class="flex flex-wrap items-center gap-2.5 flex-1">' +
+            '<td colspan="7" class="p-3.5">' +
+                '<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">' +
+                    '<form method="post" action="banking.php" enctype="multipart/form-data" class="flex flex-col gap-2.5 flex-1">' +
                         '<input type="hidden" name="csrf_token" value="' + escAttr(csrfToken) + '">' +
                         '<input type="hidden" name="action" value="update_tx">' +
                         '<input type="hidden" name="account_id" value="' + selectedAccountId + '">' +
                         '<input type="hidden" name="tx_id" value="' + escAttr(txId) + '">' +
-                        '<select name="category" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">' +
-                            optHtml +
-                        '</select>' +
-                        '<input type="text" name="note" value="' + escAttr(curNote) + '" placeholder="Eigene Notiz / Kommentar..." class="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 w-48 sm:w-64">' +
-                        '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">' +
-                            '<input type="checkbox" name="is_fixed_cost" value="1"' + (isFixed ? ' checked' : '') + ' class="rounded border-slate-300 text-brand-600">' +
-                            '<span>🔄 Fixkosten</span>' +
-                        '</label>' +
-                        '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 cursor-pointer">' +
-                            '<input type="checkbox" name="save_as_rule" value="1" class="rounded border-slate-300 text-indigo-600">' +
-                            '<span>✨ Für „' + escAttr(cparty) + '“ als Regel merken</span>' +
-                        '</label>' +
-                        '<button type="submit" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">💾 Speichern</button>' +
+                        '<div class="flex flex-wrap items-center gap-2.5">' +
+                            '<select name="category" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">' +
+                                optHtml +
+                            '</select>' +
+                            '<input type="text" name="note" value="' + escAttr(curNote) + '" placeholder="Eigene Notiz / Kommentar..." class="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 w-48 sm:w-64">' +
+                            '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">' +
+                                '<input type="checkbox" name="is_fixed_cost" value="1"' + (isFixed ? ' checked' : '') + ' class="rounded border-slate-300 text-brand-600">' +
+                                '<span>🔄 Fixkosten</span>' +
+                            '</label>' +
+                            '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 cursor-pointer">' +
+                                '<input type="checkbox" name="save_as_rule" value="1" class="rounded border-slate-300 text-indigo-600">' +
+                                '<span>✨ Für „' + escAttr(cparty) + '“ als Regel merken</span>' +
+                            '</label>' +
+                        '</div>' +
+                        '<div class="flex flex-wrap items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50">' +
+                            '<span class="text-xs font-bold text-emerald-800 dark:text-emerald-300">📎 PDF-Beleg / Rechnung:</span>' +
+                            '<select id="txReceiptSelect_' + escAttr(txId) + '" name="receipt_file_id" class="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 max-w-xs">' +
+                                receiptOptHtml +
+                            '</select>' +
+                            '<label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">' +
+                                '<span class="text-[11px] text-slate-500">oder neu hochladen:</span>' +
+                                '<input type="file" name="receipt_upload" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" class="text-xs text-slate-600 dark:text-slate-300 max-w-[220px]">' +
+                            '</label>' +
+                            '<button type="submit" class="ml-auto px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer">💾 Alles speichern</button>' +
+                        '</div>' +
                     '</form>' +
-                    '<form method="post" action="banking.php" onsubmit="return confirm(\'Diese Buchung wirklich löschen?\');">' +
+                    '<form method="post" action="banking.php" onsubmit="return confirm(\'Diese Buchung wirklich löschen?\');" class="self-end lg:self-center">' +
                         '<input type="hidden" name="csrf_token" value="' + escAttr(csrfToken) + '">' +
                         '<input type="hidden" name="action" value="delete_tx">' +
                         '<input type="hidden" name="account_id" value="' + selectedAccountId + '">' +
@@ -3772,6 +4047,10 @@ require_once __DIR__ . '/includes/header.php';
             '</td>';
 
         parentTr.insertAdjacentElement('afterend', editTr);
+        if (focusReceipt) {
+            const selEl = document.getElementById('txReceiptSelect_' + txId);
+            if (selEl) selEl.focus();
+        }
     };
 
     switchBankingTab(initialTab);
