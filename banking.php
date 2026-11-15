@@ -2,20 +2,20 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/functions.php';
 
 requireLogin();
 
+$pdo = getDB();
 $appSettings = getAppSettings($pdo);
-if (($appSettings['enable_banking'] ?? '1') !== '1') {
+if (($appSettings['enable_banking'] ?? '1') !== '1' && !isAdmin()) {
     header('Location: index.php');
     exit;
 }
 
 $userId   = (int)$_SESSION['user_id'];
 $username = (string)($_SESSION['username'] ?? 'Benutzer');
-$isAdmin  = !empty($_SESSION['is_admin']);
+$isAdmin  = isAdmin();
 
 /**
  * Kategorien-Katalog für Kontoauszüge & Finanz-Analyse
@@ -55,80 +55,84 @@ function ensureBankingSchema(PDO $pdo, int $userId): void
     $initialized = true;
 
     $pdo->exec("
-        CREATE TABLE IF NOT EXISTS bank_accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            bank_name TEXT NOT NULL DEFAULT 'Postbank',
-            iban TEXT NOT NULL DEFAULT '',
-            bic TEXT NOT NULL DEFAULT '',
-            account_type TEXT NOT NULL DEFAULT 'Girokonto',
-            color TEXT NOT NULL DEFAULT '#2563eb',
-            initial_balance REAL NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
+        CREATE TABLE IF NOT EXISTS `bank_accounts` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT NOT NULL,
+            `name` VARCHAR(190) NOT NULL,
+            `bank_name` VARCHAR(120) NOT NULL DEFAULT 'Postbank',
+            `iban` VARCHAR(64) NOT NULL DEFAULT '',
+            `bic` VARCHAR(32) NOT NULL DEFAULT '',
+            `account_type` VARCHAR(60) NOT NULL DEFAULT 'Girokonto',
+            `color` VARCHAR(24) NOT NULL DEFAULT '#2563eb',
+            `initial_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_accounts_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_bank_accounts_user ON bank_accounts(user_id)");
 
     $pdo->exec("
-        CREATE TABLE IF NOT EXISTS bank_statements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            file_id INTEGER DEFAULT NULL,
-            filename TEXT NOT NULL,
-            file_format TEXT NOT NULL DEFAULT 'pdf',
-            statement_no TEXT NOT NULL DEFAULT '',
-            statement_year INTEGER NOT NULL DEFAULT 0,
-            period_start TEXT DEFAULT NULL,
-            period_end TEXT DEFAULT NULL,
-            start_balance REAL DEFAULT NULL,
-            end_balance REAL DEFAULT NULL,
-            tx_count INTEGER NOT NULL DEFAULT 0,
-            total_income REAL NOT NULL DEFAULT 0,
-            total_expense REAL NOT NULL DEFAULT 0,
-            balance_check_ok INTEGER DEFAULT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
+        CREATE TABLE IF NOT EXISTS `bank_statements` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `account_id` INT UNSIGNED NOT NULL,
+            `user_id` INT NOT NULL,
+            `file_id` INT DEFAULT NULL,
+            `filename` VARCHAR(255) NOT NULL,
+            `file_format` VARCHAR(16) NOT NULL DEFAULT 'pdf',
+            `statement_no` VARCHAR(64) NOT NULL DEFAULT '',
+            `statement_year` INT NOT NULL DEFAULT 0,
+            `period_start` VARCHAR(20) DEFAULT NULL,
+            `period_end` VARCHAR(20) DEFAULT NULL,
+            `start_balance` DECIMAL(12,2) DEFAULT NULL,
+            `end_balance` DECIMAL(12,2) DEFAULT NULL,
+            `tx_count` INT NOT NULL DEFAULT 0,
+            `total_income` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `total_expense` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `balance_check_ok` TINYINT DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_statements_user_acc` (`user_id`, `account_id`, `period_end`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_bank_statements_user_acc ON bank_statements(user_id, account_id, period_end DESC)");
 
     $pdo->exec("
-        CREATE TABLE IF NOT EXISTS bank_transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            statement_id INTEGER DEFAULT NULL,
-            user_id INTEGER NOT NULL,
-            file_id INTEGER DEFAULT NULL,
-            booking_date TEXT NOT NULL,
-            valuta_date TEXT NOT NULL DEFAULT '',
-            booking_type TEXT NOT NULL DEFAULT '',
-            counterparty TEXT NOT NULL DEFAULT '',
-            purpose TEXT NOT NULL DEFAULT '',
-            iban TEXT NOT NULL DEFAULT '',
-            amount REAL NOT NULL DEFAULT 0,
-            currency TEXT NOT NULL DEFAULT 'EUR',
-            category TEXT NOT NULL DEFAULT 'other',
-            is_fixed_cost INTEGER NOT NULL DEFAULT 0,
-            note TEXT NOT NULL DEFAULT '',
-            tx_hash TEXT NOT NULL DEFAULT '',
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
+        CREATE TABLE IF NOT EXISTS `bank_transactions` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `account_id` INT UNSIGNED NOT NULL,
+            `statement_id` INT UNSIGNED DEFAULT NULL,
+            `user_id` INT NOT NULL,
+            `file_id` INT DEFAULT NULL,
+            `booking_date` VARCHAR(20) NOT NULL,
+            `valuta_date` VARCHAR(20) NOT NULL DEFAULT '',
+            `booking_type` VARCHAR(120) NOT NULL DEFAULT '',
+            `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
+            `purpose` TEXT NOT NULL,
+            `iban` VARCHAR(64) NOT NULL DEFAULT '',
+            `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `currency` VARCHAR(12) NOT NULL DEFAULT 'EUR',
+            `category` VARCHAR(64) NOT NULL DEFAULT 'other',
+            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+            `note` VARCHAR(500) NOT NULL DEFAULT '',
+            `tx_hash` VARCHAR(64) NOT NULL DEFAULT '',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_tx_user_acc_date` (`user_id`, `account_id`, `booking_date`),
+            KEY `idx_bank_tx_hash` (`user_id`, `account_id`, `tx_hash`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_bank_tx_user_acc_date ON bank_transactions(user_id, account_id, booking_date DESC, id DESC)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_bank_tx_hash ON bank_transactions(user_id, account_id, tx_hash)");
 
     $pdo->exec("
-        CREATE TABLE IF NOT EXISTS bank_rules (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            keyword TEXT NOT NULL,
-            category TEXT NOT NULL,
-            is_fixed_cost INTEGER NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
+        CREATE TABLE IF NOT EXISTS `bank_rules` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `user_id` INT NOT NULL,
+            `keyword` VARCHAR(190) NOT NULL,
+            `category` VARCHAR(64) NOT NULL,
+            `is_fixed_cost` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_bank_rules_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_bank_rules_user ON bank_rules(user_id)");
 
     // Standard-Konto anlegen, falls der Benutzer noch kein Konto hat
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM bank_accounts WHERE user_id = :uid");
@@ -136,7 +140,7 @@ function ensureBankingSchema(PDO $pdo, int $userId): void
     if ((int)$stmt->fetchColumn() === 0) {
         $ins = $pdo->prepare("
             INSERT INTO bank_accounts (user_id, name, bank_name, iban, bic, account_type, color, initial_balance)
-            VALUES (:uid, 'Postbank Girokonto', 'Postbank', '', 'PBNKDEFF', 'Girokonto', '#2563eb', 0)
+            VALUES (:uid, 'Postbank Girokonto', 'Postbank', '', 'PBNKDEFF', 'Girokonto', '#2563eb', 0.00)
         ");
         $ins->execute([':uid' => $userId]);
     }
@@ -1185,59 +1189,66 @@ function archiveStatementInCloudFiles(PDO $pdo, int $userId, string $accountName
         $safeAccountFolder = 'Konto';
     }
     $yearFolder = ($year >= 2000 && $year <= 2100) ? (string)$year : date('Y');
-    $folderPath = normalizeFolderPath('Kontoauszüge/' . $safeAccountFolder . '/' . $yearFolder);
+    $folderPath = extractSanitizedFolderPath('Kontoauszüge/' . $safeAccountFolder . '/' . $yearFolder . '/placeholder');
 
-    $userUploadDir = getUserUploadDir($userId);
-    $storedName    = bin2hex(random_bytes(16)) . '.' . $ext;
-    $destPath      = $userUploadDir . '/' . $storedName;
+    if (!is_dir(UPLOAD_DIR)) {
+        @mkdir(UPLOAD_DIR, 0750, true);
+    }
+
+    do {
+        $storedName = generateSafeStoredFilename();
+        $destPath   = UPLOAD_DIR . $storedName;
+    } while (file_exists($destPath));
 
     if (!@copy($tmpOrSourcePath, $destPath)) {
         return null;
     }
+    @chmod($destPath, 0640);
+
+    $mimeType = $ext === 'csv' ? 'text/csv' : ($ext === 'txt' ? 'text/plain' : 'application/pdf');
+    $fileHash = @hash_file('sha256', $destPath) ?: null;
+    $cleanOrigName = sanitizeOriginalFilename($originalName);
 
     // Ordner-Hierarchie in user_folders eintragen, damit sie in index.php sofort sichtbar ist
-    $parts = explode('/', $folderPath);
-    $accum = '';
-    foreach ($parts as $p) {
-        $accum = $accum === '' ? $p : ($accum . '/' . $p);
-        $fStmt = $pdo->prepare("INSERT OR IGNORE INTO user_folders (user_id, folder_path) VALUES (:uid, :fp)");
-        $fStmt->execute([':uid' => $userId, ':fp' => $accum]);
+    try {
+        $parts = explode('/', $folderPath);
+        $accum = '';
+        foreach ($parts as $p) {
+            if ($p === '') {
+                continue;
+            }
+            $accum = $accum === '' ? $p : ($accum . '/' . $p);
+            $fStmt = $pdo->prepare("INSERT IGNORE INTO user_folders (user_id, folder_path) VALUES (:uid, :fp)");
+            $fStmt->execute([':uid' => $userId, ':fp' => $accum]);
+        }
+    } catch (Throwable $e) {
+        // Ignorieren falls user_folders abweicht
     }
 
     $ins = $pdo->prepare("
-        INSERT INTO files (user_id, folder_path, original_name, stored_name, file_size)
-        VALUES (:uid, :folder, :orig, :stored, :size)
+        INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+        VALUES (:uid, NULL, :stored, :orig, :folder, :size, :hash, :mime, 0)
     ");
     $ins->execute([
         ':uid'    => $userId,
-        ':folder' => $folderPath,
-        ':orig'   => sanitizeFilename($originalName),
         ':stored' => $storedName,
+        ':orig'   => $cleanOrigName,
+        ':folder' => $folderPath,
         ':size'   => $size,
+        ':hash'   => $fileHash,
+        ':mime'   => $mimeType,
     ]);
     $fileId = (int)$pdo->lastInsertId();
 
-    $uStmt = $pdo->prepare("UPDATE users SET storage_used = storage_used + :sz WHERE id = :uid");
-    $uStmt->execute([':sz' => $size, ':uid' => $userId]);
-
-    if ($extractedText !== '' && function_exists('indexFileFulltext')) {
+    if ($fileId > 0 && function_exists('indexFileForFulltextSearch')) {
         try {
-            $ftStmt = $pdo->prepare("
-                INSERT INTO file_fulltext (file_id, user_id, content_text, updated_at)
-                VALUES (:fid, :uid, :txt, CURRENT_TIMESTAMP)
-                ON CONFLICT(file_id) DO UPDATE SET content_text = excluded.content_text, updated_at = CURRENT_TIMESTAMP
-            ");
-            $ftStmt->execute([
-                ':fid' => $fileId,
-                ':uid' => $userId,
-                ':txt' => mb_substr($extractedText, 0, 120000, 'UTF-8'),
-            ]);
+            indexFileForFulltextSearch($pdo, $fileId);
         } catch (Throwable $e) {
-            // Ignorieren falls Volltexttabelle noch nicht initialisiert
+            // Ignorieren
         }
     }
 
-    return $fileId;
+    return $fileId > 0 ? $fileId : null;
 }
 
 /**
@@ -1454,7 +1465,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv' && $activeAccount !== nu
 // POST-Aktionen verarbeiten
 // =========================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!validateCsrfToken($_POST['csrf_token'] ?? null)) {
+    $csrfRaw = $_POST['csrf_token'] ?? null;
+    if (!verifyCsrfToken(is_string($csrfRaw) ? $csrfRaw : null)) {
         $flashError = 'Ungültiges Sicherheits-Token (CSRF). Bitte Seite neu laden.';
     } else {
         $action = trim((string)($_POST['action'] ?? ''));
@@ -1602,7 +1614,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ((int)($fRow['is_encrypted'] ?? 0) === 1) {
                 $flashError = 'Verschlüsselte Tresor-Dateien müssen vor der Auswertung entschlüsselt werden.';
             } else {
-                $filePath = getUserUploadDir((int)$fRow['user_id']) . '/' . $fRow['stored_name'];
+                $filePath = UPLOAD_DIR . basename((string)$fRow['filename']);
                 $origName = (string)$fRow['original_name'];
                 $ext      = strtolower((string)pathinfo($origName, PATHINFO_EXTENSION));
 
@@ -2132,11 +2144,11 @@ usort($detectedSubscriptions, static fn($a, $b) => $b['last_amount'] <=> $a['las
 
 // Vorhandene PDF/CSV-Dateien in der Cloud für den Direkt-Import laden
 $cloudDocsStmt = $pdo->prepare("
-    SELECT id, original_name, folder_path, file_size, uploaded_at
+    SELECT id, original_name, folder_path, file_size, upload_date
     FROM files
     WHERE user_id = :uid AND deleted_at IS NULL AND is_encrypted = 0
       AND (LOWER(original_name) LIKE '%.pdf' OR LOWER(original_name) LIKE '%.csv')
-    ORDER BY uploaded_at DESC
+    ORDER BY upload_date DESC
     LIMIT 80
 ");
 $cloudDocsStmt->execute([':uid' => $userId]);
@@ -2153,7 +2165,7 @@ $pageTitle = '🏦 Kontoauszüge & Finanz-Analyse';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<main class="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
+<div class="space-y-6">
 
     <!-- Kopfbereich mit Kontowahl & Schnell-Aktionen -->
     <div class="rounded-2xl bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 shadow-xs p-4 sm:p-6">
@@ -3319,7 +3331,7 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </section>
 
-</main>
+</div>
 
 <!-- PDF.js für koordinatengenaue Tabellen-Extraktion aus Bank-PDFs direkt im Browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
