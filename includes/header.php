@@ -1227,6 +1227,12 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                                     <span><?= isAdmin() ? 'System-Administration' : 'Teil-Administration' ?></span>
                                 </a>
                             <?php endif; ?>
+                            <?php if (hasAdminPermission('users')): ?>
+                                <a href="users.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/50 transition-colors">
+                                    <span>👥</span>
+                                    <span>Benutzer- &amp; Gruppenverwaltung</span>
+                                </a>
+                            <?php endif; ?>
                             <?php if (isAdmin()): ?>
                                 <a href="plugins.php" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors">
                                     <span>🧩</span>
