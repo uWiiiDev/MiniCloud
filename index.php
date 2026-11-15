@@ -594,8 +594,12 @@ $stmtSharedWithMe = $pdo->prepare(
 $stmtSharedWithMe->execute([':uid' => $userId]);
 $sharedWithMeFiles = $stmtSharedWithMe->fetchAll();
 
-$totalSharedWithMeCount = count($sharedWithMeFolders) + count($sharedWithMeFiles);
-$totalSharedWithMeSize  = 0;
+$totalSharedFoldersCount = count($accessibleGroupFolders) + count($sharedWithMeFolders);
+$totalSharedWithMeCount  = $totalSharedFoldersCount + count($sharedWithMeFiles);
+$totalSharedWithMeSize   = 0;
+foreach ($accessibleGroupFolders as $gfSumRow) {
+    $totalSharedWithMeSize += (int)($gfSumRow['folder_size'] ?? 0);
+}
 foreach ($sharedWithMeFolders as $swfRow) {
     $totalSharedWithMeSize += (int)($swfRow['folder_size'] ?? 0);
 }
@@ -722,61 +726,10 @@ if ($currentFolder !== '') {
     }
 }
 $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroupFolder['id'] : '';
-$showGroupFolderRows = !empty($accessibleGroupFolders)
-    && $activeGroupFolder === null
-    && $activeSharedFolder === null
-    && !$sharedWithMeMode
-    && $currentFolder === ''
-    && !$largeFilesMode
-    && !$onlyFavorites
-    && !$showAllFolders;
 ?>
 
 <!-- Haupt-Dateitabelle (Eigene Dateien, aktiver Gruppenordner oder geöffneter freigegebener Ordner) -->
 <section id="mainFilesSection" class="mc-card relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8 transition-all">
-    <?php if (!empty($accessibleGroupFolders)): ?>
-        <!-- Schnell-Umschalter zwischen "Meine Dateien" und freigegebenen "Gruppenordnern" -->
-        <div class="px-4 py-2.5 sm:px-5 bg-indigo-50/50 dark:bg-indigo-950/25 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2">
-            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mr-1">
-                    🏢 Bereiche:
-                </span>
-                <a
-                    href="index.php"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all <?= ($activeGroupFolder === null && !$sharedWithMeMode && $activeSharedFolder === null) ? 'bg-brand-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 hover:border-brand-400' ?>"
-                >
-                    <span>🏠 Meine Dateien</span>
-                </a>
-                <?php foreach ($accessibleGroupFolders as $gfNav): ?>
-                    <?php
-                    $gfNavId = (int)$gfNav['id'];
-                    $gfNavActive = ($activeGroupFolder !== null && (int)$activeGroupFolder['id'] === $gfNavId);
-                    $gfNavCount = (int)($gfNav['file_count'] ?? 0);
-                    ?>
-                    <a
-                        href="index.php?group_folder=<?= $gfNavId ?>"
-                        title="<?= e((string)$gfNav['name'] . (!empty($gfNav['description']) ? ' – ' . (string)$gfNav['description'] : '')) ?>"
-                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all <?= $gfNavActive ? 'bg-indigo-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-800 text-indigo-800 dark:text-indigo-200 border border-indigo-200/80 dark:border-indigo-800/70 hover:border-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-900/40' ?>"
-                    >
-                        <span>🏢 <?= e((string)$gfNav['name']) ?></span>
-                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold <?= $gfNavActive ? 'bg-white/20 text-white' : 'bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300' ?>">
-                            <?= $gfNavCount ?>
-                        </span>
-                    </a>
-                <?php endforeach; ?>
-            </div>
-
-            <?php if (function_exists('hasAdminPermission') && hasAdminPermission('users')): ?>
-                <a
-                    href="users.php#tab-groups"
-                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:underline shrink-0"
-                    title="Gruppen &amp; Gruppenordner-Berechtigungen verwalten"
-                >
-                    <span>⚙️ Gruppenordner verwalten</span>
-                </a>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
     <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
@@ -788,10 +741,9 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                     <?php elseif ($searchQuery !== ''): ?>
                         🔎 Globale Suche: <span class="text-brand-600 dark:text-brand-400">„<?= e($searchQuery) ?>“</span>
                     <?php elseif ($activeGroupFolder !== null): ?>
-                        Gruppenordner: <span class="text-indigo-600 dark:text-indigo-400"><?= e((string)$activeGroupFolder['name']) ?></span>
+                        Gruppenordner: <span class="text-indigo-600 dark:text-indigo-400">🏢 <?= e((string)$activeGroupFolder['name']) ?></span>
                     <?php elseif ($sharedWithMeMode): ?>
                         👥 <span class="text-blue-600 dark:text-blue-400">Für mich freigegeben</span>
-                        <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(Von Cloud-Benutzern)</span>
                     <?php elseif ($activeSharedFolder !== null): ?>
                         Freigegebener Ordner: <span class="text-blue-600 dark:text-blue-400">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
                         <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(von <?= e((string)$activeSharedFolder['owner_username']) ?>)</span>
@@ -802,7 +754,7 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                     <?php endif; ?>
                 </h2>
                 <?php
-                $visibleFolderCountBadge = $sharedWithMeMode ? count($sharedWithMeFolders) : count($directSubfolders);
+                $visibleFolderCountBadge = $sharedWithMeMode ? $totalSharedFoldersCount : count($directSubfolders);
                 ?>
                 <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     <?= $visibleFolderCountBadge > 0 ? $visibleFolderCountBadge . ' Ordner &bull; ' : '' ?><?= count($files) ?> <?= count($files) === 1 ? 'Datei' : 'Dateien' ?>
@@ -886,7 +838,7 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
             <?php if ($currentFolder !== '' || $searchQuery !== '' || $activeGroupFolder !== null || $activeSharedFolder !== null || $sharedWithMeMode || $showAllFolders || $onlyFavorites): ?>
                 <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <a
-                        href="index.php<?= $activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] : '' ?>"
+                        href="index.php"
                         data-drop-folder=""
                         data-drop-folder-label="Hauptverzeichnis"
                         class="text-brand-600 dark:text-brand-400 hover:underline font-semibold rounded px-1 -mx-1 transition-all"
@@ -899,6 +851,40 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                         <a href="index.php?shared_with_me=1" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold">👥 Für mich freigegeben</a>
                         <span class="text-slate-400">/</span>
                         <span class="font-semibold text-slate-700 dark:text-slate-200">📁 <?= e((string)$activeSharedFolder['folder_path']) ?></span>
+                    <?php elseif ($activeGroupFolder !== null): ?>
+                        <span class="text-slate-400">/</span>
+                        <a href="index.php?shared_with_me=1" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold">👥 Für mich freigegeben</a>
+                        <span class="text-slate-400">/</span>
+                        <?php if ($currentFolder === ''): ?>
+                            <span class="font-semibold text-indigo-700 dark:text-indigo-300">🏢 <?= e((string)$activeGroupFolder['name']) ?></span>
+                        <?php else: ?>
+                            <a
+                                href="index.php?group_folder=<?= (int)$activeGroupFolder['id'] ?>"
+                                data-drop-folder=""
+                                data-drop-folder-label="<?= e((string)$activeGroupFolder['name']) ?>"
+                                class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold rounded px-1 -mx-1 transition-all"
+                            >🏢 <?= e((string)$activeGroupFolder['name']) ?></a>
+                            <?php
+                            $crumbParts = explode('/', $currentFolder);
+                            $crumbAccum = '';
+                            foreach ($crumbParts as $cIdx => $cSegment):
+                                $crumbAccum = $crumbAccum === '' ? $cSegment : $crumbAccum . '/' . $cSegment;
+                                $crumbUrl = 'index.php?' . ($baseGfQuery !== '' ? $baseGfQuery . '&' : '') . 'folder=' . rawurlencode($crumbAccum);
+                                $isLastCrumb = ($cIdx === count($crumbParts) - 1);
+                            ?>
+                                <span class="text-slate-400">/</span>
+                                <?php if ($isLastCrumb): ?>
+                                    <span class="font-semibold text-slate-700 dark:text-slate-200"><?= e($cSegment) ?></span>
+                                <?php else: ?>
+                                    <a
+                                        href="<?= e($crumbUrl) ?>"
+                                        data-drop-folder="<?= e($crumbAccum) ?>"
+                                        data-drop-folder-label="<?= e($crumbAccum) ?>"
+                                        class="text-brand-600 dark:text-brand-400 hover:underline font-medium rounded px-1 -mx-1 transition-all"
+                                    ><?= e($cSegment) ?></a>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     <?php elseif ($currentFolder !== ''): ?>
                         <?php
                         $crumbParts = explode('/', $currentFolder);
@@ -1461,7 +1447,7 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
         </div>
     <?php endif; ?>
 
-    <?php if (empty($files) && empty($directSubfolders) && !$showSharedVirtualFolder && !$showGroupFolderRows && (!$sharedWithMeMode || empty($sharedWithMeFolders)) && $currentFolder === ''): ?>
+    <?php if (empty($files) && empty($directSubfolders) && !$showSharedVirtualFolder && (!$sharedWithMeMode || $totalSharedFoldersCount === 0) && $currentFolder === ''): ?>
         <div
             class="p-10 sm:p-12 text-center <?= $canUploadHere ? 'cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition-colors' : '' ?>"
             <?php if ($canUploadHere): ?>onclick="document.getElementById('fileInput')?.click()"<?php endif; ?>
@@ -1609,19 +1595,15 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                             $upParent = '';
                             $upUrl    = 'index.php';
                             $upLabel  = 'Hauptverzeichnis';
-                        } elseif ($activeSharedFolder !== null) {
+                        } elseif ($activeSharedFolder !== null || ($activeGroupFolder !== null && $currentFolder === '')) {
                             $upParent = '';
                             $upUrl    = 'index.php?shared_with_me=1';
                             $upLabel  = '👥 Für mich freigegeben';
-                        } elseif ($activeGroupFolder !== null && $currentFolder === '') {
-                            $upParent = '';
-                            $upUrl    = 'index.php';
-                            $upLabel  = '🏠 Meine Dateien (Hauptverzeichnis)';
                         } else {
                             $upParent = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
                             $upUrl = 'index.php'
                                 . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParent !== '' ? '&amp;folder=' . rawurlencode($upParent) : '') : ($upParent !== '' ? '?folder=' . rawurlencode($upParent) : ''));
-                            $upLabel = $upParent !== '' ? $upParent : 'Hauptverzeichnis';
+                            $upLabel = $upParent !== '' ? $upParent : ($activeGroupFolder !== null ? '🏢 ' . (string)$activeGroupFolder['name'] : 'Hauptverzeichnis');
                         }
                         ?>
                         <tr
@@ -1649,8 +1631,8 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                         </tr>
                     <?php endif; ?>
 
-                    <!-- 0a. Freigegebene Gruppenordner im Hauptverzeichnis -->
-                    <?php if ($showGroupFolderRows): ?>
+                    <!-- 0b. Gruppenordner & Freigegebene Ordner innerhalb von "👥 Für mich freigegeben" (?shared_with_me=1) -->
+                    <?php if ($sharedWithMeMode): ?>
                         <?php foreach ($accessibleGroupFolders as $gfRow): ?>
                             <?php
                             $gfRowId       = (int)$gfRow['id'];
@@ -1709,10 +1691,6 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php endif; ?>
-
-                    <!-- 0b. Freigegebene Ordner innerhalb von "👥 Für mich freigegeben" (?shared_with_me=1) -->
-                    <?php if ($sharedWithMeMode): ?>
                         <?php foreach ($sharedWithMeFolders as $sFolder): ?>
                             <?php
                             $usId         = (int)$sFolder['user_share_id'];
@@ -2408,26 +2386,26 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                     <?php if ($showSharedVirtualFolder): ?>
                         <tr class="bg-blue-50/35 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-950/40 transition-all border-t-2 border-blue-200/70 dark:border-blue-800/70">
                             <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
-                                <span class="text-xs text-blue-500 dark:text-blue-400" title="Systemordner für empfangene Benutzer-Freigaben (unten angeheftet)">👥</span>
+                                <span class="text-xs text-blue-500 dark:text-blue-400" title="Systemordner für Gruppenordner &amp; empfangene Freigaben (unten angeheftet)">👥</span>
                             </td>
                             <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                                    <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Von anderen Cloud-Benutzern für mich freigegebene Ordner &amp; Dateien öffnen">
+                                    <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Für mich freigegebene Ordner, Gruppenordner &amp; Dateien öffnen">
                                         <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                         </svg>
                                     </a>
                                     <div class="min-w-0 flex-1">
                                         <div class="flex items-center gap-1.5 min-w-0">
-                                            <a href="index.php?shared_with_me=1" class="font-bold text-blue-900 dark:text-blue-200 hover:text-blue-600 dark:hover:text-blue-400 truncate min-w-0 block" title="Für mich freigegeben (Von Cloud-Benutzern)">
-                                                Für mich freigegeben (Von Cloud-Benutzern)
+                                            <a href="index.php?shared_with_me=1" class="font-bold text-blue-900 dark:text-blue-200 hover:text-blue-600 dark:hover:text-blue-400 truncate min-w-0 block" title="Für mich freigegeben">
+                                                Für mich freigegeben
                                             </a>
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 <?= $totalSharedWithMeCount > 0 ? 'bg-blue-600 text-white shadow-2xs' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' ?>">
                                                 👥 <?= $totalSharedWithMeCount ?>
                                             </span>
                                         </div>
                                         <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5 truncate">
-                                            <?= count($sharedWithMeFolders) ?> <?= count($sharedWithMeFolders) === 1 ? 'Ordner' : 'Ordner' ?> &bull;
+                                            <?= $totalSharedFoldersCount ?> <?= $totalSharedFoldersCount === 1 ? 'Ordner' : 'Ordner' ?> &bull;
                                             <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
                                             <span class="sm:hidden"> &bull; <?= e(formatBytes($totalSharedWithMeSize)) ?></span>
                                         </p>
@@ -2465,19 +2443,15 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                     $upParentGrid = '';
                     $upUrlGrid    = 'index.php';
                     $upLabelGrid  = 'Hauptverzeichnis';
-                } elseif ($activeSharedFolder !== null) {
+                } elseif ($activeSharedFolder !== null || ($activeGroupFolder !== null && $currentFolder === '')) {
                     $upParentGrid = '';
                     $upUrlGrid    = 'index.php?shared_with_me=1';
                     $upLabelGrid  = '👥 Für mich freigegeben';
-                } elseif ($activeGroupFolder !== null && $currentFolder === '') {
-                    $upParentGrid = '';
-                    $upUrlGrid    = 'index.php';
-                    $upLabelGrid  = '🏠 Meine Dateien (Hauptverzeichnis)';
                 } else {
                     $upParentGrid = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
                     $upUrlGrid = 'index.php'
                         . ($activeGroupFolder !== null ? '?group_folder=' . (int)$activeGroupFolder['id'] . ($upParentGrid !== '' ? '&amp;folder=' . rawurlencode($upParentGrid) : '') : ($upParentGrid !== '' ? '?folder=' . rawurlencode($upParentGrid) : ''));
-                    $upLabelGrid = $upParentGrid !== '' ? $upParentGrid : 'Hauptverzeichnis';
+                    $upLabelGrid = $upParentGrid !== '' ? $upParentGrid : ($activeGroupFolder !== null ? '🏢 ' . (string)$activeGroupFolder['name'] : 'Hauptverzeichnis');
                 }
                 ?>
                 <a
@@ -2503,7 +2477,7 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                 </a>
             <?php endif; ?>
 
-            <?php if ($showGroupFolderRows): ?>
+            <?php if ($sharedWithMeMode): ?>
                 <?php foreach ($accessibleGroupFolders as $gfGrid): ?>
                     <?php
                     $gfGridId    = (int)$gfGrid['id'];
@@ -2531,9 +2505,6 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                         </div>
                     </a>
                 <?php endforeach; ?>
-            <?php endif; ?>
-
-            <?php if ($sharedWithMeMode): ?>
                 <?php foreach ($sharedWithMeFolders as $sFolder): ?>
                     <?php
                     $usId    = (int)$sFolder['user_share_id'];
@@ -2708,7 +2679,7 @@ $showGroupFolderRows = !empty($accessibleGroupFolders)
                             👥 Für mich freigegeben
                         </p>
                         <p class="text-[11px] text-blue-700/80 dark:text-blue-300/80 mt-0.5">
-                            <?= count($sharedWithMeFolders) ?> Ordner &bull; <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
+                            <?= $totalSharedFoldersCount ?> Ordner &bull; <?= count($sharedWithMeFiles) ?> <?= count($sharedWithMeFiles) === 1 ? 'Datei' : 'Dateien' ?>
                         </p>
                     </div>
                 </a>
