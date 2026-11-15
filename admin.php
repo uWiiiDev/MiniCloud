@@ -964,6 +964,22 @@ function performGitHubUpdate(
         }
     }
 
+    // Optionale Plugin-Hauptdateien ermitteln: Module, die der Administrator im Minimal-Modus
+    // oder über plugins.php bewusst nicht installiert/entfernt hat, werden beim System-Update
+    // nicht ungefragt neu aufgespielt, sondern bleiben im App-Store (plugins.php) auf Abruf bereit.
+    $optionalPluginFiles = ['caldav.php' => true, 'carddav.php' => true];
+    if (is_file(__DIR__ . '/includes/plugins_catalog.php')) {
+        require_once __DIR__ . '/includes/plugins_catalog.php';
+        if (function_exists('getMiniCloudPluginCatalog')) {
+            foreach (getMiniCloudPluginCatalog() as $pMeta) {
+                $ef = ltrim((string)($pMeta['entry_file'] ?? ''), '/');
+                if ($ef !== '') {
+                    $optionalPluginFiles[$ef] = true;
+                }
+            }
+        }
+    }
+
     $updatedFilesCount = 0;
     for ($i = 0; $i < $zip->numFiles; $i++) {
         $entryName = (string)$zip->getNameIndex($i);
@@ -989,6 +1005,11 @@ function performGitHubUpdate(
             $relPath === 'config/db_credentials.php' ||
             $relPath === 'config/database.local.php'
         ) {
+            continue;
+        }
+
+        $destPath = __DIR__ . '/' . $relPath;
+        if (isset($optionalPluginFiles[$relPath]) && !is_file($destPath)) {
             continue;
         }
 

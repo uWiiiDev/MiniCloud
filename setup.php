@@ -195,6 +195,8 @@ $formAppTitle   = trim((string)($_POST['app_title'] ?? 'MiniCloud'));
 $formAdminUser  = trim((string)($_POST['admin_user'] ?? 'admin'));
 $formAdminEmail = trim((string)($_POST['admin_email'] ?? ''));
 $formAdminPass  = (string)($_POST['admin_pass'] ?? '');
+$rawMode        = (string)($_POST['install_mode'] ?? ($_GET['mode'] ?? 'minimal'));
+$formInstallMode = ($rawMode === 'full') ? 'full' : 'minimal';
 
 $errors = [];
 
@@ -279,6 +281,35 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                              ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)"
                         );
                         $stmtTitle->execute([':val' => $formAppTitle]);
+                    }
+
+                    // 3b. Bei Wahl des schlanken Starts („Nur Datei-Cloud & App-Store“) alle Zusatzmodule
+                    //     standardmäßig deaktivieren und optionale Moduldateien bereinigen, sodass sie
+                    //     später bei Bedarf über plugins.php nachgeladen werden können.
+                    if ($formInstallMode === 'minimal' && is_file(__DIR__ . '/includes/plugins_catalog.php')) {
+                        require_once __DIR__ . '/includes/plugins_catalog.php';
+                        if (function_exists('getMiniCloudPluginCatalog')) {
+                            $stmtMod = $pdo->prepare(
+                                "INSERT INTO `settings` (`setting_key`, `setting_value`)
+                                 VALUES (:k, '0')
+                                 ON DUPLICATE KEY UPDATE `setting_value` = '0'"
+                            );
+                            foreach (getMiniCloudPluginCatalog() as $pMeta) {
+                                $sKey = (string)($pMeta['setting_key'] ?? '');
+                                if ($sKey !== '') {
+                                    $stmtMod->execute([':k' => $sKey]);
+                                }
+                                $eFile = __DIR__ . '/' . ltrim((string)($pMeta['entry_file'] ?? ''), '/');
+                                if (is_file($eFile)) {
+                                    @unlink($eFile);
+                                }
+                            }
+                            foreach (['caldav.php', 'carddav.php'] as $davFile) {
+                                if (is_file(__DIR__ . '/' . $davFile)) {
+                                    @unlink(__DIR__ . '/' . $davFile);
+                                }
+                            }
+                        }
                     }
 
                     // 4. Ersten Administrator-Account mit den gewählten Zugangsdaten einrichten
@@ -569,6 +600,41 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <hr class="border-slate-200">
+
+                <!-- 4. Modul-Startumfang -->
+                <div>
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+                        4. Modul-Startumfang wählen
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition <?= $formInstallMode === 'minimal' ? 'border-brand-600 bg-brand-50/40' : 'border-slate-200 hover:border-slate-300' ?>">
+                            <input type="radio" name="install_mode" value="minimal" <?= $formInstallMode === 'minimal' ? 'checked' : '' ?> class="mt-0.5 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                    <span>📁 Nur Datei-Cloud &amp; App-Store</span>
+                                    <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Empfohlen</span>
+                                </div>
+                                <p class="text-slate-600 mt-1">
+                                    Startet schlank nur mit dem Dateimanager. Alle 40+ weiteren Module (z.&nbsp;B. Kontoauszüge, Kalender, Podcasts, Office) können später bei Bedarf per 1-Klick im App-Store nachgeladen werden.
+                                </p>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition <?= $formInstallMode === 'full' ? 'border-brand-600 bg-brand-50/40' : 'border-slate-200 hover:border-slate-300' ?>">
+                            <input type="radio" name="install_mode" value="full" <?= $formInstallMode === 'full' ? 'checked' : '' ?> class="mt-0.5 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <div class="font-bold text-slate-900">
+                                    🚀 Vollversion (Alle Module sofort aktiv)
+                                </div>
+                                <p class="text-slate-600 mt-1">
+                                    Aktiviert sofort sämtliche Cloud-Module. Einzelne Module können jederzeit im App-Store pausiert oder entfernt werden.
+                                </p>
+                            </div>
+                        </label>
                     </div>
                 </div>
 
