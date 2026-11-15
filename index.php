@@ -1549,18 +1549,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </span>
                             </a>
                         </th>
-                        <th class="py-3.5 px-4 hidden md:table-cell whitespace-nowrap">
-                            <a
-                                href="<?= e($buildSortHeaderUrl('folder')) ?>"
-                                class="inline-flex items-center gap-1.5 hover:text-brand-600 dark:hover:text-brand-400 transition-colors <?= $sortBy === 'folder' ? 'text-brand-600 dark:text-brand-400 font-bold' : '' ?>"
-                                title="Nach Ordner sortieren"
-                            >
-                                <span>Ordner</span>
-                                <span class="text-[11px] <?= $sortBy === 'folder' ? 'opacity-100' : 'opacity-40' ?>">
-                                    <?= $sortBy === 'folder' ? ($sortDir === 'asc' ? '↑' : '↓') : '↕' ?>
-                                </span>
-                            </a>
-                        </th>
                         <th class="py-3.5 px-4 hidden sm:table-cell whitespace-nowrap">
                             <a
                                 href="<?= e($buildSortHeaderUrl('size')) ?>"
@@ -1613,7 +1601,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             <?php endif; ?>
                             class="bg-slate-50/40 dark:bg-slate-800/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-all"
                         >
-                            <td class="py-2.5 px-4 sm:px-6 max-w-0 overflow-hidden" colspan="6">
+                            <td class="py-2.5 px-4 sm:px-6 max-w-0 overflow-hidden" colspan="5">
                                 <div class="flex items-center justify-between gap-2 min-w-0">
                                     <a href="<?= $upUrl ?>" class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 min-w-0" title="Übergeordneter Ordner (<?= e($upLabel) ?>)">
                                         <span class="inline-flex items-center justify-center w-10 h-7 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold shrink-0">
@@ -1648,8 +1636,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </td>
                                 <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                     <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                                        <a href="index.php?group_folder=<?= $gfRowId ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 shrink-0 mt-0.5 sm:mt-0" title="Gruppenordner öffnen">
-                                            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <a href="index.php?group_folder=<?= $gfRowId ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-11 sm:h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 shrink-0 mt-0.5 sm:mt-0" title="Gruppenordner öffnen">
+                                            <svg class="w-[18px] h-[18px] sm:w-[22px] sm:h-[22px]" fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                             </svg>
                                         </a>
@@ -1671,9 +1659,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </p>
                                         </div>
                                     </div>
-                                </td>
-                                <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-indigo-700 dark:text-indigo-400 font-medium">
-                                    🏢 Gruppenordner
                                 </td>
                                 <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
                                     <?= e(formatBytes($gfRowSize)) ?>
@@ -1713,8 +1698,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </td>
                                 <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                     <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                                        <a href="index.php?shared_folder=<?= $usId ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Freigegebenen Ordner öffnen">
-                                            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <a href="index.php?shared_folder=<?= $usId ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-11 sm:h-9 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Freigegebenen Ordner öffnen">
+                                            <svg class="w-[18px] h-[18px] sm:w-[22px] sm:h-[22px]" fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                             </svg>
                                         </a>
@@ -1735,9 +1720,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                             </p>
                                         </div>
                                     </div>
-                                </td>
-                                <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-blue-700 dark:text-blue-400 font-medium">
-                                    👤 <?= e($sfOwner) ?>
                                 </td>
                                 <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
                                     <?= e(formatBytes($sfSize)) ?>
@@ -1814,8 +1796,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                                    <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen (oder Dateien per Drag & Drop hier ablegen)">
-                                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <a href="<?= $subUrl ?>" class="inline-flex items-center justify-center w-9 h-8 sm:w-11 sm:h-9 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" title="Ordner öffnen (oder Dateien per Drag & Drop hier ablegen)">
+                                        <svg class="w-[18px] h-[18px] sm:w-[22px] sm:h-[22px]" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                         </svg>
                                     </a>
@@ -1842,12 +1824,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </p>
                                     </div>
                                 </div>
-                            </td>
-
-                            <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-amber-700 dark:text-amber-400 font-medium">
-                                <span class="truncate block max-w-[140px] lg:max-w-[180px]" title="<?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>">
-                                    📁 <?= e($subParent !== '' ? $subParent : 'Hauptverzeichnis') ?>
-                                </span>
                             </td>
 
                             <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell" data-folder-size-cell>
@@ -2151,8 +2127,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <p class="text-[11px] text-slate-400 flex items-center gap-1 sm:gap-1.5 mt-0.5 min-w-0">
                                             <span class="sm:hidden truncate"><?= e($formattedSize) ?> &bull; <?= e($formattedDate) ?></span>
                                             <span class="hidden sm:inline truncate"><?= e($mimeType) ?></span>
-                                            <?php if ($searchQuery !== '' || $onlyFavorites): ?>
-                                                <a href="<?= e($folderJumpUrl) ?>" class="md:hidden inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-medium truncate">
+                                            <?php if ($searchQuery !== '' || $onlyFavorites || $largeFilesMode): ?>
+                                                <a href="<?= e($folderJumpUrl) ?>" class="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-medium truncate">
                                                     &bull; <?= e($currentLocLabel) ?>
                                                 </a>
                                             <?php endif; ?>
@@ -2170,12 +2146,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         <?php endif; ?>
                                     </div>
                                 </div>
-                            </td>
-
-                            <td class="py-3.5 px-4 whitespace-nowrap hidden md:table-cell text-xs text-slate-600 dark:text-slate-300 font-medium">
-                                <a href="<?= e($folderJumpUrl) ?>" class="truncate block max-w-[140px] lg:max-w-[180px] hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Zum Ordner wechseln: <?= e($currentLocLabel) ?>">
-                                    <?= e($currentLocLabel) ?>
-                                </a>
                             </td>
 
                             <td class="py-3.5 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
@@ -2390,8 +2360,8 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             </td>
                             <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
                                 <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                                    <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Für mich freigegebene Ordner, Gruppenordner &amp; Dateien öffnen">
-                                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <a href="index.php?shared_with_me=1" class="inline-flex items-center justify-center w-9 h-8 sm:w-11 sm:h-9 rounded-lg bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5 sm:mt-0" title="Für mich freigegebene Ordner, Gruppenordner &amp; Dateien öffnen">
+                                        <svg class="w-[18px] h-[18px] sm:w-[22px] sm:h-[22px]" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                         </svg>
                                     </a>
@@ -2411,9 +2381,6 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </p>
                                     </div>
                                 </div>
-                            </td>
-                            <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-blue-700 dark:text-blue-400 font-medium">
-                                👥 Cloud-Freigaben
                             </td>
                             <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
                                 <?= e(formatBytes($totalSharedWithMeSize)) ?>
