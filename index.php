@@ -722,10 +722,61 @@ if ($currentFolder !== '') {
     }
 }
 $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroupFolder['id'] : '';
+$showGroupFolderRows = !empty($accessibleGroupFolders)
+    && $activeGroupFolder === null
+    && $activeSharedFolder === null
+    && !$sharedWithMeMode
+    && $currentFolder === ''
+    && !$largeFilesMode
+    && !$onlyFavorites
+    && !$showAllFolders;
 ?>
 
 <!-- Haupt-Dateitabelle (Eigene Dateien, aktiver Gruppenordner oder geöffneter freigegebener Ordner) -->
 <section id="mainFilesSection" class="mc-card relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden mb-8 transition-all">
+    <?php if (!empty($accessibleGroupFolders)): ?>
+        <!-- Schnell-Umschalter zwischen "Meine Dateien" und freigegebenen "Gruppenordnern" -->
+        <div class="px-4 py-2.5 sm:px-5 bg-indigo-50/50 dark:bg-indigo-950/25 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mr-1">
+                    🏢 Bereiche:
+                </span>
+                <a
+                    href="index.php"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all <?= ($activeGroupFolder === null && !$sharedWithMeMode && $activeSharedFolder === null) ? 'bg-brand-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 hover:border-brand-400' ?>"
+                >
+                    <span>🏠 Meine Dateien</span>
+                </a>
+                <?php foreach ($accessibleGroupFolders as $gfNav): ?>
+                    <?php
+                    $gfNavId = (int)$gfNav['id'];
+                    $gfNavActive = ($activeGroupFolder !== null && (int)$activeGroupFolder['id'] === $gfNavId);
+                    $gfNavCount = (int)($gfNav['file_count'] ?? 0);
+                    ?>
+                    <a
+                        href="index.php?group_folder=<?= $gfNavId ?>"
+                        title="<?= e((string)$gfNav['name'] . (!empty($gfNav['description']) ? ' – ' . (string)$gfNav['description'] : '')) ?>"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all <?= $gfNavActive ? 'bg-indigo-600 text-white shadow-2xs' : 'bg-white dark:bg-slate-800 text-indigo-800 dark:text-indigo-200 border border-indigo-200/80 dark:border-indigo-800/70 hover:border-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-900/40' ?>"
+                    >
+                        <span>🏢 <?= e((string)$gfNav['name']) ?></span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold <?= $gfNavActive ? 'bg-white/20 text-white' : 'bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300' ?>">
+                            <?= $gfNavCount ?>
+                        </span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (function_exists('hasAdminPermission') && hasAdminPermission('users')): ?>
+                <a
+                    href="users.php#tab-groups"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:underline shrink-0"
+                    title="Gruppen &amp; Gruppenordner-Berechtigungen verwalten"
+                >
+                    <span>⚙️ Gruppenordner verwalten</span>
+                </a>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
     <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
@@ -1410,7 +1461,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
         </div>
     <?php endif; ?>
 
-    <?php if (empty($files) && empty($directSubfolders) && !$showSharedVirtualFolder && (!$sharedWithMeMode || empty($sharedWithMeFolders)) && $currentFolder === ''): ?>
+    <?php if (empty($files) && empty($directSubfolders) && !$showSharedVirtualFolder && !$showGroupFolderRows && (!$sharedWithMeMode || empty($sharedWithMeFolders)) && $currentFolder === ''): ?>
         <div
             class="p-10 sm:p-12 text-center <?= $canUploadHere ? 'cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition-colors' : '' ?>"
             <?php if ($canUploadHere): ?>onclick="document.getElementById('fileInput')?.click()"<?php endif; ?>
@@ -1552,7 +1603,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200/80 dark:divide-slate-800 text-sm">
-                    <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null): ?>
+                    <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null || ($activeGroupFolder !== null && $currentFolder === '')): ?>
                         <?php
                         if ($sharedWithMeMode) {
                             $upParent = '';
@@ -1562,6 +1613,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                             $upParent = '';
                             $upUrl    = 'index.php?shared_with_me=1';
                             $upLabel  = '👥 Für mich freigegeben';
+                        } elseif ($activeGroupFolder !== null && $currentFolder === '') {
+                            $upParent = '';
+                            $upUrl    = 'index.php';
+                            $upLabel  = '🏠 Meine Dateien (Hauptverzeichnis)';
                         } else {
                             $upParent = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
                             $upUrl = 'index.php'
@@ -1570,7 +1625,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         }
                         ?>
                         <tr
-                            <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                            <?php if (!$sharedWithMeMode && $activeSharedFolder === null && !($activeGroupFolder !== null && $currentFolder === '')): ?>
                                 data-drop-folder="<?= e($upParent) ?>"
                                 data-drop-folder-label="<?= e($upLabel) ?>"
                             <?php endif; ?>
@@ -1584,7 +1639,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                         </span>
                                         <span class="truncate">Übergeordneter Ordner (<?= e($upLabel) ?>)</span>
                                     </a>
-                                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null && !($activeGroupFolder !== null && $currentFolder === '')): ?>
                                         <span class="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500 truncate shrink-0">
                                             📥 Dateien hierher ziehen zum Ablegen in <?= e($upLabel) ?>
                                         </span>
@@ -1592,6 +1647,68 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 </div>
                             </td>
                         </tr>
+                    <?php endif; ?>
+
+                    <!-- 0a. Freigegebene Gruppenordner im Hauptverzeichnis -->
+                    <?php if ($showGroupFolderRows): ?>
+                        <?php foreach ($accessibleGroupFolders as $gfRow): ?>
+                            <?php
+                            $gfRowId       = (int)$gfRow['id'];
+                            $gfRowName     = (string)$gfRow['name'];
+                            $gfRowDesc     = trim((string)($gfRow['description'] ?? ''));
+                            $gfRowCount    = (int)($gfRow['file_count'] ?? 0);
+                            $gfRowSize     = (int)($gfRow['folder_size'] ?? 0);
+                            $gfRowCanWrite = ((int)($gfRow['can_write'] ?? 0) === 1);
+                            ?>
+                            <tr class="bg-indigo-50/35 dark:bg-indigo-950/20 hover:bg-indigo-100/50 dark:hover:bg-indigo-950/40 transition-all">
+                                <td class="py-3 pl-2.5 pr-1 sm:pl-6 sm:pr-2 w-8 sm:w-9 align-middle text-center">
+                                    <span class="text-xs text-indigo-600 dark:text-indigo-400" title="Gemeinsamer Gruppenordner">🏢</span>
+                                </td>
+                                <td class="py-3 px-1.5 sm:px-4 w-full max-w-0 overflow-hidden">
+                                    <div class="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
+                                        <a href="index.php?group_folder=<?= $gfRowId ?>" class="inline-flex items-center justify-center w-8 h-7 sm:w-10 sm:h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 shrink-0 mt-0.5 sm:mt-0" title="Gruppenordner öffnen">
+                                            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                                            </svg>
+                                        </a>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                <a href="index.php?group_folder=<?= $gfRowId ?>" class="font-bold text-indigo-950 dark:text-indigo-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate min-w-0 block" title="<?= e($gfRowName) ?>">
+                                                    <?= e($gfRowName) ?>
+                                                </a>
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 shrink-0">
+                                                    🏢 Gruppenordner
+                                                </span>
+                                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold <?= $gfRowCanWrite ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' ?> shrink-0">
+                                                    <?= $gfRowCanWrite ? '✏️ Lesen & Schreiben' : '👁️ Nur Lesen' ?>
+                                                </span>
+                                            </div>
+                                            <p class="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 mt-0.5 truncate">
+                                                <?= $gfRowCount ?> <?= $gfRowCount === 1 ? 'Datei' : 'Dateien' ?> &bull; <?= e(formatBytes($gfRowSize)) ?>
+                                                <?= $gfRowDesc !== '' ? ' &bull; ' . e($gfRowDesc) : '' ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap hidden md:table-cell text-xs text-indigo-700 dark:text-indigo-400 font-medium">
+                                    🏢 Gruppenordner
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-medium hidden sm:table-cell">
+                                    <?= e(formatBytes($gfRowSize)) ?>
+                                </td>
+                                <td class="py-3 px-4 whitespace-nowrap text-xs text-indigo-700 dark:text-indigo-400 font-medium hidden lg:table-cell">
+                                    <?= $gfRowCanWrite ? '✏️ Schreibzugriff' : '👁️ Lesezugriff' ?>
+                                </td>
+                                <td class="py-3 pl-1 pr-2.5 sm:px-6 whitespace-nowrap text-right align-middle">
+                                    <a
+                                        href="index.php?group_folder=<?= $gfRowId ?>"
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors shadow-2xs"
+                                    >
+                                        <span>Öffnen</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
 
                     <!-- 0b. Freigegebene Ordner innerhalb von "👥 Für mich freigegeben" (?shared_with_me=1) -->
@@ -2342,7 +2459,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
 
         <!-- FOTO-GALERIE / KACHEL-ANSICHT (#fileGridView) -->
         <div id="fileGridView" class="hidden p-4 sm:p-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5" oncontextmenu="handleWorkspaceContextMenu(event)">
-            <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null): ?>
+            <?php if (($currentFolder !== '' && $activeSharedFolder === null) || $sharedWithMeMode || $activeSharedFolder !== null || ($activeGroupFolder !== null && $currentFolder === '')): ?>
                 <?php
                 if ($sharedWithMeMode) {
                     $upParentGrid = '';
@@ -2352,6 +2469,10 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                     $upParentGrid = '';
                     $upUrlGrid    = 'index.php?shared_with_me=1';
                     $upLabelGrid  = '👥 Für mich freigegeben';
+                } elseif ($activeGroupFolder !== null && $currentFolder === '') {
+                    $upParentGrid = '';
+                    $upUrlGrid    = 'index.php';
+                    $upLabelGrid  = '🏠 Meine Dateien (Hauptverzeichnis)';
                 } else {
                     $upParentGrid = str_contains($currentFolder, '/') ? dirname($currentFolder) : '';
                     $upUrlGrid = 'index.php'
@@ -2361,7 +2482,7 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                 ?>
                 <a
                     href="<?= $upUrlGrid ?>"
-                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null): ?>
+                    <?php if (!$sharedWithMeMode && $activeSharedFolder === null && !($activeGroupFolder !== null && $currentFolder === '')): ?>
                         data-drop-folder="<?= e($upParentGrid) ?>"
                         data-drop-folder-label="<?= e($upLabelGrid) ?>"
                     <?php endif; ?>
@@ -2380,6 +2501,36 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                         </p>
                     </div>
                 </a>
+            <?php endif; ?>
+
+            <?php if ($showGroupFolderRows): ?>
+                <?php foreach ($accessibleGroupFolders as $gfGrid): ?>
+                    <?php
+                    $gfGridId    = (int)$gfGrid['id'];
+                    $gfGridName  = (string)$gfGrid['name'];
+                    $gfGridCount = (int)($gfGrid['file_count'] ?? 0);
+                    $gfGridSize  = (int)($gfGrid['folder_size'] ?? 0);
+                    ?>
+                    <a
+                        href="index.php?group_folder=<?= $gfGridId ?>"
+                        class="group flex flex-col justify-between p-3.5 rounded-2xl bg-indigo-50/45 dark:bg-indigo-950/25 border border-indigo-200/80 dark:border-indigo-800/60 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all shadow-2xs"
+                        title="Gruppenordner <?= e($gfGridName) ?> öffnen"
+                    >
+                        <div class="flex items-center justify-center h-28 rounded-xl bg-indigo-100/70 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 mb-2.5 group-hover:scale-[1.02] transition-transform">
+                            <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm font-bold text-indigo-950 dark:text-indigo-200 truncate" title="<?= e($gfGridName) ?>">
+                                🏢 <?= e($gfGridName) ?>
+                            </p>
+                            <p class="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 mt-0.5 truncate">
+                                Gruppenordner &bull; <?= $gfGridCount ?> <?= $gfGridCount === 1 ? 'Datei' : 'Dateien' ?> (<?= e(formatBytes($gfGridSize)) ?>)
+                            </p>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
             <?php endif; ?>
 
             <?php if ($sharedWithMeMode): ?>

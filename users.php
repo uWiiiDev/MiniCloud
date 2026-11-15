@@ -70,6 +70,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':aus'   => $allowUserSharing,
                     ':q'     => $quotaMb * 1024 * 1024,
                 ]);
+                $newUserId = (int)$pdo->lastInsertId();
+                if ($newUserId > 0 && !empty($_POST['group_ids']) && is_array($_POST['group_ids'])) {
+                    $stmtGrpIns = $pdo->prepare('INSERT IGNORE INTO group_members (group_id, user_id) VALUES (:gid, :uid)');
+                    foreach ($_POST['group_ids'] as $rawGid) {
+                        $gid = (int)$rawGid;
+                        if ($gid > 0) {
+                            $stmtGrpIns->execute([':gid' => $gid, ':uid' => $newUserId]);
+                        }
+                    }
+                }
                 logAuditEvent($pdo, 'user_create', sprintf('Neues Benutzerkonto „%s“ (%d MB%s) angelegt', $username, $quotaMb, $makeAdmin ? ', Admin' : ''));
                 setFlash('success', sprintf('Benutzer "%s" (%d MB) wurde erfolgreich angelegt.', $username, $quotaMb));
             }
@@ -270,6 +280,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id'    => $targetUserId,
                 ]);
             }
+
+            if (isset($_POST['sync_groups']) && $_POST['sync_groups'] === '1') {
+                $pdo->prepare('DELETE FROM group_members WHERE user_id = :uid')->execute([':uid' => $targetUserId]);
+                if (!empty($_POST['group_ids']) && is_array($_POST['group_ids'])) {
+                    $stmtGrpIns = $pdo->prepare('INSERT IGNORE INTO group_members (group_id, user_id) VALUES (:gid, :uid)');
+                    foreach ($_POST['group_ids'] as $rawGid) {
+                        $gid = (int)$rawGid;
+                        if ($gid > 0) {
+                            $stmtGrpIns->execute([':gid' => $gid, ':uid' => $targetUserId]);
+                        }
+                    }
+                }
+            }
             setFlash('success', 'Benutzer-Einstellungen und Berechtigungen wurden aktualisiert.');
         }
         header('Location: users.php#tab-accounts');
@@ -332,8 +355,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- 7. Gruppenordner anlegen ---
     if ($action === 'create_group_folder') {
-        $folderName = trim((string)($_POST['folder_name'] ?? ''));
-        $folderDesc = trim((string)($_POST['folder_description'] ?? ''));
+        $folderName     = trim((string)($_POST['folder_name'] ?? ''));
+        $folderDesc     = trim((string)($_POST['folder_description'] ?? ''));
+        $initialGroupId = (int)($_POST['initial_group_id'] ?? 0);
 
         if ($folderName === '') {
             setFlash('error', 'Bitte geben Sie einen Namen für den Gruppenordner ein.');
@@ -345,6 +369,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':d' => mb_substr($folderDesc, 0, 255),
                     ':c' => $currentAdminId,
                 ]);
+                $newGfId = (int)$pdo->lastInsertId();
+                if ($newGfId > 0 && $initialGroupId > 0) {
+                    $stmtPerm = $pdo->prepare(
+                        'INSERT INTO group_folder_permissions (group_folder_id, group_id, can_write) VALUES (:gf, :gid, 1)'
+                    );
+                    $stmtPerm->execute([':gf' => $newGfId, ':gid' => $initialGroupId]);
+                }
                 setFlash('success', sprintf('Gruppenordner "%s" wurde erfolgreich erstellt.', $folderName));
             } catch (PDOException) {
                 setFlash('error', 'Ein Gruppenordner mit diesem Namen existiert bereits.');
@@ -498,6 +529,7 @@ $groupMembersRaw = $pdo->query(
 )->fetchAll();
 $membersByGroup = [];
 $groupsByUser   = [];
+$groupIdsByUser = [];
 $groupNamesMap  = [];
 foreach ($allGroups as $gRow) {
     $groupNamesMap[(int)$gRow['id']] = (string)$gRow['name'];
@@ -507,7 +539,8 @@ foreach ($groupMembersRaw as $gm) {
     $uid = (int)$gm['user_id'];
     $membersByGroup[$gid][] = $gm;
     if (isset($groupNamesMap[$gid])) {
-        $groupsByUser[$uid][] = $groupNamesMap[$gid];
+        $groupsByUser[$uid][]   = $groupNamesMap[$gid];
+        $groupIdsByUser[$uid][] = $gid;
     }
 }
 
@@ -827,6 +860,20 @@ require_once __DIR__ . '/includes/header.php';
                                     <span class="font-semibold"><?= $pMeta['icon'] ?> <?= e($pMeta['label']) ?></span>
                                     <span class="block text-[10px] text-slate-500 dark:text-slate-400"><?= e($pMeta['desc']) ?></span>
                                 </span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($allGroups)): ?>
+                <div class="p-3 rounded-xl bg-white/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                    <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">🏢 Direkt zu Benutzergruppen hinzufügen (optional):</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <?php foreach ($allGroups as $gItem): ?>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                <input type="checkbox" name="group_ids[]" value="<?= (int)$gItem['id'] ?>" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                                <span>🏢 <?= e((string)$gItem['name']) ?></span>
                             </label>
                         <?php endforeach; ?>
                     </div>
@@ -1260,6 +1307,29 @@ require_once __DIR__ . '/includes/header.php';
                                         </div>
                                     <?php endif; ?>
 
+                                    <?php if (!empty($allGroups)): ?>
+                                        <?php $uCurrentGroupIds = $groupIdsByUser[$uId] ?? []; ?>
+                                        <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                                            <input type="hidden" name="sync_groups" value="1">
+                                            <span class="block text-xs font-bold text-slate-800 dark:text-slate-200">🏢 Mitgliedschaft in Benutzergruppen:</span>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <?php foreach ($allGroups as $gItem): ?>
+                                                    <?php $gItemId = (int)$gItem['id']; ?>
+                                                    <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            name="group_ids[]"
+                                                            value="<?= $gItemId ?>"
+                                                            <?= in_array($gItemId, $uCurrentGroupIds, true) ? 'checked' : '' ?>
+                                                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                        >
+                                                        <span class="font-medium">🏢 <?= e((string)$gItem['name']) ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
                                         <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
                                             <input type="checkbox" name="allow_user_sharing" value="1" <?= $uShareVis ? 'checked' : '' ?> class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
@@ -1476,21 +1546,31 @@ require_once __DIR__ . '/includes/header.php';
                     name="folder_name"
                     required
                     maxlength="120"
-                    placeholder="Ordnername (z.B. Projektunterlagen)"
-                    class="sm:col-span-5 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                    placeholder="Ordnername (z.B. Familie, Projekt)"
+                    class="sm:col-span-4 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
                 >
                 <input
                     type="text"
                     name="folder_description"
                     maxlength="255"
                     placeholder="Optionale Beschreibung"
-                    class="sm:col-span-4 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                    class="sm:col-span-3 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
                 >
+                <select
+                    name="initial_group_id"
+                    title="Optional direkt für eine Gruppe freigeben"
+                    class="sm:col-span-3 px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                >
+                    <option value="0">+ Direkt für Gruppe freigeben (optional)…</option>
+                    <?php foreach ($allGroups as $gOpt): ?>
+                        <option value="<?= (int)$gOpt['id'] ?>">🏢 <?= e((string)$gOpt['name']) ?> (Schreibrecht)</option>
+                    <?php endforeach; ?>
+                </select>
                 <button
                     type="submit"
-                    class="sm:col-span-3 py-2 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm transition-colors cursor-pointer"
+                    class="sm:col-span-2 py-2 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm transition-colors cursor-pointer"
                 >
-                    ➕ Ordner erstellen
+                    ➕ Erstellen
                 </button>
             </form>
 
@@ -1510,7 +1590,9 @@ require_once __DIR__ . '/includes/header.php';
                             <div class="flex items-start justify-between gap-2">
                                 <div>
                                     <h3 class="text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
-                                        <span>📁 <?= e((string)$gf['name']) ?></span>
+                                        <a href="index.php?group_folder=<?= $gfId ?>" class="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" title="Gruppenordner im Dateimanager öffnen">
+                                            📁 <?= e((string)$gf['name']) ?>
+                                        </a>
                                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
                                             <?= (int)$gf['file_count'] ?> Dateien &bull; <?= e(formatBytes((int)$gf['folder_size'])) ?>
                                         </span>
@@ -1520,14 +1602,23 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php endif; ?>
                                 </div>
 
-                                <form action="users.php" method="post" onsubmit="return confirm('Gruppenordner &quot;<?= e(addslashes((string)$gf['name'])) ?>&quot; samt enthaltenen Dateien wirklich löschen?');">
-                                    <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                                    <input type="hidden" name="action" value="delete_group_folder">
-                                    <input type="hidden" name="group_folder_id" value="<?= $gfId ?>">
-                                    <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
-                                        Löschen
-                                    </button>
-                                </form>
+                                <div class="inline-flex items-center gap-1.5 shrink-0">
+                                    <a
+                                        href="index.php?group_folder=<?= $gfId ?>"
+                                        class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs"
+                                        title="Diesen Gruppenordner im Dateimanager öffnen"
+                                    >
+                                        📂 Öffnen
+                                    </a>
+                                    <form action="users.php" method="post" class="inline" onsubmit="return confirm('Gruppenordner &quot;<?= e(addslashes((string)$gf['name'])) ?>&quot; samt enthaltenen Dateien wirklich löschen?');">
+                                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                                        <input type="hidden" name="action" value="delete_group_folder">
+                                        <input type="hidden" name="group_folder_id" value="<?= $gfId ?>">
+                                        <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-600 dark:text-red-300 text-xs font-medium cursor-pointer">
+                                            Löschen
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
 
                             <!-- Aktuelle Berechtigungen -->

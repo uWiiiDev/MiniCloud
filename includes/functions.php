@@ -156,8 +156,49 @@ function getUserStorageStats(PDO $pdo, int $userId): array
  */
 function getAccessibleGroupFolders(PDO $pdo, int $userId, bool $isAdmin = false): array
 {
-    // Legacy-Gruppenordner wurden durch das direkte Ordner- & Gruppen-Teilen (user_shares) abgelöst.
-    return [];
+    $hasAdminAccess = $isAdmin || (function_exists('hasAdminPermission') && hasAdminPermission('users'));
+
+    try {
+        if ($hasAdminAccess) {
+            $stmt = $pdo->query(
+                'SELECT gf.id,
+                        gf.name,
+                        gf.description,
+                        gf.created_by,
+                        gf.created_at,
+                        1 AS can_write,
+                        (SELECT COUNT(*) FROM files f WHERE f.group_folder_id = gf.id AND f.deleted_at IS NULL) AS file_count,
+                        (SELECT COALESCE(SUM(f.file_size), 0) FROM files f WHERE f.group_folder_id = gf.id AND f.deleted_at IS NULL) AS folder_size
+                 FROM group_folders gf
+                 ORDER BY gf.name ASC'
+            );
+            return $stmt ? $stmt->fetchAll() : [];
+        }
+
+        $stmt = $pdo->prepare(
+            'SELECT gf.id,
+                    gf.name,
+                    gf.description,
+                    gf.created_by,
+                    gf.created_at,
+                    MAX(COALESCE(gfp.can_write, 0)) AS can_write,
+                    (SELECT COUNT(*) FROM files f WHERE f.group_folder_id = gf.id AND f.deleted_at IS NULL) AS file_count,
+                    (SELECT COALESCE(SUM(f.file_size), 0) FROM files f WHERE f.group_folder_id = gf.id AND f.deleted_at IS NULL) AS folder_size
+             FROM group_folders gf
+             INNER JOIN group_folder_permissions gfp ON gfp.group_folder_id = gf.id
+             WHERE gfp.user_id = :uid1
+                OR gfp.group_id IN (SELECT gm.group_id FROM group_members gm WHERE gm.user_id = :uid2)
+             GROUP BY gf.id, gf.name, gf.description, gf.created_by, gf.created_at
+             ORDER BY gf.name ASC'
+        );
+        $stmt->execute([
+            ':uid1' => $userId,
+            ':uid2' => $userId,
+        ]);
+        return $stmt->fetchAll();
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -165,7 +206,45 @@ function getAccessibleGroupFolders(PDO $pdo, int $userId, bool $isAdmin = false)
  */
 function canUserAccessGroupFolder(PDO $pdo, int $userId, int $groupFolderId, bool $requireWrite = false, bool $isAdmin = false): bool
 {
-    return false;
+    if ($groupFolderId <= 0) {
+        return false;
+    }
+
+    $hasAdminAccess = $isAdmin || (function_exists('hasAdminPermission') && hasAdminPermission('users'));
+
+    try {
+        if ($hasAdminAccess) {
+            $stmt = $pdo->prepare('SELECT id FROM group_folders WHERE id = :id LIMIT 1');
+            $stmt->execute([':id' => $groupFolderId]);
+            return (bool)$stmt->fetchColumn();
+        }
+
+        $sql = 'SELECT MAX(COALESCE(gfp.can_write, 0)) AS max_write, COUNT(*) AS cnt
+                FROM group_folder_permissions gfp
+                INNER JOIN group_folders gf ON gf.id = gfp.group_folder_id
+                WHERE gfp.group_folder_id = :gfid
+                  AND (
+                      gfp.user_id = :uid1
+                      OR gfp.group_id IN (SELECT gm.group_id FROM group_members gm WHERE gm.user_id = :uid2)
+                  )';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':gfid' => $groupFolderId,
+            ':uid1' => $userId,
+            ':uid2' => $userId,
+        ]);
+        $row = $stmt->fetch();
+        if (!$row || (int)$row['cnt'] === 0) {
+            return false;
+        }
+
+        if ($requireWrite) {
+            return (int)$row['max_write'] === 1;
+        }
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
 }
 
 /**
