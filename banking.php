@@ -2585,25 +2585,25 @@ require_once __DIR__ . '/includes/header.php';
                 </select>
             </div>
 
-            <div class="sm:col-span-2 flex items-center gap-2">
-                <div class="flex-1">
-                    <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Volltextsuche (Empfänger, Zweck, Betrag)</label>
+            <div class="sm:col-span-2">
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Volltextsuche (Empfänger, Zweck, Betrag)</label>
+                <div class="flex items-stretch gap-2">
                     <input
                         type="text"
                         name="q"
                         value="<?= e($searchQuery) ?>"
                         placeholder="z.B. Postbank, REWE, Miete, Stadtwerke, 49,00..."
-                        class="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                        class="flex-1 min-w-0 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                     >
+                    <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white border border-brand-600 cursor-pointer shrink-0 inline-flex items-center justify-center">
+                        🔍 Filtern
+                    </button>
+                    <?php if ($filterYear !== 'all' || $filterMonth !== 'all' || $filterCategory !== 'all' || $filterType !== 'all' || $searchQuery !== ''): ?>
+                        <a href="banking.php?account_id=<?= (int)$selectedAccountId ?>&amp;tab=<?= e($activeTab) ?>" class="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 shrink-0 inline-flex items-center justify-center" title="Filter zurücksetzen">
+                            ✕
+                        </a>
+                    <?php endif; ?>
                 </div>
-                <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer shrink-0">
-                    🔍 Filtern
-                </button>
-                <?php if ($filterYear !== 'all' || $filterMonth !== 'all' || $filterCategory !== 'all' || $filterType !== 'all' || $searchQuery !== ''): ?>
-                    <a href="banking.php?account_id=<?= (int)$selectedAccountId ?>&amp;tab=<?= e($activeTab) ?>" class="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 shrink-0" title="Filter zurücksetzen">
-                        ✕
-                    </a>
-                <?php endif; ?>
             </div>
         </form>
     </div>
