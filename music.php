@@ -1474,7 +1474,13 @@ if (!$isGuestMode && $userId > 0) {
         // Der Benutzer hat den Ordner-Filter explizit geändert (oder Reset/Alle Ordner gewählt)
         $explicitFolder = trim((string)$_GET['folder']);
         $_SESSION['music_last_folder'] = $explicitFolder;
-        @setcookie('mc_music_folder_' . $userId, $explicitFolder, time() + (86400 * 90), '/; samesite=lax');
+        try {
+            setcookie('mc_music_folder_' . $userId, $explicitFolder, [
+                'expires'  => time() + (86400 * 90),
+                'path'     => '/',
+                'samesite' => 'Lax',
+            ]);
+        } catch (Throwable) {}
 
         try {
             $pdo->prepare('
@@ -1511,7 +1517,13 @@ if (!$isGuestMode && $userId > 0) {
                 // Ordner existiert nicht mehr -> sauber zurücksetzen
                 $folderFilter = '';
                 $_SESSION['music_last_folder'] = '';
-                @setcookie('mc_music_folder_' . $userId, '', time() - 3600, '/; samesite=lax');
+                try {
+                    setcookie('mc_music_folder_' . $userId, '', [
+                        'expires'  => time() - 3600,
+                        'path'     => '/',
+                        'samesite' => 'Lax',
+                    ]);
+                } catch (Throwable) {}
                 try {
                     $pdo->prepare('UPDATE music_user_prefs SET last_folder = "" WHERE user_id = :uid')->execute([':uid' => $userId]);
                 } catch (Throwable) {}
