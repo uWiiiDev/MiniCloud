@@ -689,6 +689,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ------------------------------------------------------------------------
+    // AKTION: Patientenverfügung aus Vorlage in Archiv speichern & aktivieren
+    // ------------------------------------------------------------------------
+    if ($action === 'save_living_will_doc') {
+        $willText   = trim((string)($_POST['living_will_text'] ?? ''));
+        $willLoc    = mb_substr(trim((string)($_POST['living_will_location'] ?? 'MiniCloud Patientenakte (ausgedruckt bei Unterlagen)')), 0, 255);
+        $markActive = isset($_POST['mark_active']) && $_POST['mark_active'] === '1';
+
+        if ($willText !== '' && $activeProfileId > 0) {
+            $pNameSafe = preg_replace('/[^a-zA-Z0-9_\-]/', '_', (string)($activeProfile['name'] ?? 'Patient'));
+            $docFileName = 'Patientenverfuegung_' . $pNameSafe . '_' . date('Y-m-d') . '.txt';
+            $uploadBaseDir = __DIR__ . '/uploads';
+            $safeFolder = 'Gesundheit/' . $pNameSafe;
+            $targetDir = $uploadBaseDir . '/' . $safeFolder;
+            if (!is_dir($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            $storedName = 'will_' . bin2hex(random_bytes(8)) . '.txt';
+            $targetFile = $targetDir . '/' . $storedName;
+            file_put_contents($targetFile, $willText);
+            $fileSize = strlen($willText);
+
+            $stmtInsFile = $pdo->prepare('INSERT INTO files
+                (user_id, folder_path, filename, original_name, file_size, mime_type, is_encrypted)
+                VALUES (:uid, :fp, :fn, :on, :fs, :mt, 0)');
+            $stmtInsFile->execute([
+                ':uid' => $userId, ':fp' => $safeFolder, ':fn' => $storedName,
+                ':on' => $docFileName, ':fs' => $fileSize, ':mt' => 'text/plain'
+            ]);
+            $newFileId = (int)$pdo->lastInsertId();
+
+            $stmtInsDoc = $pdo->prepare('INSERT INTO health_documents
+                (user_id, profile_id, title, category, document_date, issuer, summary, file_id, include_in_dossier)
+                VALUES (:uid, :pid, :title, :cat, :ddate, :issuer, :sum, :fid, 1)');
+            $stmtInsDoc->execute([
+                ':uid' => $userId, ':pid' => $activeProfileId,
+                ':title' => 'Patientenverfügung nach BMJ (§ 1901a BGB)',
+                ':cat' => 'living_will',
+                ':ddate' => date('Y-m-d'),
+                ':issuer' => (string)($activeProfile['name'] ?? 'Verfügender'),
+                ':sum' => 'Formgerechte Patientenverfügung mit Festlegungen zu lebenserhaltenden Maßnahmen, Palliative Care, Beatmung, künstlicher Ernährung und Vorsorgebevollmächtigten.',
+                ':fid' => $newFileId
+            ]);
+
+            if ($markActive) {
+                $pdo->prepare('UPDATE health_profiles SET has_living_will = 1, living_will_location = :loc WHERE id = :pid AND user_id = :uid')
+                    ->execute([':loc' => $willLoc, ':pid' => $activeProfileId, ':uid' => $userId]);
+            }
+
+            setFlash('success', 'Patientenverfügung erfolgreich generiert, im Befund-Archiv hinterlegt und im Notfallpass aktiviert.');
+        }
+        header('Location: health.php?tab=emergency' . ($activeProfileId > 0 ? '&profile=' . $activeProfileId : ''));
+        exit;
+    }
+
+    // ------------------------------------------------------------------------
     // AKTION: Impfung / Vorsorge eintragen
     // ------------------------------------------------------------------------
     if ($action === 'save_vaccine') {
@@ -1219,6 +1274,12 @@ require_once __DIR__ . '/includes/header.php';
                                     }) ?>
                                 </span>
                             </div>
+                            <div class="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <span class="text-[11px] text-slate-500 dark:text-slate-400">Rechtssichere BMJ-Vorlage (§ 1901a BGB):</span>
+                                <button type="button" onclick="openLivingWillModal()" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer">
+                                    📜 Vorlage öffnen &rarr;
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1243,6 +1304,10 @@ require_once __DIR__ . '/includes/header.php';
 
             <!-- BUTTONS: AUSDRUCKEN & BEARBEITEN -->
             <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
+                <button type="button" onclick="openLivingWillModal()"
+                        class="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer">
+                    📜 Patientenverfügung (Vorlage &amp; Generator)
+                </button>
                 <button type="button" onclick="window.print()"
                         class="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-950 font-bold text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer">
                     🖨️ Notfallausweis drucken (Scheckkarten-Format)
@@ -1599,6 +1664,10 @@ require_once __DIR__ . '/includes/header.php';
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button type="button" onclick="openLivingWillModal()"
+                            class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer">
+                        📜 Patientenverfügung
+                    </button>
                     <button type="button" onclick="openDossierModal()"
                             class="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer">
                         📄 1-Klick-Facharzt-Dossier
@@ -1633,6 +1702,7 @@ require_once __DIR__ . '/includes/header.php';
                                             'lab_report' => '🧪',
                                             'radiology' => '🩻',
                                             'dental' => '🦷',
+                                            'living_will' => '📜',
                                             default => '📄'
                                         }) ?>
                                     </span>
@@ -2422,6 +2492,7 @@ require_once __DIR__ . '/includes/header.php';
                         <option value="lab_report">Labor- / Blutbefund</option>
                         <option value="radiology">Röntgen / MRT / CT</option>
                         <option value="dental">Zahnarzt</option>
+                        <option value="living_will">Patientenverfügung / Vorsorge</option>
                         <option value="other">Sonstiges Dokument</option>
                     </select>
                 </div>
@@ -2752,6 +2823,192 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <!-- ========================================================================== -->
+<!-- MODAL: PATIENTENVERFÜGUNGS-GENERATOR & BMJ-VORLAGE (§ 1901a BGB)           -->
+<!-- ========================================================================== -->
+<div id="modalLivingWill" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+    <div class="mc-card w-full max-w-6xl p-5 sm:p-6 space-y-4 max-h-[95vh] overflow-y-auto rounded-3xl shadow-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+            <div>
+                <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    📜 Patientenverfügung nach BMJ-Muster (§ 1901a BGB)
+                </h3>
+                <p class="text-xs text-slate-500">
+                    Rechtssichere Vorsorgeerklärung mit individuellen Behandlungsfestlegungen, Druckansicht &amp; Cloud-Archivierung
+                </p>
+            </div>
+            <button type="button" onclick="document.getElementById('modalLivingWill').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">✕</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 text-xs">
+            <!-- LINKE SPALTE: EINSTELLUNGEN & WEICHENSTELLUNGEN -->
+            <div class="lg:col-span-5 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                <!-- 1. PERSONALIEN -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                    <p class="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>👤</span> 1. Angaben zum/zur Verfügenden
+                    </p>
+                    <div>
+                        <label class="block font-semibold mb-0.5 text-slate-700 dark:text-slate-300">Vollständiger Name *</label>
+                        <input type="text" id="lwInputName" oninput="updateLivingWillPreview()" value="<?= e($activeProfile['name'] ?? '') ?>" class="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-semibold mb-0.5 text-slate-700 dark:text-slate-300">Geburtsdatum</label>
+                            <input type="text" id="lwInputBirthDate" oninput="updateLivingWillPreview()" value="<?= !empty($activeProfile['birth_date']) ? date('d.m.Y', strtotime($activeProfile['birth_date'])) : '' ?>" placeholder="TT.MM.JJJJ" class="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+                        </div>
+                        <div>
+                            <label class="block font-semibold mb-0.5 text-slate-700 dark:text-slate-300">Wohnort / Anschrift</label>
+                            <input type="text" id="lwInputAddress" oninput="updateLivingWillPreview()" placeholder="Musterstadt" class="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-0.5 text-slate-700 dark:text-slate-300">Hausarzt / Behandelnder Arzt</label>
+                        <input type="text" id="lwInputDoc" oninput="updateLivingWillPreview()" value="<?= e($activeProfile['primary_doctor'] ?? '') ?>" placeholder="z. B. Dr. med. Schmidt" class="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+                    </div>
+                </div>
+
+                <!-- 2. GELTUNGSBEREICH (SITUATIONEN) -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <p class="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>⚡</span> 2. Situationen, in denen die Verfügung gilt
+                    </p>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptSterben" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Unmittelbarer Sterbeprozess:</strong> Wenn ich mich unabwendbar im unmittelbaren Sterben befinde.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptEndstadium" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Endstadium unheilbarer Krankheit:</strong> Tödlicher Verlauf, selbst wenn Tod erst in Wochen/Monaten eintritt.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptHirn" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Schwerster Dauerschaden des Gehirns:</strong> Dauerhafter Bewusstseinsverlust / Wachkoma (apallisches Syndrom).</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptDemenz" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Fortgeschrittener Hirnabbau:</strong> Schwere Demenz mit Unfähigkeit zur natürlichen Nahrungsaufnahme.</span>
+                    </label>
+                </div>
+
+                <!-- 3. BEHANDLUNGSWÜNSCHE & ANORDNUNGEN -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <p class="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>🏥</span> 3. Medizinische Festlegungen &amp; Anordnungen
+                    </p>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptLifeSupport" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Lebenserhaltende Maßnahmen:</strong> Keine künstliche Verlängerung des Sterbeprozesses.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptPalliative" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Palliative Schmerztherapie:</strong> Volle Schmerzlinderung &amp; Sedierung, auch wenn als Nebenwirkung die Lebenszeit verkürzt wird.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptBeatmung" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Künstliche Beatmung:</strong> Ablehnung invasiver Dauerbeatmung (Intubation); Beendigung begonnener Beatmung.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptErnaehrung" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Künstliche Ernährung / PEG:</strong> Keine Magensonde; Flüssigkeitsgabe nur zur Linderung von Mundtrockenheit &amp; Durst.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptDnr" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Wiederbelebung (DNR):</strong> Verzicht auf Reanimationsversuche bei Herz- oder Atemstillstand.</span>
+                    </label>
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" id="lwOptHospiz" onchange="updateLivingWillPreview()" checked class="mt-0.5 rounded text-indigo-600">
+                        <span><strong>Sterbeort:</strong> Wenn möglich Sterben in vertrauter häuslicher Umgebung oder Hospiz statt Intensivstation.</span>
+                    </label>
+                </div>
+
+                <!-- 4. ORGANSPENDE -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <p class="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>🫀</span> 4. Verhältnis zur Organspende
+                    </p>
+                    <div class="space-y-1.5">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="lwOrganChoice" value="card" onchange="updateLivingWillPreview()" checked class="text-indigo-600">
+                            <span>Es gelten die Festlegungen in meinem gesonderten Organspendeausweis.</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="lwOrganChoice" value="yes" onchange="updateLivingWillPreview()" class="text-indigo-600">
+                            <span>Organspende befürwortet (kurzzeitige Organerhaltung bis Hirntod gestattet).</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="lwOrganChoice" value="no" onchange="updateLivingWillPreview()" class="text-indigo-600">
+                            <span>Organspende ausdrücklich abgelehnt.</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 5. BEVOLLMÄCHTIGTE VERTRAUENSPERSONEN -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <p class="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>🤝</span> 5. Bevollmächtigte / Vertrauensperson(en)
+                    </p>
+                    <textarea id="lwInputProxy" oninput="updateLivingWillPreview()" rows="2" class="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs" placeholder="Name, Telefonnummer, Anschrift der bevollmächtigten Vertrauensperson"><?php
+                    if (!empty($emergencyList)) {
+                        $pLines = [];
+                        foreach ($emergencyList as $c) {
+                            $pLines[] = trim(($c['name'] ?? '') . (!empty($c['rel']) ? ' (' . $c['rel'] . ')' : '') . (!empty($c['phone']) ? ', Tel: ' . $c['phone'] : ''));
+                        }
+                        echo e(implode("\n", $pLines));
+                    }
+                    ?></textarea>
+                </div>
+            </div>
+
+            <!-- RECHTE SPALTE: LIVE-VORSCHAU DES DOKUMENTS -->
+            <div class="lg:col-span-7 flex flex-col justify-between space-y-3">
+                <div class="flex items-center justify-between">
+                    <p class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>📜</span> Dokument-Vorschau (DIN-A4 Druckansicht)
+                    </p>
+                    <span class="text-[11px] text-slate-500">§ 1901a BGB konform</span>
+                </div>
+
+                <div id="livingWillPreviewBox" class="p-6 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-inner font-serif text-[11px] sm:text-xs leading-relaxed max-h-[60vh] overflow-y-auto space-y-3 select-text text-slate-800 dark:text-slate-200">
+                    <!-- Wird dynamisch durch updateLivingWillPreview() befüllt -->
+                </div>
+
+                <!-- AKTIONEN -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="copyLivingWillText()" id="btnCopyLw" class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer">
+                            📋 In Zwischenablage
+                        </button>
+                        <button type="button" onclick="saveLivingWillToArchive()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+                            📁 In Patientenakte ablegen
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="document.getElementById('modalLivingWill').classList.add('hidden')" class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-semibold text-xs">
+                            Schließen
+                        </button>
+                        <button type="button" onclick="printLivingWillDoc()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer">
+                            🖨️ DIN-A4 Drucken / PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verstecktes Formular zum automatischen Archivieren der Patientenverfügung -->
+<form method="post" id="formSaveLivingWill" class="hidden">
+    <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+    <input type="hidden" name="action" value="save_living_will_doc">
+    <input type="hidden" name="living_will_text" id="inputLivingWillText" value="">
+    <input type="hidden" name="living_will_location" id="inputLivingWillLocation" value="Gespeichert in MiniCloud-Patientenakte (ausgedruckt bei Unterlagen)">
+    <input type="hidden" name="mark_active" value="1">
+</form>
+
+<!-- Druck-Container für sauberes DIN-A4 Drucken -->
+<div id="printableLivingWillDoc" class="hidden"></div>
+
+<!-- ========================================================================== -->
 <!-- JAVASCRIPT-LOGIK FÜR MODALS, EDITING & PRESETS                             -->
 <!-- ========================================================================== -->
 <script>
@@ -2929,11 +3186,357 @@ function generateDossierPrint() {
     document.getElementById('modalDossier').classList.add('hidden');
     window.print();
 }
+
+// =============================================================================
+// PATIENTENVERFÜGUNG (VORLAGE, GENERATOR, DIN-A4 DRUCK & ARCHIVIERUNG)
+// =============================================================================
+function openLivingWillModal() {
+    updateLivingWillPreview();
+    document.getElementById('modalLivingWill').classList.remove('hidden');
+}
+
+function escapeHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function getLivingWillGeneratedData() {
+    const name    = (document.getElementById('lwInputName')?.value || '').trim() || 'Vorname Nachname';
+    const bdate   = (document.getElementById('lwInputBirthDate')?.value || '').trim();
+    const address = (document.getElementById('lwInputAddress')?.value || '').trim();
+    const doc     = (document.getElementById('lwInputDoc')?.value || '').trim();
+    const proxy   = (document.getElementById('lwInputProxy')?.value || '').trim();
+
+    const optSterben     = document.getElementById('lwOptSterben')?.checked ?? true;
+    const optEndstadium  = document.getElementById('lwOptEndstadium')?.checked ?? true;
+    const optHirn        = document.getElementById('lwOptHirn')?.checked ?? true;
+    const optDemenz      = document.getElementById('lwOptDemenz')?.checked ?? true;
+
+    const optLifeSupport = document.getElementById('lwOptLifeSupport')?.checked ?? true;
+    const optPalliative  = document.getElementById('lwOptPalliative')?.checked ?? true;
+    const optBeatmung    = document.getElementById('lwOptBeatmung')?.checked ?? true;
+    const optErnaehrung  = document.getElementById('lwOptErnaehrung')?.checked ?? true;
+    const optDnr         = document.getElementById('lwOptDnr')?.checked ?? true;
+    const optHospiz      = document.getElementById('lwOptHospiz')?.checked ?? true;
+
+    const organChoiceEl = document.querySelector('input[name="lwOrganChoice"]:checked');
+    const organChoice   = organChoiceEl ? organChoiceEl.value : 'card';
+
+    // Generiere reinen Text für Zwischenablage und Dateiablage
+    let txt = `PATIENTENVERFÜGUNG\ngemäß § 1901a Abs. 1 BGB\n\n`;
+    txt += `Ich, ${name}`;
+    if (bdate) txt += `, geboren am ${bdate}`;
+    if (address) txt += `, wohnhaft in ${address}`;
+    txt += `,\n`;
+    txt += `treffe hiermit für den Fall, dass ich meinen Willen infolge von Bewusstlosigkeit, Hirnschädigung, Krankheit oder Schwäche nicht mehr bilden oder äußern kann, folgende unmittelbar verbindliche Anordnungen:\n\n`;
+
+    txt += `1. SITUATIONEN, FÜR DIE DIESE VERFÜGUNG GILT:\n`;
+    let sitCount = 0;
+    if (optSterben) {
+        sitCount++;
+        txt += `(${sitCount}) Wenn ich mich aller Wahrscheinlichkeit nach unabwendbar im unmittelbaren Sterbeprozess befinde.\n`;
+    }
+    if (optEndstadium) {
+        sitCount++;
+        txt += `(${sitCount}) Wenn ich mich im Endstadium einer unheilbaren, tödlich verlaufenden Krankheit befinde, selbst wenn der Eintritt des Todes noch Wochen oder Monate dauern sollte.\n`;
+    }
+    if (optHirn) {
+        sitCount++;
+        txt += `(${sitCount}) Wenn infolge einer schwersten Gehirnschädigung (z. B. nach Reanimation, Schlaganfall, Hirnblutung oder Schädel-Hirn-Trauma) meine Fähigkeit, Einsichten zu gewinnen und Entscheidungen zu treffen, aller Voraussicht nach dauerhaft erloschen ist (Wachkoma / apallisches Syndrom).\n`;
+    }
+    if (optDemenz) {
+        sitCount++;
+        txt += `(${sitCount}) Wenn ich infolge eines fortgeschrittenen Hirnabbauprozesses (z. B. bei schwerer Demenzerkrankung) nicht mehr in der Lage bin, Nahrung und Flüssigkeit auf natürlichem Wege zu mir zu nehmen.\n`;
+    }
+    if (sitCount === 0) {
+        txt += `(Für alle medizinisch aussichtslosen Situationen mit irreversiblem Bewusstseinsverlust).\n`;
+    }
+    txt += `\n`;
+
+    txt += `2. KONKRETE BEHANDLUNGSENTSCHEIDUNGEN:\n`;
+    txt += `In den vorstehend beschriebenen Situationen verfüge ich verbindlich:\n`;
+    if (optLifeSupport) {
+        txt += `• Lebenserhaltende Maßnahmen: Ich wünsche keine künstliche Verlängerung meines Lebens, wenn dadurch lediglich der Sterbeprozess qualvoll verlängert wird. Medizinische Maßnahmen sind auf die Linderung von Schmerzen, Atemnot, Übelkeit und Angst zu beschränken.\n`;
+    }
+    if (optPalliative) {
+        txt += `• Palliative Schmerz- und Symptombehandlung: Ich verlange eine fachgerechte, lindernde Schmerztherapie. Treten Schmerzen, Erstickungsangst oder schwere Unruhe auf, fordere ich die Gabe hochwirksamer Schmerzmittel und ggf. eine palliative Sedierung – selbst wenn dadurch als unvermeidbare Nebenwirkung mein Todeseintritt beschleunigt werden sollte.\n`;
+    }
+    if (optBeatmung) {
+        txt += `• Künstliche Beatmung: Ich lehne eine invasive künstliche Dauerbeatmung (Intubation, Tracheostoma) ab. Eine bereits eingeleitete Beatmung ist unter den genannten Voraussetzungen schrittweise und schonend zu beenden.\n`;
+    }
+    if (optErnaehrung) {
+        txt += `• Künstliche Ernährung & Flüssigkeitszufuhr: Ich lehne die künstliche Zufuhr von Nahrung und Flüssigkeit über Magensonden (PEG) oder Venenkatheter ab. Flüssigkeit darf nur in dem Umfang verabreicht werden, wie es zur Linderung von Durstgefühl und Mundtrockenheit erforderlich ist.\n`;
+    }
+    if (optDnr) {
+        txt += `• Wiederbelebung (DNR): Kommt es zum Herz- oder Atemstillstand, lehne ich Wiederbelebungsmaßnahmen (Reanimation, Herzdruckmassage, Defibrillation) ausdrücklich ab.\n`;
+    }
+    if (optHospiz) {
+        txt += `• Sterbebegleitung & Ort: Ich wünsche, wenn möglich, in vertrauter häuslicher Umgebung oder in einem Hospiz im Beisein mir nahestehender Menschen zu sterben.\n`;
+    }
+    txt += `\n`;
+
+    txt += `3. VERHÄLTNIS ZUR ORGANSPENDE:\n`;
+    if (organChoice === 'yes') {
+        txt += `Ich befürworte eine Organspende. Kurzzeitige intensivmedizinische Maßnahmen, die ausschließlich der Feststellung des Hirntodes und der Erhaltung transplantierbarer Organe dienen, sind ausdrücklich gestattet.\n\n`;
+    } else if (organChoice === 'no') {
+        txt += `Ich lehne eine Entnahme von Organen oder Geweben nach meinem Tod ausdrücklich ab.\n\n`;
+    } else {
+        txt += `Hinsichtlich einer Organspende gelten die Festlegungen in meinem gesondert mitgeführten Organspendeausweis.\n\n`;
+    }
+
+    if (proxy) {
+        txt += `4. DURCHSETZUNG MEINES WILLENS (BEVOLLMÄCHTIGTE):\n`;
+        txt += `Zur Durchsetzung meiner Wünsche benenne ich folgende bevollmächtigte Person(en) meines Vertrauens:\n${proxy}\n`;
+        txt += `Meine behandelnden Ärzte werden insoweit gegenüber meinen Bevollmächtigten von der ärztlichen Schweigepflicht entbunden (§ 1901a BGB).\n\n`;
+    }
+
+    if (doc) {
+        txt += `Hausarzt / behandelnde Praxis:\n${doc}\n\n`;
+    }
+
+    txt += `5. VERBINDLICHKEIT & RECHTLICHE HINWEISE:\n`;
+    txt += `Ich habe diese Patientenverfügung nach reiflicher Überlegung im Vollbesitz meiner geistigen Kräfte und frei von äußerem Zwang verfasst. Sie ist für Ärzte und Pflegekräfte unmittelbar verbindlich (§ 1901a BGB). Sie gilt zeitlich unbegrenzt, solange ich sie nicht widerrufe.\n\n`;
+
+    txt += `Ort, Datum: ________________________\n\n`;
+    txt += `Unterschrift: ___________________________________________________\n(${name})\n\n`;
+    txt += `(Optional: Bestätigung durch Zeugen oder Arzt)\n`;
+    txt += `Ich bestätige, dass der/die Verfügende die Patientenverfügung eigenhändig und im Vollbesitz der geistigen Kräfte unterzeichnet hat:\n\n`;
+    txt += `Ort, Datum: ________________________  Unterschrift: _______________________________\n`;
+
+    return {
+        text: txt,
+        name: name,
+        bdate: bdate,
+        address: address,
+        doc: doc,
+        proxy: proxy,
+        optSterben, optEndstadium, optHirn, optDemenz,
+        optLifeSupport, optPalliative, optBeatmung, optErnaehrung, optDnr, optHospiz,
+        organChoice
+    };
+}
+
+function updateLivingWillPreview() {
+    const data = getLivingWillGeneratedData();
+    const box = document.getElementById('livingWillPreviewBox');
+    if (!box) return;
+
+    box.innerHTML = `
+        <div class="text-center border-b border-slate-300 dark:border-slate-700 pb-3 mb-4">
+            <h2 class="text-base sm:text-lg font-bold tracking-wider uppercase text-slate-900 dark:text-white">Patientenverfügung</h2>
+            <p class="text-[11px] text-slate-500 font-sans">gemäß § 1901a Abs. 1 Bürgerliches Gesetzbuch (BGB)</p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] space-y-0.5">
+            <div><strong>Verfügende Person:</strong> ${escapeHtml(data.name)}</div>
+            ${data.bdate ? `<div><strong>Geburtsdatum:</strong> ${escapeHtml(data.bdate)}</div>` : ''}
+            ${data.address ? `<div><strong>Wohnanschrift:</strong> ${escapeHtml(data.address)}</div>` : ''}
+            ${data.doc ? `<div><strong>Hausarzt / Praxis:</strong> ${escapeHtml(data.doc)}</div>` : ''}
+        </div>
+
+        <p class="pt-2 text-justify">
+            Ich treffe hiermit für den Fall, dass ich meinen Willen infolge von Bewusstlosigkeit, Hirnschädigung, schwerer Krankheit oder Schwäche nicht mehr bilden oder äußern kann, folgende <strong>unmittelbar verbindliche Anordnungen</strong>:
+        </p>
+
+        <h3 class="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1 pt-2">
+            1. Situationen, für die diese Verfügung gilt:
+        </h3>
+        <ul class="list-disc pl-5 space-y-1.5 text-slate-700 dark:text-slate-300">
+            ${data.optSterben ? `<li><strong>Unmittelbarer Sterbeprozess:</strong> Wenn ich mich aller Wahrscheinlichkeit nach unabwendbar im unmittelbaren Sterbeprozess befinde.</li>` : ''}
+            ${data.optEndstadium ? `<li><strong>Endstadium unheilbarer Krankheit:</strong> Wenn ich mich im Endstadium einer unheilbaren, tödlich verlaufenden Krankheit befinde, selbst wenn der Todeseintritt noch Wochen oder Monate dauern sollte.</li>` : ''}
+            ${data.optHirn ? `<li><strong>Schwerste Gehirnschädigung / Wachkoma:</strong> Wenn infolge einer Hirnschädigung meine Fähigkeit, Einsichten zu gewinnen und Entscheidungen zu treffen, aller Voraussicht nach dauerhaft erloschen ist (Wachkoma / apallisches Syndrom).</li>` : ''}
+            ${data.optDemenz ? `<li><strong>Fortgeschrittener Hirnabbau:</strong> Wenn ich infolge eines weit fortgeschrittenen Hirnabbauprozesses (z. B. schwerer Demenzerkrankung) nicht mehr in der Lage bin, Nahrung und Flüssigkeit auf natürlichem Wege zu mir zu nehmen.</li>` : ''}
+        </ul>
+
+        <h3 class="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1 pt-2">
+            2. Konkrete Behandlungsentscheidungen:
+        </h3>
+        <p class="italic text-slate-500">In den vorstehend beschriebenen Situationen verfüge ich verbindlich:</p>
+        <ul class="list-disc pl-5 space-y-1.5 text-slate-700 dark:text-slate-300">
+            ${data.optLifeSupport ? `<li><strong>Lebenserhaltende Maßnahmen:</strong> Ich wünsche keine künstliche Verlängerung meines Lebens, wenn dadurch lediglich das Sterben qualvoll verlängert wird.</li>` : ''}
+            ${data.optPalliative ? `<li><strong>Palliative Schmerztherapie:</strong> Ich fordere eine fachgerechte lindernde Schmerztherapie und palliative Sedierung bei Atemnot, Schmerzen oder Angst – auch wenn dadurch als unvermeidbare Nebenwirkung die Lebenszeit verkürzt werden sollte.</li>` : ''}
+            ${data.optBeatmung ? `<li><strong>Künstliche Beatmung:</strong> Ich lehne eine invasive Dauerbeatmung ab; eine bereits eingeleitete Beatmung ist unter diesen Voraussetzungen zu beenden.</li>` : ''}
+            ${data.optErnaehrung ? `<li><strong>Künstliche Ernährung / PEG:</strong> Ich lehne künstliche Ernährung über Magensonden (PEG) ab. Flüssigkeit darf nur zur Linderung von Mundtrockenheit und Durst verabreicht werden.</li>` : ''}
+            ${data.optDnr ? `<li><strong>Wiederbelebung (DNR):</strong> Bei Herz- oder Atemstillstand lehne ich Wiederbelebungsmaßnahmen ausdrücklich ab.</li>` : ''}
+            ${data.optHospiz ? `<li><strong>Sterbeort:</strong> Ich wünsche, wenn möglich, in vertrauter häuslicher Umgebung oder im Hospiz im Beisein mir nahestehender Menschen zu sterben.</li>` : ''}
+        </ul>
+
+        <h3 class="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1 pt-2">
+            3. Verhältnis zur Organspende:
+        </h3>
+        <p class="text-slate-700 dark:text-slate-300">
+            ${data.organChoice === 'yes'
+                ? 'Ich befürworte eine Organspende. Kurzzeitige intensivmedizinische Maßnahmen, die ausschließlich der Organerhaltung und Hirntoddiagnostik dienen, sind gestattet.'
+                : (data.organChoice === 'no'
+                    ? 'Ich lehne eine Entnahme von Organen und Geweben nach meinem Tod ausdrücklich ab.'
+                    : 'Hinsichtlich einer Organspende gelten die Festlegungen in meinem gesondert mitgeführten Organspendeausweis.')}
+        </p>
+
+        ${data.proxy ? `
+            <h3 class="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1 pt-2">
+                4. Durchsetzung meines Willens (Bevollmächtigte):
+            </h3>
+            <p class="text-slate-700 dark:text-slate-300">Zur Durchsetzung meiner Wünsche benenne ich folgende bevollmächtigte Person(en):</p>
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] whitespace-pre-line font-sans">${escapeHtml(data.proxy)}</div>
+            <p class="text-[10px] text-slate-400">Meine behandelnden Ärzte werden insoweit gegenüber meinen Bevollmächtigten von der Schweigepflicht entbunden (§ 1901a BGB).</p>
+        ` : ''}
+
+        <h3 class="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1 pt-2">
+            5. Verbindlichkeit &amp; Unterschrift:
+        </h3>
+        <p class="text-slate-700 dark:text-slate-300 text-justify">
+            Ich habe diese Verfügung nach reiflicher Überlegung im Vollbesitz meiner geistigen Kräfte verfasst. Sie ist für Ärzte und Betreuer unmittelbar bindend (§ 1901a BGB) und gilt zeitlich unbegrenzt, solange sie nicht widerrufen wird.
+        </p>
+
+        <div class="pt-6 grid grid-cols-2 gap-6 text-[10px] font-sans">
+            <div class="border-t border-slate-400 dark:border-slate-600 pt-1">
+                Ort, Datum
+            </div>
+            <div class="border-t border-slate-400 dark:border-slate-600 pt-1">
+                Unterschrift des/der Verfügenden (${escapeHtml(data.name)})
+            </div>
+        </div>
+    `;
+}
+
+function printLivingWillDoc() {
+    const data = getLivingWillGeneratedData();
+    const printBox = document.getElementById('printableLivingWillDoc');
+    if (!printBox) return;
+
+    printBox.innerHTML = `
+        <div style="font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #000; padding: 10mm 15mm;">
+            <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 20px;">
+                <h1 style="font-size: 20pt; font-weight: bold; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px;">Patientenverfügung</h1>
+                <p style="font-size: 11pt; font-weight: bold; margin: 0; color: #333;">gemäß § 1901a Abs. 1 Bürgerliches Gesetzbuch (BGB)</p>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 10.5pt;">
+                <strong>Verfügende Person:</strong> ${escapeHtml(data.name)}
+                ${data.bdate ? `<br><strong>Geburtsdatum:</strong> ${escapeHtml(data.bdate)}` : ''}
+                ${data.address ? `<br><strong>Wohnanschrift:</strong> ${escapeHtml(data.address)}` : ''}
+                ${data.doc ? `<br><strong>Hausarzt:</strong> ${escapeHtml(data.doc)}` : ''}
+            </div>
+
+            <p style="margin-bottom: 16px; font-size: 10.5pt;">
+                Ich treffe hiermit für den Fall, dass ich meinen Willen infolge von Bewusstlosigkeit, schwerster Hirnschädigung, Krankheit oder Schwäche nicht mehr bilden oder äußern kann, folgende <strong>unmittelbar verbindliche Anordnungen</strong>:
+            </p>
+
+            <h2 style="font-size: 12pt; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">1. Situationen, für die diese Verfügung gilt</h2>
+            <ul style="margin: 0 0 16px 20px; padding: 0;">
+                ${data.optSterben ? `<li style="margin-bottom: 6px;"><strong>Unmittelbarer Sterbeprozess:</strong> Wenn ich mich aller Wahrscheinlichkeit nach unabwendbar im unmittelbaren Sterbeprozess befinde.</li>` : ''}
+                ${data.optEndstadium ? `<li style="margin-bottom: 6px;"><strong>Endstadium unheilbarer Krankheit:</strong> Wenn ich mich im Endstadium einer unheilbaren, tödlich verlaufenden Krankheit befinde, selbst wenn der Eintritt des Todes noch Wochen oder Monate dauern sollte.</li>` : ''}
+                ${data.optHirn ? `<li style="margin-bottom: 6px;"><strong>Schwerste Gehirnschädigung / Wachkoma:</strong> Wenn infolge einer Hirnschädigung meine Fähigkeit, Einsichten zu gewinnen und Entscheidungen zu treffen, aller Voraussicht nach dauerhaft erloschen ist (Wachkoma / apallisches Syndrom).</li>` : ''}
+                ${data.optDemenz ? `<li style="margin-bottom: 6px;"><strong>Fortgeschrittener Hirnabbau:</strong> Wenn ich infolge eines weit fortgeschrittenen Hirnabbauprozesses (z. B. schwerer Demenz) nicht mehr in der Lage bin, Nahrung und Flüssigkeit auf natürlichem Wege zu mir zu nehmen.</li>` : ''}
+            </ul>
+
+            <h2 style="font-size: 12pt; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">2. Konkrete Behandlungsentscheidungen</h2>
+            <p style="margin-bottom: 8px;">In den vorstehend beschriebenen Situationen verfüge ich verbindlich:</p>
+            <ul style="margin: 0 0 16px 20px; padding: 0;">
+                ${data.optLifeSupport ? `<li style="margin-bottom: 6px;"><strong>Lebenserhaltende Maßnahmen:</strong> Ich wünsche keine künstliche Lebensverlängerung, wenn dadurch lediglich das Sterben qualvoll verlängert wird.</li>` : ''}
+                ${data.optPalliative ? `<li style="margin-bottom: 6px;"><strong>Palliative Schmerztherapie:</strong> Ich fordere eine fachgerechte lindernde Schmerztherapie und ggf. palliative Sedierung bei Schmerzen, Atemnot oder Erstickungsangst – auch wenn dadurch als unvermeidbare Nebenwirkung mein Todeseintritt beschleunigt werden sollte.</li>` : ''}
+                ${data.optBeatmung ? `<li style="margin-bottom: 6px;"><strong>Künstliche Beatmung:</strong> Ich lehne eine invasive Dauerbeatmung (Intubation) ab. Eine bereits eingeleitete Beatmung ist unter diesen Voraussetzungen zu beenden.</li>` : ''}
+                ${data.optErnaehrung ? `<li style="margin-bottom: 6px;"><strong>Künstliche Ernährung / PEG:</strong> Ich lehne künstliche Ernährung über Magensonden (PEG) ab. Flüssigkeit darf nur zur Linderung von Mundtrockenheit und Durstgefühl verabreicht werden.</li>` : ''}
+                ${data.optDnr ? `<li style="margin-bottom: 6px;"><strong>Wiederbelebung (DNR):</strong> Bei Herz- oder Atemstillstand lehne ich Wiederbelebungsmaßnahmen ausdrücklich ab.</li>` : ''}
+                ${data.optHospiz ? `<li style="margin-bottom: 6px;"><strong>Sterbeort:</strong> Ich wünsche, wenn möglich, in häuslicher Umgebung oder im Hospiz im Beisein mir nahestehender Menschen zu sterben.</li>` : ''}
+            </ul>
+
+            <h2 style="font-size: 12pt; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">3. Verhältnis zur Organspende</h2>
+            <p style="margin-bottom: 16px;">
+                ${data.organChoice === 'yes'
+                    ? 'Ich befürworte eine Organspende. Kurzzeitige intensivmedizinische Maßnahmen, die ausschließlich der Organerhaltung und Hirntoddiagnostik dienen, sind gestattet.'
+                    : (data.organChoice === 'no'
+                        ? 'Ich lehne eine Entnahme von Organen und Geweben nach meinem Tod ausdrücklich ab.'
+                        : 'Hinsichtlich einer Organspende gelten die Festlegungen in meinem gesondert mitgeführten Organspendeausweis.')}
+            </p>
+
+            ${data.proxy ? `
+                <h2 style="font-size: 12pt; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">4. Durchsetzung meines Willens (Bevollmächtigte)</h2>
+                <p style="margin-bottom: 6px;">Zur Durchsetzung meiner Wünsche benenne ich folgende bevollmächtigte Person(en):</p>
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px; white-space: pre-line;">${escapeHtml(data.proxy)}</div>
+                <p style="font-size: 10pt; color: #444; margin-bottom: 16px;">Meine behandelnden Ärzte werden insoweit gegenüber meinen Bevollmächtigten von der ärztlichen Schweigepflicht entbunden (§ 1901a BGB).</p>
+            ` : ''}
+
+            <h2 style="font-size: 12pt; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">5. Verbindlichkeit &amp; Bestätigung</h2>
+            <p style="margin-bottom: 30px;">
+                Ich habe diese Patientenverfügung nach reiflicher Überlegung im Vollbesitz meiner geistigen Kräfte verfasst. Sie ist für Ärzte und Betreuer unmittelbar bindend (§ 1901a BGB) und gilt zeitlich unbegrenzt, solange sie nicht widerrufen wird.
+            </p>
+
+            <div style="display: flex; justify-content: space-between; gap: 40px; margin-top: 40px;">
+                <div style="flex: 1; border-top: 1px solid #000; padding-top: 6px;">
+                    <div style="font-size: 9.5pt; color: #555;">Ort, Datum</div>
+                </div>
+                <div style="flex: 2; border-top: 1px solid #000; padding-top: 6px;">
+                    <div style="font-size: 9.5pt; color: #555;">Unterschrift des/der Verfügenden (${escapeHtml(data.name)})</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 35px; padding-top: 15px; border-top: 1px dashed #999; font-size: 9.5pt; color: #444;">
+                <p style="margin-bottom: 25px;">
+                    <strong>Bestätigung durch Zeugen oder Arzt (optional):</strong><br>
+                    Ich bestätige, dass der/die oben genannte Verfügende die Patientenverfügung eigenhändig und im Vollbesitz der geistigen Kräfte unterzeichnet hat.
+                </p>
+                <div style="display: flex; justify-content: space-between; gap: 40px;">
+                    <div style="flex: 1; border-top: 1px solid #666; padding-top: 4px;">
+                        <div style="font-size: 9pt; color: #666;">Ort, Datum</div>
+                    </div>
+                    <div style="flex: 2; border-top: 1px solid #666; padding-top: 4px;">
+                        <div style="font-size: 9pt; color: #666;">Unterschrift des Zeugen / Arztes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.classList.add('printing-living-will');
+    window.print();
+    setTimeout(() => {
+        document.body.classList.remove('printing-living-will');
+    }, 1200);
+}
+
+function copyLivingWillText() {
+    const data = getLivingWillGeneratedData();
+    navigator.clipboard.writeText(data.text).then(() => {
+        const btn = document.getElementById('btnCopyLw');
+        if (btn) {
+            const old = btn.textContent;
+            btn.textContent = '✅ Kopiert!';
+            setTimeout(() => btn.textContent = old, 2000);
+        }
+    }).catch(() => {
+        alert('Kopieren nicht unterstützt. Bitte den Text manuell aus der Vorschau markieren.');
+    });
+}
+
+function saveLivingWillToArchive() {
+    const data = getLivingWillGeneratedData();
+    document.getElementById('inputLivingWillText').value = data.text;
+    document.getElementById('formSaveLivingWill').submit();
+}
 </script>
 
 <style>
 @media print {
-    /* Druck-Optimierung: Navigationsleisten, Kopf- und Fußzeilen ausblenden */
+    /* Wenn die Patientenverfügung gedruckt wird: nur das saubere DIN-A4 Dokument ausgeben */
+    body.printing-living-will > *:not(#printableLivingWillDoc) {
+        display: none !important;
+    }
+    body.printing-living-will #printableLivingWillDoc {
+        display: block !important;
+        position: static !important;
+        background: white !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+    }
+
+    /* Normaler Druck: Navigationsleisten, Kopf- und Fußzeilen ausblenden */
     header, footer, nav, #mcPersistentRadioMiniBar, #mcPersistentMusicMiniBar,
     .overflow-x-auto, button, a[href*="download.php"], #btnDeleteProfile {
         display: none !important;
