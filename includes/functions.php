@@ -805,6 +805,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_alerts'                 => '1',
         'enable_podcasts'               => '1',
         'enable_health'                 => '1',
+        'enable_deals'                  => '1',
         'tankerkoenig_api_key'          => '',
         'maps_airgap_only'              => '1',
         'maps_default_detail'           => '4',
@@ -909,6 +910,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_alerts'        => 'alerts.php',
         'enable_podcasts'      => 'podcasts.php',
         'enable_health'        => 'health.php',
+        'enable_deals'         => 'deals.php',
     ];
     foreach ($moduleFileMap as $settingKey => $scriptFile) {
         if (!is_file($rootDir . '/' . $scriptFile)) {
@@ -3478,6 +3480,13 @@ function getModuleStatsCatalog(): array
             'url'         => 'health.php',
             'setting_key' => 'enable_health',
             'color'       => 'bg-emerald-600',
+        ],
+        'deals' => [
+            'icon'        => '🏷️',
+            'label'       => 'Preiswächter & Deal-Radar',
+            'url'         => 'deals.php',
+            'setting_key' => 'enable_deals',
+            'color'       => 'bg-amber-600',
         ],
         'webdav' => [
             'icon'        => '📡',

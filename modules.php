@@ -441,6 +441,18 @@ $allModules = [
         'badge'    => 'NEU',
         'badgeCls' => 'bg-emerald-600 text-white',
     ],
+    [
+        'key'      => 'deals',
+        'enabled'  => ($appSettings['enable_deals'] ?? '1') === '1',
+        'title'    => 'Preiswächter & Deal-Radar',
+        'shortSub' => 'Wunschpreis-Alarm & Preisverlauf',
+        'icon'     => '🏷️',
+        'url'      => 'deals.php',
+        'category' => 'finance_club',
+        'desc'     => '100 % privater Preis-Tracker für Amazon, Idealo, Geizhals & alle Online-Shops: Wunschpreis-Alarm, Preissturz-Meldungen, interaktive Verlaufscharts, Allzeittief-Erkennung & 1-Klick-Browser-Bookmarklet.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-amber-600 text-white',
+    ],
 
     // --- 4. Medien & Kreativ ---
     [
