@@ -1318,7 +1318,7 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                     const storageKey = 'mc_pinned_header_nav_u<?= (int)$_SESSION['user_id'] ?>';
                     const orderKey   = 'mc_launcher_order_u<?= (int)$_SESSION['user_id'] ?>';
                     const defaultPinned = ['files', 'chat'];
-                    const defaultOrder  = ['files', 'workflows', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'maps', 'weather', 'traffic', 'fuel', 'transit', 'alerts', 'polls', 'menti', 'forms', 'budget', 'banking', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'podcasts', 'news', 'assistant', 'passwords', 'authenticator', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
+                    const defaultOrder  = ['files', 'workflows', 'dashboard', 'office', 'pdf_tools', 'translator', 'whiteboard', 'ebooks', 'calculator', 'calendar', 'health', 'chat', 'tasks', 'projects', 'notes', 'contacts', 'maps', 'weather', 'traffic', 'fuel', 'transit', 'alerts', 'polls', 'menti', 'forms', 'budget', 'banking', 'split', 'markets', 'club', 'gallery', 'video_studio', 'cinema', 'music', 'tv_radio', 'radio', 'podcasts', 'news', 'assistant', 'passwords', 'authenticator', 'toolbox', 'bundesliga', 'surflog', 'games', 'trash'];
 
                     function getPinnedNav() {
                         try {
