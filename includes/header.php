@@ -1695,10 +1695,17 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         if (item.url) {
                             closeGlobalSearchModal();
                             const rg = window.McGlobalRadio;
-                            const st = rg && typeof rg.getState === 'function' ? rg.getState() : null;
-                            const radioActive = Boolean(rg && ((typeof rg.isPlaying === 'function' && rg.isPlaying()) || (st && st.playing && st.streamUrl && !st.closed)));
-                            if (radioActive && rg && typeof rg.openInViewport === 'function') {
+                            const rst = rg && typeof rg.getState === 'function' ? rg.getState() : null;
+                            const radioActive = Boolean(rg && ((typeof rg.isPlaying === 'function' && rg.isPlaying()) || (rst && rst.playing && rst.streamUrl && !rst.closed)));
+
+                            const mg = window.McGlobalMusic;
+                            const mst = mg && typeof mg.getState === 'function' ? mg.getState() : null;
+                            const musicActive = Boolean(mg && ((typeof mg.isPlaying === 'function' && mg.isPlaying()) || (mst && mst.playing && !mst.closed)));
+
+                            if ((radioActive || musicActive) && rg && typeof rg.openInViewport === 'function') {
                                 rg.openInViewport(item.url);
+                            } else if ((radioActive || musicActive) && mg && typeof mg.openInViewport === 'function') {
+                                mg.openInViewport(item.url);
                             } else {
                                 window.location.href = item.url;
                             }

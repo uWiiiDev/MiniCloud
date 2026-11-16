@@ -1784,17 +1784,95 @@ if (
 </div>
 <audio id="mcGlobalPersistentAudio" preload="none" class="hidden"></audio>
 
+<!-- ====================================================================== -->
+<!-- GLOBALER PERSISTENTER MUSIK-MINI-PLAYER (MODULÜBERGREIFEND)           -->
+<!-- ====================================================================== -->
+<div id="mcPersistentMusicMiniBar"
+     class="hidden fixed bottom-4 left-4 z-50 max-w-[calc(100vw-5.5rem)] sm:max-w-md rounded-2xl bg-gradient-to-r from-slate-900 via-rose-950 to-slate-900 text-white px-3.5 py-2.5 border border-rose-500/40 shadow-2xl backdrop-blur-md">
+    <div class="flex items-center gap-2">
+        <!-- Prev -->
+        <button type="button" onclick="window.McGlobalMusic && window.McGlobalMusic.step(-1)"
+                class="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs flex items-center justify-center transition cursor-pointer shrink-0"
+                title="Vorheriger Titel">
+            ⏮️
+        </button>
+
+        <!-- Play / Pause -->
+        <button type="button" id="mcMiniMusicPlayBtn" onclick="window.McGlobalMusic && window.McGlobalMusic.toggle()"
+                class="w-9 h-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-sm flex items-center justify-center shadow-md transition-transform active:scale-95 cursor-pointer shrink-0"
+                title="Wiedergabe abspielen / pausieren">
+            ⏸️
+        </button>
+
+        <!-- Next -->
+        <button type="button" onclick="window.McGlobalMusic && window.McGlobalMusic.step(1)"
+                class="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs flex items-center justify-center transition cursor-pointer shrink-0"
+                title="Nächster Titel">
+            ⏭️
+        </button>
+
+        <!-- Info (Titel, Interpret, Zeit) -->
+        <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+                <span class="text-sm shrink-0">🎵</span>
+                <span id="mcMiniMusicTitle" class="text-xs font-extrabold truncate">Titel</span>
+                <span id="mcMiniMusicChord" class="hidden px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 truncate">--</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-rose-200/90 truncate mt-0.5">
+                <span id="mcMiniMusicArtist" class="truncate">Interpret</span>
+                <span id="mcMiniMusicTime" class="font-mono text-[10px] text-slate-400 shrink-0 ml-1">00:00</span>
+            </div>
+        </div>
+
+        <!-- Mute & Lautstärke (Desktop) -->
+        <div class="hidden sm:flex items-center gap-1 bg-white/10 px-2 py-1 rounded-xl shrink-0">
+            <button type="button" id="mcMiniMusicMuteBtn" onclick="window.McGlobalMusic && window.McGlobalMusic.toggleMute()"
+                    class="text-xs cursor-pointer" title="Stummschalten">🔊</button>
+            <input type="range" id="mcMiniMusicVol" min="0" max="100" value="90"
+                   oninput="window.McGlobalMusic && window.McGlobalMusic.setVolume(this.value)"
+                   aria-label="Musik-Lautstärke"
+                   class="w-14 accent-rose-500 cursor-pointer">
+        </div>
+
+        <!-- Zum Musik-Modul -->
+        <a href="music.php" id="mcMiniMusicOpenBtn"
+           class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+           title="Musik-Studio öffnen">
+            🎶
+        </a>
+
+        <!-- Schließen -->
+        <button type="button" onclick="window.McGlobalMusic && window.McGlobalMusic.stopAndClose()"
+                class="w-7 h-7 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+                title="Wiedergabe beenden &amp; schließen">
+            ✕
+        </button>
+    </div>
+</div>
+<audio id="mcGlobalPersistentMusicAudio" preload="auto" playsinline class="hidden"></audio>
+
 <script>
 (() => {
     const STATE_KEY = 'mc_global_radio_state_v1';
     const GLOBAL_RADIO_CSRF = <?= json_encode(function_exists('getCsrfToken') ? getCsrfToken() : ($_SESSION['csrf_token'] ?? '')) ?>;
 
-    // Falls diese Seite bereits im nahtlosen Radio-Viewport-Iframe läuft,
+    const MUSIC_STATE_KEY = 'mc_global_music_state_v1';
+
+    // Falls diese Seite bereits im nahtlosen Viewport-Iframe läuft,
     // nutze direkt die Audio-Instanz des Elternfensters (0 ms Unterbrechung).
     try {
-        if (window.parent && window.parent !== window && window.parent.McGlobalRadio) {
-            window.McGlobalRadio = window.parent.McGlobalRadio;
-            window.parent.McGlobalRadio.notifyChildPageLoaded(window);
+        if (window.parent && window.parent !== window && (window.parent.McGlobalRadio || window.parent.McGlobalMusic)) {
+            if (window.parent.McGlobalRadio) {
+                window.McGlobalRadio = window.parent.McGlobalRadio;
+            }
+            if (window.parent.McGlobalMusic) {
+                window.McGlobalMusic = window.parent.McGlobalMusic;
+            }
+            if (typeof window.parent.notifyChildPageLoadedSeamless === 'function') {
+                window.parent.notifyChildPageLoadedSeamless(window);
+            } else if (window.parent.McGlobalRadio && typeof window.parent.McGlobalRadio.notifyChildPageLoaded === 'function') {
+                window.parent.McGlobalRadio.notifyChildPageLoaded(window);
+            }
             return;
         }
     } catch (e) {}
@@ -1807,6 +1885,8 @@ if (
     let lastAudioCurrentTime  = -1;
     let frozenTicksCount      = 0;
     let boundAudioEl          = null;
+    let boundMusicAudioEl     = null;
+    let lastMusicTimeSaveTs   = 0;
 
     // Ursprüngliche Host-Seite des Hauptfensters merken (darf nicht durch history.replaceState überschrieben werden)
     const INITIAL_HOST_PATH   = window.location.pathname;
@@ -1891,6 +1971,165 @@ if (
             const muted = Boolean((audio && audio.muted) || (st && (st.muted || st.volume === 0)));
             muteEl.textContent = muted ? '🔇' : '🔊';
         }
+    };
+
+    /* =========================================================================
+       MUSIK-MODUL STATE & AUDIO (PERSISTENT & NAHTLOS)
+       ========================================================================= */
+    const getMusicState = () => {
+        try {
+            const raw = sessionStorage.getItem(MUSIC_STATE_KEY) || localStorage.getItem(MUSIC_STATE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const saveMusicState = (patch) => {
+        try {
+            const prev = getMusicState() || {};
+            const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
+            const serialized = JSON.stringify(next);
+            sessionStorage.setItem(MUSIC_STATE_KEY, serialized);
+            try { localStorage.setItem(MUSIC_STATE_KEY, serialized); } catch (e2) {}
+            return next;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const getMusicAudioEl = () => {
+        return document.getElementById('cloudAudioElement') || document.getElementById('mcGlobalPersistentMusicAudio');
+    };
+
+    const formatAudioSecondsGlobal = (sec) => {
+        if (!isFinite(sec) || sec < 0) sec = 0;
+        const total = Math.floor(sec);
+        const mins  = Math.floor(total / 60);
+        const secs  = total % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    };
+
+    const isPathMusicPage = (p) => {
+        const clean = String(p || '');
+        return clean.endsWith('/music.php') || clean === 'music.php';
+    };
+
+    const isCurrentViewMusicPage = () => {
+        if (appFrame && !appFrame.classList.contains('hidden')) {
+            try {
+                if (appFrame.contentWindow && appFrame.contentWindow.location && appFrame.contentWindow.location.pathname && appFrame.contentWindow.location.pathname !== 'blank') {
+                    return isPathMusicPage(appFrame.contentWindow.location.pathname);
+                }
+            } catch (e) {}
+            return isPathMusicPage(currentViewportPath);
+        }
+        return isPathMusicPage(INITIAL_HOST_PATH);
+    };
+
+    const notifyMusicPagePlayState = (isPlaying) => {
+        const btnMain = document.getElementById('btnPlayPauseMain');
+        const btnMini = document.getElementById('btnPlayPauseMini');
+        const disc = document.getElementById('playerVinylDisc');
+        if (btnMain) btnMain.textContent = isPlaying ? '⏸️' : '▶️';
+        if (btnMini) btnMini.textContent = isPlaying ? '⏸️' : '▶️';
+        if (disc) disc.classList.toggle('animate-spin', isPlaying);
+
+        if (appFrame && appFrame.contentWindow && appFrame.contentWindow.document) {
+            try {
+                const cMain = appFrame.contentWindow.document.getElementById('btnPlayPauseMain');
+                const cMini = appFrame.contentWindow.document.getElementById('btnPlayPauseMini');
+                const cDisc = appFrame.contentWindow.document.getElementById('playerVinylDisc');
+                if (cMain) cMain.textContent = isPlaying ? '⏸️' : '▶️';
+                if (cMini) cMini.textContent = isPlaying ? '⏸️' : '▶️';
+                if (cDisc) cDisc.classList.toggle('animate-spin', isPlaying);
+            } catch (e) {}
+        }
+    };
+
+    const notifyMusicPageTrackChanged = (track, nextIdx) => {
+        if (typeof window.syncMusicUiToActiveTrack === 'function') {
+            window.syncMusicUiToActiveTrack(track, nextIdx);
+        }
+        if (appFrame && appFrame.contentWindow && typeof appFrame.contentWindow.syncMusicUiToActiveTrack === 'function') {
+            try {
+                appFrame.contentWindow.syncMusicUiToActiveTrack(track, nextIdx);
+            } catch (e) {}
+        }
+    };
+
+    const updateMusicMiniBarUi = () => {
+        const bar = document.getElementById('mcPersistentMusicMiniBar');
+        if (!bar) return;
+
+        const st = getMusicState();
+        const audio = getMusicAudioEl();
+        const isPlaying = Boolean(audio && !audio.paused && !audio.ended && st && st.streamUrl);
+        const shouldShowBar = Boolean(st && st.streamUrl && !st.closed && (isPlaying || st.playing) && !isCurrentViewMusicPage());
+
+        bar.classList.toggle('hidden', !shouldShowBar);
+
+        const playBtn  = document.getElementById('mcMiniMusicPlayBtn');
+        const titleEl  = document.getElementById('mcMiniMusicTitle');
+        const artistEl = document.getElementById('mcMiniMusicArtist');
+        const timeEl   = document.getElementById('mcMiniMusicTime');
+        const chordEl  = document.getElementById('mcMiniMusicChord');
+        const volEl    = document.getElementById('mcMiniMusicVol');
+        const muteEl   = document.getElementById('mcMiniMusicMuteBtn');
+
+        if (playBtn) playBtn.textContent = isPlaying ? '⏸️' : '▶️';
+        if (st && titleEl) titleEl.textContent = st.title || 'Musik';
+        if (st && artistEl) artistEl.textContent = st.artist || 'MiniCloud';
+        if (timeEl && audio) {
+            const cur = audio.currentTime || (st && st.currentTime) || 0;
+            const dur = audio.duration || (st && st.duration) || 0;
+            timeEl.textContent = `${formatAudioSecondsGlobal(cur)} / ${formatAudioSecondsGlobal(dur)}`;
+        }
+        if (chordEl) {
+            if (st && st.chord) {
+                chordEl.textContent = st.chord;
+                chordEl.classList.remove('hidden');
+            } else {
+                chordEl.classList.add('hidden');
+            }
+        }
+        if (st && volEl && typeof st.volume === 'number') volEl.value = String(st.volume);
+        if (muteEl) {
+            const muted = Boolean((audio && audio.muted) || (st && (st.muted || st.volume === 0)));
+            muteEl.textContent = muted ? '🔇' : '🔊';
+        }
+    };
+
+    const bindMusicAudioEvents = (ma) => {
+        if (!ma || boundMusicAudioEl === ma) return;
+        boundMusicAudioEl = ma;
+
+        ma.addEventListener('play', () => {
+            saveMusicState({ playing: true, closed: false });
+            updateMusicMiniBarUi();
+            notifyMusicPagePlayState(true);
+        });
+
+        ma.addEventListener('pause', () => {
+            saveMusicState({ playing: false });
+            updateMusicMiniBarUi();
+            notifyMusicPagePlayState(false);
+        });
+
+        ma.addEventListener('timeupdate', () => {
+            const timeEl = document.getElementById('mcMiniMusicTime');
+            if (timeEl) {
+                const cur = ma.currentTime || 0;
+                const dur = ma.duration || 0;
+                timeEl.textContent = `${formatAudioSecondsGlobal(cur)} / ${formatAudioSecondsGlobal(dur)}`;
+            }
+        });
+
+        ma.addEventListener('ended', () => {
+            if (window.McGlobalMusic && typeof window.McGlobalMusic.step === 'function') {
+                window.McGlobalMusic.step(1);
+            }
+        });
     };
 
     const pollIcyTitle = async () => {
@@ -2096,7 +2335,7 @@ if (
         const parsed = new URL(targetUrl, window.location.href);
         const targetPath = parsed.pathname;
 
-        // Wenn das Ziel exakt die ursprüngliche Basis-Host-Seite selbst ist (z.B. Rückkehr zu radio.php),
+        // Wenn das Ziel exakt die ursprüngliche Basis-Host-Seite selbst ist (z.B. Rückkehr zu radio.php oder music.php),
         // blende das Viewport-Iframe einfach wieder aus (0 ms Unterbrechung, kein Doppel-Laden).
         if (targetPath === INITIAL_HOST_PATH && parsed.search === INITIAL_HOST_SEARCH) {
             currentViewportPath = INITIAL_HOST_PATH;
@@ -2109,11 +2348,15 @@ if (
                 document.title = INITIAL_HOST_TITLE;
             }
             if (window.location.href !== parsed.href) {
-                window.history.pushState({ mcRadioShell: true, url: parsed.href }, '', parsed.href);
+                window.history.pushState({ mcSeamlessShell: true, url: parsed.href }, '', parsed.href);
             }
             updateMiniBarUi();
+            updateMusicMiniBarUi();
             if (typeof window.syncRadioDockFromState === 'function') {
                 window.syncRadioDockFromState();
+            }
+            if (typeof window.syncMusicUiFromGlobalState === 'function') {
+                window.syncMusicUiFromGlobalState();
             }
             return;
         }
@@ -2122,7 +2365,7 @@ if (
 
         if (!appFrame) {
             appFrame = document.createElement('iframe');
-            appFrame.id = 'mcRadioAppFrame';
+            appFrame.id = 'mcSeamlessAppFrame';
             appFrame.className = 'fixed inset-0 w-full h-full border-0 z-40 bg-slate-100 dark:bg-slate-950';
             appFrame.setAttribute('allow', 'autoplay; clipboard-read; clipboard-write; fullscreen');
             document.body.appendChild(appFrame);
@@ -2132,10 +2375,11 @@ if (
         document.documentElement.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
         if (window.location.href !== parsed.href) {
-            window.history.pushState({ mcRadioShell: true, url: parsed.href }, '', parsed.href);
+            window.history.pushState({ mcSeamlessShell: true, url: parsed.href }, '', parsed.href);
         }
         appFrame.src = parsed.href;
         updateMiniBarUi();
+        updateMusicMiniBarUi();
     };
 
     const shouldInterceptLinkClick = (ev, anchor, refLocation) => {
@@ -2164,6 +2408,9 @@ if (
         }
     };
 
+    /* =========================================================================
+       API FÜR GLOBALEN WEBRADIO-PLAYER
+       ========================================================================= */
     const api = {
         getAudio: () => getAudioEl(),
         getState: () => getState(),
@@ -2173,6 +2420,11 @@ if (
             return Boolean(a && !a.paused);
         },
         playStation: (name, streamUrl, genre) => {
+            // Mutex: Musik-Wiedergabe pausieren
+            if (musicApi && typeof musicApi.pause === 'function') {
+                musicApi.pause();
+            }
+
             const a = getAudioEl();
             if (!a || !streamUrl) return;
             bindAudioRecoveryEvents(a);
@@ -2210,7 +2462,6 @@ if (
                 pollIcyTitle();
                 ensureIcyPolling();
             }).catch(() => {
-                // Falls Netzwerk beim Start kurz weg ist, automatisch weiterversuchen
                 scheduleStreamReconnect(2500);
                 updateMiniBarUi();
             });
@@ -2222,6 +2473,10 @@ if (
             bindAudioRecoveryEvents(a);
             ensureStreamWatchdog();
             if (a.paused && !st.reconnecting) {
+                // Mutex: Musik pausieren
+                if (musicApi && typeof musicApi.pause === 'function') {
+                    musicApi.pause();
+                }
                 clearReconnectSchedule();
                 a.src = st.streamUrl;
                 a.volume = Math.max(0, Math.min(1, (typeof st.volume === 'number' ? st.volume : 85) / 100));
@@ -2331,6 +2586,7 @@ if (
                 const childPath = childWin.location.pathname || '';
                 if (childPath.endsWith('/login.php') || childPath.endsWith('/logout.php')) {
                     api.stopAndClose();
+                    if (musicApi) musicApi.stopAndClose();
                     window.top.location.href = childHref;
                     return;
                 }
@@ -2339,7 +2595,7 @@ if (
                     document.title = childWin.document.title;
                 }
                 if (window.location.href !== childHref) {
-                    window.history.replaceState({ mcRadioShell: true, url: childHref }, '', childHref);
+                    window.history.replaceState({ mcSeamlessShell: true, url: childHref }, '', childHref);
                 }
                 // Abfangen von Navigation & Logout im Child-Dokument
                 childWin.document.addEventListener('click', (ev) => {
@@ -2348,14 +2604,15 @@ if (
                     const href = a.getAttribute('href') || '';
                     if (href.includes('logout.php')) {
                         api.stopAndClose();
+                        if (musicApi) musicApi.stopAndClose();
                         window.top.location.href = a.href;
                         return;
                     }
                     if (shouldInterceptLinkClick(ev, a, childWin.location)) {
                         try {
                             const u = new URL(a.href, childWin.location.href);
-                            // Wenn im Child-Iframe zurück auf die Host-Seite (z.B. radio.php) geklickt wird,
-                            // blende das Iframe nahtlos aus statt radio.php doppelt im Iframe zu laden.
+                            // Wenn im Child-Iframe zurück auf die Host-Seite geklickt wird,
+                            // blende das Iframe nahtlos aus statt die Seite doppelt im Iframe zu laden.
                             if (u.pathname === INITIAL_HOST_PATH && u.search === INITIAL_HOST_SEARCH) {
                                 ev.preventDefault();
                                 openInSeamlessViewport(u.href);
@@ -2363,6 +2620,7 @@ if (
                             }
                             currentViewportPath = u.pathname;
                             updateMiniBarUi();
+                            updateMusicMiniBarUi();
                         } catch (e2) {}
                     }
                 }, true);
@@ -2371,31 +2629,220 @@ if (
                     const form = ev.target;
                     if (form && form.action && String(form.action).includes('logout.php')) {
                         api.stopAndClose();
+                        if (musicApi) musicApi.stopAndClose();
                         form.target = '_top';
                     }
                 }, true);
             } catch (e) {}
             updateMiniBarUi();
+            updateMusicMiniBarUi();
         }
     };
 
     window.McGlobalRadio = api;
 
-    // Klick-Interceptor im Hauptfenster: Wenn das Radio aktiv spielt ODER ein Hintergrund-Upload läuft,
-    // öffne Modulwechsel unterbrechungsfrei im Viewport, sodass Stream & SharedWorker-Upload 100 % weiterlaufen.
+    /* =========================================================================
+       API FÜR GLOBALEN MUSIK-PLAYER (MODULÜBERGREIFEND)
+       ========================================================================= */
+    const musicApi = {
+        getAudio: () => getMusicAudioEl(),
+        getState: () => getMusicState(),
+        openInViewport: (targetUrl) => openInSeamlessViewport(targetUrl),
+        openMusicModule: () => openInSeamlessViewport('music.php'),
+        isPlaying: () => {
+            const a = getMusicAudioEl();
+            return Boolean(a && !a.paused && !a.ended);
+        },
+        playTrack: (track, playlist, index) => {
+            const a = getMusicAudioEl();
+            if (!a || !track || !track.streamUrl) return;
+            if (api && typeof api.pause === 'function') {
+                api.pause();
+            }
+            bindMusicAudioEvents(a);
+            a.src = track.streamUrl;
+            const prev = getMusicState() || {};
+            const vol = typeof prev.volume === 'number' ? prev.volume : 90;
+            a.volume = Math.max(0, Math.min(1, vol / 100));
+            a.muted  = Boolean(prev.muted);
+            saveMusicState({
+                trackId: track.id || 0,
+                title: track.title || 'Musik',
+                artist: track.artist || '',
+                album: track.album || '',
+                folder: track.folder || '',
+                streamUrl: track.streamUrl || '',
+                coverUrl: track.coverUrl || '',
+                duration: track.duration || 0,
+                currentTime: 0,
+                playing: true,
+                closed: false,
+                currentTrackIdx: index,
+                playlist: Array.isArray(playlist) ? playlist : (prev.playlist || [])
+            });
+            updateMusicMiniBarUi();
+            a.play().then(() => {
+                updateMusicMiniBarUi();
+                notifyMusicPageTrackChanged(track, index);
+            }).catch(() => {});
+        },
+        syncTrackPlay: (track, playlist, index, isPlaying = true) => {
+            if (api && typeof api.pause === 'function') {
+                api.pause();
+            }
+            const a = getMusicAudioEl();
+            if (a) bindMusicAudioEvents(a);
+            const prev = getMusicState() || {};
+            saveMusicState({
+                trackId: track.id || 0,
+                title: track.title || 'Musik',
+                artist: track.artist || '',
+                album: track.album || '',
+                folder: track.folder || '',
+                streamUrl: track.streamUrl || '',
+                coverUrl: track.coverUrl || '',
+                duration: track.duration || 0,
+                currentTime: 0,
+                playing: Boolean(isPlaying),
+                closed: false,
+                currentTrackIdx: index,
+                playlist: Array.isArray(playlist) ? playlist.map(p => ({
+                    id: p.id,
+                    title: p.title,
+                    artist: p.artist,
+                    album: p.album,
+                    folder: p.folder,
+                    streamUrl: p.streamUrl,
+                    coverUrl: p.coverUrl,
+                    duration: p.duration
+                })) : (prev.playlist || [])
+            });
+            updateMusicMiniBarUi();
+        },
+        syncTime: (cur, dur, chord) => {
+            const timeEl = document.getElementById('mcMiniMusicTime');
+            if (timeEl) {
+                timeEl.textContent = `${formatAudioSecondsGlobal(cur)} / ${formatAudioSecondsGlobal(dur)}`;
+            }
+            const chordEl = document.getElementById('mcMiniMusicChord');
+            if (chordEl) {
+                if (chord) {
+                    chordEl.textContent = chord;
+                    chordEl.classList.remove('hidden');
+                } else {
+                    chordEl.classList.add('hidden');
+                }
+            }
+            const now = Date.now();
+            if (now - lastMusicTimeSaveTs > 4000) {
+                lastMusicTimeSaveTs = now;
+                saveMusicState({ currentTime: Math.floor(cur), duration: Math.floor(dur), chord: chord || '' });
+            }
+        },
+        toggle: () => {
+            const a = getMusicAudioEl();
+            const st = getMusicState();
+            if (!a || !st || !st.streamUrl) return;
+            bindMusicAudioEvents(a);
+            if (a.paused) {
+                if (api && typeof api.pause === 'function') {
+                    api.pause();
+                }
+                if (!a.src || a.src === '' || a.src === window.location.href) {
+                    a.src = st.streamUrl;
+                    if (st.currentTime > 0) {
+                        a.currentTime = st.currentTime;
+                    }
+                }
+                saveMusicState({ playing: true, closed: false });
+                a.play().then(() => {
+                    updateMusicMiniBarUi();
+                    notifyMusicPagePlayState(true);
+                }).catch(() => {});
+            } else {
+                a.pause();
+                saveMusicState({ playing: false });
+                updateMusicMiniBarUi();
+                notifyMusicPagePlayState(false);
+            }
+        },
+        pause: () => {
+            const a = getMusicAudioEl();
+            if (a && !a.paused) {
+                a.pause();
+            }
+            saveMusicState({ playing: false });
+            updateMusicMiniBarUi();
+            notifyMusicPagePlayState(false);
+        },
+        step: (delta) => {
+            const st = getMusicState();
+            if (!st || !Array.isArray(st.playlist) || !st.playlist.length) return;
+            const curIdx = typeof st.currentTrackIdx === 'number' ? st.currentTrackIdx : 0;
+            const nextIdx = ((curIdx + delta) % st.playlist.length + st.playlist.length) % st.playlist.length;
+            const track = st.playlist[nextIdx];
+            if (track) {
+                musicApi.playTrack(track, st.playlist, nextIdx);
+            }
+        },
+        setVolume: (val) => {
+            const v = Math.max(0, Math.min(100, Number(val)));
+            const a = getMusicAudioEl();
+            if (a) {
+                a.muted = false;
+                a.volume = v / 100;
+            }
+            saveMusicState({ volume: v, muted: false });
+            updateMusicMiniBarUi();
+        },
+        toggleMute: () => {
+            const a = getMusicAudioEl();
+            if (!a) return false;
+            a.muted = !a.muted;
+            saveMusicState({ muted: a.muted });
+            updateMusicMiniBarUi();
+            return a.muted;
+        },
+        stopAndClose: () => {
+            const a = getMusicAudioEl();
+            if (a) {
+                a.pause();
+                a.removeAttribute('src');
+                a.load();
+            }
+            saveMusicState({ playing: false, closed: true });
+            updateMusicMiniBarUi();
+            notifyMusicPagePlayState(false);
+        },
+        syncFromState: () => {
+            updateMusicMiniBarUi();
+        }
+    };
+
+    window.McGlobalMusic = musicApi;
+    window.notifyChildPageLoadedSeamless = (childWin) => {
+        api.notifyChildPageLoaded(childWin);
+    };
+
+    // Klick-Interceptor im Hauptfenster: Wenn Radio/Musik aktiv spielt ODER ein Hintergrund-Upload läuft,
+    // öffne Modulwechsel unterbrechungsfrei im Viewport, sodass Audio & SharedWorker 100 % weiterlaufen.
     document.addEventListener('click', (ev) => {
         const anchor = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
         if (!anchor) return;
         const href = anchor.getAttribute('href') || '';
         if (href.includes('logout.php')) {
             api.stopAndClose();
+            if (musicApi) musicApi.stopAndClose();
             return;
         }
+
         const st = getState();
         const isRadioActive  = api.isPlaying() || Boolean(st && st.playing && st.streamUrl && !st.closed);
+        const mst = getMusicState();
+        const isMusicActive  = musicApi.isPlaying() || Boolean(mst && mst.playing && mst.streamUrl && !mst.closed);
         const isUploadActive = Boolean(window.McGlobalUpload && window.McGlobalUpload.isUploading());
         const isShellOpen    = Boolean(appFrame && !appFrame.classList.contains('hidden'));
-        if (!isRadioActive && !isUploadActive && !isShellOpen) return;
+        if (!isRadioActive && !isMusicActive && !isUploadActive && !isShellOpen) return;
 
         if (shouldInterceptLinkClick(ev, anchor, window.location)) {
             ev.preventDefault();
@@ -2415,6 +2862,13 @@ if (
                 document.title = INITIAL_HOST_TITLE;
             }
             updateMiniBarUi();
+            updateMusicMiniBarUi();
+            if (typeof window.syncRadioDockFromState === 'function') {
+                window.syncRadioDockFromState();
+            }
+            if (typeof window.syncMusicUiFromGlobalState === 'function') {
+                window.syncMusicUiFromGlobalState();
+            }
             return;
         }
         if (appFrame) {
@@ -2429,9 +2883,10 @@ if (
             } catch (e) {}
         }
         updateMiniBarUi();
+        updateMusicMiniBarUi();
     });
 
-    // Auto-Resume bei vollständigem Seiten-Reload (F5 / direkter Aufruf), falls Radio aktiv war
+    // Auto-Resume bei vollständigem Seiten-Reload (F5 / direkter Aufruf), falls Radio oder Musik aktiv war
     let unlockGestureBound = false;
     const bindFirstGestureResume = () => {
         if (unlockGestureBound) return;
@@ -2440,6 +2895,8 @@ if (
             unlockGestureBound = false;
             document.removeEventListener('pointerdown', resumeOnGesture, true);
             document.removeEventListener('keydown', resumeOnGesture, true);
+
+            // Radio wiederaufnehmen
             const st = getState();
             const a  = getAudioEl();
             if (st && st.playing && !st.closed && st.streamUrl && a && a.paused) {
@@ -2455,12 +2912,29 @@ if (
                     }
                 }).catch(() => {});
             }
+
+            // Musik wiederaufnehmen
+            const mst = getMusicState();
+            const ma  = getMusicAudioEl();
+            if (mst && mst.playing && !mst.closed && mst.streamUrl && ma && ma.paused) {
+                ma.src = mst.streamUrl;
+                if (mst.currentTime > 0) {
+                    ma.currentTime = mst.currentTime;
+                }
+                const vol = typeof mst.volume === 'number' ? mst.volume : 90;
+                ma.volume = Math.max(0, Math.min(1, vol / 100));
+                ma.muted = Boolean(mst.muted);
+                ma.play().then(() => {
+                    updateMusicMiniBarUi();
+                    notifyMusicPagePlayState(true);
+                }).catch(() => {});
+            }
         };
         document.addEventListener('pointerdown', resumeOnGesture, true);
         document.addEventListener('keydown', resumeOnGesture, true);
     };
 
-    const initAutoResume = () => {
+    const initRadioAutoResume = () => {
         const st = getState();
         if (!st || !st.streamUrl || st.closed) return;
         updateMiniBarUi();
@@ -2482,13 +2956,46 @@ if (
                         window.syncRadioDockFromState();
                     }
                 }).catch(() => {
-                    // Falls der Browser nach manuellem F5-Reload eine Interaktion verlangt,
-                    // starte sofort beim ersten Klick/Tastendruck weiter.
                     updateMiniBarUi();
                     bindFirstGestureResume();
                 });
             }
         }
+    };
+
+    const initMusicAutoResume = () => {
+        const mst = getMusicState();
+        if (!mst || !mst.streamUrl || mst.closed) return;
+        updateMusicMiniBarUi();
+        if (mst.playing) {
+            const a = getMusicAudioEl();
+            if (a) {
+                bindMusicAudioEvents(a);
+            }
+            if (a && a.paused) {
+                a.src = mst.streamUrl;
+                if (mst.currentTime > 0) {
+                    a.currentTime = mst.currentTime;
+                }
+                const vol = typeof mst.volume === 'number' ? mst.volume : 90;
+                a.volume = Math.max(0, Math.min(1, vol / 100));
+                a.muted = Boolean(mst.muted);
+                a.play().then(() => {
+                    updateMusicMiniBarUi();
+                    notifyMusicPagePlayState(true);
+                }).catch(() => {
+                    updateMusicMiniBarUi();
+                    bindFirstGestureResume();
+                });
+            }
+        }
+    };
+
+    const initAutoResume = () => {
+        initRadioAutoResume();
+        initMusicAutoResume();
+        const ma = getMusicAudioEl();
+        if (ma) bindMusicAudioEvents(ma);
     };
 
     if (document.readyState === 'loading') {

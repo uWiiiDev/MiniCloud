@@ -2899,7 +2899,25 @@ const MUSIC_TRACKS = <?= json_encode(array_map(static function (array $t) use ($
     ];
 }, $displayedTracks), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 
-const audioEl        = document.getElementById('cloudAudioElement');
+function getSharedMusicHost() {
+    try {
+        if (window.parent && window.parent !== window && window.parent.McGlobalMusic) {
+            return window.parent.McGlobalMusic;
+        }
+    } catch (e) {}
+    return window.McGlobalMusic || null;
+}
+
+function getEffectiveMusicAudio() {
+    const host = getSharedMusicHost();
+    if (host && typeof host.getAudio === 'function') {
+        const ha = host.getAudio();
+        if (ha) return ha;
+    }
+    return document.getElementById('cloudAudioElement') || document.getElementById('mcGlobalPersistentMusicAudio');
+}
+
+const audioEl        = getEffectiveMusicAudio();
 const preloaderEl    = document.getElementById('cloudAudioPreloader');
 const seekSlider     = document.getElementById('playerSeekSlider');
 const visCanvas      = document.getElementById('audioVisualizerCanvas');
@@ -3106,6 +3124,15 @@ function playTrackAtIndex(index, autoStart = true) {
     const track = MUSIC_TRACKS[currentTrackIdx];
     if (!track) return;
 
+    // Mutex: Webradio sofort pausieren, wenn Musik gestartet wird
+    try {
+        if (window.parent && window.parent.McGlobalRadio && typeof window.parent.McGlobalRadio.pause === 'function') {
+            window.parent.McGlobalRadio.pause();
+        } else if (window.McGlobalRadio && typeof window.McGlobalRadio.pause === 'function') {
+            window.McGlobalRadio.pause();
+        }
+    } catch (e) {}
+
     // WICHTIG FÜR ANDROID / iOS SPERRBILDSCHIRM:
     // Sofort synchron im ersten Schritt src setzen und play() aufrufen, damit das Betriebssystem
     // den Audio-Fokus beim automatischen Titelwechsel (ended -> nächster Titel) nicht verliert!
@@ -3132,6 +3159,12 @@ function playTrackAtIndex(index, autoStart = true) {
                 audioEl.addEventListener('canplay', retryPlay, { once: true });
             });
         }
+    }
+
+    // An den persistenten globalen Host (Hauptfenster / Mini-Bar) synchronisieren
+    const sharedHost = getSharedMusicHost();
+    if (sharedHost && typeof sharedHost.syncTrackPlay === 'function') {
+        sharedHost.syncTrackPlay(track, MUSIC_TRACKS, currentTrackIdx, autoStart);
     }
 
     ensureWebAudioGraph(false);
@@ -3250,6 +3283,13 @@ function toggleAudioPlay() {
         audioCtx.resume();
     }
     if (audioEl.paused) {
+        try {
+            if (window.parent && window.parent.McGlobalRadio && typeof window.parent.McGlobalRadio.pause === 'function') {
+                window.parent.McGlobalRadio.pause();
+            } else if (window.McGlobalRadio && typeof window.McGlobalRadio.pause === 'function') {
+                window.McGlobalRadio.pause();
+            }
+        } catch (e) {}
         audioEl.play().catch(() => {});
     } else {
         audioEl.pause();
@@ -3447,6 +3487,14 @@ if (audioEl) {
 
         if (typeof updateChordsStudioPlayback === 'function') {
             updateChordsStudioPlayback(cur, dur);
+        }
+
+        const sharedHost = getSharedMusicHost();
+        if (sharedHost && typeof sharedHost.syncTime === 'function') {
+            const curChord = (typeof lastActiveChordIndex === 'number' && chordsTimeline && chordsTimeline[lastActiveChordIndex])
+                ? chordsTimeline[lastActiveChordIndex].chord
+                : '';
+            sharedHost.syncTime(cur, dur, curChord);
         }
 
         if ('mediaSession' in navigator && typeof navigator.mediaSession.setPositionState === 'function' && dur > 0 && isFinite(dur)) {
@@ -4747,6 +4795,73 @@ if (audiobookModeActive) {
     if (eqSel) eqSel.value = 'voice';
 }
 
+function syncMusicUiToActiveTrack(track, nextIdx) {
+    if (!track) return;
+    if (typeof nextIdx === 'number' && nextIdx >= 0 && nextIdx < MUSIC_TRACKS.length) {
+        currentTrackIdx = nextIdx;
+    } else {
+        const found = MUSIC_TRACKS.findIndex(t => t.id === track.id || t.id === track.trackId || (track.streamUrl && t.streamUrl === track.streamUrl));
+        if (found >= 0) currentTrackIdx = found;
+    }
+
+    const title  = track.title  || (currentTrackIdx >= 0 ? MUSIC_TRACKS[currentTrackIdx].title : 'Musik');
+    const artist = track.artist || (currentTrackIdx >= 0 ? MUSIC_TRACKS[currentTrackIdx].artist : '');
+    const album  = track.album  || (currentTrackIdx >= 0 ? MUSIC_TRACKS[currentTrackIdx].album : '');
+    const folder = track.folder || (currentTrackIdx >= 0 ? MUSIC_TRACKS[currentTrackIdx].folder : '');
+    const coverUrl = track.coverUrl || (currentTrackIdx >= 0 ? MUSIC_TRACKS[currentTrackIdx].coverUrl : '');
+
+    const chapterPrefix = audiobookModeActive
+        ? `📖 Kapitel ${currentTrackIdx + 1}/${MUSIC_TRACKS.length} • `
+        : (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx].trackNo > 0 ? `#${String(MUSIC_TRACKS[currentTrackIdx].trackNo).padStart(2, '0')} • ` : '');
+
+    document.getElementById('playerTitle').textContent       = title;
+    document.getElementById('playerArtist').textContent      = artist;
+    document.getElementById('playerAlbumFolder').textContent = `${chapterPrefix}💿 ${album} • 📁 ${folder}`;
+
+    document.getElementById('miniPlayerTitle').textContent   = title;
+    document.getElementById('miniPlayerArtist').textContent  = artist;
+    document.getElementById('bottomMiniPlayer').classList.remove('hidden');
+
+    const coverImg = document.getElementById('playerCoverImg');
+    const vinylFb  = document.getElementById('playerVinylFallback');
+    if (coverUrl) {
+        coverImg.src = coverUrl;
+        coverImg.classList.remove('hidden');
+        vinylFb.classList.add('hidden');
+    } else {
+        coverImg.classList.add('hidden');
+        vinylFb.classList.remove('hidden');
+    }
+
+    const isPlaying = audioEl ? !audioEl.paused : Boolean(track.playing);
+    document.getElementById('btnPlayPauseMain').textContent = isPlaying ? '⏸️' : '▶️';
+    document.getElementById('btnPlayPauseMini').textContent = isPlaying ? '⏸️' : '▶️';
+    const csPlayBtn = document.getElementById('btnPlayPauseChordsStudio');
+    if (csPlayBtn) csPlayBtn.textContent = isPlaying ? '⏸️' : '▶️';
+    const disc = document.getElementById('playerVinylDisc');
+    if (disc) disc.classList.toggle('animate-spin', isPlaying);
+
+    highlightActiveTrackRow();
+
+    if (currentTrackIdx >= 0 && MUSIC_TRACKS[currentTrackIdx] && typeof onTrackChangedForChordsStudio === 'function') {
+        onTrackChangedForChordsStudio(MUSIC_TRACKS[currentTrackIdx]);
+    }
+}
+
+window.syncMusicUiToActiveTrack = syncMusicUiToActiveTrack;
+window.syncMusicUiFromGlobalState = function() {
+    const sharedHost = getSharedMusicHost();
+    const st = sharedHost ? sharedHost.getState() : null;
+    if (st && st.streamUrl && !st.closed) {
+        syncMusicUiToActiveTrack(st, st.currentTrackIdx);
+    }
+};
+
+// Prüfen, ob bereits ein Titel im persistenten Hintergrund-Player aktiv oder abgespielt wird
+const sharedHost = getSharedMusicHost();
+const sharedSt   = sharedHost ? sharedHost.getState() : null;
+const isAlreadyActive = Boolean(sharedSt && sharedSt.streamUrl && !sharedSt.closed && (sharedSt.playing || (audioEl && !audioEl.paused)));
+
 // Falls ?play=<fileId> übergeben wurde (z.B. aus Dateivorschau), direkt diesen Titel starten!
 if (MUSIC_AUTOPLAY_ID > 0 && MUSIC_TRACKS.length > 0) {
     const targetIdx = MUSIC_TRACKS.findIndex(t => t.id === MUSIC_AUTOPLAY_ID);
@@ -4755,6 +4870,16 @@ if (MUSIC_AUTOPLAY_ID > 0 && MUSIC_TRACKS.length > 0) {
     } else {
         playTrackAtIndex(0, false);
     }
+} else if (isAlreadyActive) {
+    // Es läuft bereits ein Titel im persistenten Player: NIEMALS von 0:00 neu starten!
+    let activeIdx = -1;
+    if (sharedSt.trackId) {
+        activeIdx = MUSIC_TRACKS.findIndex(t => t.id === sharedSt.trackId);
+    }
+    if (activeIdx === -1 && typeof sharedSt.currentTrackIdx === 'number' && sharedSt.currentTrackIdx >= 0 && sharedSt.currentTrackIdx < MUSIC_TRACKS.length) {
+        activeIdx = sharedSt.currentTrackIdx;
+    }
+    syncMusicUiToActiveTrack(sharedSt, activeIdx);
 } else if (MUSIC_TRACKS.length > 0) {
     playTrackAtIndex(0, false);
 }
