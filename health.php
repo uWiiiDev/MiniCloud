@@ -1031,32 +1031,36 @@ require_once __DIR__ . '/includes/header.php';
     <!-- ====================================================================== -->
     <!-- MODUL-NAVIGATION (8 REITER FÜR ALLE GESUNDHEITSBEREICHE)                -->
     <!-- ====================================================================== -->
-    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200 dark:border-slate-800 scrollbar-none">
-        <?php
-        $tabsMeta = [
-            'emergency' => ['label' => 'Notfallpass', 'icon' => '🚨', 'badge' => ''],
-            'meds'      => ['label' => 'Medikamente', 'icon' => '💊', 'badge' => $medRefillWarnings > 0 ? ('⚠️ ' . $medRefillWarnings) : (count($medications) > 0 ? (string)count($medications) : '')],
-            'visits'    => ['label' => 'Arzttermine', 'icon' => '🗓️', 'badge' => count($doctorVisits) > 0 ? (string)count($doctorVisits) : ''],
-            'lab'       => ['label' => 'Labor-Trends', 'icon' => '🧪', 'badge' => count($labValues) > 0 ? (string)count($labValues) : ''],
-            'docs'      => ['label' => 'Befund-Archiv', 'icon' => '📁', 'badge' => count($documents) > 0 ? (string)count($documents) : ''],
-            'vaccines'  => ['label' => 'Impfen & Vorsorge', 'icon' => '💉', 'badge' => (count($vaccines) + count($checkups)) > 0 ? (string)(count($vaccines) + count($checkups)) : ''],
-            'vitals'    => ['label' => 'Vital & Schmerz', 'icon' => '📈', 'badge' => count($vitals) > 0 ? (string)count($vitals) : ''],
-            'vision'    => ['label' => 'Brillenpass', 'icon' => '👓', 'badge' => count($visionPasses) > 0 ? (string)count($visionPasses) : ''],
-        ];
-        foreach ($tabsMeta as $tKey => $tData):
-            $isActive = $activeTab === $tKey;
-        ?>
-            <a href="health.php?tab=<?= urlencode($tKey) ?><?= $activeProfileId > 0 ? '&amp;profile=' . $activeProfileId : '' ?>"
-               class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all <?= $isActive ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' ?>">
-                <span><?= $tData['icon'] ?></span>
-                <span><?= e($tData['label']) ?></span>
-                <?php if ($tData['badge'] !== ''): ?>
-                    <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold <?= $isActive ? 'bg-white/20 text-white' : ($tKey === 'meds' && $medRefillWarnings > 0 ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200') ?>">
-                        <?= e($tData['badge']) ?>
-                    </span>
-                <?php endif; ?>
-            </a>
-        <?php endforeach; ?>
+    <div class="bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+        <nav class="grid grid-cols-4 lg:grid-cols-8 gap-1 sm:gap-1.5" aria-label="Gesundheits-Bereiche">
+            <?php
+            $tabsMeta = [
+                'emergency' => ['label' => 'Notfallpass',       'short' => 'Notfall',      'icon' => '🚨', 'full' => 'Scheckkarten-Notfallpass & Notfallkontakte', 'badge' => ''],
+                'meds'      => ['label' => 'Medikamente',       'short' => 'Medikamente',  'icon' => '💊', 'full' => 'Bundesmedikationsplan (BMP) & Vorratsampel', 'badge' => $medRefillWarnings > 0 ? ('⚠️ ' . $medRefillWarnings) : (count($medications) > 0 ? (string)count($medications) : '')],
+                'visits'    => ['label' => 'Arzttermine',       'short' => 'Termine',      'icon' => '🗓️', 'full' => 'Arzttermine & Sprechstunden-Protokoll',      'badge' => count($doctorVisits) > 0 ? (string)count($doctorVisits) : ''],
+                'lab'       => ['label' => 'Labor-Trends',      'short' => 'Labor',        'icon' => '🧪', 'full' => 'Laborwerte & Blutbild-Trends',               'badge' => count($labValues) > 0 ? (string)count($labValues) : ''],
+                'docs'      => ['label' => 'Befund-Archiv',     'short' => 'Befunde',      'icon' => '📁', 'full' => 'Befunde, Arztbriefe & 1-Klick-Dossier',       'badge' => count($documents) > 0 ? (string)count($documents) : ''],
+                'vaccines'  => ['label' => 'Impfen & Vorsorge', 'short' => 'Impfen',       'icon' => '💉', 'full' => 'STIKO-Impfpass & Vorsorge-Bonusheft',        'badge' => (count($vaccines) + count($checkups)) > 0 ? (string)(count($vaccines) + count($checkups)) : ''],
+                'vitals'    => ['label' => 'Vital & Schmerz',   'short' => 'Vitalwerte',   'icon' => '📈', 'full' => 'Vitalwerte (Blutdruck/BMI) & Schmerztagebuch','badge' => count($vitals) > 0 ? (string)count($vitals) : ''],
+                'vision'    => ['label' => 'Brillenpass',       'short' => 'Brille',       'icon' => '👓', 'full' => 'Brillen- & Sehschärfe-Pass',                 'badge' => count($visionPasses) > 0 ? (string)count($visionPasses) : ''],
+            ];
+            foreach ($tabsMeta as $tKey => $tData):
+                $isActive = $activeTab === $tKey;
+            ?>
+                <a href="health.php?tab=<?= urlencode($tKey) ?><?= $activeProfileId > 0 ? '&amp;profile=' . $activeProfileId : '' ?>"
+                   title="<?= e($tData['full']) ?>"
+                   class="relative flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs transition-all text-center <?= $isActive ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 font-bold shadow-xs ring-1 ring-slate-200/80 dark:ring-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50 font-medium' ?>">
+                    <span class="text-base sm:text-sm leading-none shrink-0"><?= $tData['icon'] ?></span>
+                    <span class="truncate hidden xl:inline"><?= e($tData['label']) ?></span>
+                    <span class="truncate inline xl:hidden"><?= e($tData['short']) ?></span>
+                    <?php if ($tData['badge'] !== ''): ?>
+                        <span class="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold leading-tight shadow-2xs <?= $isActive ? 'bg-emerald-600 text-white' : ($tKey === 'meds' && $medRefillWarnings > 0 ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300') ?>">
+                            <?= e($tData['badge']) ?>
+                        </span>
+                    <?php endif; ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
     </div>
 
     <!-- ====================================================================== -->
