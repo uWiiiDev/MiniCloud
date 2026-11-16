@@ -367,6 +367,18 @@ $allModules = [
         'badge'    => '',
         'badgeCls' => '',
     ],
+    [
+        'key'      => 'health',
+        'enabled'  => ($appSettings['enable_health'] ?? '1') === '1',
+        'title'    => 'Gesundheit & Patientenakte',
+        'shortSub' => 'Notfallpass, BMP, Labor & Befunde',
+        'icon'     => '🩺',
+        'url'      => 'health.php',
+        'category' => 'org_team',
+        'desc'     => '100 % private elektronische Patientenakte: Scheckkarten-Notfallpass, Bundesmedikationsplan mit Vorratsampel, Labor- & Blutbild-Trends, STIKO-Impfpass, Arzttermin-Protokolle, Vitalwerte & 1-Klick-Facharzt-Dossier.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-emerald-600 text-white',
+    ],
 
     // --- 3. Finanzen & Verein ---
     [

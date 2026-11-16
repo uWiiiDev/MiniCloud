@@ -1340,6 +1340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $enableTransit     = isset($_POST['enable_transit']) && $_POST['enable_transit'] === '1' ? '1' : '0';
         $enableAlerts      = isset($_POST['enable_alerts']) && $_POST['enable_alerts'] === '1' ? '1' : '0';
         $enablePodcasts    = isset($_POST['enable_podcasts']) && $_POST['enable_podcasts'] === '1' ? '1' : '0';
+        $enableHealth      = isset($_POST['enable_health']) && $_POST['enable_health'] === '1' ? '1' : '0';
         $deeplApiKey       = mb_substr(trim((string)($_POST['translator_deepl_api_key'] ?? '')), 0, 160);
         $libreUrlRaw       = trim((string)($_POST['translator_libretranslate_url'] ?? ''));
         $libreUrl          = '';
@@ -1416,6 +1417,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveAppSetting($pdo, 'enable_transit', $enableTransit);
         saveAppSetting($pdo, 'enable_alerts', $enableAlerts);
         saveAppSetting($pdo, 'enable_podcasts', $enablePodcasts);
+        saveAppSetting($pdo, 'enable_health', $enableHealth);
         saveAppSetting($pdo, 'translator_deepl_api_key', $deeplApiKey);
         saveAppSetting($pdo, 'translator_libretranslate_url', $libreUrl);
         saveAppSetting($pdo, 'translator_default_target', $transDefaultTgt);
@@ -3796,6 +3798,35 @@ foreach ($modList as $mItem) {
                         </a>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_podcasts'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
                             <?= ($currentSettings['enable_podcasts'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modul 27o: Gesundheit, Vital-Manager & Digitale Patientenakte -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="enable_health"
+                            value="1"
+                            <?= ($currentSettings['enable_health'] ?? '1') === '1' ? 'checked' : '' ?>
+                            class="mt-1 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        >
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                🩺 Gesundheit &amp; Digitale Patientenakte (<code class="text-xs font-mono">health.php</code>)
+                            </p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                100% private, DSGVO-konforme Patientenakte &amp; Notfallpass für die ganze Familie: Bundesmedikationsplan (BMP), Laborwert-Trends mit Ampel, Arzt-Dossier, STIKO-Impfpass, Vitaldaten &amp; Sehstärken-Pass.
+                            </p>
+                        </div>
+                    </label>
+                    <div class="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                        <a href="health.php" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                            🩺 Patientenakte öffnen &rarr;
+                        </a>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?= ($currentSettings['enable_health'] ?? '1') === '1' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' ?>">
+                            <?= ($currentSettings['enable_health'] ?? '1') === '1' ? 'Aktiviert' : 'Deaktiviert' ?>
                         </span>
                     </div>
                 </div>

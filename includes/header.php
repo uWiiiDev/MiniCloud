@@ -1030,6 +1030,19 @@ $pwaLogoHash = substr(hash('sha256', (string)$appLogoUri), 0, 10);
                         </a>
                     <?php endif; ?>
 
+                    <?php if (($appSettings['enable_health'] ?? '1') === '1'): ?>
+                        <a
+                            href="health.php"
+                            data-nav-item="health"
+                            style="display:none;"
+                            class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Gesundheit, Patientenakte &amp; Vital-Manager"
+                        >
+                            <span>🩺</span>
+                            <span class="hidden md:inline">Gesundheit</span>
+                        </a>
+                    <?php endif; ?>
+
                     <?php if (($appSettings['enable_calculator'] ?? '1') === '1'): ?>
                         <a
                             href="calculator.php"
