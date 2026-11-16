@@ -627,7 +627,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $action    = (string)($_POST['action'] ?? '');
 
     if (!verifyCsrfToken(is_string($csrfToken) ? $csrfToken : null)) {
-        if (in_array($action, ['toggle_favorite', 'save_progress', 'get_track_chords', 'save_track_chords', 'fetch_online_lyrics'], true)) {
+        if (in_array($action, ['toggle_favorite', 'save_progress', 'get_track_chords', 'save_track_chords', 'fetch_online_lyrics', 'save_songsheet_file'], true)) {
             header('Content-Type: application/json; charset=UTF-8');
             echo json_encode(['ok' => false, 'error' => 'Ungültiges CSRF-Token']);
             exit;
@@ -923,6 +923,94 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             'plainLyrics'  => $plainLyrics,
             'trackName'    => $trackName,
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // AJAX: Druckfertiges Liedblatt als HTML-Dokument in "Dokumente/Lieder" der Cloud speichern
+    if ($action === 'save_songsheet_file') {
+        header('Content-Type: application/json; charset=UTF-8');
+        if ($userId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Nicht angemeldet']);
+            exit;
+        }
+        $title     = trim((string)($_POST['title'] ?? 'Lied'));
+        $artist    = trim((string)($_POST['artist'] ?? ''));
+        $htmlSheet = (string)($_POST['html_content'] ?? '');
+
+        if ($htmlSheet === '') {
+            echo json_encode(['ok' => false, 'error' => 'Kein Inhalt übergeben']);
+            exit;
+        }
+
+        $folderName = 'Dokumente/Lieder';
+        ensureUploadDirReady(UPLOAD_DIR);
+        registerFolderHierarchy($pdo, $userId, $folderName);
+
+        $safeTitle  = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß _\-]/u', '', $title) ?: 'Lied';
+        $safeArtist = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß _\-]/u', '', $artist);
+        $origName   = ($safeArtist !== '' ? ($safeArtist . ' - ') : '') . $safeTitle . ' (Liedblatt).html';
+
+        $storedName = generateStoredFileName('html');
+        $destPath   = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $storedName;
+
+        $fullHtml = '<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>' . htmlspecialchars($origName, ENT_QUOTES, 'UTF-8') . '</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #0f172a; padding: 2rem; margin: 0; }
+  .sheet-container { max-width: 850px; margin: 0 auto; background: #fff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+  h1 { margin: 0 0 0.25rem 0; font-size: 1.8rem; color: #0f172a; }
+  .artist { font-size: 1.1rem; color: #e11d48; margin-bottom: 1rem; font-weight: 600; }
+  .meta-strip { font-size: 0.85rem; color: #64748b; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1.5rem; font-family: monospace; font-weight: bold; }
+  .chord-strip { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px dashed #cbd5e1; }
+  .chord-box { text-align: center; }
+  .song-content { font-family: monospace; font-size: 14px; line-height: 1.8; }
+  .chord-line { color: #d97706; font-weight: 900; }
+  .lyrics-line { color: #1e293b; margin-bottom: 0.5rem; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet-container { box-shadow: none; padding: 0; max-width: 100%; border-radius: 0; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet-container">
+  ' . $htmlSheet . '
+</div>
+</body>
+</html>';
+
+        $written = @file_put_contents($destPath, $fullHtml);
+        if ($written === false) {
+            echo json_encode(['ok' => false, 'error' => 'Datei konnte nicht auf Server geschrieben werden']);
+            exit;
+        }
+        @chmod($destPath, 0640);
+
+        // In DB eintragen
+        $stmtIns = $pdo->prepare('
+            INSERT INTO files (user_id, folder_path, original_name, filename, file_size, mime_type)
+            VALUES (:uid, :folder, :orig, :fname, :fsize, "text/html")
+        ');
+        $stmtIns->execute([
+            ':uid'    => $userId,
+            ':folder' => $folderName,
+            ':orig'   => $origName,
+            ':fname'  => $storedName,
+            ':fsize'  => strlen($fullHtml),
+        ]);
+        $newFileId = (int)$pdo->lastInsertId();
+
+        echo json_encode([
+            'ok'        => true,
+            'file_id'   => $newFileId,
+            'orig_name' => $origName,
+            'folder'    => $folderName,
+        ]);
         exit;
     }
 
@@ -2426,6 +2514,11 @@ require_once __DIR__ . '/includes/header.php';
                         title="Songtext &amp; Akkorde manuell bearbeiten">
                     <span id="btnEditLyricsIcon">✏️</span> <span id="btnEditLyricsLabel">Text bearbeiten</span>
                 </button>
+                <button type="button" onclick="openSongsheetModal()"
+                        class="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-1 transition cursor-pointer"
+                        title="Druckfertiges Liedblatt mit Text, Akkorden &amp; Grifftabellen anzeigen">
+                    <span>📄</span> <span>Liedblatt</span>
+                </button>
                 <?php if (!$isGuestMode): ?>
                 <button type="button" onclick="saveTrackChordsAjax()"
                         class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 transition cursor-pointer"
@@ -2570,6 +2663,137 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
 
+    </div>
+</div>
+
+<style>
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+    #modalSongsheetPreview, #modalSongsheetPreview * {
+        visibility: visible !important;
+    }
+    #modalSongsheetPreview {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        overflow: visible !important;
+    }
+    .no-print {
+        display: none !important;
+    }
+    #songsheetPaperArea {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: white !important;
+        color: black !important;
+    }
+    .sheet-verse {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+}
+</style>
+
+<!-- MODAL: DRUCKFERTIGES LIEDBLATT (PRINT & PDF PREVIEW) -->
+<div id="modalSongsheetPreview" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto">
+    <!-- OBERE STEUERLEISTE (Wird beim Drucken ausgeblendet) -->
+    <div class="no-print w-full max-w-4xl bg-slate-900 border border-slate-700 text-white rounded-xl shadow-xl px-4 py-3 mb-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-2">
+            <span class="text-xl">📄</span>
+            <div>
+                <h4 class="text-xs sm:text-sm font-extrabold text-white">Liedblatt-Vorschau</h4>
+                <p class="text-[11px] text-slate-400">Druckfertig für A4-Papier, iPad &amp; Notenständer</p>
+            </div>
+        </div>
+
+        <!-- Formatierungs-Werkzeuge -->
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+            <!-- Spalten -->
+            <div class="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+                <button type="button" id="btnSheetCol1" onclick="setSongsheetColumns(1)" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-600 text-white cursor-pointer">1 Spalte</button>
+                <button type="button" id="btnSheetCol2" onclick="setSongsheetColumns(2)" class="px-2 py-1 rounded text-[11px] font-semibold text-slate-400 hover:text-white cursor-pointer">2 Spalten</button>
+            </div>
+
+            <!-- Schriftgröße -->
+            <div class="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+                <button type="button" onclick="adjustSongsheetFontSize(-1)" title="Schrift kleiner" class="px-2 py-1 text-slate-300 font-bold hover:text-white cursor-pointer">A-</button>
+                <span id="sheetFontSizeLabel" class="px-1.5 text-[11px] font-mono text-slate-400">14px</span>
+                <button type="button" onclick="adjustSongsheetFontSize(1)" title="Schrift größer" class="px-2 py-1 text-slate-300 font-bold hover:text-white cursor-pointer">A+</button>
+            </div>
+
+            <!-- Grifftabellen anzeigen -->
+            <label class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 cursor-pointer text-[11px] text-slate-200 select-none">
+                <input type="checkbox" id="sheetShowDiagramsCheckbox" onchange="toggleSongsheetChordBoxes(this.checked)" checked class="rounded text-teal-600">
+                <span>Grifftabellen</span>
+            </label>
+
+            <!-- Aktionen: Drucken & In Cloud speichern -->
+            <button type="button" onclick="printSongsheet()" class="px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
+                <span>🖨️</span> <span>Drucken / PDF</span>
+            </button>
+            <?php if (!$isGuestMode): ?>
+            <button type="button" onclick="saveSongsheetToCloud()" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 shadow-sm transition cursor-pointer" title="Als Datei in 'Dokumente/Lieder' speichern">
+                <span>💾</span> <span>In Cloud speichern</span>
+            </button>
+            <?php endif; ?>
+            <button type="button" onclick="closeSongsheetModal()" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white text-base transition cursor-pointer">
+                ✕
+            </button>
+        </div>
+    </div>
+
+    <!-- PAPIER-BLATT (A4-PROPORTIONIERT) -->
+    <div id="songsheetPaperArea" class="bg-white text-slate-900 rounded-xl p-6 sm:p-10 max-w-4xl w-full shadow-2xl min-h-[700px] border border-slate-200 transition-all">
+        <!-- HEADER -->
+        <div class="border-b-2 border-slate-800 pb-3 mb-4 flex items-start justify-between gap-4">
+            <div>
+                <h1 id="sheetSongTitle" class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Titel</h1>
+                <p id="sheetSongArtist" class="text-base sm:text-lg font-bold text-rose-600">Interpret</p>
+                <div class="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-600 font-mono font-semibold">
+                    <span id="sheetKeyBadge">Tonart: C-Dur</span>
+                    <span>&bull;</span>
+                    <span id="sheetCapoBadge">Capo: Kein</span>
+                    <span>&bull;</span>
+                    <span id="sheetTransposeBadge">Original</span>
+                </div>
+            </div>
+            <div class="text-right text-[11px] text-slate-400 font-sans shrink-0 hidden sm:block">
+                <span class="font-extrabold text-slate-700 tracking-tight">MiniCloud</span> Liedblatt<br>
+                <?= date('d.m.Y') ?>
+            </div>
+        </div>
+
+        <!-- AKKORD-LEGENDEN (GRIFFTABELLEN GANZ OBEN) -->
+        <div id="sheetChordsGalleryBox" class="mb-5 pb-4 border-b border-dashed border-slate-300">
+            <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Verwendete Akkorde:</p>
+            <div id="sheetChordBoxesContainer" class="flex flex-wrap items-center gap-3 sm:gap-4">
+                <!-- SVG-Diagramme -->
+            </div>
+        </div>
+
+        <!-- SONGTEXT & AKKORDE CONTENT -->
+        <div id="sheetLyricsContainer" class="font-mono text-sm leading-relaxed text-slate-800 space-y-4">
+            <!-- Strophen & Refrain -->
+        </div>
+
+        <!-- FOOTER-HINWEIS -->
+        <div class="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 font-sans">
+            Erstellt mit dem MiniCloud Musik-Studio &bull; Selbst gehostet &amp; DSGVO-konform
+        </div>
     </div>
 </div>
 
@@ -4188,6 +4412,246 @@ async function saveTrackChordsAjax() {
 function escapeHtml(str) {
     if (typeof str !== 'string') return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ==========================================================================
+   DRUCKFERTIGES LIEDBLATT (PRINT & PDF LEAD-SHEET GENERATOR)
+   ========================================================================== */
+
+let songsheetColumns       = 1;
+let songsheetFontSize      = 14;
+let songsheetShowDiagrams  = true;
+
+function openSongsheetModal() {
+    if (!activeChordsTrack) {
+        if (MUSIC_TRACKS.length > 0) {
+            activeChordsTrack = MUSIC_TRACKS[currentTrackIdx >= 0 ? currentTrackIdx : 0];
+        }
+    }
+    if (!activeChordsTrack) {
+        alert('Bitte wähle zuerst einen Titel aus.');
+        return;
+    }
+
+    const modal = document.getElementById('modalSongsheetPreview');
+    if (modal) modal.classList.remove('hidden');
+
+    document.getElementById('sheetSongTitle').textContent  = activeChordsTrack.title;
+    document.getElementById('sheetSongArtist').textContent = activeChordsTrack.artist;
+
+    const keyText  = detectedSongKey ? `Tonart: ${detectedSongKey}` : 'Tonart: Unbekannt';
+    const capoText = chordCapo > 0 ? `Capo: Bund ${chordCapo}` : 'Capo: Kein';
+    let transText  = 'Original';
+    if (chordTranspose > 0) transText = `Transponiert +${chordTranspose} ♯`;
+    else if (chordTranspose < 0) transText = `Transponiert ${chordTranspose} ♭`;
+
+    document.getElementById('sheetKeyBadge').textContent       = keyText;
+    document.getElementById('sheetCapoBadge').textContent      = capoText;
+    document.getElementById('sheetTransposeBadge').textContent = transText;
+
+    const uniqueChords = new Set();
+
+    // 1. Aus Timeline
+    for (let i = 0; i < chordsTimeline.length; i++) {
+        const eff = getEffectiveChord(chordsTimeline[i].chord, chordTranspose, chordSimplify, chordCapo);
+        if (eff && eff !== '--') uniqueChords.add(eff);
+    }
+
+    // 2. Aus Text-Zeilen
+    for (let i = 0; i < parsedLyricsLines.length; i++) {
+        if (parsedLyricsLines[i].chords) {
+            for (let c = 0; c < parsedLyricsLines[i].chords.length; c++) {
+                const eff = getEffectiveChord(parsedLyricsLines[i].chords[c], chordTranspose, chordSimplify, chordCapo);
+                if (eff && eff !== '--') uniqueChords.add(eff);
+            }
+        }
+    }
+
+    const chordBoxesContainer = document.getElementById('sheetChordBoxesContainer');
+    if (chordBoxesContainer) {
+        if (uniqueChords.size === 0) {
+            chordBoxesContainer.innerHTML = '<span class="text-xs text-slate-400 italic">Keine Akkorde hinterlegt.</span>';
+        } else {
+            let svgHtml = '';
+            uniqueChords.forEach(chord => {
+                svgHtml += `
+                    <div class="chord-box flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-200 shadow-xs">
+                        <span class="text-xs font-mono font-bold text-amber-700 mb-1">${escapeHtml(chord)}</span>
+                        <div class="scale-90 origin-top">
+                            ${generateGuitarChordSvg(chord)}
+                        </div>
+                    </div>
+                `;
+            });
+            chordBoxesContainer.innerHTML = svgHtml;
+        }
+    }
+
+    const lyricsContainer = document.getElementById('sheetLyricsContainer');
+    if (lyricsContainer) {
+        if (!rawLyricsText && !parsedLyricsLines.length) {
+            lyricsContainer.innerHTML = `
+                <div class="py-12 text-center text-slate-400 italic">
+                    Für diesen Titel ist noch kein Songtext hinterlegt.<br>
+                    Tippe im Studio auf „📝 Lyrics suchen“ oder „✏️ Text bearbeiten“.
+                </div>
+            `;
+            return;
+        }
+
+        let contentHtml = '';
+        let currentVerse = [];
+
+        const linesToProcess = parsedLyricsLines.length > 0
+            ? parsedLyricsLines
+            : rawLyricsText.split('\n').map(l => ({ time: -1, text: l, chords: [] }));
+
+        for (let i = 0; i < linesToProcess.length; i++) {
+            const item = linesToProcess[i];
+            const text = (item.text || '').trim();
+
+            if (text === '') {
+                if (currentVerse.length > 0) {
+                    contentHtml += renderSheetVerseBlock(currentVerse);
+                    currentVerse = [];
+                }
+                continue;
+            }
+
+            let lineChords = [];
+            if (item.chords && item.chords.length > 0) {
+                lineChords = item.chords.map(ch => getEffectiveChord(ch, chordTranspose, chordSimplify, chordCapo));
+            } else if (chordsTimeline.length > 0 && item.time >= 0) {
+                for (let t = 0; t < chordsTimeline.length; t++) {
+                    if (chordsTimeline[t].time <= item.time + 1.0) {
+                        const eff = getEffectiveChord(chordsTimeline[t].chord, chordTranspose, chordSimplify, chordCapo);
+                        if (eff && !lineChords.includes(eff)) lineChords = [eff];
+                    }
+                }
+            }
+
+            currentVerse.push({ text, chords: lineChords });
+        }
+
+        if (currentVerse.length > 0) {
+            contentHtml += renderSheetVerseBlock(currentVerse);
+        }
+
+        lyricsContainer.innerHTML = contentHtml || '<p class="italic text-slate-400">Kein formatierter Text verfügbar.</p>';
+        setSongsheetColumns(songsheetColumns);
+    }
+}
+
+function renderSheetVerseBlock(lines) {
+    if (!lines || !lines.length) return '';
+    let blockHtml = '<div class="sheet-verse break-inside-avoid mb-6">';
+    for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const isHeader = /^\[(strophe|verse|refrain|chorus|bridge|outro|intro)/i.test(l.text) || /^(strophe|verse|refrain|chorus|bridge|outro|intro)\s*\d*:/i.test(l.text);
+
+        if (isHeader) {
+            blockHtml += `
+                <div class="text-xs font-bold uppercase tracking-wider text-rose-600 font-sans mt-3 mb-1.5 border-b border-rose-100 pb-0.5">
+                    ${escapeHtml(l.text)}
+                </div>
+            `;
+            continue;
+        }
+
+        const chordsStr = l.chords.length > 0 ? l.chords.join('         ') : '';
+        blockHtml += `
+            <div class="mb-2 leading-tight">
+                ${chordsStr ? `<div class="chord-line text-amber-700 font-mono font-extrabold text-xs tracking-wider">${escapeHtml(chordsStr)}</div>` : ''}
+                <div class="lyrics-line text-slate-800 font-mono text-sm">${escapeHtml(l.text)}</div>
+            </div>
+        `;
+    }
+    blockHtml += '</div>';
+    return blockHtml;
+}
+
+function closeSongsheetModal() {
+    const modal = document.getElementById('modalSongsheetPreview');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setSongsheetColumns(num) {
+    songsheetColumns = num === 2 ? 2 : 1;
+    const btn1 = document.getElementById('btnSheetCol1');
+    const btn2 = document.getElementById('btnSheetCol2');
+    const container = document.getElementById('sheetLyricsContainer');
+
+    if (btn1 && btn2) {
+        if (songsheetColumns === 2) {
+            btn2.className = 'px-2 py-1 rounded text-[11px] font-bold bg-teal-600 text-white cursor-pointer';
+            btn1.className = 'px-2 py-1 rounded text-[11px] font-semibold text-slate-400 hover:text-white cursor-pointer';
+        } else {
+            btn1.className = 'px-2 py-1 rounded text-[11px] font-bold bg-teal-600 text-white cursor-pointer';
+            btn2.className = 'px-2 py-1 rounded text-[11px] font-semibold text-slate-400 hover:text-white cursor-pointer';
+        }
+    }
+
+    if (container) {
+        if (songsheetColumns === 2) {
+            container.style.columnCount = '2';
+            container.style.columnGap   = '2.5rem';
+            container.style.columnRule  = '1px solid #e2e8f0';
+        } else {
+            container.style.columnCount = '1';
+            container.style.columnGap   = 'normal';
+            container.style.columnRule  = 'none';
+        }
+    }
+}
+
+function adjustSongsheetFontSize(delta) {
+    songsheetFontSize = Math.max(10, Math.min(24, songsheetFontSize + delta));
+    const lbl = document.getElementById('sheetFontSizeLabel');
+    if (lbl) lbl.textContent = songsheetFontSize + 'px';
+    const container = document.getElementById('sheetLyricsContainer');
+    if (container) {
+        container.style.fontSize = songsheetFontSize + 'px';
+    }
+}
+
+function toggleSongsheetChordBoxes(show) {
+    songsheetShowDiagrams = Boolean(show);
+    const box = document.getElementById('sheetChordsGalleryBox');
+    if (box) {
+        if (songsheetShowDiagrams) box.classList.remove('hidden');
+        else box.classList.add('hidden');
+    }
+}
+
+function printSongsheet() {
+    window.print();
+}
+
+async function saveSongsheetToCloud() {
+    if (MUSIC_IS_GUEST || !activeChordsTrack) return;
+    const paper = document.getElementById('songsheetPaperArea');
+    if (!paper) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('csrf_token', MUSIC_CSRF_TOKEN);
+        fd.append('action', 'save_songsheet_file');
+        fd.append('title', activeChordsTrack.title || 'Lied');
+        fd.append('artist', activeChordsTrack.artist || '');
+        fd.append('html_content', paper.innerHTML);
+
+        const resp = await fetch('music.php', { method: 'POST', body: fd });
+        const data = await resp.json();
+
+        if (data && data.ok) {
+            alert(`Liedblatt wurde erfolgreich als Datei in deiner Cloud gespeichert:\n\n📁 ${data.folder}/${data.orig_name}\n\nDu kannst die Datei jederzeit im Datei-Modul öffnen, drucken oder teilen!`);
+        } else {
+            alert('Fehler beim Speichern in der Cloud: ' + (data.error || 'Unbekannt'));
+        }
+    } catch (e) {
+        console.error('Fehler beim Cloud-Export des Liedblatts:', e);
+        alert('Netzwerkfehler beim Speichern des Liedblatts.');
+    }
 }
 
 // Tastatursteuerung (Leertaste = Play/Pause, Pfeil links/rechts = -15s/+15s)
