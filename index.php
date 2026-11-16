@@ -1003,6 +1003,17 @@ $baseGfQuery = $activeGroupFolder !== null ? 'group_folder=' . (int)$activeGroup
                                 <span class="hidden sm:inline">Import</span>
                             </button>
                         <?php endif; ?>
+
+                        <?php if (($appSettings['enable_workflows'] ?? '1') === '1'): ?>
+                            <a
+                                href="workflows.php"
+                                title="Smart-Workflows &amp; Automatisierung (Kategorisieren, Verschieben, E-Mail-Versand &amp; Beleg-Verknüpfung)"
+                                class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-amber-700 dark:text-amber-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-2xs text-[11px] font-semibold transition-all"
+                            >
+                                <span>⚡</span>
+                                <span class="hidden md:inline">Workflows</span>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </form>
             <?php endif; ?>
@@ -5602,6 +5613,59 @@ function appendMenuSectionDivider(titleText) {
     mobileActionList.appendChild(div);
 }
 
+<?php
+$quickMenuWorkflows = [];
+if (($appSettings['enable_workflows'] ?? '1') === '1' && function_exists('ensureWorkflowSchema')) {
+    try {
+        ensureWorkflowSchema($pdo);
+        $stmtQWf = $pdo->prepare(
+            'SELECT id, name, icon, category_label FROM workflows WHERE user_id = :uid AND is_active = 1 AND show_in_file_menu = 1 ORDER BY priority_order ASC, id ASC LIMIT 12'
+        );
+        $stmtQWf->execute([':uid' => $userId]);
+        $quickMenuWorkflows = $stmtQWf->fetchAll();
+    } catch (Throwable) {
+        $quickMenuWorkflows = [];
+    }
+}
+?>
+const USER_QUICK_WORKFLOWS = <?= json_encode($quickMenuWorkflows, JSON_UNESCAPED_UNICODE) ?>;
+
+function submitQuickWorkflow(workflowId, fileId = 0, batchIds = []) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'workflows.php';
+    form.className = 'hidden';
+
+    const addField = (name, val) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = name;
+        inp.value = String(val);
+        form.appendChild(inp);
+    };
+
+    addField('csrf_token', csrfToken);
+    addField('action', 'execute_single');
+    addField('workflow_id', workflowId);
+    if (fileId > 0) {
+        addField('file_id', fileId);
+    }
+    if (Array.isArray(batchIds) && batchIds.length > 0) {
+        addField('batch_file_ids', batchIds.join(','));
+    }
+    const curF = <?= json_encode($currentFolder) ?>;
+    if (curF !== '') {
+        addField('return_folder', curF);
+    }
+    const actGf = <?= $activeGroupFolder !== null ? (int)$activeGroupFolder['id'] : 0 ?>;
+    if (actGf > 0) {
+        addField('group_folder_id', actGf);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function appendBatchSelectionContextActions() {
     const checkedFileCbs = getSelectedFileCheckboxes();
     const checkedFolderCbs = getSelectedFolderCheckboxes();
@@ -5613,6 +5677,14 @@ function appendBatchSelectionContextActions() {
         appendMenuActionRow(`📦 Ausgewählte Dateien als ZIP (${checkedFileCbs.length})`, 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100', () => {
             downloadBatchZip();
         }, null);
+        if (Array.isArray(USER_QUICK_WORKFLOWS) && USER_QUICK_WORKFLOWS.length > 0) {
+            const batchIds = checkedFileCbs.map(cb => cb.value);
+            USER_QUICK_WORKFLOWS.forEach(wf => {
+                appendMenuActionRow(`${wf.icon || '⚡'} Workflow (${checkedFileCbs.length}): ${wf.name}`, 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+                    submitQuickWorkflow(Number(wf.id), 0, batchIds);
+                }, null);
+            });
+        }
     }
     appendMenuActionRow(`🗜️ Markierte Elemente als ZIP archivieren (${totalChecked})`, 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100', () => {
         openBatchArchiveModal();
@@ -5788,6 +5860,24 @@ function openMobileFileMenu(fileIdx, canDelete, ev = null) {
             toggleFavorite(item.id);
         }, null);
     }
+
+    // 8b. Smart-Workflows (1-Klick-Schnellaktionen auf diese Datei anwenden)
+    <?php if (($appSettings['enable_workflows'] ?? '1') === '1'): ?>
+    if (!item.isEncrypted && item.canManage) {
+        if (Array.isArray(USER_QUICK_WORKFLOWS) && USER_QUICK_WORKFLOWS.length > 0) {
+            appendMenuSectionDivider('⚡ Smart-Workflows (1-Klick)');
+            USER_QUICK_WORKFLOWS.forEach(wf => {
+                appendMenuActionRow(`${wf.icon || '⚡'} ${wf.name}`, 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+                    submitQuickWorkflow(Number(wf.id), Number(item.id));
+                }, null);
+            });
+        } else {
+            appendMenuActionRow('⚡ Smart-Workflows & Regeln einrichten…', 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100', () => {
+                window.location.href = 'workflows.php';
+            }, null);
+        }
+    }
+    <?php endif; ?>
 
     // 9. Löschen
     if (canDelete) {

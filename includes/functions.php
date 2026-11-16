@@ -791,6 +791,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_surflog'                => '1',
         'enable_cinema'                 => '1',
         'enable_translator'             => '1',
+        'enable_workflows'              => '1',
         'enable_bundesliga'             => '1',
         'enable_tv_radio'               => '1',
         'enable_radio'                  => '1',
@@ -893,6 +894,7 @@ function getAppSettings(?PDO $pdo = null, bool $forceRefresh = false): array
         'enable_surflog'       => 'surflog.php',
         'enable_cinema'        => 'cinema.php',
         'enable_translator'    => 'translate.php',
+        'enable_workflows'     => 'workflows.php',
         'enable_bundesliga'    => 'bundesliga.php',
         'enable_tv_radio'      => 'tv_radio.php',
         'enable_radio'         => 'radio.php',
@@ -3230,6 +3232,13 @@ function getModuleStatsCatalog(): array
             'setting_key' => 'enable_pdf_tools',
             'color'       => 'bg-rose-600',
         ],
+        'workflows' => [
+            'icon'        => '⚡',
+            'label'       => 'Smart-Workflows & Automatisierung',
+            'url'         => 'workflows.php',
+            'setting_key' => 'enable_workflows',
+            'color'       => 'bg-amber-600',
+        ],
         'projects' => [
             'icon'        => '🚀',
             'label'       => 'Projektmanagement & Gantt',
@@ -4871,6 +4880,1022 @@ function buildFulltextSnippet(string $contentText, string $query, int $maxLength
 
     return $prefix . trim($snippet) . $suffix;
 }
+
+/**
+ * Stellt sicher, dass die Tabellen `workflows` und `workflow_logs` für das Smart-Workflow-Modul existieren.
+ */
+function ensureWorkflowSchema(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured || (!empty($_SESSION['_mc_workflows_schema_v1_ok']) && $_SESSION['_mc_workflows_schema_v1_ok'] === 1)) {
+        $ensured = true;
+        return;
+    }
+    $ensured = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `workflows` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` INT NOT NULL,
+                `name` VARCHAR(190) NOT NULL,
+                `icon` VARCHAR(24) NOT NULL DEFAULT '⚡',
+                `category_label` VARCHAR(120) NOT NULL DEFAULT '',
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `trigger_on_upload` TINYINT(1) NOT NULL DEFAULT 1,
+                `show_in_file_menu` TINYINT(1) NOT NULL DEFAULT 1,
+                `stop_processing` TINYINT(1) NOT NULL DEFAULT 0,
+                `priority_order` INT NOT NULL DEFAULT 10,
+                `cond_match_mode` VARCHAR(12) NOT NULL DEFAULT 'all',
+                `cond_source_folder` VARCHAR(500) NOT NULL DEFAULT '',
+                `cond_extensions` VARCHAR(255) NOT NULL DEFAULT '',
+                `cond_filename_keywords` VARCHAR(500) NOT NULL DEFAULT '',
+                `cond_content_keywords` VARCHAR(1000) NOT NULL DEFAULT '',
+                `cond_content_match_mode` VARCHAR(12) NOT NULL DEFAULT 'any',
+                `cond_min_size_kb` INT UNSIGNED NOT NULL DEFAULT 0,
+                `cond_min_age_days` INT UNSIGNED NOT NULL DEFAULT 0,
+                `act_set_favorite` TINYINT(1) NOT NULL DEFAULT 0,
+                `act_add_comment` VARCHAR(500) NOT NULL DEFAULT '',
+                `act_rename_pattern` VARCHAR(255) NOT NULL DEFAULT '',
+                `act_move_folder` VARCHAR(500) NOT NULL DEFAULT '',
+                `act_copy_folder` VARCHAR(500) NOT NULL DEFAULT '',
+                `act_compress_zip` TINYINT(1) NOT NULL DEFAULT 0,
+                `act_send_email_to` VARCHAR(255) NOT NULL DEFAULT '',
+                `act_send_email_subject` VARCHAR(255) NOT NULL DEFAULT '',
+                `act_send_email_body` TEXT DEFAULT NULL,
+                `act_send_email_mode` VARCHAR(32) NOT NULL DEFAULT 'attachment_or_link',
+                `act_create_task_title` VARCHAR(255) NOT NULL DEFAULT '',
+                `act_create_task_due_days` INT NOT NULL DEFAULT 7,
+                `act_create_task_priority` VARCHAR(16) NOT NULL DEFAULT 'medium',
+                `act_match_banking` TINYINT(1) NOT NULL DEFAULT 0,
+                `run_count` INT UNSIGNED NOT NULL DEFAULT 0,
+                `last_run_at` DATETIME DEFAULT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_workflows_user_active` (`user_id`, `is_active`, `priority_order`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `workflow_logs` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `workflow_id` INT UNSIGNED DEFAULT NULL,
+                `user_id` INT NOT NULL,
+                `file_id` INT DEFAULT NULL,
+                `workflow_name` VARCHAR(190) NOT NULL DEFAULT '',
+                `file_name` VARCHAR(255) NOT NULL DEFAULT '',
+                `trigger_type` VARCHAR(32) NOT NULL DEFAULT 'upload',
+                `status` VARCHAR(24) NOT NULL DEFAULT 'success',
+                `actions_summary` TEXT NOT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_wf_logs_user` (`user_id`, `created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_mc_workflows_schema_v1_ok'] = 1;
+        }
+    } catch (Throwable) {
+        // Ignorieren falls eingeschränkt
+    }
+}
+
+/**
+ * Liefert fertige 1-Klick-Vorlagen für das Workflow-Studio.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function getWorkflowTemplatesCatalog(): array
+{
+    return [
+        'invoice_autosort' => [
+            'name'                    => 'Rechnungen erkennen, kategorisieren & nach Jahr sortieren',
+            'icon'                    => '🧾',
+            'desc'                    => 'Erkennt PDF-Rechnungen automatisch am Inhalt oder Dateinamen, versieht sie mit der Kategorie „Rechnung“, verknüpft sie nach Möglichkeit mit dem Kontoauszug und verschiebt sie nach Finanzen/Rechnungen/{JAHR}.',
+            'category_label'          => 'Rechnung',
+            'trigger_on_upload'       => 1,
+            'show_in_file_menu'       => 1,
+            'stop_processing'         => 0,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => '',
+            'cond_extensions'         => 'pdf',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => 'Rechnung,Rechnungsnummer,MwSt,Umsatzsteuer,Gesamtbetrag,IBAN,Invoice',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 0,
+            'act_set_favorite'        => 0,
+            'act_add_comment'         => '🏷️ Automatisch kategorisiert als: {KATEGORIE} ({DATUM})',
+            'act_rename_pattern'      => '',
+            'act_move_folder'         => 'Finanzen/Rechnungen/{JAHR}',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 0,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '',
+            'act_send_email_body'     => '',
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '',
+            'act_create_task_due_days'=> 7,
+            'act_create_task_priority'=> 'medium',
+            'act_match_banking'       => 1,
+        ],
+        'tax_email_forward' => [
+            'name'                    => 'Beleg per E-Mail an Steuerberater / Buchhaltung senden & ablegen',
+            'icon'                    => '📧',
+            'desc'                    => 'Versendet das Dokument automatisch per E-Mail (als Anhang oder sicherer Freigabelink), benennt es sauber mit Tagesdatum um und legt es im Ordner Steuer/{JAHR}/Gesendet ab.',
+            'category_label'          => 'Steuerbeleg',
+            'trigger_on_upload'       => 0,
+            'show_in_file_menu'       => 1,
+            'stop_processing'         => 0,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => 'Steuer/Posteingang',
+            'cond_extensions'         => 'pdf,jpg,png,csv,xlsx',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => '',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 0,
+            'act_set_favorite'        => 0,
+            'act_add_comment'         => '📧 Am {DATUM} per Workflow versendet ({KATEGORIE})',
+            'act_rename_pattern'      => '{DATUM}_Beleg_{NAME}',
+            'act_move_folder'         => 'Steuer/{JAHR}/Gesendet',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 0,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '[Beleg {DATUM}] {DATEINAME}',
+            'act_send_email_body'     => "Hallo,\r\n\r\nanbei erhalten Sie automatisch den neuen Beleg „{DATEINAME}“ ({GROESSE}) vom {DATUM}.\r\n\r\nDirektlink zum Download:\r\n{SHARE_LINK}\r\n\r\nViele Grüße",
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '',
+            'act_create_task_due_days'=> 7,
+            'act_create_task_priority'=> 'medium',
+            'act_match_banking'       => 1,
+        ],
+        'invoice_todo_reminder' => [
+            'name'                    => 'Zahlungserinnerung / To-Do bei offenen Rechnungen & Mahnungen',
+            'icon'                    => '⏰',
+            'desc'                    => 'Prüft neue PDFs auf Begriffe wie „zahlbar bis“, „Fälligkeit“ oder „Mahnung“ und legt automatisch eine Aufgabe mit angehängtem Beleg in Ihrer Aufgabenliste an.',
+            'category_label'          => 'Zahlung fällig',
+            'trigger_on_upload'       => 1,
+            'show_in_file_menu'       => 1,
+            'stop_processing'         => 0,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => '',
+            'cond_extensions'         => 'pdf',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => 'zahlbar bis,Fälligkeit,Bitte überweisen Sie,Mahnung,Zahlungsziel',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 0,
+            'act_set_favorite'        => 1,
+            'act_add_comment'         => '⏰ Zahlungsziel erkannt – Aufgabe wurde automatisch angelegt.',
+            'act_rename_pattern'      => '',
+            'act_move_folder'         => 'Finanzen/Offene_Rechnungen',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 0,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '',
+            'act_send_email_body'     => '',
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '💸 Rechnung prüfen & überweisen: {DATEINAME}',
+            'act_create_task_due_days'=> 7,
+            'act_create_task_priority'=> 'high',
+            'act_match_banking'       => 0,
+        ],
+        'contracts_archive' => [
+            'name'                    => 'Verträge, Policen & Bescheide automatisch sichern',
+            'icon'                    => '📜',
+            'desc'                    => 'Erkennt Verträge, Versicherungspolicen und Steuerbescheide, markiert sie als ⭐ Favorit und sortiert sie nach Dokumente/Vertraege/{JAHR}.',
+            'category_label'          => 'Vertrag / Bescheid',
+            'trigger_on_upload'       => 1,
+            'show_in_file_menu'       => 1,
+            'stop_processing'         => 0,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => '',
+            'cond_extensions'         => 'pdf,docx',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => 'Vertrag,Versicherungsschein,Police,Steuerbescheid,Kündigungsfrist,Arbeitsvertrag,Mietvertrag',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 0,
+            'act_set_favorite'        => 1,
+            'act_add_comment'         => '📜 Wichtiger Vertrag / Bescheid ({DATUM})',
+            'act_rename_pattern'      => '{DATUM}_{NAME}',
+            'act_move_folder'         => 'Dokumente/Vertraege/{JAHR}',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 0,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '',
+            'act_send_email_body'     => '',
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '',
+            'act_create_task_due_days'=> 14,
+            'act_create_task_priority'=> 'medium',
+            'act_match_banking'       => 0,
+        ],
+        'ebooks_autosort' => [
+            'name'                    => 'E-Books (.epub) automatisch in die Bibliothek einsortieren',
+            'icon'                    => '📚',
+            'desc'                    => 'Verschiebt hochgeladene .epub-Dateien automatisch in den Ordner „E-Books“, damit Ihr Hauptverzeichnis immer aufgeräumt bleibt.',
+            'category_label'          => 'E-Book',
+            'trigger_on_upload'       => 1,
+            'show_in_file_menu'       => 0,
+            'stop_processing'         => 1,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => '__root__',
+            'cond_extensions'         => 'epub',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => '',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 0,
+            'act_set_favorite'        => 0,
+            'act_add_comment'         => '',
+            'act_rename_pattern'      => '',
+            'act_move_folder'         => 'E-Books',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 0,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '',
+            'act_send_email_body'     => '',
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '',
+            'act_create_task_due_days'=> 7,
+            'act_create_task_priority'=> 'low',
+            'act_match_banking'       => 0,
+        ],
+        'old_files_zip_archive' => [
+            'name'                    => 'Ältere Dateien automatisch als ZIP archivieren & Platz sparen',
+            'icon'                    => '🗜️',
+            'desc'                    => 'Komprimiert ausgewählte oder ältere Dokumente (> 30 Tage) direkt als .zip-Archiv, legt sie unter Archiv/{JAHR} ab und verschiebt die Originale in den Papierkorb.',
+            'category_label'          => 'Archiviert',
+            'trigger_on_upload'       => 0,
+            'show_in_file_menu'       => 1,
+            'stop_processing'         => 1,
+            'cond_match_mode'         => 'all',
+            'cond_source_folder'      => '',
+            'cond_extensions'         => '',
+            'cond_filename_keywords'  => '',
+            'cond_content_keywords'   => '',
+            'cond_content_match_mode' => 'any',
+            'cond_min_size_kb'        => 0,
+            'cond_min_age_days'       => 30,
+            'act_set_favorite'        => 0,
+            'act_add_comment'         => '🗜️ Automatisch als ZIP archiviert am {DATUM}',
+            'act_rename_pattern'      => '',
+            'act_move_folder'         => 'Archiv/{JAHR}',
+            'act_copy_folder'         => '',
+            'act_compress_zip'        => 1,
+            'act_send_email_to'       => '',
+            'act_send_email_subject'  => '',
+            'act_send_email_body'     => '',
+            'act_send_email_mode'     => 'attachment_or_link',
+            'act_create_task_title'   => '',
+            'act_create_task_due_days'=> 7,
+            'act_create_task_priority'=> 'low',
+            'act_match_banking'       => 0,
+        ],
+    ];
+}
+
+/**
+ * Ersetzt Platzhalter wie {DATUM}, {JAHR}, {MONAT}, {NAME}, {DATEINAME}, {ENDUNG}, {KATEGORIE}, {ORDNER}, {GROESSE}, {WORKFLOW}, {SHARE_LINK}.
+ *
+ * @param array<string, string> $vars
+ */
+function replaceWorkflowPlaceholders(string $template, array $vars): string
+{
+    if ($template === '') {
+        return '';
+    }
+    $replacements = [
+        '{DATUM}'     => $vars['date'] ?? date('Y-m-d'),
+        '{JAHR}'      => $vars['year'] ?? date('Y'),
+        '{MONAT}'     => $vars['month'] ?? date('m'),
+        '{TAG}'       => $vars['day'] ?? date('d'),
+        '{NAME}'      => $vars['stem'] ?? 'Dokument',
+        '{DATEINAME}' => $vars['filename'] ?? 'Dokument',
+        '{ENDUNG}'    => $vars['ext'] ?? '',
+        '{KATEGORIE}' => $vars['category'] ?? 'Allgemein',
+        '{ORDNER}'    => $vars['folder'] ?? 'Hauptverzeichnis',
+        '{GROESSE}'   => $vars['size'] ?? '0 B',
+        '{WORKFLOW}'  => $vars['workflow'] ?? 'Workflow',
+        '{SHARE_LINK}'=> $vars['share_link'] ?? '',
+    ];
+    return strtr($template, $replacements);
+}
+
+/**
+ * Versendet eine Workflow-E-Mail wahlweise inklusive physischem Datei-Anhang (MIME multipart/mixed)
+ * oder als reine Text-E-Mail über die konfigurierten Systemeinstellungen (SMTP oder PHP mail()).
+ */
+function sendWorkflowEmail(
+    PDO $pdo,
+    string $toEmail,
+    string $rawSubject,
+    string $bodyText,
+    ?string $attachmentPath = null,
+    string $attachmentName = '',
+    string $attachmentMime = 'application/octet-stream',
+    ?string &$errorOut = null
+): bool {
+    $toEmail = trim($toEmail);
+    if (filter_var($toEmail, FILTER_VALIDATE_EMAIL) === false) {
+        $errorOut = 'Ungültige Empfänger-E-Mail-Adresse.';
+        return false;
+    }
+
+    // Falls kein Anhang gewünscht oder Datei > 12 MB -> schlanker Standardversand
+    if ($attachmentPath === null || !is_file($attachmentPath) || !is_readable($attachmentPath) || (int)@filesize($attachmentPath) > 12 * 1048576) {
+        return sendSystemEmail($pdo, $toEmail, $rawSubject, $bodyText, $errorOut);
+    }
+
+    $settings = getAppSettings($pdo);
+    $appTitle = $settings['app_title'] ?: APP_NAME;
+
+    $rawHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    $domain  = preg_replace('/:\d+$/', '', $rawHost) ?: 'localhost';
+    if ($domain === 'localhost' || filter_var($domain, FILTER_VALIDATE_IP) !== false) {
+        $hostname = trim((string)(gethostname() ?: ''));
+        $domain = ($hostname !== '' && str_contains($hostname, '.')) ? $hostname : 'runready.cloud';
+    }
+
+    $configuredFrom = trim($settings['mail_from']);
+    $smtpUserEmail  = trim($settings['smtp_user']);
+    if (filter_var($configuredFrom, FILTER_VALIDATE_EMAIL) !== false) {
+        $fromEmail = $configuredFrom;
+    } elseif ($settings['mail_transport'] === 'smtp' && filter_var($smtpUserEmail, FILTER_VALIDATE_EMAIL) !== false) {
+        $fromEmail = $smtpUserEmail;
+    } else {
+        $fromEmail = 'noreply@' . $domain;
+    }
+
+    $cleanTitle      = preg_replace('/[\r\n"]/', '', $appTitle) ?: APP_NAME;
+    $encodedFromName = '=?UTF-8?B?' . base64_encode($cleanTitle) . '?=';
+    $encodedSubject  = '=?UTF-8?B?' . base64_encode($rawSubject) . '?=';
+    $boundary        = '=_MC_WF_' . bin2hex(random_bytes(12));
+
+    $cleanAttName    = sanitizeOriginalFilename($attachmentName !== '' ? $attachmentName : basename($attachmentPath));
+    $encodedAttName  = '=?UTF-8?B?' . base64_encode($cleanAttName) . '?=';
+    $rawFileBytes    = @file_get_contents($attachmentPath);
+    if (!is_string($rawFileBytes)) {
+        return sendSystemEmail($pdo, $toEmail, $rawSubject, $bodyText, $errorOut);
+    }
+
+    $headers = [
+        'From: ' . $encodedFromName . ' <' . $fromEmail . '>',
+        'Reply-To: ' . $fromEmail,
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/mixed; boundary="' . $boundary . '"',
+        'X-Mailer: MiniCloud-Workflows',
+    ];
+    $headerStr = implode("\r\n", $headers);
+
+    $mimeParts = [
+        '--' . $boundary,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        str_replace(["\r\n", "\r"], "\r\n", $bodyText),
+        '',
+        '--' . $boundary,
+        'Content-Type: ' . ($attachmentMime !== '' ? $attachmentMime : 'application/octet-stream') . '; name="' . $encodedAttName . '"',
+        'Content-Transfer-Encoding: base64',
+        'Content-Disposition: attachment; filename="' . $encodedAttName . '"',
+        '',
+        rtrim(chunk_split(base64_encode($rawFileBytes), 76, "\r\n")),
+        '--' . $boundary . '--',
+        '',
+    ];
+    $fullMimeBody = implode("\r\n", $mimeParts);
+
+    if ($settings['mail_transport'] === 'smtp') {
+        return sendSmtpEmail($settings, $fromEmail, $toEmail, $encodedSubject, $fullMimeBody, $headerStr, $errorOut);
+    }
+
+    $sent = @mail($toEmail, $encodedSubject, $fullMimeBody, $headerStr, '-f ' . escapeshellarg($fromEmail));
+    if (!$sent) {
+        $sent = @mail($toEmail, $encodedSubject, $fullMimeBody, $headerStr);
+    }
+    if (!$sent) {
+        $errorOut = 'Der lokale PHP mail()-Aufruf für den E-Mail-Anhang ist fehlgeschlagen.';
+    }
+    return (bool)$sent;
+}
+
+/**
+ * Prüft, ob eine Datei alle konfigurierten WENN-Bedingungen eines Workflows erfüllt.
+ *
+ * @param array<string, mixed> $workflow
+ * @param array<string, mixed> $fileRow
+ */
+function doesWorkflowMatchFile(PDO $pdo, array $workflow, array $fileRow, ?string &$cachedContentText = null, bool $ignoreSourceFolder = false): bool
+{
+    if (!empty($fileRow['deleted_at'])) {
+        return false;
+    }
+
+    $origName   = (string)($fileRow['original_name'] ?? '');
+    $folderPath = trim((string)($fileRow['folder_path'] ?? ''));
+    $fileSize   = (int)($fileRow['file_size'] ?? 0);
+    $ext        = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $uploadTs   = strtotime((string)($fileRow['upload_date'] ?? 'now')) ?: time();
+
+    $condResults = [];
+
+    // 1. Quellordner-Bedingung
+    $condFolder = trim((string)($workflow['cond_source_folder'] ?? ''));
+    if (!$ignoreSourceFolder && $condFolder !== '') {
+        if ($condFolder === '__root__') {
+            $condResults[] = ($folderPath === '');
+        } else {
+            $cleanCondFolder = sanitizeFolderPathInput($condFolder);
+            $condResults[] = ($folderPath === $cleanCondFolder || str_starts_with($folderPath, $cleanCondFolder . '/'));
+        }
+    }
+
+    // 2. Dateiendungen (z. B. "pdf,docx")
+    $condExtsRaw = trim((string)($workflow['cond_extensions'] ?? ''));
+    if ($condExtsRaw !== '') {
+        $allowedExts = [];
+        foreach (preg_split('/[\s,;]+/', strtolower($condExtsRaw), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ePart) {
+            $ePart = ltrim(trim($ePart), '.');
+            if ($ePart !== '') {
+                $allowedExts[] = $ePart;
+            }
+        }
+        if (!empty($allowedExts)) {
+            $condResults[] = in_array($ext, $allowedExts, true);
+        }
+    }
+
+    // 3. Stichwörter im Dateinamen
+    $condFnKwRaw = trim((string)($workflow['cond_filename_keywords'] ?? ''));
+    if ($condFnKwRaw !== '') {
+        $fnKeywords = array_filter(array_map('trim', explode(',', $condFnKwRaw)), static fn(string $s): bool => $s !== '');
+        if (!empty($fnKeywords)) {
+            $fnMatched = false;
+            foreach ($fnKeywords as $kw) {
+                if (mb_stripos($origName, $kw, 0, 'UTF-8') !== false) {
+                    $fnMatched = true;
+                    break;
+                }
+            }
+            $condResults[] = $fnMatched;
+        }
+    }
+
+    // 4. Stichwörter im Dokument-Volltext (oder Dateinamen)
+    $condContentKwRaw = trim((string)($workflow['cond_content_keywords'] ?? ''));
+    if ($condContentKwRaw !== '') {
+        $contentKeywords = array_filter(array_map('trim', explode(',', $condContentKwRaw)), static fn(string $s): bool => $s !== '');
+        if (!empty($contentKeywords)) {
+            if ($cachedContentText === null) {
+                $cachedContentText = '';
+                $fid = (int)($fileRow['id'] ?? 0);
+                if ($fid > 0 && (int)($fileRow['is_encrypted'] ?? 0) === 0) {
+                    try {
+                        $stmtTxt = $pdo->prepare('SELECT content_text FROM file_search_index WHERE file_id = :fid LIMIT 1');
+                        $stmtTxt->execute([':fid' => $fid]);
+                        $dbTxt = $stmtTxt->fetchColumn();
+                        if (is_string($dbTxt) && $dbTxt !== '') {
+                            $cachedContentText = $dbTxt;
+                        } elseif (isFileEligibleForFulltextIndex($origName)) {
+                            $phys = UPLOAD_DIR . basename((string)($fileRow['filename'] ?? ''));
+                            if (is_file($phys)) {
+                                $cachedContentText = extractSearchableDocumentText($phys, $origName);
+                            }
+                        }
+                    } catch (Throwable) {
+                        $cachedContentText = '';
+                    }
+                }
+            }
+
+            $haystack = $origName . "\n" . $cachedContentText;
+            $kwMode = (string)($workflow['cond_content_match_mode'] ?? 'any');
+            if ($kwMode === 'all') {
+                $allKwHit = true;
+                foreach ($contentKeywords as $kw) {
+                    if (mb_stripos($haystack, $kw, 0, 'UTF-8') === false) {
+                        $allKwHit = false;
+                        break;
+                    }
+                }
+                $condResults[] = $allKwHit;
+            } else {
+                $anyKwHit = false;
+                foreach ($contentKeywords as $kw) {
+                    if (mb_stripos($haystack, $kw, 0, 'UTF-8') !== false) {
+                        $anyKwHit = true;
+                        break;
+                    }
+                }
+                $condResults[] = $anyKwHit;
+            }
+        }
+    }
+
+    // 5. Mindest-Dateigröße in KB
+    $minSizeKb = (int)($workflow['cond_min_size_kb'] ?? 0);
+    if ($minSizeKb > 0) {
+        $condResults[] = ($fileSize >= ($minSizeKb * 1024));
+    }
+
+    // 6. Mindestalter der Datei in Tagen
+    $minAgeDays = (int)($workflow['cond_min_age_days'] ?? 0);
+    if ($minAgeDays > 0) {
+        $ageDays = (time() - $uploadTs) / 86400;
+        $condResults[] = ($ageDays >= $minAgeDays);
+    }
+
+    if (empty($condResults)) {
+        return true;
+    }
+
+    $matchMode = (string)($workflow['cond_match_mode'] ?? 'all');
+    if ($matchMode === 'any') {
+        return in_array(true, $condResults, true);
+    }
+
+    return !in_array(false, $condResults, true);
+}
+
+/**
+ * Führt alle konfigurierten DANN-Aktionen eines Workflows auf einer einzelnen Datei aus
+ * und protokolliert das Ergebnis in `workflow_logs`.
+ *
+ * @param array<string, mixed> $workflow
+ * @return array{ok: bool, executed_actions: array<int, string>, file_id: int}
+ */
+function executeWorkflowOnFile(
+    PDO $pdo,
+    array $workflow,
+    int $fileId,
+    int $actorUserId,
+    string $triggerType = 'upload'
+): array {
+    ensureWorkflowSchema($pdo);
+
+    $stmtF = $pdo->prepare('SELECT * FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+    $stmtF->execute([':id' => $fileId]);
+    $file = $stmtF->fetch();
+    if (!$file) {
+        return ['ok' => false, 'executed_actions' => [], 'file_id' => $fileId];
+    }
+
+    $wfId          = (int)($workflow['id'] ?? 0);
+    $wfName        = (string)($workflow['name'] ?? 'Workflow');
+    $categoryLabel = trim((string)($workflow['category_label'] ?? ''));
+    $ownerId       = (int)$file['user_id'];
+    $currentGfId   = !empty($file['group_folder_id']) ? (int)$file['group_folder_id'] : null;
+    $origName      = (string)$file['original_name'];
+    $folderPath    = (string)$file['folder_path'];
+    $fileSize      = (int)$file['file_size'];
+    $isEncrypted   = (int)($file['is_encrypted'] ?? 0) === 1;
+    $ext           = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $stem          = pathinfo($origName, PATHINFO_FILENAME);
+    $uploadTs      = strtotime((string)($file['upload_date'] ?? 'now')) ?: time();
+
+    $vars = [
+        'date'       => date('Y-m-d'),
+        'year'       => date('Y', $uploadTs),
+        'month'      => date('m', $uploadTs),
+        'day'        => date('d', $uploadTs),
+        'stem'       => $stem !== '' ? $stem : $origName,
+        'filename'   => $origName,
+        'ext'        => $ext,
+        'category'   => $categoryLabel !== '' ? $categoryLabel : 'Dokument',
+        'folder'     => $folderPath !== '' ? $folderPath : 'Hauptverzeichnis',
+        'size'       => formatBytes($fileSize),
+        'workflow'   => $wfName,
+        'share_link' => '',
+    ];
+
+    $executed = [];
+    $hasError = false;
+
+    // 1. Als ⭐ Favorit markieren
+    if ((int)($workflow['act_set_favorite'] ?? 0) === 1 && (int)($file['is_favorite'] ?? 0) === 0) {
+        $pdo->prepare('UPDATE files SET is_favorite = 1 WHERE id = :id')->execute([':id' => $fileId]);
+        $executed[] = '⭐ Als Favorit markiert';
+    }
+
+    // 2. Datei umbenennen (act_rename_pattern)
+    $renamePattern = trim((string)($workflow['act_rename_pattern'] ?? ''));
+    if ($renamePattern !== '') {
+        $rawNewName = replaceWorkflowPlaceholders($renamePattern, $vars);
+        $cleanNewName = sanitizeOriginalFilename($rawNewName);
+        if ($ext !== '' && !str_ends_with(strtolower($cleanNewName), '.' . $ext)) {
+            $cleanNewName .= '.' . $ext;
+        }
+        // Verhindern, dass ein Präfix mehrfach vorangestellt wird, wenn der Name bereits genauso beginnt
+        if ($cleanNewName !== '' && $cleanNewName !== $origName) {
+            $pdo->prepare('UPDATE files SET original_name = :oname WHERE id = :id')
+                ->execute([':oname' => $cleanNewName, ':id' => $fileId]);
+            $pdo->prepare('UPDATE file_search_index SET original_name = :oname WHERE file_id = :fid')
+                ->execute([':oname' => mb_substr($cleanNewName, 0, 255, 'UTF-8'), ':fid' => $fileId]);
+            $executed[] = sprintf('✏️ Umbenannt in „%s“', $cleanNewName);
+            $origName = $cleanNewName;
+            $vars['filename'] = $origName;
+            $vars['stem']     = pathinfo($origName, PATHINFO_FILENAME);
+        }
+    }
+
+    // 3. Zusätzliche Kopie in Zielordner ablegen (act_copy_folder)
+    $copyFolderRaw = trim((string)($workflow['act_copy_folder'] ?? ''));
+    if ($copyFolderRaw !== '') {
+        $expandedCopyFolder = sanitizeFolderPathInput(replaceWorkflowPlaceholders($copyFolderRaw, $vars));
+        $srcPhys = UPLOAD_DIR . basename((string)$file['filename']);
+        if ($expandedCopyFolder !== '' && is_file($srcPhys) && is_readable($srcPhys)) {
+            $newStoredCopy = generateSafeStoredFilename();
+            $dstPhysCopy   = UPLOAD_DIR . $newStoredCopy;
+            if (@copy($srcPhys, $dstPhysCopy)) {
+                @chmod($dstPhysCopy, 0640);
+                registerFolderHierarchy($pdo, $ownerId, $expandedCopyFolder, $currentGfId);
+                $pdo->prepare(
+                    'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+                     VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :fh, :mime, :enc)'
+                )->execute([
+                    ':uid'   => $ownerId,
+                    ':gf_id' => $currentGfId,
+                    ':fn'    => $newStoredCopy,
+                    ':orig'  => $origName,
+                    ':fp'    => $expandedCopyFolder,
+                    ':sz'    => $fileSize,
+                    ':fh'    => $file['file_hash'] ?? null,
+                    ':mime'  => (string)$file['mime_type'],
+                    ':enc'   => $isEncrypted ? 1 : 0,
+                ]);
+                $executed[] = sprintf('📋 Kopie in „%s“ abgelegt', $expandedCopyFolder);
+            }
+        }
+    }
+
+    // 4. Datei automatisch verschieben (act_move_folder, unterstützt auch Gruppenordner via "gf:ID:Pfad")
+    $moveFolderRaw = trim((string)($workflow['act_move_folder'] ?? ''));
+    if ($moveFolderRaw !== '') {
+        $targetGfId = $currentGfId;
+        $folderExpr = $moveFolderRaw;
+        if (preg_match('/^gf:(\d+):(.*)$/', $moveFolderRaw, $mGf)) {
+            $candGfId = (int)$mGf[1];
+            if (canUserAccessGroupFolder($pdo, $actorUserId, $candGfId, true, isAdmin())) {
+                $targetGfId = $candGfId;
+                $folderExpr = $mGf[2];
+            }
+        } elseif (str_starts_with($moveFolderRaw, 'personal:')) {
+            $targetGfId = null;
+            $folderExpr = substr($moveFolderRaw, 9);
+        }
+
+        $expandedMoveFolder = ($folderExpr === '__root__' || $folderExpr === '/')
+            ? ''
+            : sanitizeFolderPathInput(replaceWorkflowPlaceholders($folderExpr, $vars));
+
+        if ($expandedMoveFolder !== $folderPath || $targetGfId !== $currentGfId) {
+            if ($expandedMoveFolder !== '') {
+                registerFolderHierarchy($pdo, $ownerId, $expandedMoveFolder, $targetGfId);
+            }
+            $pdo->prepare('UPDATE files SET group_folder_id = :gf_id, folder_path = :fp WHERE id = :id')
+                ->execute([
+                    ':gf_id' => $targetGfId,
+                    ':fp'    => $expandedMoveFolder,
+                    ':id'    => $fileId,
+                ]);
+            $folderPath    = $expandedMoveFolder;
+            $currentGfId   = $targetGfId;
+            $vars['folder'] = $folderPath !== '' ? $folderPath : 'Hauptverzeichnis';
+            $executed[]    = sprintf('📁 Verschoben nach „%s“', $vars['folder']);
+        }
+    }
+
+    // 5. Kategorie-Tag / Kommentar an Datei anheften (act_add_comment)
+    $commentRaw = trim((string)($workflow['act_add_comment'] ?? ''));
+    if ($commentRaw === '' && $categoryLabel !== '') {
+        $commentRaw = '🏷️ Kategorie: {KATEGORIE}';
+    }
+    if ($commentRaw !== '') {
+        $commentText = mb_substr(trim(replaceWorkflowPlaceholders($commentRaw, $vars)), 0, 500, 'UTF-8');
+        if ($commentText !== '') {
+            try {
+                // Doppelten identischen Kommentar an derselben Datei vermeiden
+                $stmtChkCom = $pdo->prepare(
+                    'SELECT COUNT(*) FROM file_comments WHERE file_id = :fid AND comment_text = :ct'
+                );
+                $stmtChkCom->execute([':fid' => $fileId, ':ct' => $commentText]);
+                if ((int)$stmtChkCom->fetchColumn() === 0) {
+                    $pdo->prepare(
+                        'INSERT INTO file_comments (file_id, user_id, comment_text) VALUES (:fid, :uid, :ct)'
+                    )->execute([
+                        ':fid' => $fileId,
+                        ':uid' => $actorUserId > 0 ? $actorUserId : $ownerId,
+                        ':ct'  => $commentText,
+                    ]);
+                    $executed[] = sprintf('💬 Notiz: „%s“', $commentText);
+                }
+            } catch (Throwable) {
+            }
+        }
+    }
+
+    // 6. Automatisch mit passender Bankbuchung in `bank_transactions` verknüpfen (act_match_banking)
+    if ((int)($workflow['act_match_banking'] ?? 0) === 1 && !$isEncrypted) {
+        try {
+            $docText = '';
+            $stmtTxt = $pdo->prepare('SELECT content_text FROM file_search_index WHERE file_id = :fid LIMIT 1');
+            $stmtTxt->execute([':fid' => $fileId]);
+            $dbTxt = $stmtTxt->fetchColumn();
+            if (is_string($dbTxt) && $dbTxt !== '') {
+                $docText = $dbTxt;
+            } elseif (isFileEligibleForFulltextIndex($origName)) {
+                $phys = UPLOAD_DIR . basename((string)$file['filename']);
+                if (is_file($phys)) {
+                    $docText = extractSearchableDocumentText($phys, $origName);
+                }
+            }
+
+            $searchPool = $origName . ' ' . $docText;
+            $foundAmounts = [];
+            if (preg_match_all('/(?<!\d)(\d{1,3}(?:\.\d{3})*,\d{2}|\d+\.\d{2})(?!\d)/', $searchPool, $amMatches)) {
+                foreach ($amMatches[1] as $rawAm) {
+                    if (str_contains($rawAm, ',')) {
+                        $norm = (float)str_replace(['.', ','], ['', '.'], $rawAm);
+                    } else {
+                        $norm = (float)$rawAm;
+                    }
+                    if ($norm >= 0.50 && $norm <= 999999.99) {
+                        $foundAmounts[number_format($norm, 2, '.', '')] = $norm;
+                    }
+                }
+            }
+
+            if (!empty($foundAmounts)) {
+                $stmtUnlinked = $pdo->prepare(
+                    'SELECT id, counterparty, purpose, amount, booking_date
+                     FROM bank_transactions
+                     WHERE user_id = :uid AND receipt_file_id IS NULL
+                     ORDER BY id DESC
+                     LIMIT 250'
+                );
+                $stmtUnlinked->execute([':uid' => $ownerId]);
+                $candidates = $stmtUnlinked->fetchAll();
+
+                $bestTx = null;
+                $bestScore = 0;
+
+                foreach ($candidates as $tx) {
+                    $txAbs = number_format(abs((float)$tx['amount']), 2, '.', '');
+                    if (!isset($foundAmounts[$txAbs])) {
+                        continue;
+                    }
+                    $score = 10; // Betrags-Treffer
+                    $cp = trim((string)$tx['counterparty']);
+                    if ($cp !== '') {
+                        $cpWords = preg_split('/[\s,.\-\/]+/u', $cp, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                        foreach ($cpWords as $w) {
+                            if (mb_strlen($w, 'UTF-8') >= 4 && mb_stripos($searchPool, $w, 0, 'UTF-8') !== false) {
+                                $score += 15;
+                            }
+                        }
+                    }
+                    if ($score > $bestScore) {
+                        $bestScore = $score;
+                        $bestTx = $tx;
+                    }
+                }
+
+                if ($bestTx !== null) {
+                    $pdo->prepare('UPDATE bank_transactions SET receipt_file_id = :fid WHERE id = :txid')
+                        ->execute([':fid' => $fileId, ':txid' => (int)$bestTx['id']]);
+                    $executed[] = sprintf(
+                        '🏦 Beleg an Buchung „%s (%s €)“ gehängt',
+                        mb_substr((string)($bestTx['counterparty'] ?: 'Buchung'), 0, 35),
+                        number_format((float)$bestTx['amount'], 2, ',', '.')
+                    );
+                }
+            }
+        } catch (Throwable) {
+        }
+    }
+
+    // 7. Aufgabe / Erinnerung in `tasks` anlegen (act_create_task_title)
+    $taskTitleRaw = trim((string)($workflow['act_create_task_title'] ?? ''));
+    if ($taskTitleRaw !== '') {
+        try {
+            $taskTitle = mb_substr(trim(replaceWorkflowPlaceholders($taskTitleRaw, $vars)), 0, 255, 'UTF-8');
+            $dueDays   = max(0, min(365, (int)($workflow['act_create_task_due_days'] ?? 7)));
+            $dueDate   = date('Y-m-d', time() + ($dueDays * 86400));
+            $prio      = (string)($workflow['act_create_task_priority'] ?? 'medium');
+            if (!in_array($prio, ['low', 'medium', 'high', 'urgent'], true)) {
+                $prio = 'medium';
+            }
+            $taskDesc = sprintf(
+                'Automatisch erstellt durch Workflow „%s“ für die Datei „%s“ (%s, Ordner: %s).',
+                $wfName,
+                $origName,
+                formatBytes($fileSize),
+                $vars['folder']
+            );
+            $pdo->prepare(
+                'INSERT INTO tasks (user_id, title, description, status, priority, due_date, attached_file_id)
+                 VALUES (:uid, :t, :d, :st, :pr, :dd, :af)'
+            )->execute([
+                ':uid' => $ownerId,
+                ':t'   => $taskTitle,
+                ':d'   => $taskDesc,
+                ':st'  => 'todo',
+                ':pr'  => $prio,
+                ':dd'  => $dueDate,
+                ':af'  => $fileId,
+            ]);
+            $executed[] = sprintf('✅ Aufgabe angelegt: „%s“ (Fällig: %s)', $taskTitle, date('d.m.Y', strtotime($dueDate)));
+        } catch (Throwable) {
+        }
+    }
+
+    // 8. Automatischer Versand per vordefinierter E-Mail (act_send_email_to)
+    $emailTo = trim((string)($workflow['act_send_email_to'] ?? ''));
+    if ($emailTo !== '' && filter_var($emailTo, FILTER_VALIDATE_EMAIL) !== false) {
+        $emailMode = (string)($workflow['act_send_email_mode'] ?? 'attachment_or_link');
+        $physPath  = UPLOAD_DIR . basename((string)$file['filename']);
+
+        // Bei Bedarf automatisch einen 14 Tage gültigen Freigabelink für {SHARE_LINK} erzeugen
+        $shareUrl = getBaseUrl() . '/index.php';
+        if (!$isEncrypted && ($emailMode === 'share_link' || $emailMode === 'attachment_or_link' || str_contains((string)($workflow['act_send_email_body'] ?? ''), '{SHARE_LINK}'))) {
+            try {
+                $token = bin2hex(random_bytes(24));
+                $expiresAt = date('Y-m-d H:i:s', time() + (14 * 86400));
+                $pdo->prepare(
+                    'INSERT INTO shares (file_id, user_id, share_token, expires_at) VALUES (:fid, :uid, :tok, :exp)'
+                )->execute([
+                    ':fid' => $fileId,
+                    ':uid' => $ownerId,
+                    ':tok' => $token,
+                    ':exp' => $expiresAt,
+                ]);
+                $shareUrl = getBaseUrl() . '/share.php?token=' . $token;
+            } catch (Throwable) {
+            }
+        }
+        $vars['share_link'] = $shareUrl;
+
+        $subjectRaw = trim((string)($workflow['act_send_email_subject'] ?? ''));
+        if ($subjectRaw === '') {
+            $subjectRaw = '[MiniCloud Workflow] {DATEINAME}';
+        }
+        $subject = replaceWorkflowPlaceholders($subjectRaw, $vars);
+
+        $bodyRaw = trim((string)($workflow['act_send_email_body'] ?? ''));
+        if ($bodyRaw === '') {
+            $bodyRaw = "Hallo,\r\n\r\nder MiniCloud-Workflow „{WORKFLOW}“ hat das Dokument „{DATEINAME}“ ({GROESSE}, Kategorie: {KATEGORIE}) verarbeitet.\r\n\r\nDirektlink zum Dokument:\r\n{SHARE_LINK}\r\n\r\nViele Grüße";
+        }
+        $bodyText = replaceWorkflowPlaceholders($bodyRaw, $vars);
+
+        $attachPath = ($emailMode === 'attachment_or_link' && !$isEncrypted && is_file($physPath)) ? $physPath : null;
+        $mailErr    = null;
+        if (sendWorkflowEmail($pdo, $emailTo, $subject, $bodyText, $attachPath, $origName, (string)$file['mime_type'], $mailErr)) {
+            $executed[] = sprintf('📧 E-Mail an %s gesendet', $emailTo);
+        } else {
+            $hasError = true;
+            $executed[] = sprintf('⚠️ E-Mail an %s fehlgeschlagen (%s)', $emailTo, $mailErr ?: 'Mail-Fehler');
+        }
+    }
+
+    // 9. Als ZIP-Archiv komprimieren & Original in den Papierkorb verschieben (act_compress_zip)
+    if ((int)($workflow['act_compress_zip'] ?? 0) === 1 && !$isEncrypted && $ext !== 'zip' && class_exists('ZipArchive')) {
+        $physPath = UPLOAD_DIR . basename((string)$file['filename']);
+        if (is_file($physPath) && is_readable($physPath)) {
+            $zipStoredName = generateSafeStoredFilename();
+            $zipPhysPath   = UPLOAD_DIR . $zipStoredName;
+            $zip = new ZipArchive();
+            if ($zip->open($zipPhysPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+                if ($zip->addFile($physPath, $origName)) {
+                    $zip->close();
+                    @chmod($zipPhysPath, 0640);
+                    $zipSize = max(0, (int)@filesize($zipPhysPath));
+                    $zipHash = @hash_file('sha256', $zipPhysPath) ?: null;
+                    $zipOrigName = pathinfo($origName, PATHINFO_FILENAME) . '.zip';
+
+                    $stmtInsZip = $pdo->prepare(
+                        'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
+                         VALUES (:uid, :gf_id, :fn, :orig, :fp, :sz, :fh, :mime, 0)'
+                    );
+                    $stmtInsZip->execute([
+                        ':uid'   => $ownerId,
+                        ':gf_id' => $currentGfId,
+                        ':fn'    => $zipStoredName,
+                        ':orig'  => $zipOrigName,
+                        ':fp'    => $folderPath,
+                        ':sz'    => $zipSize,
+                        ':fh'    => $zipHash,
+                        ':mime'  => 'application/zip',
+                    ]);
+                    $newZipId = (int)$pdo->lastInsertId();
+                    $pdo->prepare('UPDATE files SET deleted_at = NOW() WHERE id = :id')->execute([':id' => $fileId]);
+                    $fileId = $newZipId;
+                    $executed[] = sprintf('🗜️ Als „%s“ (%s) archiviert & Original in Papierkorb verschoben', $zipOrigName, formatBytes($zipSize));
+                } else {
+                    $zip->close();
+                    @unlink($zipPhysPath);
+                }
+            }
+        }
+    }
+
+    if (!empty($executed)) {
+        if ($wfId > 0) {
+            $pdo->prepare('UPDATE workflows SET run_count = run_count + 1, last_run_at = NOW() WHERE id = :id')
+                ->execute([':id' => $wfId]);
+        }
+
+        $pdo->prepare(
+            'INSERT INTO workflow_logs (workflow_id, user_id, file_id, workflow_name, file_name, trigger_type, status, actions_summary)
+             VALUES (:wfid, :uid, :fid, :wfname, :fname, :ttype, :st, :sum)'
+        )->execute([
+            ':wfid'   => $wfId > 0 ? $wfId : null,
+            ':uid'    => $ownerId,
+            ':fid'    => $fileId,
+            ':wfname' => $wfName,
+            ':fname'  => $origName,
+            ':ttype'  => $triggerType,
+            ':st'     => $hasError ? 'partial' : 'success',
+            ':sum'    => implode(' • ', $executed),
+        ]);
+    }
+
+    return [
+        'ok'               => !empty($executed),
+        'executed_actions' => $executed,
+        'file_id'          => $fileId,
+    ];
+}
+
+/**
+ * Prüft beim Upload oder Scan einer Datei automatisch alle aktiven Upload-Workflows des Benutzers
+ * und führt passende Regeln der Reihe nach aus.
+ *
+ * @return array<int, string> Liste der ausgeführten Workflow-Meldungen
+ */
+function runUploadWorkflowsForFile(PDO $pdo, int $ownerUserId, int $fileId, string $triggerType = 'upload'): array
+{
+    if ($ownerUserId <= 0 || $fileId <= 0) {
+        return [];
+    }
+
+    $settings = getAppSettings($pdo);
+    if (($settings['enable_workflows'] ?? '1') !== '1') {
+        return [];
+    }
+
+    ensureWorkflowSchema($pdo);
+
+    try {
+        $stmtWfs = $pdo->prepare(
+            'SELECT * FROM workflows
+             WHERE user_id = :uid AND is_active = 1 AND trigger_on_upload = 1
+             ORDER BY priority_order ASC, id ASC'
+        );
+        $stmtWfs->execute([':uid' => $ownerUserId]);
+        $workflows = $stmtWfs->fetchAll();
+        if (empty($workflows)) {
+            return [];
+        }
+
+        $stmtFile = $pdo->prepare('SELECT * FROM files WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+        $stmtFile->execute([':id' => $fileId]);
+        $fileRow = $stmtFile->fetch();
+        if (!$fileRow) {
+            return [];
+        }
+
+        $cachedContentText = null;
+        $summaryMessages   = [];
+
+        foreach ($workflows as $wf) {
+            if (doesWorkflowMatchFile($pdo, $wf, $fileRow, $cachedContentText)) {
+                $res = executeWorkflowOnFile($pdo, $wf, $fileId, $ownerUserId, $triggerType);
+                if (!empty($res['executed_actions'])) {
+                    $summaryMessages[] = sprintf('⚡ %s: %s', (string)$wf['name'], implode(', ', $res['executed_actions']));
+                    $fileId = (int)$res['file_id'];
+                    // Aktualisierte Dateizeile neu laden, falls weitere Workflows folgen
+                    $stmtFile->execute([':id' => $fileId]);
+                    $fileRow = $stmtFile->fetch();
+                    if (!$fileRow) {
+                        break;
+                    }
+                }
+                if ((int)($wf['stop_processing'] ?? 0) === 1) {
+                    break;
+                }
+            }
+        }
+
+        return $summaryMessages;
+    } catch (Throwable) {
+        return [];
+    }
+}
+
 
 
 

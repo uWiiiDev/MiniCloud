@@ -168,6 +168,7 @@ $finfo = new finfo(FILEINFO_MIME_TYPE);
 $uploadedCount = 0;
 $totalUploadedBytes = 0;
 $errorMessages = [];
+$workflowSummaries = [];
 
 $stmtInsert = $pdo->prepare(
     'INSERT INTO files (user_id, group_folder_id, filename, original_name, folder_path, file_size, file_hash, mime_type, is_encrypted)
@@ -307,7 +308,8 @@ foreach ($validCandidates as $fileItem) {
                 ':mime_type' => $mimeType,
                 ':id'        => (int)$existingFile['id'],
             ]);
-            indexFileForFulltextSearch($pdo, (int)$existingFile['id']);
+            $savedFileId = (int)$existingFile['id'];
+            indexFileForFulltextSearch($pdo, $savedFileId);
         } else {
             $stmtInsert->execute([
                 ':user_id'         => $effectiveOwnerId,
@@ -320,13 +322,21 @@ foreach ($validCandidates as $fileItem) {
                 ':mime_type'       => $mimeType,
                 ':is_encrypted'    => $isEncryptedFlag,
             ]);
+            $savedFileId = (int)$pdo->lastInsertId();
             if ($isEncryptedFlag === 0) {
-                indexFileForFulltextSearch($pdo, (int)$pdo->lastInsertId());
+                indexFileForFulltextSearch($pdo, $savedFileId);
             }
         }
 
         if ($finalFolderPath !== '') {
             registerFolderHierarchy($pdo, $effectiveOwnerId, $finalFolderPath, $groupFolderId > 0 ? $groupFolderId : null);
+        }
+
+        if ($savedFileId > 0 && function_exists('runUploadWorkflowsForFile')) {
+            $wfRes = runUploadWorkflowsForFile($pdo, $effectiveOwnerId, $savedFileId, 'upload');
+            foreach ($wfRes as $wfMsg) {
+                $workflowSummaries[] = $wfMsg;
+            }
         }
 
         $remainingQuota -= $actualSize;
@@ -343,6 +353,9 @@ if ($uploadedCount > 0 && empty($errorMessages)) {
     $msg = $uploadedCount === 1
         ? sprintf('1 Datei (%s) wurde erfolgreich hochgeladen.', formatBytes($totalUploadedBytes))
         : sprintf('%d Dateien (insgesamt %s) wurden erfolgreich hochgeladen.', $uploadedCount, formatBytes($totalUploadedBytes));
+    if (!empty($workflowSummaries)) {
+        $msg .= ' ' . implode(' | ', array_slice($workflowSummaries, 0, 3));
+    }
     respondUpload(true, $msg, $isAjax, $baseTargetFolder, $groupFolderId, 200, $sharedFolderId);
 }
 

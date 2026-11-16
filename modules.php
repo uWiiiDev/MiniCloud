@@ -78,6 +78,18 @@ $allModules = [
         'badgeCls' => '',
     ],
     [
+        'key'      => 'workflows',
+        'enabled'  => ($appSettings['enable_workflows'] ?? '1') === '1',
+        'title'    => 'Smart-Workflows',
+        'shortSub' => 'Kategorisieren, Verschieben & E-Mail',
+        'icon'     => '⚡',
+        'url'      => 'workflows.php',
+        'category' => 'files_office',
+        'desc'     => 'Dokumente beim Upload oder per 1-Klick automatisch kategorisieren, umbenennen, in Ordner sortieren, per E-Mail versenden oder mit Kontoauszügen & Aufgaben verknüpfen.',
+        'badge'    => 'NEU',
+        'badgeCls' => 'bg-amber-500 text-slate-950',
+    ],
+    [
         'key'      => 'office',
         'enabled'  => ($appSettings['enable_office'] ?? '1') === '1',
         'title'    => 'Office & E-Mail',
