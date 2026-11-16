@@ -101,6 +101,17 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
 
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `music_user_prefs` (
+        `user_id` INT UNSIGNED NOT NULL,
+        `last_folder` VARCHAR(255) NOT NULL DEFAULT '',
+        `last_sort` VARCHAR(32) NOT NULL DEFAULT 'chapter',
+        `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`user_id`),
+        CONSTRAINT `fk_mup_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+");
+
 try {
     $colsMtm = $pdo->query("SHOW COLUMNS FROM `music_track_meta`")->fetchAll(PDO::FETCH_COLUMN);
     if (!in_array('cached_track_no', $colsMtm, true)) {
@@ -1455,6 +1466,60 @@ if ($userId > 0) {
     }
 }
 
+// ============================================================================
+// LETZTEN AUSGEWÄHLTEN ORDNER MERKEN & AUTOMATISCH VORWÄHLEN (Persistenz per Benutzer)
+// ============================================================================
+if (!$isGuestMode && $userId > 0) {
+    if (isset($_GET['folder'])) {
+        // Der Benutzer hat den Ordner-Filter explizit geändert (oder Reset/Alle Ordner gewählt)
+        $explicitFolder = trim((string)$_GET['folder']);
+        $_SESSION['music_last_folder'] = $explicitFolder;
+        @setcookie('mc_music_folder_' . $userId, $explicitFolder, time() + (86400 * 90), '/; samesite=lax');
+
+        try {
+            $pdo->prepare('
+                INSERT INTO music_user_prefs (user_id, last_folder)
+                VALUES (:uid, :folder)
+                ON DUPLICATE KEY UPDATE last_folder = :folder2
+            ')->execute([':uid' => $userId, ':folder' => $explicitFolder, ':folder2' => $explicitFolder]);
+        } catch (Throwable) {}
+
+        $folderFilter = $explicitFolder;
+    } else {
+        // Kein Ordner-Parameter in der URL übergeben -> gespeicherten letzten Ordner wiederherstellen
+        $savedFolder = $_SESSION['music_last_folder'] ?? null;
+        if ($savedFolder === null && isset($_COOKIE['mc_music_folder_' . $userId])) {
+            $savedFolder = (string)$_COOKIE['mc_music_folder_' . $userId];
+        }
+        if ($savedFolder === null) {
+            try {
+                $stmtPref = $pdo->prepare('SELECT last_folder FROM music_user_prefs WHERE user_id = :uid LIMIT 1');
+                $stmtPref->execute([':uid' => $userId]);
+                $dbPref = $stmtPref->fetchColumn();
+                if ($dbPref !== false && is_string($dbPref)) {
+                    $savedFolder = $dbPref;
+                }
+            } catch (Throwable) {}
+        }
+
+        if (is_string($savedFolder) && $savedFolder !== '') {
+            // Nur anwenden, wenn der gemerkte Ordner auch noch existiert und Dateien enthält
+            if (isset($audioFolders[$savedFolder])) {
+                $folderFilter = $savedFolder;
+                $_SESSION['music_last_folder'] = $savedFolder;
+            } else {
+                // Ordner existiert nicht mehr -> sauber zurücksetzen
+                $folderFilter = '';
+                $_SESSION['music_last_folder'] = '';
+                @setcookie('mc_music_folder_' . $userId, '', time() - 3600, '/; samesite=lax');
+                try {
+                    $pdo->prepare('UPDATE music_user_prefs SET last_folder = "" WHERE user_id = :uid')->execute([':uid' => $userId]);
+                } catch (Throwable) {}
+            }
+        }
+    }
+}
+
 // Welche Titel werden aktuell in der Trackliste angezeigt?
 $displayedTracks = [];
 if ($activePlaylist && !$isPlaylistLocked) {
@@ -2003,7 +2068,7 @@ require_once __DIR__ . '/includes/header.php';
                                 Anwenden
                             </button>
                             <?php if ($searchQuery !== '' || $folderFilter !== ''): ?>
-                                <a href="music.php?filter=<?= e($viewFilter) ?>" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                <a href="music.php?filter=<?= e($viewFilter) ?>&amp;folder=" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
                                     ✕ Reset
                                 </a>
                             <?php endif; ?>
