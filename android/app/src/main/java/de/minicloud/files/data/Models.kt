@@ -29,12 +29,26 @@ data class FileItem(
     val isFavorite: Boolean,
     val uploadDate: String,
     val thumbnailUrl: String?,
-    val downloadUrl: String
+    val downloadUrl: String,
+    val isShared: Boolean = false,
+    val shareUrl: String? = null
 )
 
 data class FolderItem(
     val name: String,
-    val path: String
+    val path: String,
+    val isShared: Boolean = false,
+    val shareUrl: String? = null
+)
+
+data class ShareInfo(
+    val id: Int,
+    val shareToken: String,
+    val shareUrl: String,
+    val shareMode: String = "read",
+    val hasPassword: Boolean = false,
+    val expiresAt: String? = null,
+    val downloadCount: Int = 0
 )
 
 data class BreadcrumbItem(

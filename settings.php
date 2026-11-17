@@ -1321,7 +1321,7 @@ $themeGroups = [
                     ⬇️ MiniCloud-Files.apk herunterladen (16 MB)
                 </a>
                 <span class="text-xs text-slate-500 dark:text-slate-400">
-                    Version 1.6.0 • Für alle Android-Geräte (Android 8.0 bis Android 15)
+                    Version 1.7.0 • Für alle Android-Geräte (Android 8.0 bis Android 15)
                 </span>
             </div>
         </section>

@@ -28,7 +28,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,6 +85,15 @@ fun FileBrowserScreen(
     var renameFileName by remember { mutableStateOf("") }
     var showMoveFileDialog by remember { mutableStateOf(false) }
     var showDeleteFileConfirmDialog by remember { mutableStateOf(false) }
+
+    // Freigabe-Aktionen (Share Link Dialog)
+    var showShareDialog by remember { mutableStateOf(false) }
+    var shareTargetFile by remember { mutableStateOf<FileItem?>(null) }
+    var shareTargetFolder by remember { mutableStateOf<FolderItem?>(null) }
+    var activeShareInfo by remember { mutableStateOf<ShareInfo?>(null) }
+    var isShareLoading by remember { mutableStateOf(false) }
+    var sharePassword by remember { mutableStateOf("") }
+    var shareExpiryDays by remember { mutableStateOf(0) }
 
     fun buildBreadcrumbs(folder: String): List<BreadcrumbItem> {
         val bcs = mutableListOf(BreadcrumbItem("MiniCloud", ""))
@@ -656,6 +667,23 @@ fun FileBrowserScreen(
 
                                                     val isFolderOffline = offlineManager.isFolderOffline(f.path)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        if (f.isShared) {
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = Blue500.copy(alpha = 0.2f),
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Box(contentAlignment = Alignment.Center) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Link,
+                                                                        contentDescription = "Freigabelink aktiv",
+                                                                        tint = Blue500,
+                                                                        modifier = Modifier.size(15.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                        }
                                                         if (isFolderOffline) {
                                                             Surface(
                                                                 shape = CircleShape,
@@ -789,6 +817,15 @@ fun FileBrowserScreen(
                                         Spacer(modifier = Modifier.height(2.dp))
                                         val isFileOffline = offlineManager.isFileOffline(item.id)
                                         Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (item.isShared) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Link,
+                                                    contentDescription = "Freigabelink aktiv",
+                                                    tint = Blue500,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                            }
                                             if (isFileOffline) {
                                                 Icon(
                                                     imageVector = Icons.Default.OfflinePin,
@@ -959,6 +996,28 @@ fun FileBrowserScreen(
                     onClick = {
                         showFolderActionMenu = false
                         showMoveFolderDialog = true
+                    }
+                )
+
+                // Freigabelink erstellen / verwalten
+                ActionMenuItem(
+                    icon = if (f.isShared) Icons.Default.Link else Icons.Default.Share,
+                    text = if (f.isShared) "Freigabelink verwalten" else "Freigabelink erstellen",
+                    tint = if (f.isShared) Blue500 else White,
+                    onClick = {
+                        showFolderActionMenu = false
+                        shareTargetFolder = f
+                        shareTargetFile = null
+                        sharePassword = ""
+                        shareExpiryDays = 0
+                        activeShareInfo = null
+                        isShareLoading = true
+                        showShareDialog = true
+                        coroutineScope.launch {
+                            val res = api.getShare(folderPath = f.path)
+                            activeShareInfo = res.getOrNull()
+                            isShareLoading = false
+                        }
                     }
                 )
 
@@ -1288,10 +1347,32 @@ fun FileBrowserScreen(
                     }
                 )
 
-                // Teilen
+                // Freigabelink erstellen / verwalten
                 ActionMenuItem(
-                    icon = Icons.Default.Share,
-                    text = "Teilen",
+                    icon = if (file.isShared) Icons.Default.Link else Icons.Default.Share,
+                    text = if (file.isShared) "Freigabelink verwalten" else "Freigabelink erstellen",
+                    tint = if (file.isShared) Blue500 else White,
+                    onClick = {
+                        showFileActionMenu = false
+                        shareTargetFile = file
+                        shareTargetFolder = null
+                        sharePassword = ""
+                        shareExpiryDays = 0
+                        activeShareInfo = null
+                        isShareLoading = true
+                        showShareDialog = true
+                        coroutineScope.launch {
+                            val res = api.getShare(fileId = file.id)
+                            activeShareInfo = res.getOrNull()
+                            isShareLoading = false
+                        }
+                    }
+                )
+
+                // Datei senden (System-Share-Sheet)
+                ActionMenuItem(
+                    icon = Icons.Default.Send,
+                    text = "Datei senden...",
                     tint = White,
                     onClick = {
                         showFileActionMenu = false
@@ -1525,6 +1606,351 @@ fun FileBrowserScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteFileConfirmDialog = false }) {
                     Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // 9. Freigabelink Dialog (Erstellen / Verwalten)
+    if (showShareDialog && (shareTargetFile != null || shareTargetFolder != null)) {
+        val targetName = shareTargetFile?.name ?: shareTargetFolder?.name ?: ""
+        val isFolder = shareTargetFolder != null
+        val clipboardManager = LocalClipboardManager.current
+
+        AlertDialog(
+            onDismissRequest = { showShareDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Link,
+                        contentDescription = null,
+                        tint = Blue500,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (activeShareInfo != null) "Freigabe verwalten" else "Freigabelink erstellen",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White
+                    )
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = targetName,
+                        color = Slate300,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (isShareLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Blue500)
+                        }
+                    } else if (activeShareInfo != null) {
+                        val share = activeShareInfo!!
+                        // Aktiver Link Container
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Slate900,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Blue500.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "ÖFFENTLICHER LINK",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Blue400
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = share.shareUrl,
+                                    color = White,
+                                    fontSize = 12.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Infos zum Link
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Slate700.copy(alpha = 0.6f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = if (share.hasPassword) Icons.Default.Lock else Icons.Default.LockOpen,
+                                        contentDescription = null,
+                                        tint = if (share.hasPassword) Color(0xFFF59E0B) else Slate400,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (share.hasPassword) "Passwort" else "Kein PW",
+                                        fontSize = 10.sp,
+                                        color = Slate300,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Slate700.copy(alpha = 0.6f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccessTime,
+                                        contentDescription = null,
+                                        tint = Slate400,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (!share.expiresAt.isNullOrEmpty()) "Bis: ${share.expiresAt.take(10)}" else "Unbegrenzt",
+                                        fontSize = 10.sp,
+                                        color = Slate300,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Slate700.copy(alpha = 0.6f),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = null,
+                                        tint = Slate400,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${share.downloadCount} Downloads",
+                                        fontSize = 10.sp,
+                                        color = Slate300,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Buttons: Link kopieren & Link teilen
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(share.shareUrl))
+                                    Toast.makeText(context, "Link in die Zwischenablage kopiert!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Slate700),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Kopieren", fontSize = 13.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, share.shareUrl)
+                                        putExtra(Intent.EXTRA_SUBJECT, "Freigabelink: $targetName")
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, "Freigabelink teilen"))
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Blue600),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Teilen", fontSize = 13.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Freigabe aufheben
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isShareLoading = true
+                                    val delRes = if (isFolder) {
+                                        api.deleteShare(folderPath = shareTargetFolder!!.path)
+                                    } else {
+                                        api.deleteShare(fileId = shareTargetFile!!.id)
+                                    }
+                                    isShareLoading = false
+                                    delRes.fold(
+                                        onSuccess = {
+                                            activeShareInfo = null
+                                            Toast.makeText(context, "Freigabelink gelöscht.", Toast.LENGTH_SHORT).show()
+                                            loadCurrentFolder(currentFolder)
+                                        },
+                                        onFailure = {
+                                            Toast.makeText(context, it.localizedMessage ?: "Fehler beim Löschen", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Red500),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Red500.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.LinkOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Freigabelink widerrufen", fontSize = 13.sp)
+                        }
+
+                    } else {
+                        // Neues Link-Formular
+                        Text(
+                            text = "Jeder mit diesem Link kann ${if (isFolder) "diesen Ordner ansehen und herunterladen" else "diese Datei herunterladen"}.",
+                            color = Slate400,
+                            fontSize = 12.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        OutlinedTextField(
+                            value = sharePassword,
+                            onValueChange = { sharePassword = it },
+                            label = { Text("Passwortschutz (optional)") },
+                            placeholder = { Text("Kein Passwort") },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = Slate400)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Blue500,
+                                unfocusedBorderColor = Slate700,
+                                focusedTextColor = White,
+                                unfocusedTextColor = Slate200
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Gültigkeitsdauer:",
+                            color = Slate300,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val expiryOptions = listOf(
+                                Pair(0, "Unbegrenzt"),
+                                Pair(1, "1 Tag"),
+                                Pair(7, "7 Tage"),
+                                Pair(30, "30 Tage")
+                            )
+                            for ((days, label) in expiryOptions) {
+                                val selected = (shareExpiryDays == days)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) Blue600 else Slate700,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { shareExpiryDays = days }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (selected) White else Slate300,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isShareLoading = true
+                                    val createRes = if (isFolder) {
+                                        api.createShare(
+                                            folderPath = shareTargetFolder!!.path,
+                                            password = sharePassword.trim().ifEmpty { null },
+                                            expiresDays = shareExpiryDays
+                                        )
+                                    } else {
+                                        api.createShare(
+                                            fileId = shareTargetFile!!.id,
+                                            password = sharePassword.trim().ifEmpty { null },
+                                            expiresDays = shareExpiryDays
+                                        )
+                                    }
+                                    isShareLoading = false
+                                    createRes.fold(
+                                        onSuccess = { sInfo ->
+                                            activeShareInfo = sInfo
+                                            Toast.makeText(context, "Freigabelink erstellt!", Toast.LENGTH_SHORT).show()
+                                            loadCurrentFolder(currentFolder)
+                                        },
+                                        onFailure = {
+                                            Toast.makeText(context, it.localizedMessage ?: "Fehler beim Erstellen", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Blue600),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.AddLink, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Freigabelink jetzt erstellen", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showShareDialog = false }) {
+                    Text("Schließen", color = Slate400)
                 }
             },
             containerColor = Slate800,

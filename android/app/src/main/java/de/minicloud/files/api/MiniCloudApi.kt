@@ -125,7 +125,14 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
                 val folders = mutableListOf<FolderItem>()
                 for (i in 0 until fArray.length()) {
                     val obj = fArray.getJSONObject(i)
-                    folders.add(FolderItem(obj.getString("name"), obj.getString("path")))
+                    folders.add(
+                        FolderItem(
+                            name = obj.getString("name"),
+                            path = obj.getString("path"),
+                            isShared = obj.optBoolean("is_shared", false),
+                            shareUrl = if (obj.isNull("share_url")) null else obj.optString("share_url")
+                        )
+                    )
                 }
 
                 // Files
@@ -385,6 +392,152 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
         }
     }
 
+    suspend fun createShare(
+        fileId: Int? = null,
+        folderPath: String? = null,
+        password: String? = null,
+        expiresDays: Int = 0,
+        shareMode: String = "read"
+    ): Result<ShareInfo> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBuilder = FormBody.Builder()
+                .add("action", "create_share")
+                .add("share_mode", shareMode)
+                .add("expires_days", expiresDays.toString())
+
+            if (fileId != null && fileId > 0) {
+                formBuilder.add("id", fileId.toString())
+            }
+            if (!folderPath.isNullOrBlank()) {
+                formBuilder.add("folder", folderPath)
+            }
+            if (!password.isNullOrBlank()) {
+                formBuilder.add("password", password)
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Freigabelink konnte nicht erstellt werden.")))
+                }
+                val s = json.getJSONObject("share")
+                val shareInfo = ShareInfo(
+                    id = s.getInt("id"),
+                    shareToken = s.getString("share_token"),
+                    shareUrl = s.getString("share_url"),
+                    shareMode = s.optString("share_mode", "read"),
+                    hasPassword = s.optBoolean("has_password", false),
+                    expiresAt = if (s.isNull("expires_at")) null else s.optString("expires_at"),
+                    downloadCount = s.optInt("download_count", 0)
+                )
+                Result.success(shareInfo)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getShare(
+        fileId: Int? = null,
+        folderPath: String? = null
+    ): Result<ShareInfo?> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBuilder = FormBody.Builder()
+                .add("action", "get_share")
+
+            if (fileId != null && fileId > 0) {
+                formBuilder.add("id", fileId.toString())
+            }
+            if (!folderPath.isNullOrBlank()) {
+                formBuilder.add("folder", folderPath)
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Freigabe konnte nicht abgerufen werden.")))
+                }
+                if (json.isNull("share")) {
+                    return@withContext Result.success(null)
+                }
+                val s = json.getJSONObject("share")
+                val shareInfo = ShareInfo(
+                    id = s.getInt("id"),
+                    shareToken = s.getString("share_token"),
+                    shareUrl = s.getString("share_url"),
+                    shareMode = s.optString("share_mode", "read"),
+                    hasPassword = s.optBoolean("has_password", false),
+                    expiresAt = if (s.isNull("expires_at")) null else s.optString("expires_at"),
+                    downloadCount = s.optInt("download_count", 0)
+                )
+                Result.success(shareInfo)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteShare(
+        shareId: Int? = null,
+        fileId: Int? = null,
+        folderPath: String? = null
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBuilder = FormBody.Builder()
+                .add("action", "delete_share")
+
+            if (shareId != null && shareId > 0) {
+                formBuilder.add("share_id", shareId.toString())
+            }
+            if (fileId != null && fileId > 0) {
+                formBuilder.add("id", fileId.toString())
+            }
+            if (!folderPath.isNullOrBlank()) {
+                formBuilder.add("folder", folderPath)
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBuilder.build())
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Freigabe konnte nicht gelöscht werden.")))
+                }
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun uploadFile(
         fileBytes: ByteArray,
         filename: String,
@@ -487,7 +640,9 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
                     isFavorite = o.optBoolean("is_favorite", false),
                     uploadDate = o.optString("upload_date", ""),
                     thumbnailUrl = if (o.isNull("thumbnail_url")) null else o.optString("thumbnail_url"),
-                    downloadUrl = o.optString("download_url", "")
+                    downloadUrl = o.optString("download_url", ""),
+                    isShared = o.optBoolean("is_shared", false),
+                    shareUrl = if (o.isNull("share_url")) null else o.optString("share_url")
                 )
             )
         }

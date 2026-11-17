@@ -252,11 +252,191 @@ if ($method === 'POST') {
             'new_folder' => $newFolder,
         ]);
     }
+
+    // Freigabelink erstellen (Datei oder Ordner)
+    if ($action === 'create_share') {
+        $fileId = (int)($_POST['id'] ?? $jsonInput['id'] ?? 0);
+        $folderPath = sanitizeFolderPathInput((string)($_POST['folder'] ?? $jsonInput['folder'] ?? ''));
+        $password = trim((string)($_POST['password'] ?? $jsonInput['password'] ?? ''));
+        $expiresDays = (int)($_POST['expires_days'] ?? $jsonInput['expires_days'] ?? 0);
+        $shareMode = trim((string)($_POST['share_mode'] ?? $jsonInput['share_mode'] ?? 'read'));
+        if (!in_array($shareMode, ['read', 'upload'], true)) {
+            $shareMode = 'read';
+        }
+
+        if ($fileId <= 0 && $folderPath === '') {
+            sendJsonResponse(['ok' => false, 'error' => 'Keine Datei oder kein Ordner angegeben.'], 400);
+        }
+
+        $targetName = '';
+        if ($fileId > 0) {
+            $stmt = $pdo->prepare('SELECT id, original_name FROM files WHERE id = :id AND user_id = :uid AND deleted_at IS NULL LIMIT 1');
+            $stmt->execute([':id' => $fileId, ':uid' => $userId]);
+            $file = $stmt->fetch();
+            if (!$file) {
+                sendJsonResponse(['ok' => false, 'error' => 'Datei nicht gefunden oder keine Berechtigung.'], 404);
+            }
+            $targetName = (string)$file['original_name'];
+            $folderPath = null;
+        } else {
+            $targetName = basename($folderPath);
+            $fileId = null;
+        }
+
+        // Frühere Freigaben für diese Datei / diesen Ordner des Nutzers bereinigen
+        if ($fileId !== null) {
+            $stmtDelOld = $pdo->prepare('DELETE FROM shares WHERE user_id = :uid AND file_id = :fid');
+            $stmtDelOld->execute([':uid' => $userId, ':fid' => $fileId]);
+        } else {
+            $stmtDelOld = $pdo->prepare('DELETE FROM shares WHERE user_id = :uid AND folder_path = :fp');
+            $stmtDelOld->execute([':uid' => $userId, ':fp' => $folderPath]);
+        }
+
+        // Eindeutigen 32-Zeichen Token generieren
+        do {
+            $token = bin2hex(random_bytes(16));
+            $stmtCheck = $pdo->prepare('SELECT id FROM shares WHERE share_token = :token LIMIT 1');
+            $stmtCheck->execute([':token' => $token]);
+        } while ($stmtCheck->fetch());
+
+        $passwordHash = null;
+        if ($password !== '') {
+            $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+        }
+
+        $expiresAt = null;
+        if ($expiresDays > 0 && $expiresDays <= 3650) {
+            $expiresAt = date('Y-m-d H:i:s', time() + ($expiresDays * 86400));
+        }
+
+        $stmtInsert = $pdo->prepare(
+            'INSERT INTO shares (file_id, folder_path, user_id, share_token, share_mode, password_hash, expires_at, max_downloads, download_count)
+             VALUES (:file_id, :folder_path, :user_id, :share_token, :share_mode, :password_hash, :expires_at, NULL, 0)'
+        );
+        $stmtInsert->execute([
+            ':file_id'       => $fileId,
+            ':folder_path'   => $folderPath,
+            ':user_id'       => $userId,
+            ':share_token'   => $token,
+            ':share_mode'    => $shareMode,
+            ':password_hash' => $passwordHash,
+            ':expires_at'    => $expiresAt,
+        ]);
+        $shareId = (int)$pdo->lastInsertId();
+
+        $shareUrl = getBaseUrl() . '/share.php?token=' . rawurlencode($token);
+
+        if (function_exists('logAuditEvent')) {
+            logAuditEvent(
+                $pdo,
+                'share_create',
+                sprintf('App: Freigabelink für %s "%s" erstellt', $folderPath !== null ? 'Ordner' : 'Datei', $targetName),
+                $userId
+            );
+        }
+
+        sendJsonResponse([
+            'ok'    => true,
+            'share' => [
+                'id'             => $shareId,
+                'share_token'    => $token,
+                'share_url'      => $shareUrl,
+                'share_mode'     => $shareMode,
+                'has_password'   => ($passwordHash !== null),
+                'expires_at'     => $expiresAt,
+                'download_count' => 0,
+            ],
+        ]);
+    }
+
+    // Aktive Freigabe abfragen
+    if ($action === 'get_share') {
+        $fileId = (int)($_POST['id'] ?? $jsonInput['id'] ?? 0);
+        $folderPath = sanitizeFolderPathInput((string)($_POST['folder'] ?? $jsonInput['folder'] ?? ''));
+
+        if ($fileId > 0) {
+            $stmt = $pdo->prepare('SELECT id, share_token, share_mode, password_hash, expires_at, download_count, created_at
+                                   FROM shares
+                                   WHERE user_id = :uid AND file_id = :fid
+                                   ORDER BY id DESC LIMIT 1');
+            $stmt->execute([':uid' => $userId, ':fid' => $fileId]);
+        } elseif ($folderPath !== '') {
+            $stmt = $pdo->prepare('SELECT id, share_token, share_mode, password_hash, expires_at, download_count, created_at
+                                   FROM shares
+                                   WHERE user_id = :uid AND folder_path = :fp
+                                   ORDER BY id DESC LIMIT 1');
+            $stmt->execute([':uid' => $userId, ':fp' => $folderPath]);
+        } else {
+            sendJsonResponse(['ok' => false, 'error' => 'Keine Datei oder kein Ordner angegeben.'], 400);
+        }
+
+        $row = $stmt->fetch();
+        if (!$row) {
+            sendJsonResponse(['ok' => true, 'share' => null]);
+        }
+
+        $shareUrl = getBaseUrl() . '/share.php?token=' . rawurlencode((string)$row['share_token']);
+        sendJsonResponse([
+            'ok'    => true,
+            'share' => [
+                'id'             => (int)$row['id'],
+                'share_token'    => (string)$row['share_token'],
+                'share_url'      => $shareUrl,
+                'share_mode'     => (string)($row['share_mode'] ?? 'read'),
+                'has_password'   => !empty($row['password_hash']),
+                'expires_at'     => $row['expires_at'] ? (string)$row['expires_at'] : null,
+                'download_count' => (int)($row['download_count'] ?? 0),
+                'created_at'     => (string)$row['created_at'],
+            ],
+        ]);
+    }
+
+    // Freigabe löschen
+    if ($action === 'delete_share') {
+        $shareId = (int)($_POST['share_id'] ?? $jsonInput['share_id'] ?? 0);
+        $fileId = (int)($_POST['id'] ?? $jsonInput['id'] ?? 0);
+        $folderPath = sanitizeFolderPathInput((string)($_POST['folder'] ?? $jsonInput['folder'] ?? ''));
+
+        if ($shareId > 0) {
+            $stmt = $pdo->prepare('DELETE FROM shares WHERE id = :id AND user_id = :uid');
+            $stmt->execute([':id' => $shareId, ':uid' => $userId]);
+        } elseif ($fileId > 0) {
+            $stmt = $pdo->prepare('DELETE FROM shares WHERE file_id = :fid AND user_id = :uid');
+            $stmt->execute([':fid' => $fileId, ':uid' => $userId]);
+        } elseif ($folderPath !== '') {
+            $stmt = $pdo->prepare('DELETE FROM shares WHERE folder_path = :fp AND user_id = :uid');
+            $stmt->execute([':fp' => $folderPath, ':uid' => $userId]);
+        } else {
+            sendJsonResponse(['ok' => false, 'error' => 'Keine Freigabe-ID oder Ziel angegeben.'], 400);
+        }
+
+        if (function_exists('logAuditEvent')) {
+            logAuditEvent($pdo, 'share_delete', 'App: Freigabelink gelöscht', $userId);
+        }
+
+        sendJsonResponse(['ok' => true, 'message' => 'Freigabelink erfolgreich gelöscht.']);
+    }
 }
 
 // GET: Ordnerinhalte auflisten oder Suche ausführen
 $search = trim((string)($_GET['q'] ?? ''));
 $folderInput = sanitizeFolderPathInput((string)($_GET['folder'] ?? ''));
+
+// Aktive Freigaben des Benutzers laden für Schnellanzeige
+$stmtUserShares = $pdo->prepare('SELECT id, file_id, folder_path, share_token FROM shares WHERE user_id = :uid AND (expires_at IS NULL OR expires_at > NOW())');
+$stmtUserShares->execute([':uid' => $userId]);
+$fileShares = [];
+$folderShares = [];
+$baseUrl = getBaseUrl();
+foreach ($stmtUserShares->fetchAll() as $sRow) {
+    $sUrl = $baseUrl . '/share.php?token=' . rawurlencode((string)$sRow['share_token']);
+    if ($sRow['file_id'] !== null) {
+        $fileShares[(int)$sRow['file_id']] = $sUrl;
+    }
+    if (!empty($sRow['folder_path'])) {
+        $folderShares[(string)$sRow['folder_path']] = $sUrl;
+    }
+}
 
 // Falls Suche
 if ($search !== '') {
@@ -283,6 +463,8 @@ if ($search !== '') {
             'is_image'       => $isImg,
             'is_video'       => $isVid,
             'is_favorite'    => (int)$rf['is_favorite'] === 1,
+            'is_shared'      => isset($fileShares[(int)$rf['id']]),
+            'share_url'      => $fileShares[(int)$rf['id']] ?? null,
             'upload_date'    => (string)$rf['upload_date'],
             'thumbnail_url'  => ($isImg || $isVid) ? ('api/thumb.php?id=' . $rf['id']) : null,
             'download_url'   => 'api/download.php?id=' . $rf['id'],
@@ -351,6 +533,12 @@ foreach ($allFolders as $f) {
 // Alphabetisch sortieren
 usort($directSubfolders, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
 
+foreach ($directSubfolders as &$dsf) {
+    $dsf['is_shared'] = isset($folderShares[$dsf['path']]);
+    $dsf['share_url'] = $folderShares[$dsf['path']] ?? null;
+}
+unset($dsf);
+
 // 3. Dateien im aktuellen Verzeichnis ermitteln
 $stmtFiles = $pdo->prepare('SELECT id, filename, original_name, folder_path, file_size, mime_type, is_encrypted, is_favorite, upload_date
     FROM files
@@ -373,6 +561,8 @@ foreach ($rawFiles as $rf) {
         'is_image'       => $isImg,
         'is_video'       => $isVid,
         'is_favorite'    => (int)$rf['is_favorite'] === 1,
+        'is_shared'      => isset($fileShares[(int)$rf['id']]),
+        'share_url'      => $fileShares[(int)$rf['id']] ?? null,
         'upload_date'    => (string)$rf['upload_date'],
         'thumbnail_url'  => ($isImg || $isVid) ? ('api/thumb.php?id=' . $rf['id']) : null,
         'download_url'   => 'api/download.php?id=' . $rf['id'],
