@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {
+if (PHP_SAPI !== 'cli' && (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) ?: '') === realpath(__FILE__)) {
     http_response_code(403);
     exit('Zugriff verweigert.');
 }

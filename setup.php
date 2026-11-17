@@ -250,7 +250,7 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
             // 1. Konfigurationsdatei config/db_credentials.php schreiben
             $credContent = "<?php\n"
                 . "declare(strict_types=1);\n\n"
-                . "if (PHP_SAPI !== 'cli' && basename((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) {\n"
+                . "if (PHP_SAPI !== 'cli' && (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) ?: '') === realpath(__FILE__)) {\n"
                 . "    http_response_code(403);\n"
                 . "    exit('Zugriff verweigert.');\n"
                 . "}\n\n"
