@@ -193,17 +193,17 @@ $directSubfolders = [];
 $seenSubfolders = [];
 
 foreach ($allFolders as $f) {
-    $fPath = (string)$f['folder_path'];
+    $fPath = trim((string)$f['folder_path'], '/');
+    if ($fPath === '') {
+        continue;
+    }
+
     if ($folderInput === '') {
         // Wurzelverzeichnis: Erster Pfadabschnitt
-        if (!str_contains($fPath, '/')) {
-            $directSubfolders[] = ['name' => $fPath, 'path' => $fPath];
-        } else {
-            $rootSeg = explode('/', $fPath, 2)[0];
-            if (!isset($seenSubfolders[$rootSeg])) {
-                $seenSubfolders[$rootSeg] = true;
-                $directSubfolders[] = ['name' => $rootSeg, 'path' => $rootSeg];
-            }
+        $rootSeg = explode('/', $fPath, 2)[0];
+        if (!isset($seenSubfolders[$rootSeg])) {
+            $seenSubfolders[$rootSeg] = true;
+            $directSubfolders[] = ['name' => $rootSeg, 'path' => $rootSeg];
         }
     } else {
         // In Unterordner: Pfad muss mit "$folderInput/" beginnen
@@ -211,7 +211,7 @@ foreach ($allFolders as $f) {
         if (str_starts_with($fPath, $prefix)) {
             $rest = substr($fPath, strlen($prefix));
             $subSeg = explode('/', $rest, 2)[0];
-            if (!isset($seenSubfolders[$subSeg])) {
+            if ($subSeg !== '' && !isset($seenSubfolders[$subSeg])) {
                 $seenSubfolders[$subSeg] = true;
                 $directSubfolders[] = [
                     'name' => $subSeg,
