@@ -48,10 +48,11 @@ if ($action === 'login') {
 
     $userId = (int)$userRow['id'];
 
-    // Rolle ermitteln
-    $stmtRole = $pdo->prepare('SELECT role FROM users WHERE id = :uid LIMIT 1');
-    $stmtRole->execute([':uid' => $userId]);
-    $role = (string)($stmtRole->fetchColumn() ?: 'user');
+    // Admin-Status ermitteln
+    $stmtAdmin = $pdo->prepare('SELECT is_admin FROM users WHERE id = :uid LIMIT 1');
+    $stmtAdmin->execute([':uid' => $userId]);
+    $isAdmin = (int)($stmtAdmin->fetchColumn() ?: 0) === 1;
+    $role = $isAdmin ? 'admin' : 'user';
 
     // Token erzeugen
     $rawToken = bin2hex(random_bytes(32));

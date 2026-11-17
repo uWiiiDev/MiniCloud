@@ -104,7 +104,7 @@ function requireApiAuth(PDO $pdo): array
     // 1. Token-Authentifizierung (Bevorzugt für Apps)
     if ($token !== null && strlen($token) >= 20) {
         $tokenHash = hash('sha256', $token);
-        $stmt = $pdo->prepare('SELECT t.id AS token_id, t.user_id, u.username, u.is_locked, u.role
+        $stmt = $pdo->prepare('SELECT t.id AS token_id, t.user_id, u.username, u.is_locked, u.is_admin
             FROM api_tokens t
             JOIN users u ON t.user_id = u.id
             WHERE t.token_hash = :hash
@@ -117,11 +117,12 @@ function requireApiAuth(PDO $pdo): array
             $pdo->prepare('UPDATE api_tokens SET last_used_at = NOW() WHERE id = :tid')
                 ->execute([':tid' => (int)$row['token_id']]);
 
+            $isAdmin = ((int)($row['is_admin'] ?? 0) === 1);
             return [
                 'id'       => (int)$row['user_id'],
                 'username' => (string)$row['username'],
-                'role'     => (string)($row['role'] ?? 'user'),
-                'is_admin' => ((string)($row['role'] ?? 'user') === 'admin')
+                'role'     => $isAdmin ? 'admin' : 'user',
+                'is_admin' => $isAdmin
             ];
         }
     }
@@ -142,15 +143,15 @@ function requireApiAuth(PDO $pdo): array
     if ($authUser !== null && $authPass !== null && trim($authUser) !== '') {
         $userRow = verifyDavBasicAuth($pdo, trim($authUser), (string)$authPass, 'MiniCloud API');
         if ($userRow !== null) {
-            $stmtRole = $pdo->prepare('SELECT role FROM users WHERE id = :uid');
-            $stmtRole->execute([':uid' => (int)$userRow['id']]);
-            $role = (string)($stmtRole->fetchColumn() ?: 'user');
+            $stmtAdmin = $pdo->prepare('SELECT is_admin FROM users WHERE id = :uid');
+            $stmtAdmin->execute([':uid' => (int)$userRow['id']]);
+            $isAdmin = ((int)($stmtAdmin->fetchColumn() ?: 0) === 1);
 
             return [
                 'id'       => (int)$userRow['id'],
                 'username' => (string)$userRow['username'],
-                'role'     => $role,
-                'is_admin' => ($role === 'admin')
+                'role'     => $isAdmin ? 'admin' : 'user',
+                'is_admin' => $isAdmin
             ];
         }
     }
