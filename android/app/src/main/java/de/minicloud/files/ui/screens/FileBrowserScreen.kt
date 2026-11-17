@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -450,59 +451,42 @@ fun FileBrowserScreen(
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(112.dp)
+                                                .height(115.dp)
                                                 .clickable { loadCurrentFolder(f.path) },
                                             shape = RoundedCornerShape(16.dp),
                                             colors = CardDefaults.cardColors(containerColor = Slate800),
                                             border = androidx.compose.foundation.BorderStroke(1.dp, Slate700.copy(alpha = 0.6f))
                                         ) {
-                                            Column(
+                                            Box(
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .padding(12.dp),
-                                                verticalArrangement = Arrangement.SpaceBetween
+                                                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.Top
-                                                ) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(12.dp),
-                                                        color = Color(0xFFF59E0B).copy(alpha = 0.18f),
-                                                        modifier = Modifier.size(42.dp)
-                                                    ) {
-                                                        Box(contentAlignment = Alignment.Center) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Folder,
-                                                                contentDescription = null,
-                                                                tint = Color(0xFFF59E0B),
-                                                                modifier = Modifier.size(26.dp)
-                                                            )
-                                                        }
-                                                    }
-                                                    Icon(
-                                                        imageVector = Icons.Default.ChevronRight,
-                                                        contentDescription = null,
-                                                        tint = Slate700,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
+                                                // Großes gelbes Ordnersymbol fast so groß wie die Kachel
+                                                Icon(
+                                                    imageVector = Icons.Default.Folder,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFF59E0B),
+                                                    modifier = Modifier.size(width = 132.dp, height = 98.dp)
+                                                )
 
-                                                Column {
+                                                // Beschriftung direkt im Ordnersymbol integriert
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(104.dp)
+                                                        .padding(top = 18.dp, start = 4.dp, end = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
                                                     Text(
                                                         text = f.name,
-                                                        color = White,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    Text(
-                                                        text = "Ordner öffnen",
-                                                        color = Slate400,
-                                                        fontSize = 11.sp
+                                                        color = Color(0xFF0F172A),
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        textAlign = TextAlign.Center,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        lineHeight = 15.sp
                                                     )
                                                 }
                                             }
