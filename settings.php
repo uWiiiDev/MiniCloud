@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
             setFlash('success', 'Ihr Passwort wurde erfolgreich geändert.');
         }
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-password');
         exit;
     }
 
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
                 : 'Das automatische Timeout wurde deaktiviert (Sie bleiben angemeldet).'
         );
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-timeout');
         exit;
     }
 
@@ -178,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
                 : 'Statusmeldungen bleiben nun dauerhaft sichtbar, bis Sie diese manuell schließen.'
         );
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-flash');
         exit;
     }
 
@@ -200,7 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
         ];
         setFlash('success', $msgMap[$newMode] ?? $msgMap[1]);
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-chat');
         exit;
     }
 
@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn && $userRow !== null) {
                 : 'Sie werden in der Teilen-Auswahl anderer Cloud-Benutzer nicht mehr angezeigt.'
         );
 
-        header('Location: settings.php');
+        header('Location: settings.php#sec-sharing');
         exit;
     }
 
@@ -476,8 +476,65 @@ $themeGroups = [
         </div>
     <?php endif; ?>
 
+
+    <?php if ($loggedIn): ?>
+    <!-- THEMATISCHE EINSTELLUNGS-NAVIGATION (TABS) -->
+    <nav aria-label="Einstellungen-Bereiche" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-xs mb-6 flex flex-wrap items-center gap-1.5 sticky top-3 z-30 backdrop-blur-md bg-white/95 dark:bg-slate-900/95">
+        <button
+            type="button"
+            data-settings-tab-btn="tab-appearance"
+            onclick="switchSettingsTab('tab-appearance')"
+            class="settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-brand-600 text-white shadow-xs"
+        >
+            <span>🎨</span>
+            <span>Erscheinungsbild &amp; Sprache</span>
+        </button>
+        <button
+            type="button"
+            data-settings-tab-btn="tab-security"
+            onclick="switchSettingsTab('tab-security')"
+            class="settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+            <span>🔐</span>
+            <span>Sicherheit &amp; Anmeldung</span>
+        </button>
+        <button
+            type="button"
+            data-settings-tab-btn="tab-connections"
+            onclick="switchSettingsTab('tab-connections')"
+            class="settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+            <span>📱</span>
+            <span>Apps &amp; Verbindungen</span>
+        </button>
+        <button
+            type="button"
+            data-settings-tab-btn="tab-account"
+            onclick="switchSettingsTab('tab-account')"
+            class="settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+            <span>📬</span>
+            <span>Konto &amp; Benachrichtigungen</span>
+        </button>
+        <button
+            type="button"
+            data-settings-tab-btn="all"
+            onclick="switchSettingsTab('all')"
+            class="settings-tab-btn inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer sm:ml-auto text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Alle Einstellungen untereinander anzeigen"
+        >
+            <span>📋</span>
+            <span>Alle anzeigen</span>
+        </button>
+    </nav>
+    <?php endif; ?>
+
+    <!-- ======================================================== -->
+    <!-- BEREICH 1: ERSCHEINUNGSBILD & SPRACHE                    -->
+    <!-- ======================================================== -->
+    <div data-settings-tab-panel="tab-appearance" class="space-y-6">
     <!-- 1. SPRACHE WÄHLEN -->
-    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+    <section id="sec-lang" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-1">Sprache wählen</h2>
         <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
             Wählen Sie Ihre bevorzugte Sprache für die Benutzeroberfläche.
@@ -550,7 +607,7 @@ $themeGroups = [
     </section>
 
     <!-- 2b. FARBDESIGN / THEME WÄHLEN -->
-    <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+    <section id="sec-theme" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-1">Design-Theme wählen</h2>
         <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
             Alle hellen Themes sind angenehm abgedunkelt, um ein grelles Blenden zu vermeiden.
@@ -596,7 +653,144 @@ $themeGroups = [
     </section>
 
     <?php if ($loggedIn && $userRow !== null): ?>
-        <!-- 3. E-MAIL-ADRESSE (PASSWORT-WIEDERHERSTELLUNG) & ZWEI-FAKTOR-AUTHENTIFIZIERUNG (2FA) -->
+        <!-- 3b-2. ANZEIGEDAUER VON STATUSMELDUNGEN -->
+        <?php
+        $userFlashSec = isset($userRow['flash_duration']) ? max(0, min(300, (int)$userRow['flash_duration'])) : 10;
+        $flashPresets = [
+            1  => '1 Sekunde',
+            3  => '3 Sekunden',
+            5  => '5 Sekunden',
+            10 => '10 Sekunden (Standard)',
+            15 => '15 Sekunden',
+            0  => 'Nicht ausblenden (Manuell)',
+        ];
+        $flashBadgeLabel = $userFlashSec === 0
+            ? 'Manuell schließen'
+            : ($userFlashSec === 1 ? '1 Sekunde' : $userFlashSec . ' Sekunden');
+        ?>
+        <section id="sec-flash" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔔 Anzeigedauer von Statusmeldungen</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userFlashSec > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($flashBadgeLabel) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Bestimmen Sie, nach wie vielen Sekunden grüne, gelbe oder rote Rückmeldungen oben auf der Seite automatisch ausgeblendet werden – oder geben Sie eine eigene Sekundenzahl ein.
+            </p>
+
+            <form action="settings.php" method="post" class="space-y-3.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_flash_duration">
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <?php foreach ($flashPresets as $fSec => $fLabel): ?>
+                        <?php $isSelectedFlash = ($userFlashSec === (int)$fSec); ?>
+                        <button
+                            type="submit"
+                            name="flash_duration_preset"
+                            value="<?= (int)$fSec ?>"
+                            class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedFlash ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                        >
+                            <span class="truncate"><?= e($fLabel) ?></span>
+                            <?php if ($isSelectedFlash): ?>
+                                <span class="text-xs font-bold shrink-0">✓</span>
+                            <?php endif; ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <label for="custom_flash_duration" class="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Eigene Dauer in Sekunden (1–300 s, oder 0 = nie automatisch ausblenden):
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <input
+                            type="number"
+                            id="custom_flash_duration"
+                            name="custom_flash_duration"
+                            min="0"
+                            max="300"
+                            value="<?= (int)$userFlashSec ?>"
+                            class="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Sek.</span>
+                        <button
+                            type="submit"
+                            class="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                            Übernehmen
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+    <?php endif; ?>
+    </div>
+
+    <?php if ($loggedIn && $userRow !== null): ?>
+    <!-- ======================================================== -->
+    <!-- BEREICH 2: SICHERHEIT & ANMELDUNG                        -->
+    <!-- ======================================================== -->
+    <div data-settings-tab-panel="tab-security" class="space-y-6 hidden">
+        <!-- 4. PERSÖNLICHES KONTO & PASSWORT ÄNDERN -->
+        <section id="sec-password" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-1">Eigenes Passwort ändern</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Angemeldet als <strong><?= e((string)$userRow['username']) ?></strong>
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-end">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="change_own_password">
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Aktuelles Passwort</label>
+                    <input
+                        type="password"
+                        name="current_password"
+                        required
+                        autocomplete="current-password"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Neues Passwort</label>
+                    <input
+                        type="password"
+                        name="new_password"
+                        required
+                        minlength="8"
+                        autocomplete="new-password"
+                        placeholder="Mindestens 8 Zeichen"
+                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Neues Passwort bestätigen</label>
+                    <div class="flex items-center gap-2">
+                        <input
+                            type="password"
+                            name="confirm_password"
+                            required
+                            minlength="8"
+                            autocomplete="new-password"
+                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                        <button
+                            type="submit"
+                            class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+                        >
+                            Speichern
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
         <?php
         $userTfaMode = (int)($userRow['two_factor_enabled'] ?? 0);
         $userTotpSecret = trim((string)($userRow['totp_secret'] ?? ''));
@@ -796,323 +990,6 @@ $themeGroups = [
                     </details>
                 <?php endif; ?>
             </div>
-        </section>
-
-        <!-- 3b. AUTOMATISCHE ABMELDUNG (SITZUNGS-TIMEOUT) -->
-        <?php
-        $userTimeoutMin = isset($userRow['session_timeout']) ? (int)$userRow['session_timeout'] : 30;
-        $allowedTimeouts = getAllowedSessionTimeouts();
-        if (!array_key_exists($userTimeoutMin, $allowedTimeouts)) {
-            $userTimeoutMin = 30;
-        }
-        ?>
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">⏱️ Automatische Abmeldung (Timeout)</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userTimeoutMin > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
-                    <?= e($allowedTimeouts[$userTimeoutMin]) ?>
-                </span>
-            </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Legen Sie fest, nach wie vielen Minuten ohne Aktivität sich die Anwendung zu Ihrer Sicherheit automatisch abmeldet.
-            </p>
-
-            <form action="settings.php" method="post" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="update_session_timeout">
-
-                <?php foreach ($allowedTimeouts as $tMin => $tLabel): ?>
-                    <?php $isSelectedTimeout = ($userTimeoutMin === (int)$tMin); ?>
-                    <button
-                        type="submit"
-                        name="session_timeout"
-                        value="<?= (int)$tMin ?>"
-                        class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedTimeout ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
-                    >
-                        <span class="truncate"><?= e($tLabel) ?></span>
-                        <?php if ($isSelectedTimeout): ?>
-                            <span class="text-xs font-bold shrink-0">✓</span>
-                        <?php endif; ?>
-                    </button>
-                <?php endforeach; ?>
-            </form>
-        </section>
-
-        <!-- 3b-2. ANZEIGEDAUER VON STATUSMELDUNGEN -->
-        <?php
-        $userFlashSec = isset($userRow['flash_duration']) ? max(0, min(300, (int)$userRow['flash_duration'])) : 10;
-        $flashPresets = [
-            1  => '1 Sekunde',
-            3  => '3 Sekunden',
-            5  => '5 Sekunden',
-            10 => '10 Sekunden (Standard)',
-            15 => '15 Sekunden',
-            0  => 'Nicht ausblenden (Manuell)',
-        ];
-        $flashBadgeLabel = $userFlashSec === 0
-            ? 'Manuell schließen'
-            : ($userFlashSec === 1 ? '1 Sekunde' : $userFlashSec . ' Sekunden');
-        ?>
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">🔔 Anzeigedauer von Statusmeldungen</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userFlashSec > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
-                    <?= e($flashBadgeLabel) ?>
-                </span>
-            </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Bestimmen Sie, nach wie vielen Sekunden grüne, gelbe oder rote Rückmeldungen oben auf der Seite automatisch ausgeblendet werden – oder geben Sie eine eigene Sekundenzahl ein.
-            </p>
-
-            <form action="settings.php" method="post" class="space-y-3.5">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="update_flash_duration">
-
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    <?php foreach ($flashPresets as $fSec => $fLabel): ?>
-                        <?php $isSelectedFlash = ($userFlashSec === (int)$fSec); ?>
-                        <button
-                            type="submit"
-                            name="flash_duration_preset"
-                            value="<?= (int)$fSec ?>"
-                            class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedFlash ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
-                        >
-                            <span class="truncate"><?= e($fLabel) ?></span>
-                            <?php if ($isSelectedFlash): ?>
-                                <span class="text-xs font-bold shrink-0">✓</span>
-                            <?php endif; ?>
-                        </button>
-                    <?php endforeach; ?>
-                </div>
-
-                <div class="pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <label for="custom_flash_duration" class="text-xs font-medium text-slate-700 dark:text-slate-300">
-                        Eigene Dauer in Sekunden (1–300 s, oder 0 = nie automatisch ausblenden):
-                    </label>
-                    <div class="flex items-center gap-2">
-                        <input
-                            type="number"
-                            id="custom_flash_duration"
-                            name="custom_flash_duration"
-                            min="0"
-                            max="300"
-                            value="<?= (int)$userFlashSec ?>"
-                            class="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        >
-                        <span class="text-xs text-slate-500 dark:text-slate-400">Sek.</span>
-                        <button
-                            type="submit"
-                            class="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                        >
-                            Übernehmen
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </section>
-
-        <!-- 3b-3. CHAT-BENACHRICHTIGUNGEN (PC & MOBILGERÄT) -->
-        <?php
-        $userChatNotifyMode = isset($userRow['chat_notify_mode']) ? max(0, min(3, (int)$userRow['chat_notify_mode'])) : 1;
-        $chatNotifyModes = [
-            1 => '🔔 Nur System-Benachrichtigung (Standard)',
-            2 => '🔔 + 💬 System & In-App-Banner',
-            3 => '💬 Nur In-App-Banner',
-            0 => '🔕 Deaktiviert (Nur roter Zähler)',
-        ];
-        ?>
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">💬 Chat-Benachrichtigungen (PC &amp; Mobilgerät)</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userChatNotifyMode > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
-                    <?= e($chatNotifyModes[$userChatNotifyMode] ?? $chatNotifyModes[1]) ?>
-                </span>
-            </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Legen Sie fest, wie Sie am Rechner und auf dem Smartphone über neue Chat-Nachrichten informiert werden möchten. Standardmäßig sind nur echte System-Benachrichtigungen (ohne In-App-Banner) aktiv.
-            </p>
-
-            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="update_chat_notify_mode">
-
-                <?php foreach ($chatNotifyModes as $nMode => $nLabel): ?>
-                    <?php $isSelectedNotify = ($userChatNotifyMode === (int)$nMode); ?>
-                    <button
-                        type="submit"
-                        name="chat_notify_mode"
-                        value="<?= (int)$nMode ?>"
-                        class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedNotify ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
-                    >
-                        <span class="truncate"><?= e($nLabel) ?></span>
-                        <?php if ($isSelectedNotify): ?>
-                            <span class="text-xs font-bold shrink-0">✓</span>
-                        <?php endif; ?>
-                    </button>
-                <?php endforeach; ?>
-            </form>
-
-            <div class="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <p id="browserNotifyStatusText" class="text-xs text-slate-500 dark:text-slate-400">
-                    Für System-Benachrichtigungen auf PC &amp; Mobilgerät muss Ihr Browser einmalig die Berechtigung erhalten.
-                </p>
-                <button
-                    type="button"
-                    id="btnRequestBrowserNotify"
-                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
-                >
-                    🔔 System-Benachrichtigung auf diesem Gerät freigeben / testen
-                </button>
-            </div>
-            <script>
-            (() => {
-                const btn = document.getElementById('btnRequestBrowserNotify');
-                const statusEl = document.getElementById('browserNotifyStatusText');
-                if (!btn || !statusEl) return;
-
-                const updatePermStatus = () => {
-                    if (!('Notification' in window)) {
-                        statusEl.textContent = 'Hinweis: Dieser Browser unterstützt keine nativen System-Benachrichtigungen (auf iPhone/iPad bitte zuerst als App zum Home-Bildschirm hinzufügen).';
-                        return;
-                    }
-                    if (Notification.permission === 'granted') {
-                        statusEl.textContent = '✅ System-Benachrichtigungen sind auf diesem Gerät freigegeben.';
-                        btn.textContent = '🔔 Test-Benachrichtigung senden';
-                    } else if (Notification.permission === 'denied') {
-                        statusEl.textContent = '⚠️ System-Benachrichtigungen wurden in den Browser-Einstellungen blockiert.';
-                    }
-                };
-                updatePermStatus();
-
-                btn.addEventListener('click', async () => {
-                    if (!('Notification' in window)) {
-                        alert('Dieser Browser unterstützt keine System-Benachrichtigungen. Auf iOS fügen Sie die Cloud bitte zuerst zum Home-Bildschirm hinzu.');
-                        return;
-                    }
-                    let perm = Notification.permission;
-                    if (perm !== 'granted') {
-                        try {
-                            perm = await Notification.requestPermission();
-                        } catch (_) {}
-                    }
-                    updatePermStatus();
-                    if (perm === 'granted') {
-                        const title = '💬 Chat-Benachrichtigung aktiv';
-                        const opts = {
-                            body: 'Sie erhalten neue Chat-Nachrichten nun direkt auf diesem Gerät.',
-                            icon: 'app-icon.php?size=180',
-                            badge: 'app-icon.php?size=180',
-                            data: { url: 'messages.php' }
-                        };
-                        if ('serviceWorker' in navigator) {
-                            navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts)).catch(() => new Notification(title, opts));
-                        } else {
-                            new Notification(title, opts);
-                        }
-                    }
-                });
-            })();
-            </script>
-        </section>
-
-        <!-- 3c. SICHTBARKEIT IN DER TEILEN-AUSWAHL (DATENSCHUTZ BEI DIREKTFREIGABEN) -->
-        <?php $allowUserSharing = isset($userRow['allow_user_sharing']) && (int)$userRow['allow_user_sharing'] === 1; ?>
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">👥 Sichtbarkeit in der Teilen-Auswahl</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $allowUserSharing ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
-                    <?= $allowUserSharing ? '👁️ Sichtbar für Direktfreigaben' : '🔒 Versteckt (Standard)' ?>
-                </span>
-            </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Standardmäßig ist Ihr Konto zu Ihrem Schutz versteckt, sodass andere Benutzer Ihren Namen nicht in der Teilen-Auswahl sehen. Wenn Sie die Sichtbarkeit aktivieren, können andere angemeldete Cloud-Benutzer Dateien und Ordner direkt mit Ihnen teilen.
-            </p>
-
-            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="update_share_visibility">
-
-                <button
-                    type="submit"
-                    name="allow_user_sharing"
-                    value="0"
-                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= !$allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
-                >
-                    <span>🔒 Nicht in Teilen-Auswahl anzeigen (Standard)</span>
-                    <?php if (!$allowUserSharing): ?>
-                        <span class="text-xs font-bold shrink-0">✓</span>
-                    <?php endif; ?>
-                </button>
-
-                <button
-                    type="submit"
-                    name="allow_user_sharing"
-                    value="1"
-                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
-                >
-                    <span>👁️ In Teilen-Auswahl anzeigen (Direktfreigaben erlauben)</span>
-                    <?php if ($allowUserSharing): ?>
-                        <span class="text-xs font-bold shrink-0">✓</span>
-                    <?php endif; ?>
-                </button>
-            </form>
-        </section>
-
-        <!-- 4. PERSÖNLICHES KONTO & PASSWORT ÄNDERN -->
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-1">Eigenes Passwort ändern</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Angemeldet als <strong><?= e((string)$userRow['username']) ?></strong>
-            </p>
-
-            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-end">
-                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                <input type="hidden" name="action" value="change_own_password">
-
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Aktuelles Passwort</label>
-                    <input
-                        type="password"
-                        name="current_password"
-                        required
-                        autocomplete="current-password"
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                </div>
-
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Neues Passwort</label>
-                    <input
-                        type="password"
-                        name="new_password"
-                        required
-                        minlength="8"
-                        autocomplete="new-password"
-                        placeholder="Mindestens 8 Zeichen"
-                        class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                </div>
-
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Neues Passwort bestätigen</label>
-                    <div class="flex items-center gap-2">
-                        <input
-                            type="password"
-                            name="confirm_password"
-                            required
-                            minlength="8"
-                            autocomplete="new-password"
-                            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        >
-                        <button
-                            type="submit"
-                            class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
-                        >
-                            Speichern
-                        </button>
-                    </div>
-                </div>
-            </form>
         </section>
 
         <!-- 4b. PASSKEYS (FINGERABDRUCK, FACE-ID & WINDOWS HELLO – WEBAUTHN) -->
@@ -1322,8 +1199,54 @@ $themeGroups = [
             </script>
         </section>
 
+        <!-- 3b. AUTOMATISCHE ABMELDUNG (SITZUNGS-TIMEOUT) -->
+        <?php
+        $userTimeoutMin = isset($userRow['session_timeout']) ? (int)$userRow['session_timeout'] : 30;
+        $allowedTimeouts = getAllowedSessionTimeouts();
+        if (!array_key_exists($userTimeoutMin, $allowedTimeouts)) {
+            $userTimeoutMin = 30;
+        }
+        ?>
+        <section id="sec-timeout" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">⏱️ Automatische Abmeldung (Timeout)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userTimeoutMin > 0 ? 'bg-brand-100 dark:bg-brand-950 text-brand-800 dark:text-brand-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($allowedTimeouts[$userTimeoutMin]) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Legen Sie fest, nach wie vielen Minuten ohne Aktivität sich die Anwendung zu Ihrer Sicherheit automatisch abmeldet.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_session_timeout">
+
+                <?php foreach ($allowedTimeouts as $tMin => $tLabel): ?>
+                    <?php $isSelectedTimeout = ($userTimeoutMin === (int)$tMin); ?>
+                    <button
+                        type="submit"
+                        name="session_timeout"
+                        value="<?= (int)$tMin ?>"
+                        class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedTimeout ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                    >
+                        <span class="truncate"><?= e($tLabel) ?></span>
+                        <?php if ($isSelectedTimeout): ?>
+                            <span class="text-xs font-bold shrink-0">✓</span>
+                        <?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
+            </form>
+        </section>
+
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- BEREICH 3: APPS & GERÄTE-VERBINDUNGEN                    -->
+    <!-- ======================================================== -->
+    <div data-settings-tab-panel="tab-connections" class="space-y-6 hidden">
         <!-- NATIVE ANDROID APP -->
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <section id="sec-android" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-brand-600/10 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold text-xl shrink-0">
@@ -1408,7 +1331,7 @@ $themeGroups = [
             $davsEndpointUrl   = preg_replace('/^https:\/\//i', 'davs://', preg_replace('/^http:\/\//i', 'dav://', $webdavEndpointUrl));
         ?>
         <!-- WEBDAV NETZLAUFWERK -->
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+        <section id="sec-webdav" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                 <div>
                     <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">📡 WebDAV-Netzlaufwerk einbinden</h2>
@@ -1583,6 +1506,159 @@ $themeGroups = [
                     Noch keine separaten App-Passwörter angelegt.
                 </p>
             <?php endif; ?>
+        </section>
+
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- BEREICH 4: KONTO & BENACHRICHTIGUNGEN                    -->
+    <!-- ======================================================== -->
+    <div data-settings-tab-panel="tab-account" class="space-y-6 hidden">
+        <!-- 3b-3. CHAT-BENACHRICHTIGUNGEN (PC & MOBILGERÄT) -->
+        <?php
+        $userChatNotifyMode = isset($userRow['chat_notify_mode']) ? max(0, min(3, (int)$userRow['chat_notify_mode'])) : 1;
+        $chatNotifyModes = [
+            1 => '🔔 Nur System-Benachrichtigung (Standard)',
+            2 => '🔔 + 💬 System & In-App-Banner',
+            3 => '💬 Nur In-App-Banner',
+            0 => '🔕 Deaktiviert (Nur roter Zähler)',
+        ];
+        ?>
+        <section id="sec-chat" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">💬 Chat-Benachrichtigungen (PC &amp; Mobilgerät)</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $userChatNotifyMode > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= e($chatNotifyModes[$userChatNotifyMode] ?? $chatNotifyModes[1]) ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Legen Sie fest, wie Sie am Rechner und auf dem Smartphone über neue Chat-Nachrichten informiert werden möchten. Standardmäßig sind nur echte System-Benachrichtigungen (ohne In-App-Banner) aktiv.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_chat_notify_mode">
+
+                <?php foreach ($chatNotifyModes as $nMode => $nLabel): ?>
+                    <?php $isSelectedNotify = ($userChatNotifyMode === (int)$nMode); ?>
+                    <button
+                        type="submit"
+                        name="chat_notify_mode"
+                        value="<?= (int)$nMode ?>"
+                        class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $isSelectedNotify ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                    >
+                        <span class="truncate"><?= e($nLabel) ?></span>
+                        <?php if ($isSelectedNotify): ?>
+                            <span class="text-xs font-bold shrink-0">✓</span>
+                        <?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
+            </form>
+
+            <div class="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <p id="browserNotifyStatusText" class="text-xs text-slate-500 dark:text-slate-400">
+                    Für System-Benachrichtigungen auf PC &amp; Mobilgerät muss Ihr Browser einmalig die Berechtigung erhalten.
+                </p>
+                <button
+                    type="button"
+                    id="btnRequestBrowserNotify"
+                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+                >
+                    🔔 System-Benachrichtigung auf diesem Gerät freigeben / testen
+                </button>
+            </div>
+            <script>
+            (() => {
+                const btn = document.getElementById('btnRequestBrowserNotify');
+                const statusEl = document.getElementById('browserNotifyStatusText');
+                if (!btn || !statusEl) return;
+
+                const updatePermStatus = () => {
+                    if (!('Notification' in window)) {
+                        statusEl.textContent = 'Hinweis: Dieser Browser unterstützt keine nativen System-Benachrichtigungen (auf iPhone/iPad bitte zuerst als App zum Home-Bildschirm hinzufügen).';
+                        return;
+                    }
+                    if (Notification.permission === 'granted') {
+                        statusEl.textContent = '✅ System-Benachrichtigungen sind auf diesem Gerät freigegeben.';
+                        btn.textContent = '🔔 Test-Benachrichtigung senden';
+                    } else if (Notification.permission === 'denied') {
+                        statusEl.textContent = '⚠️ System-Benachrichtigungen wurden in den Browser-Einstellungen blockiert.';
+                    }
+                };
+                updatePermStatus();
+
+                btn.addEventListener('click', async () => {
+                    if (!('Notification' in window)) {
+                        alert('Dieser Browser unterstützt keine System-Benachrichtigungen. Auf iOS fügen Sie die Cloud bitte zuerst zum Home-Bildschirm hinzu.');
+                        return;
+                    }
+                    let perm = Notification.permission;
+                    if (perm !== 'granted') {
+                        try {
+                            perm = await Notification.requestPermission();
+                        } catch (_) {}
+                    }
+                    updatePermStatus();
+                    if (perm === 'granted') {
+                        const title = '💬 Chat-Benachrichtigung aktiv';
+                        const opts = {
+                            body: 'Sie erhalten neue Chat-Nachrichten nun direkt auf diesem Gerät.',
+                            icon: 'app-icon.php?size=180',
+                            badge: 'app-icon.php?size=180',
+                            data: { url: 'messages.php' }
+                        };
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts)).catch(() => new Notification(title, opts));
+                        } else {
+                            new Notification(title, opts);
+                        }
+                    }
+                });
+            })();
+            </script>
+        </section>
+
+        <!-- 3c. SICHTBARKEIT IN DER TEILEN-AUSWAHL (DATENSCHUTZ BEI DIREKTFREIGABEN) -->
+        <?php $allowUserSharing = isset($userRow['allow_user_sharing']) && (int)$userRow['allow_user_sharing'] === 1; ?>
+        <section id="sec-sharing" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">👥 Sichtbarkeit in der Teilen-Auswahl</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold <?= $allowUserSharing ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' ?>">
+                    <?= $allowUserSharing ? '👁️ Sichtbar für Direktfreigaben' : '🔒 Versteckt (Standard)' ?>
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Standardmäßig ist Ihr Konto zu Ihrem Schutz versteckt, sodass andere Benutzer Ihren Namen nicht in der Teilen-Auswahl sehen. Wenn Sie die Sichtbarkeit aktivieren, können andere angemeldete Cloud-Benutzer Dateien und Ordner direkt mit Ihnen teilen.
+            </p>
+
+            <form action="settings.php" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                <input type="hidden" name="action" value="update_share_visibility">
+
+                <button
+                    type="submit"
+                    name="allow_user_sharing"
+                    value="0"
+                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= !$allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                >
+                    <span>🔒 Nicht in Teilen-Auswahl anzeigen (Standard)</span>
+                    <?php if (!$allowUserSharing): ?>
+                        <span class="text-xs font-bold shrink-0">✓</span>
+                    <?php endif; ?>
+                </button>
+
+                <button
+                    type="submit"
+                    name="allow_user_sharing"
+                    value="1"
+                    class="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer <?= $allowUserSharing ? 'bg-brand-600 text-white border-brand-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-500' ?>"
+                >
+                    <span>👁️ In Teilen-Auswahl anzeigen (Direktfreigaben erlauben)</span>
+                    <?php if ($allowUserSharing): ?>
+                        <span class="text-xs font-bold shrink-0">✓</span>
+                    <?php endif; ?>
+                </button>
+            </form>
         </section>
 
         <!-- E-MAIL-POSTFACH FÜR DAS OFFICE-MODUL (ZERO-STORAGE) -->
@@ -1879,10 +1955,8 @@ $themeGroups = [
             });
             </script>
         </section>
-    <?php endif; ?>
-
     <?php if (($appSettings['registration_paywall_enabled'] ?? '0') === '1' || !empty($userRow['paypal_subscription_id'])): ?>
-        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+        <section id="sec-subscription" class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 text-lg">
                     💳
@@ -1900,6 +1974,113 @@ $themeGroups = [
             </a>
         </section>
     <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+<script>
+function switchSettingsTab(tabId, updateHash = true) {
+    const panels = document.querySelectorAll('[data-settings-tab-panel]');
+    const buttons = document.querySelectorAll('[data-settings-tab-btn]');
+
+    // Hash-Mapping für direkte Anker, Unterabschnitte und Legacy-Links
+    const hashMap = {
+        // 1. Erscheinungsbild
+        'tab-appearance': 'tab-appearance',
+        'appearance': 'tab-appearance',
+        'design': 'tab-appearance',
+        'lang': 'tab-appearance',
+        'sec-lang': 'tab-appearance',
+        'sec-ui-style': 'tab-appearance',
+        'sec-theme': 'tab-appearance',
+        'sec-flash': 'tab-appearance',
+
+        // 2. Sicherheit
+        'tab-security': 'tab-security',
+        'security': 'tab-security',
+        'password': 'tab-security',
+        'sec-password': 'tab-security',
+        'sec-2fa': 'tab-security',
+        'sec-passkeys': 'tab-security',
+        'sec-timeout': 'tab-security',
+
+        // 3. Apps & Verbindungen
+        'tab-connections': 'tab-connections',
+        'connections': 'tab-connections',
+        'apps': 'tab-connections',
+        'android': 'tab-connections',
+        'sec-android': 'tab-connections',
+        'webdav': 'tab-connections',
+        'sec-webdav': 'tab-connections',
+        'app-passwords': 'tab-connections',
+
+        // 4. Konto & Benachrichtigungen
+        'tab-account': 'tab-account',
+        'account': 'tab-account',
+        'chat': 'tab-account',
+        'sec-chat': 'tab-account',
+        'sharing': 'tab-account',
+        'sec-sharing': 'tab-account',
+        'mail': 'tab-account',
+        'sec-mail': 'tab-account',
+        'subscription': 'tab-account',
+        'sec-subscription': 'tab-account',
+
+        'all': 'all'
+    };
+
+    const targetTab = hashMap[tabId] || 'tab-appearance';
+
+    // Panels umschalten
+    panels.forEach((panel) => {
+        const pId = panel.getAttribute('data-settings-tab-panel');
+        if (targetTab === 'all' || pId === targetTab) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    });
+
+    // Buttons hervorheben
+    buttons.forEach((btn) => {
+        const bId = btn.getAttribute('data-settings-tab-btn');
+        const isAll = (bId === 'all');
+        const activeClass = 'settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-brand-600 text-white shadow-xs' + (isAll ? ' sm:ml-auto' : '');
+        const inactiveClass = 'settings-tab-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' + (isAll ? ' sm:ml-auto' : '');
+
+        if (bId === targetTab) {
+            btn.className = activeClass;
+        } else {
+            btn.className = inactiveClass;
+        }
+    });
+
+    // URL-Hash aktualisieren
+    if (updateHash && history.replaceState) {
+        const hashOut = (targetTab === 'tab-appearance') ? 'appearance'
+                      : (targetTab === 'tab-security') ? 'security'
+                      : (targetTab === 'tab-connections') ? 'connections'
+                      : (targetTab === 'tab-account') ? 'account'
+                      : 'all';
+        history.replaceState(null, '', '#' + hashOut);
+    }
+}
+
+// Beim Laden URL-Hash prüfen & ggf. direkt zum Anker scrollen
+document.addEventListener('DOMContentLoaded', () => {
+    const rawHash = (window.location.hash || '').replace(/^#/, '');
+    if (rawHash) {
+        switchSettingsTab(rawHash, false);
+        setTimeout(() => {
+            const el = document.getElementById(rawHash);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 120);
+    } else {
+        switchSettingsTab('tab-appearance', false);
+    }
+});
+</script>
 </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
