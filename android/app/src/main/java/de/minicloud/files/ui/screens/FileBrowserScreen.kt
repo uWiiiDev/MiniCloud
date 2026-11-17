@@ -451,42 +451,63 @@ fun FileBrowserScreen(
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(138.dp)
+                                                .height(132.dp)
                                                 .clickable { loadCurrentFolder(f.path) },
                                             shape = RoundedCornerShape(18.dp),
                                             colors = CardDefaults.cardColors(containerColor = Slate800),
                                             border = androidx.compose.foundation.BorderStroke(1.dp, Slate700.copy(alpha = 0.6f))
                                         ) {
-                                            Box(
+                                            Column(
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .padding(horizontal = 2.dp, vertical = 4.dp),
-                                                contentAlignment = Alignment.Center
+                                                    .padding(14.dp),
+                                                verticalArrangement = Arrangement.SpaceBetween
                                             ) {
-                                                // 20% größeres gelbes Ordnersymbol (158x118 dp)
-                                                Icon(
-                                                    imageVector = Icons.Default.Folder,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFF59E0B),
-                                                    modifier = Modifier.size(width = 158.dp, height = 118.dp)
-                                                )
-
-                                                // Beschriftung direkt im Ordnersymbol integriert
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(125.dp)
-                                                        .padding(top = 22.dp, start = 4.dp, end = 4.dp),
-                                                    contentAlignment = Alignment.Center
+                                                // Oben: Großes gelbes Ordnersymbol links oben
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.Top
                                                 ) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        color = Color(0xFFF59E0B).copy(alpha = 0.16f),
+                                                        modifier = Modifier.size(54.dp)
+                                                    ) {
+                                                        Box(contentAlignment = Alignment.Center) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Folder,
+                                                                contentDescription = null,
+                                                                tint = Color(0xFFF59E0B),
+                                                                modifier = Modifier.size(36.dp)
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Icon(
+                                                        imageVector = Icons.Default.ChevronRight,
+                                                        contentDescription = null,
+                                                        tint = Slate700,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+
+                                                // Unten: Beschriftung am unteren Rand (außerhalb des Ordnersymbols)
+                                                Column {
                                                     Text(
                                                         text = f.name,
-                                                        color = Color(0xFF0F172A),
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Black,
-                                                        textAlign = TextAlign.Center,
+                                                        color = White,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Bold,
                                                         maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis,
-                                                        lineHeight = 16.sp
+                                                        lineHeight = 18.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = "Ordner",
+                                                        color = Slate400,
+                                                        fontSize = 11.sp
                                                     )
                                                 }
                                             }
