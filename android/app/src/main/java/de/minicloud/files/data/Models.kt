@@ -47,5 +47,6 @@ data class FileListData(
     val breadcrumbs: List<BreadcrumbItem>,
     val folders: List<FolderItem>,
     val files: List<FileItem>,
-    val quota: Quota?
+    val quota: Quota?,
+    val allFolders: List<String> = emptyList()
 )

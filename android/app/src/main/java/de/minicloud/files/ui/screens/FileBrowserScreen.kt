@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +43,7 @@ import de.minicloud.files.ui.theme.*
 import kotlinx.coroutines.launch
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FileBrowserScreen(
     prefs: PreferencesManager,
@@ -58,13 +60,25 @@ fun FileBrowserScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }
 
-    // Dialog-Zustände
+    // Dialog- & Aktions-Zustände
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
 
+    // Ordner-Aktionen
+    var selectedFolderForAction by remember { mutableStateOf<FolderItem?>(null) }
+    var showFolderActionMenu by remember { mutableStateOf(false) }
+    var showRenameFolderDialog by remember { mutableStateOf(false) }
+    var renameFolderName by remember { mutableStateOf("") }
+    var showMoveFolderDialog by remember { mutableStateOf(false) }
+    var showDeleteFolderConfirmDialog by remember { mutableStateOf(false) }
+
+    // Datei-Aktionen
     var selectedFileForAction by remember { mutableStateOf<FileItem?>(null) }
-    var showRenameDialog by remember { mutableStateOf(false) }
+    var showFileActionMenu by remember { mutableStateOf(false) }
+    var showRenameFileDialog by remember { mutableStateOf(false) }
     var renameFileName by remember { mutableStateOf("") }
+    var showMoveFileDialog by remember { mutableStateOf(false) }
+    var showDeleteFileConfirmDialog by remember { mutableStateOf(false) }
 
     fun loadCurrentFolder(targetFolder: String = currentFolder) {
         isLoading = true
@@ -154,6 +168,38 @@ fun FileBrowserScreen(
                         context.startActivity(viewIntent)
                     } catch (e: Exception) {
                         Toast.makeText(context, "Keine passende App zum Öffnen gefunden.", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onFailure = { err ->
+                    Toast.makeText(context, "Download fehlgeschlagen: ${err.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+    }
+
+    fun shareFile(fileItem: FileItem) {
+        coroutineScope.launch {
+            Toast.makeText(context, "Bereite \"${fileItem.name}\" zum Teilen vor...", Toast.LENGTH_SHORT).show()
+            val tempDir = File(context.cacheDir, "shared").apply { mkdirs() }
+            val localFile = File(tempDir, fileItem.name)
+            val downloadResult = api.downloadToFile(fileItem.id, localFile)
+
+            downloadResult.fold(
+                onSuccess = { f ->
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            f
+                        )
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = fileItem.mimeType.ifEmpty { "*/*" }
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Datei teilen"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Teilen fehlgeschlagen: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onFailure = { err ->
@@ -452,7 +498,14 @@ fun FileBrowserScreen(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(132.dp)
-                                                .clickable { loadCurrentFolder(f.path) },
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .combinedClickable(
+                                                    onClick = { loadCurrentFolder(f.path) },
+                                                    onLongClick = {
+                                                        selectedFolderForAction = f
+                                                        showFolderActionMenu = true
+                                                    }
+                                                ),
                                             shape = RoundedCornerShape(18.dp),
                                             colors = CardDefaults.cardColors(containerColor = Slate800),
                                             border = androidx.compose.foundation.BorderStroke(1.dp, Slate700.copy(alpha = 0.6f))
@@ -537,7 +590,14 @@ fun FileBrowserScreen(
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { openDownloadedFile(item) },
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .combinedClickable(
+                                            onClick = { openDownloadedFile(item) },
+                                            onLongClick = {
+                                                selectedFileForAction = item
+                                                showFileActionMenu = true
+                                            }
+                                        ),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = CardDefaults.cardColors(containerColor = Slate800)
                                 ) {
@@ -597,11 +657,10 @@ fun FileBrowserScreen(
                                         )
                                     }
 
-                                    // Aktionen (Umbenennen / Löschen)
+                                    // Aktionen (Menü für Umbenennen / Verschieben / Teilen / Löschen)
                                     IconButton(onClick = {
                                         selectedFileForAction = item
-                                        renameFileName = item.name
-                                        showRenameDialog = true
+                                        showFileActionMenu = true
                                     }) {
                                         Icon(Icons.Default.MoreVert, contentDescription = "Optionen", tint = Slate400)
                                     }
@@ -668,70 +727,557 @@ fun FileBrowserScreen(
         )
     }
 
-    // Dialog: Dateiaktionen (Umbenennen & Löschen)
-    if (showRenameDialog && selectedFileForAction != null) {
-        val activeItem = selectedFileForAction!!
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text("Datei bearbeiten") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = renameFileName,
-                        onValueChange = { renameFileName = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Blue500,
-                            unfocusedBorderColor = Slate700,
-                            focusedTextColor = White,
-                            unfocusedTextColor = Slate200
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                val delRes = api.deleteFile(activeItem.id)
-                                showRenameDialog = false
-                                if (delRes.isSuccess) {
-                                    Toast.makeText(context, "In den Papierkorb verschoben", Toast.LENGTH_SHORT).show()
-                                    loadCurrentFolder(currentFolder)
-                                }
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Red500),
-                        modifier = Modifier.fillMaxWidth()
+    // ==========================================
+    // ORDNER-AKTIONEN: BottomSheet & Dialoge
+    // ==========================================
+
+    // 1. Ordner-Aktionsmenü (Bottom Sheet nach langem Touch)
+    if (showFolderActionMenu && selectedFolderForAction != null) {
+        val f = selectedFolderForAction!!
+        ModalBottomSheet(
+            onDismissRequest = { showFolderActionMenu = false },
+            containerColor = Slate800,
+            contentColor = White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 14.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF59E0B).copy(alpha = 0.16f),
+                        modifier = Modifier.size(42.dp)
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, tint = White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Datei löschen", color = White)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = f.name,
+                            color = White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Ordner",
+                            color = Slate400,
+                            fontSize = 12.sp
+                        )
                     }
                 }
+
+                Divider(color = Slate700, modifier = Modifier.padding(bottom = 6.dp))
+
+                // Umbenennen
+                ActionMenuItem(
+                    icon = Icons.Default.Edit,
+                    text = "Umbenennen",
+                    tint = White,
+                    onClick = {
+                        showFolderActionMenu = false
+                        renameFolderName = f.name
+                        showRenameFolderDialog = true
+                    }
+                )
+
+                // Verschieben
+                ActionMenuItem(
+                    icon = Icons.Default.DriveFileMove,
+                    text = "Verschieben",
+                    tint = White,
+                    onClick = {
+                        showFolderActionMenu = false
+                        showMoveFolderDialog = true
+                    }
+                )
+
+                // Löschen
+                ActionMenuItem(
+                    icon = Icons.Default.Delete,
+                    text = "Löschen",
+                    tint = Red500,
+                    onClick = {
+                        showFolderActionMenu = false
+                        showDeleteFolderConfirmDialog = true
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    // 2. Ordner umbenennen Dialog
+    if (showRenameFolderDialog && selectedFolderForAction != null) {
+        val f = selectedFolderForAction!!
+        AlertDialog(
+            onDismissRequest = { showRenameFolderDialog = false },
+            title = { Text("Ordner umbenennen") },
+            text = {
+                OutlinedTextField(
+                    value = renameFolderName,
+                    onValueChange = { renameFolderName = it },
+                    label = { Text("Neuer Name") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Blue500,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = White,
+                        unfocusedTextColor = Slate200
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameFolderName.trim()
+                        if (newName.isNotEmpty() && newName != f.name) {
+                            coroutineScope.launch {
+                                val res = api.renameFolder(f.path, newName)
+                                showRenameFolderDialog = false
+                                res.fold(
+                                    onSuccess = {
+                                        Toast.makeText(context, "Ordner umbenannt", Toast.LENGTH_SHORT).show()
+                                        loadCurrentFolder(currentFolder)
+                                    },
+                                    onFailure = {
+                                        Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        } else {
+                            showRenameFolderDialog = false
+                        }
+                    }
+                ) {
+                    Text("Speichern", color = Blue500)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameFolderDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // 3. Ordner verschieben Dialog
+    if (showMoveFolderDialog && selectedFolderForAction != null) {
+        val f = selectedFolderForAction!!
+        val currentParent = if (f.path.contains('/')) f.path.substringBeforeLast('/') else ""
+        val availableTargets = mutableListOf<Pair<String, String>>()
+        if (currentParent != "") {
+            availableTargets.add(Pair("", "MiniCloud (Hauptverzeichnis)"))
+        }
+        val allDirs = fileData?.allFolders.orEmpty()
+        for (dir in allDirs) {
+            if (dir != f.path && !dir.startsWith("${f.path}/") && dir != currentParent) {
+                availableTargets.add(Pair(dir, dir))
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showMoveFolderDialog = false },
+            title = { Text("Ordner \"${f.name}\" verschieben") },
+            text = {
+                if (availableTargets.isEmpty()) {
+                    Text("Keine alternativen Zielordner vorhanden.", color = Slate400)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                        items(availableTargets) { (targetPath, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showMoveFolderDialog = false
+                                        coroutineScope.launch {
+                                            val res = api.moveFolder(f.path, targetPath)
+                                            res.fold(
+                                                onSuccess = {
+                                                    Toast.makeText(context, "Ordner verschoben", Toast.LENGTH_SHORT).show()
+                                                    loadCurrentFolder(currentFolder)
+                                                },
+                                                onFailure = {
+                                                    Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (targetPath.isEmpty()) Icons.Default.Home else Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = if (targetPath.isEmpty()) Blue500 else Color(0xFFF59E0B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = label,
+                                    color = White,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Divider(color = Slate700.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showMoveFolderDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // 4. Ordner löschen Bestätigung
+    if (showDeleteFolderConfirmDialog && selectedFolderForAction != null) {
+        val f = selectedFolderForAction!!
+        AlertDialog(
+            onDismissRequest = { showDeleteFolderConfirmDialog = false },
+            title = { Text("Ordner löschen") },
+            text = {
+                Text("Möchten Sie den Ordner \"${f.name}\" und alle darin enthaltenen Dateien wirklich in den Papierkorb verschieben?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val res = api.deleteFolder(f.path)
+                            showDeleteFolderConfirmDialog = false
+                            res.fold(
+                                onSuccess = {
+                                    Toast.makeText(context, "Ordner gelöscht", Toast.LENGTH_SHORT).show()
+                                    loadCurrentFolder(currentFolder)
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red500)
+                ) {
+                    Text("Löschen", color = White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteFolderConfirmDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // ==========================================
+    // DATEI-AKTIONEN: BottomSheet & Dialoge
+    // ==========================================
+
+    // 5. Datei-Aktionsmenü (Bottom Sheet nach langem Touch oder 3-Punkte)
+    if (showFileActionMenu && selectedFileForAction != null) {
+        val file = selectedFileForAction!!
+        ModalBottomSheet(
+            onDismissRequest = { showFileActionMenu = false },
+            containerColor = Slate800,
+            contentColor = White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 14.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Blue500.copy(alpha = 0.16f),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = getFileIcon(file),
+                                contentDescription = null,
+                                tint = getFileIconTint(file),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = file.name,
+                            color = White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${file.sizeFormatted} • ${file.uploadDate.take(10)}",
+                            color = Slate400,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Divider(color = Slate700, modifier = Modifier.padding(bottom = 6.dp))
+
+                // Öffnen
+                ActionMenuItem(
+                    icon = Icons.Default.FileOpen,
+                    text = "Öffnen",
+                    tint = White,
+                    onClick = {
+                        showFileActionMenu = false
+                        openDownloadedFile(file)
+                    }
+                )
+
+                // Umbenennen
+                ActionMenuItem(
+                    icon = Icons.Default.Edit,
+                    text = "Umbenennen",
+                    tint = White,
+                    onClick = {
+                        showFileActionMenu = false
+                        renameFileName = file.name
+                        showRenameFileDialog = true
+                    }
+                )
+
+                // Verschieben
+                ActionMenuItem(
+                    icon = Icons.Default.DriveFileMove,
+                    text = "Verschieben",
+                    tint = White,
+                    onClick = {
+                        showFileActionMenu = false
+                        showMoveFileDialog = true
+                    }
+                )
+
+                // Teilen
+                ActionMenuItem(
+                    icon = Icons.Default.Share,
+                    text = "Teilen",
+                    tint = White,
+                    onClick = {
+                        showFileActionMenu = false
+                        shareFile(file)
+                    }
+                )
+
+                // Löschen
+                ActionMenuItem(
+                    icon = Icons.Default.Delete,
+                    text = "Löschen",
+                    tint = Red500,
+                    onClick = {
+                        showFileActionMenu = false
+                        showDeleteFileConfirmDialog = true
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    // 6. Datei umbenennen Dialog
+    if (showRenameFileDialog && selectedFileForAction != null) {
+        val file = selectedFileForAction!!
+        AlertDialog(
+            onDismissRequest = { showRenameFileDialog = false },
+            title = { Text("Datei umbenennen") },
+            text = {
+                OutlinedTextField(
+                    value = renameFileName,
+                    onValueChange = { renameFileName = it },
+                    label = { Text("Dateiname") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Blue500,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = White,
+                        unfocusedTextColor = Slate200
+                    )
+                )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         val newName = renameFileName.trim()
-                        if (newName.isNotEmpty() && newName != activeItem.name) {
+                        if (newName.isNotEmpty() && newName != file.name) {
                             coroutineScope.launch {
-                                val renRes = api.renameFile(activeItem.id, newName)
-                                showRenameDialog = false
-                                if (renRes.isSuccess) {
-                                    loadCurrentFolder(currentFolder)
-                                }
+                                val res = api.renameFile(file.id, newName)
+                                showRenameFileDialog = false
+                                res.fold(
+                                    onSuccess = {
+                                        Toast.makeText(context, "Datei umbenannt", Toast.LENGTH_SHORT).show()
+                                        loadCurrentFolder(currentFolder)
+                                    },
+                                    onFailure = {
+                                        Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
                             }
                         } else {
-                            showRenameDialog = false
+                            showRenameFileDialog = false
                         }
                     }
                 ) {
-                    Text("Umbenennen", color = Blue500)
+                    Text("Speichern", color = Blue500)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) {
-                    Text("Schließen", color = Slate400)
+                TextButton(onClick = { showRenameFileDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // 7. Datei verschieben Dialog
+    if (showMoveFileDialog && selectedFileForAction != null) {
+        val file = selectedFileForAction!!
+        val availableTargets = mutableListOf<Pair<String, String>>()
+        if (file.folderPath.isNotEmpty()) {
+            availableTargets.add(Pair("", "MiniCloud (Hauptverzeichnis)"))
+        }
+        val allDirs = fileData?.allFolders.orEmpty()
+        for (dir in allDirs) {
+            if (dir != file.folderPath) {
+                availableTargets.add(Pair(dir, dir))
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showMoveFileDialog = false },
+            title = { Text("Datei \"${file.name}\" verschieben") },
+            text = {
+                if (availableTargets.isEmpty()) {
+                    Text("Keine weiteren Zielordner vorhanden.", color = Slate400)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                        items(availableTargets) { (targetPath, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showMoveFileDialog = false
+                                        coroutineScope.launch {
+                                            val res = api.moveFile(file.id, targetPath)
+                                            res.fold(
+                                                onSuccess = {
+                                                    Toast.makeText(context, "Datei verschoben", Toast.LENGTH_SHORT).show()
+                                                    loadCurrentFolder(currentFolder)
+                                                },
+                                                onFailure = {
+                                                    Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (targetPath.isEmpty()) Icons.Default.Home else Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = if (targetPath.isEmpty()) Blue500 else Color(0xFFF59E0B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = label,
+                                    color = White,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Divider(color = Slate700.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showMoveFileDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            containerColor = Slate800,
+            titleContentColor = White,
+            textContentColor = Slate200
+        )
+    }
+
+    // 8. Datei löschen Bestätigung
+    if (showDeleteFileConfirmDialog && selectedFileForAction != null) {
+        val file = selectedFileForAction!!
+        AlertDialog(
+            onDismissRequest = { showDeleteFileConfirmDialog = false },
+            title = { Text("Datei löschen") },
+            text = {
+                Text("Möchten Sie die Datei \"${file.name}\" wirklich in den Papierkorb verschieben?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val res = api.deleteFile(file.id)
+                            showDeleteFileConfirmDialog = false
+                            res.fold(
+                                onSuccess = {
+                                    Toast.makeText(context, "In den Papierkorb verschoben", Toast.LENGTH_SHORT).show()
+                                    loadCurrentFolder(currentFolder)
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it.localizedMessage ?: "Fehler", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red500)
+                ) {
+                    Text("Löschen", color = White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteFileConfirmDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
                 }
             },
             containerColor = Slate800,
@@ -740,6 +1286,36 @@ fun FileBrowserScreen(
         )
     }
 }
+}
+
+@Composable
+private fun ActionMenuItem(
+    icon: ImageVector,
+    text: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            color = tint,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
 }
 
 private fun getFileIcon(item: FileItem) = when {

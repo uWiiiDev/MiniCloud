@@ -132,11 +132,18 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
                 val filesArray = json.optJSONArray("files") ?: JSONArray()
                 val files = parseFilesArray(filesArray)
 
+                // All folders
+                val allFArray = json.optJSONArray("all_folders") ?: JSONArray()
+                val allFolders = mutableListOf<String>()
+                for (i in 0 until allFArray.length()) {
+                    allFolders.add(allFArray.getString(i))
+                }
+
                 // Quota
                 val quotaObj = json.optJSONObject("quota")
                 val quota = if (quotaObj != null) parseQuota(quotaObj) else null
 
-                Result.success(FileListData(currentFolder, breadcrumbs, folders, files, quota))
+                Result.success(FileListData(currentFolder, breadcrumbs, folders, files, quota, allFolders))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -251,6 +258,96 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
                 val json = JSONObject(bodyStr)
                 if (!json.optBoolean("ok", false)) {
                     return@withContext Result.failure(Exception(json.optString("error", "Datei konnte nicht gelöscht werden.")))
+                }
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun moveFile(id: Int, targetFolder: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBody = FormBody.Builder()
+                .add("action", "move")
+                .add("id", id.toString())
+                .add("target_folder", targetFolder)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Datei konnte nicht verschoben werden.")))
+                }
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun renameFolder(oldFolder: String, newName: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBody = FormBody.Builder()
+                .add("action", "rename_folder")
+                .add("old_folder", oldFolder)
+                .add("new_name", newName)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Ordner konnte nicht umbenannt werden.")))
+                }
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun moveFolder(folder: String, targetParent: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
+            val url = "$base/api/files.php"
+
+            val formBody = FormBody.Builder()
+                .add("action", "move_folder")
+                .add("folder", folder)
+                .add("target_parent", targetParent)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${prefs.apiToken}")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val json = JSONObject(bodyStr)
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext Result.failure(Exception(json.optString("error", "Ordner konnte nicht verschoben werden.")))
                 }
                 Result.success(true)
             }
