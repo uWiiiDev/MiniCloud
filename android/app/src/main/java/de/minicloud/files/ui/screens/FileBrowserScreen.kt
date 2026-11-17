@@ -60,6 +60,10 @@ fun FileBrowserScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }
 
+    val offlineManager = remember { OfflineManager(context) }
+    var offlineUpdateTrigger by remember { mutableStateOf(0) }
+    var isOfflineFilterActive by remember { mutableStateOf(false) }
+
     // Dialog- & Aktions-Zustände
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
@@ -80,7 +84,33 @@ fun FileBrowserScreen(
     var showMoveFileDialog by remember { mutableStateOf(false) }
     var showDeleteFileConfirmDialog by remember { mutableStateOf(false) }
 
+    fun buildBreadcrumbs(folder: String): List<BreadcrumbItem> {
+        val bcs = mutableListOf(BreadcrumbItem("MiniCloud", ""))
+        if (folder.isNotEmpty()) {
+            val parts = folder.split('/')
+            var acc = ""
+            for (p in parts) {
+                acc = if (acc.isEmpty()) p else "$acc/$p"
+                bcs.add(BreadcrumbItem(p, acc))
+            }
+        }
+        return bcs
+    }
+
     fun loadCurrentFolder(targetFolder: String = currentFolder) {
+        if (isOfflineFilterActive) {
+            currentFolder = targetFolder
+            val (offFolders, offFiles) = offlineManager.getOfflineItemsForFolder(targetFolder)
+            fileData = FileListData(
+                currentFolder = targetFolder,
+                breadcrumbs = buildBreadcrumbs(targetFolder),
+                folders = offFolders,
+                files = offFiles,
+                quota = null
+            )
+            return
+        }
+
         isLoading = true
         coroutineScope.launch {
             val result = api.fetchFiles(targetFolder)
@@ -91,7 +121,20 @@ fun FileBrowserScreen(
                     fileData = data
                 },
                 onFailure = { error ->
-                    Toast.makeText(context, error.localizedMessage ?: "Ladefehler", Toast.LENGTH_SHORT).show()
+                    val (offFolders, offFiles) = offlineManager.getOfflineItemsForFolder(targetFolder)
+                    if (offFolders.isNotEmpty() || offFiles.isNotEmpty()) {
+                        currentFolder = targetFolder
+                        fileData = FileListData(
+                            currentFolder = targetFolder,
+                            breadcrumbs = buildBreadcrumbs(targetFolder),
+                            folders = offFolders,
+                            files = offFiles,
+                            quota = null
+                        )
+                        Toast.makeText(context, "Offline-Modus: Gespeicherte Offline-Dateien geladen.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, error.localizedMessage ?: "Ladefehler", Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
         }
@@ -146,6 +189,28 @@ fun FileBrowserScreen(
     }
 
     fun openDownloadedFile(fileItem: FileItem) {
+        // 1. Direkt aus dem Offline-Speicher öffnen falls vorhanden
+        val offlineFile = offlineManager.getOfflineFile(fileItem.id)
+        if (offlineFile != null && offlineFile.exists() && offlineFile.length() > 0) {
+            try {
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    offlineFile
+                )
+                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, fileItem.mimeType.ifEmpty { "*/*" })
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(viewIntent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Keine passende App zum Öffnen gefunden.", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        // 2. Ansonsten aus Cloud herunterladen
         coroutineScope.launch {
             Toast.makeText(context, "Lade \"${fileItem.name}\" herunter...", Toast.LENGTH_SHORT).show()
             val tempDir = File(context.cacheDir, "downloads").apply { mkdirs() }
@@ -178,6 +243,27 @@ fun FileBrowserScreen(
     }
 
     fun shareFile(fileItem: FileItem) {
+        // Falls offline vorhanden: Direkt teilen
+        val offlineFile = offlineManager.getOfflineFile(fileItem.id)
+        if (offlineFile != null && offlineFile.exists() && offlineFile.length() > 0) {
+            try {
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    offlineFile
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = fileItem.mimeType.ifEmpty { "*/*" }
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Datei teilen"))
+            } catch (e: Exception) {
+                Toast.makeText(context, "Teilen fehlgeschlagen: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         coroutineScope.launch {
             Toast.makeText(context, "Bereite \"${fileItem.name}\" zum Teilen vor...", Toast.LENGTH_SHORT).show()
             val tempDir = File(context.cacheDir, "shared").apply { mkdirs() }
@@ -279,6 +365,16 @@ fun FileBrowserScreen(
                     IconButton(onClick = onNavigateCameraSync) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = "Foto-Sync", tint = Slate200)
                     }
+                    IconButton(onClick = {
+                        isOfflineFilterActive = !isOfflineFilterActive
+                        loadCurrentFolder(currentFolder)
+                    }) {
+                        Icon(
+                            imageVector = if (isOfflineFilterActive) Icons.Default.OfflinePin else Icons.Default.CloudQueue,
+                            contentDescription = if (isOfflineFilterActive) "Offline-Modus aktiv" else "Offline-Dateien",
+                            tint = if (isOfflineFilterActive) Color(0xFF10B981) else Slate200
+                        )
+                    }
                     IconButton(onClick = { loadCurrentFolder(currentFolder) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren", tint = Slate200)
                     }
@@ -316,6 +412,27 @@ fun FileBrowserScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Offline-Filter Banner
+            if (isOfflineFilterActive) {
+                Surface(
+                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.OfflinePin, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Offline-Modus aktiv • Nur heruntergeladene Dateien",
+                            color = Color(0xFF10B981),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
             // Speicher-Quota Balken
             fileData?.quota?.let { q ->
                 Surface(
@@ -537,12 +654,32 @@ fun FileBrowserScreen(
                                                         }
                                                     }
 
-                                                    Icon(
-                                                        imageVector = Icons.Default.ChevronRight,
-                                                        contentDescription = null,
-                                                        tint = Slate700,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
+                                                    val isFolderOffline = offlineManager.isFolderOffline(f.path)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        if (isFolderOffline) {
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = Color(0xFF10B981).copy(alpha = 0.2f),
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Box(contentAlignment = Alignment.Center) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.OfflinePin,
+                                                                        contentDescription = "Offline verfügbar",
+                                                                        tint = Color(0xFF10B981),
+                                                                        modifier = Modifier.size(15.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                        }
+                                                        Icon(
+                                                            imageVector = Icons.Default.ChevronRight,
+                                                            contentDescription = null,
+                                                            tint = Slate700,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
                                                 }
 
                                                 // Unten: Beschriftung am unteren Rand (außerhalb des Ordnersymbols)
@@ -650,11 +787,30 @@ fun FileBrowserScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "${item.sizeFormatted} • ${item.uploadDate.take(10)}",
-                                            color = Slate400,
-                                            fontSize = 11.sp
-                                        )
+                                        val isFileOffline = offlineManager.isFileOffline(item.id)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (isFileOffline) {
+                                                Icon(
+                                                    imageVector = Icons.Default.OfflinePin,
+                                                    contentDescription = "Offline verfügbar",
+                                                    tint = Color(0xFF10B981),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Offline • ${item.sizeFormatted}",
+                                                    color = Color(0xFF10B981),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "${item.sizeFormatted}${if (item.uploadDate.isNotEmpty()) " • ${item.uploadDate.take(10)}" else ""}",
+                                                    color = Slate400,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
                                     }
 
                                     // Aktionen (Menü für Umbenennen / Verschieben / Teilen / Löschen)
@@ -805,6 +961,50 @@ fun FileBrowserScreen(
                         showMoveFolderDialog = true
                     }
                 )
+
+                // Offline verfügbar machen / entfernen
+                val isFolderOffline = offlineManager.isFolderOffline(f.path)
+                if (isFolderOffline) {
+                    ActionMenuItem(
+                        icon = Icons.Default.CloudOff,
+                        text = "Offline entfernen",
+                        tint = Slate200,
+                        onClick = {
+                            showFolderActionMenu = false
+                            offlineManager.unmarkFolderOffline(f.path)
+                            offlineUpdateTrigger++
+                            Toast.makeText(context, "Ordner nicht mehr offline verfügbar", Toast.LENGTH_SHORT).show()
+                            loadCurrentFolder(currentFolder)
+                        }
+                    )
+                } else {
+                    ActionMenuItem(
+                        icon = Icons.Default.CloudDownload,
+                        text = "Offline verfügbar machen",
+                        tint = Color(0xFF10B981),
+                        onClick = {
+                            showFolderActionMenu = false
+                            coroutineScope.launch {
+                                Toast.makeText(context, "Lade Ordner \"${f.name}\" für Offline-Nutzung...", Toast.LENGTH_SHORT).show()
+                                offlineManager.markFolderOffline(f.path)
+                                val fRes = api.fetchFiles(f.path)
+                                var count = 0
+                                fRes.getOrNull()?.files?.forEach { file ->
+                                    val temp = File(context.cacheDir, "dl_${file.id}_${file.name}")
+                                    val dlRes = api.downloadToFile(file.id, temp)
+                                    if (dlRes.isSuccess) {
+                                        offlineManager.saveFileOffline(file, temp)
+                                        temp.delete()
+                                        count++
+                                    }
+                                }
+                                offlineUpdateTrigger++
+                                Toast.makeText(context, "Ordner offline: $count Datei(en) gespeichert", Toast.LENGTH_SHORT).show()
+                                loadCurrentFolder(currentFolder)
+                            }
+                        }
+                    )
+                }
 
                 // Löschen
                 ActionMenuItem(
@@ -971,6 +1171,8 @@ fun FileBrowserScreen(
                             showDeleteFolderConfirmDialog = false
                             res.fold(
                                 onSuccess = {
+                                    offlineManager.unmarkFolderOffline(f.path)
+                                    offlineUpdateTrigger++
                                     Toast.makeText(context, "Ordner gelöscht", Toast.LENGTH_SHORT).show()
                                     loadCurrentFolder(currentFolder)
                                 },
@@ -1096,6 +1298,49 @@ fun FileBrowserScreen(
                         shareFile(file)
                     }
                 )
+
+                // Offline verfügbar machen / entfernen
+                val isFileOffline = offlineManager.isFileOffline(file.id)
+                if (isFileOffline) {
+                    ActionMenuItem(
+                        icon = Icons.Default.CloudOff,
+                        text = "Offline entfernen",
+                        tint = Slate200,
+                        onClick = {
+                            showFileActionMenu = false
+                            offlineManager.removeFileOffline(file.id)
+                            offlineUpdateTrigger++
+                            Toast.makeText(context, "\"${file.name}\" aus Offline-Speicher entfernt", Toast.LENGTH_SHORT).show()
+                            loadCurrentFolder(currentFolder)
+                        }
+                    )
+                } else {
+                    ActionMenuItem(
+                        icon = Icons.Default.CloudDownload,
+                        text = "Offline verfügbar machen",
+                        tint = Color(0xFF10B981),
+                        onClick = {
+                            showFileActionMenu = false
+                            coroutineScope.launch {
+                                Toast.makeText(context, "Lade \"${file.name}\" herunter...", Toast.LENGTH_SHORT).show()
+                                val temp = File(context.cacheDir, "dl_${file.id}_${file.name}")
+                                val dlRes = api.downloadToFile(file.id, temp)
+                                dlRes.fold(
+                                    onSuccess = { downloadedFile ->
+                                        offlineManager.saveFileOffline(file, downloadedFile)
+                                        downloadedFile.delete()
+                                        offlineUpdateTrigger++
+                                        Toast.makeText(context, "\"${file.name}\" ist jetzt offline verfügbar", Toast.LENGTH_SHORT).show()
+                                        loadCurrentFolder(currentFolder)
+                                    },
+                                    onFailure = {
+                                        Toast.makeText(context, "Download fehlgeschlagen: ${it.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
 
                 // Löschen
                 ActionMenuItem(
@@ -1261,6 +1506,8 @@ fun FileBrowserScreen(
                             showDeleteFileConfirmDialog = false
                             res.fold(
                                 onSuccess = {
+                                    offlineManager.removeFileOffline(file.id)
+                                    offlineUpdateTrigger++
                                     Toast.makeText(context, "In den Papierkorb verschoben", Toast.LENGTH_SHORT).show()
                                     loadCurrentFolder(currentFolder)
                                 },
