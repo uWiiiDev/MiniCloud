@@ -86,7 +86,7 @@ if ($folderInput !== '') {
 }
 
 // Dateinamen auf Festplatte generieren
-ensureDirExists(UPLOAD_DIR);
+ensureUploadDirReady();
 do {
     $storedFilename = generateSafeStoredFilename();
     $destinationPath = UPLOAD_DIR . $storedFilename;
@@ -148,7 +148,7 @@ $stmtInsert->execute([
 $newFileId = (int)$pdo->lastInsertId();
 
 // Audit-Log
-recordAuditLog($pdo, $userId, 'API_FILE_UPLOAD', sprintf('Datei "%s" (%s) in Ordner "%s" hochgeladen', $originalName, formatBytes($actualSize), $folderInput));
+logAuditEvent($pdo, 'file_upload', sprintf('Datei "%s" (%s) in Ordner "%s" hochgeladen', $originalName, formatBytes($actualSize), $folderInput), $userId, $user['username'] ?? null);
 
 $isImg = str_starts_with($mimeType, 'image/');
 $isVid = str_starts_with($mimeType, 'video/');

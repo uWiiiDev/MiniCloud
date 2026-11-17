@@ -79,6 +79,7 @@ class ShareReceiverActivity : ComponentActivity() {
         coroutineScope.launch {
             Toast.makeText(this@ShareReceiverActivity, "Lade ${uris.size} Datei(en) in MiniCloud hoch...", Toast.LENGTH_SHORT).show()
             var successCount = 0
+            var lastError: String? = null
             for (uri in uris) {
                 try {
                     val name = getFileName(uri) ?: "geteilt_${System.currentTimeMillis()}"
@@ -86,13 +87,22 @@ class ShareReceiverActivity : ComponentActivity() {
                     val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     if (bytes != null) {
                         val res = api.uploadFile(bytes, name, targetFolder, mime)
-                        if (res.isSuccess) successCount++
+                        res.fold(
+                            onSuccess = { successCount++ },
+                            onFailure = { lastError = it.localizedMessage }
+                        )
+                    } else {
+                        lastError = "Datei nicht lesbar"
                     }
                 } catch (e: Exception) {
-                    // ignore
+                    lastError = e.localizedMessage
                 }
             }
-            Toast.makeText(this@ShareReceiverActivity, "$successCount von ${uris.size} erfolgreich hochgeladen!", Toast.LENGTH_LONG).show()
+            if (successCount > 0) {
+                Toast.makeText(this@ShareReceiverActivity, "$successCount von ${uris.size} erfolgreich hochgeladen!", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this@ShareReceiverActivity, "Upload fehlgeschlagen: ${lastError ?: "Serverfehler"}", Toast.LENGTH_LONG).show()
+            }
             finish()
         }
     }

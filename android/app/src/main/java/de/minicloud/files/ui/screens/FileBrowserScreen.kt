@@ -92,6 +92,7 @@ fun FileBrowserScreen(
         if (uris.isNotEmpty()) {
             coroutineScope.launch {
                 var count = 0
+                var lastError: String? = null
                 for (uri in uris) {
                     try {
                         val fileName = queryFileName(context, uri) ?: "upload_${System.currentTimeMillis()}"
@@ -99,13 +100,22 @@ fun FileBrowserScreen(
                         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         if (bytes != null) {
                             val upRes = api.uploadFile(bytes, fileName, currentFolder, mimeType)
-                            if (upRes.isSuccess) count++
+                            upRes.fold(
+                                onSuccess = { count++ },
+                                onFailure = { lastError = it.localizedMessage }
+                            )
+                        } else {
+                            lastError = "Datei konnte nicht gelesen werden"
                         }
                     } catch (e: Exception) {
-                        // ignore
+                        lastError = e.localizedMessage
                     }
                 }
-                Toast.makeText(context, "$count Datei(en) erfolgreich hochgeladen", Toast.LENGTH_SHORT).show()
+                if (count > 0) {
+                    Toast.makeText(context, "$count Datei(en) erfolgreich hochgeladen", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Upload fehlgeschlagen: ${lastError ?: "Unbekannter Fehler"}", Toast.LENGTH_LONG).show()
+                }
                 loadCurrentFolder(currentFolder)
             }
         }
