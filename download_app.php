@@ -15,7 +15,9 @@ $fileSize = (int)filesize($apkPath);
 header('Content-Type: application/vnd.android.package-archive');
 header('Content-Disposition: attachment; filename="MiniCloud-Files.apk"');
 header('Content-Length: ' . (string)$fileSize);
-header('Cache-Control: public, max-age=3600');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 readfile($apkPath);
 exit;

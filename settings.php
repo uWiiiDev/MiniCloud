@@ -1392,13 +1392,13 @@ $themeGroups = [
 
             <div class="flex flex-wrap items-center gap-3">
                 <a
-                    href="download_app.php"
+                    href="download_app.php?t=<?= time() ?>"
                     class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors"
                 >
                     ⬇️ MiniCloud-Files.apk herunterladen (16 MB)
                 </a>
                 <span class="text-xs text-slate-500 dark:text-slate-400">
-                    Für alle Android-Geräte (Android 8.0 bis Android 14/15)
+                    Version 1.2.0 • Für alle Android-Geräte (Android 8.0 bis Android 15)
                 </span>
             </div>
         </section>
