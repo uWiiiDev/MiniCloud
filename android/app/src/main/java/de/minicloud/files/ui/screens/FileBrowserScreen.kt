@@ -451,42 +451,42 @@ fun FileBrowserScreen(
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(115.dp)
+                                                .height(138.dp)
                                                 .clickable { loadCurrentFolder(f.path) },
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(18.dp),
                                             colors = CardDefaults.cardColors(containerColor = Slate800),
                                             border = androidx.compose.foundation.BorderStroke(1.dp, Slate700.copy(alpha = 0.6f))
                                         ) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                                                    .padding(horizontal = 2.dp, vertical = 4.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                // Großes gelbes Ordnersymbol fast so groß wie die Kachel
+                                                // 20% größeres gelbes Ordnersymbol (158x118 dp)
                                                 Icon(
                                                     imageVector = Icons.Default.Folder,
                                                     contentDescription = null,
                                                     tint = Color(0xFFF59E0B),
-                                                    modifier = Modifier.size(width = 132.dp, height = 98.dp)
+                                                    modifier = Modifier.size(width = 158.dp, height = 118.dp)
                                                 )
 
                                                 // Beschriftung direkt im Ordnersymbol integriert
                                                 Box(
                                                     modifier = Modifier
-                                                        .width(104.dp)
-                                                        .padding(top = 18.dp, start = 4.dp, end = 4.dp),
+                                                        .width(125.dp)
+                                                        .padding(top = 22.dp, start = 4.dp, end = 4.dp),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(
                                                         text = f.name,
                                                         color = Color(0xFF0F172A),
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Black,
                                                         textAlign = TextAlign.Center,
                                                         maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis,
-                                                        lineHeight = 15.sp
+                                                        lineHeight = 16.sp
                                                     )
                                                 }
                                             }
