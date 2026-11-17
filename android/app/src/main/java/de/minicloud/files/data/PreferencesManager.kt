@@ -16,12 +16,29 @@ class PreferencesManager(context: Context) {
         private const val KEY_WIFI_ONLY = "wifi_only"
         private const val KEY_CHARGING_ONLY = "charging_only"
         private const val KEY_LAST_SYNC_TS = "last_sync_timestamp"
+
+        fun cleanServerUrl(input: String): String {
+            var url = input.trim()
+            if (url.isEmpty()) return ""
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                url = "https://$url"
+            }
+            url = url.removeSuffix("/")
+            // Falls Benutzer die URL aus der Adresszeile mit Dateinamen kopiert hat (z.B. /index.php, /settings.php, /files.php)
+            val phpFileRegex = Regex("/[a-zA-Z0-9_-]+\\.php.*$", RegexOption.IGNORE_CASE)
+            url = url.replace(phpFileRegex, "")
+            // Falls /api oder /api/ am Ende steht
+            if (url.endsWith("/api", ignoreCase = true)) {
+                url = url.dropLast(4)
+            }
+            return url.removeSuffix("/")
+        }
     }
 
     var serverUrl: String
         get() = prefs.getString(KEY_SERVER_URL, "") ?: ""
         set(value) {
-            val clean = value.trim().removeSuffix("/")
+            val clean = cleanServerUrl(value)
             prefs.edit().putString(KEY_SERVER_URL, clean).apply()
         }
 

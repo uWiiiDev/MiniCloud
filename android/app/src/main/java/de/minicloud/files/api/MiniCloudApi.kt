@@ -1,7 +1,5 @@
 package de.minicloud.files.api
 
-import android.content.Context
-import android.net.Uri
 import de.minicloud.files.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,7 +10,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 class MiniCloudApi(private val prefs: PreferencesManager) {
@@ -21,10 +18,18 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val request = original.newBuilder()
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 15; Mobile) MiniCloud-Files/1.0")
+                .header("Accept", "application/json, */*")
+                .build()
+            chain.proceed(request)
+        }
         .build()
 
     fun getAuthenticatedUrl(relativeUrl: String): String {
-        val base = prefs.serverUrl.removeSuffix("/")
+        val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
         val path = relativeUrl.removePrefix("/")
         val token = prefs.apiToken
         val sep = if (path.contains("?")) "&" else "?"
@@ -38,28 +43,31 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
         deviceName: String = "Android Gerät"
     ): Result<Pair<String, Quota>> = withContext(Dispatchers.IO) {
         try {
-            val cleanServer = serverUrl.trim().removeSuffix("/")
+            val cleanServer = PreferencesManager.cleanServerUrl(serverUrl)
             val url = "$cleanServer/api/auth.php"
 
-            val jsonBody = JSONObject().apply {
-                put("action", "login")
-                put("username", username)
-                put("password", pass)
-                put("device_name", deviceName)
-            }
-
-            val requestBody = jsonBody.toString()
-                .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            val formBody = FormBody.Builder()
+                .add("action", "login")
+                .add("username", username.trim())
+                .add("password", pass)
+                .add("device_name", deviceName)
+                .build()
 
             val request = Request.Builder()
                 .url(url)
-                .post(requestBody)
+                .post(formBody)
                 .build()
 
             client.newCall(request).execute().use { response ->
                 val bodyStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    val errMsg = parseError(bodyStr, "Server-Fehler: HTTP ${response.code}")
+                    val errMsg = if (response.code == 403) {
+                        "Server-Fehler HTTP 403 (Zugriff verweigert):\nBitte prüfen Sie die Server-URL. Sie muss genau auf das MiniCloud-Verzeichnis verweisen (z. B. https://meinedomain.de oder https://meinedomain.de/minicloud ohne Dateinamen wie index.php)."
+                    } else if (response.code == 404) {
+                        "Server-Fehler HTTP 404 (Nicht gefunden):\nUnter dieser Adresse wurde kein MiniCloud /api/ Verzeichnis gefunden."
+                    } else {
+                        parseError(bodyStr, "Server-Fehler: HTTP ${response.code}")
+                    }
                     return@withContext Result.failure(Exception(errMsg))
                 }
 
@@ -81,7 +89,7 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun fetchFiles(folder: String): Result<FileListData> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val encodedFolder = java.net.URLEncoder.encode(folder, "UTF-8")
             val url = "$base/api/files.php?folder=$encodedFolder"
 
@@ -137,7 +145,7 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun searchFiles(query: String): Result<List<FileItem>> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
             val url = "$base/api/files.php?q=$encodedQuery"
 
@@ -163,19 +171,19 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun createFolder(parentFolder: String, name: String): Result<FolderItem> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/files.php"
 
-            val jsonBody = JSONObject().apply {
-                put("action", "mkdir")
-                put("folder", parentFolder)
-                put("name", name)
-            }
+            val formBody = FormBody.Builder()
+                .add("action", "mkdir")
+                .add("folder", parentFolder)
+                .add("name", name)
+                .build()
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer ${prefs.apiToken}")
-                .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .post(formBody)
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -194,19 +202,19 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun renameFile(id: Int, newName: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/files.php"
 
-            val jsonBody = JSONObject().apply {
-                put("action", "rename")
-                put("id", id)
-                put("new_name", newName)
-            }
+            val formBody = FormBody.Builder()
+                .add("action", "rename")
+                .add("id", id.toString())
+                .add("new_name", newName)
+                .build()
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer ${prefs.apiToken}")
-                .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .post(formBody)
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -224,18 +232,18 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun deleteFile(id: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/files.php"
 
-            val jsonBody = JSONObject().apply {
-                put("action", "delete")
-                put("id", id)
-            }
+            val formBody = FormBody.Builder()
+                .add("action", "delete")
+                .add("id", id.toString())
+                .build()
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer ${prefs.apiToken}")
-                .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .post(formBody)
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -253,18 +261,18 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun deleteFolder(folderPath: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/files.php"
 
-            val jsonBody = JSONObject().apply {
-                put("action", "delete_folder")
-                put("folder", folderPath)
-            }
+            val formBody = FormBody.Builder()
+                .add("action", "delete_folder")
+                .add("folder", folderPath)
+                .build()
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer ${prefs.apiToken}")
-                .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .post(formBody)
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -287,7 +295,7 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
         mimeType: String = "application/octet-stream"
     ): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/upload.php"
 
             val fileRequestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
@@ -327,7 +335,7 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
                     isVideo = fObj.optBoolean("is_video", false),
                     isFavorite = false,
                     uploadDate = "",
-                    thumbnailUrl = fObj.optString("thumbnail_url", null),
+                    thumbnailUrl = if (fObj.isNull("thumbnail_url")) null else fObj.optString("thumbnail_url"),
                     downloadUrl = fObj.optString("download_url", "")
                 )
                 Result.success(item)
@@ -339,7 +347,7 @@ class MiniCloudApi(private val prefs: PreferencesManager) {
 
     suspend fun downloadToFile(fileId: Int, destFile: File): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val base = prefs.serverUrl.removeSuffix("/")
+            val base = PreferencesManager.cleanServerUrl(prefs.serverUrl)
             val url = "$base/api/download.php?id=$fileId"
 
             val request = Request.Builder()

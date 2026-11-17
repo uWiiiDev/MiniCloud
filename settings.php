@@ -1367,6 +1367,29 @@ $themeGroups = [
                 </div>
             </div>
 
+            <div class="mb-4">
+                <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Server-URL für die Android-App:</label>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input
+                        type="text"
+                        id="androidServerUrlField"
+                        readonly
+                        value="<?= e(getBaseUrl()) ?>"
+                        class="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-mono text-slate-900 dark:text-white"
+                    >
+                    <button
+                        type="button"
+                        onclick="navigator.clipboard.writeText(document.getElementById('androidServerUrlField').value); this.textContent='✅ Kopiert!'; setTimeout(()=>this.textContent='📋 Server-URL kopieren', 2000);"
+                        class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer shrink-0"
+                    >
+                        📋 Server-URL kopieren
+                    </button>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Trage genau diese Adresse in der Android-App unter <strong>Server-URL</strong> ein.
+                </p>
+            </div>
+
             <div class="flex flex-wrap items-center gap-3">
                 <a
                     href="download_app.php"
