@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">MiniCloud</string>
+    <string name="login_title">Mit MiniCloud verbinden</string>
+    <string name="server_url">Server-Adresse (z.B. https://cloud.meinedomain.de)</string>
+    <string name="username">Benutzername</string>
+    <string name="password">Passwort / App-Token</string>
+    <string name="login_button">Anmelden</string>
+    <string name="logout">Abmelden</string>
+    <string name="files">Dateien</string>
+    <string name="camera_sync">Kamera-Upload</string>
+    <string name="quota_used">%1$s von %2$s belegt</string>
+</resources>

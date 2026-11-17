@@ -1322,6 +1322,64 @@ $themeGroups = [
             </script>
         </section>
 
+        <!-- NATIVE ANDROID APP -->
+        <section class="mc-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-brand-600/10 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold text-xl shrink-0">
+                        📱
+                    </div>
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">MiniCloud Android-App (Dateien &amp; Foto-Upload)</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Echte native App (Kotlin &amp; Jetpack Compose) exklusiv für dein Dateimodul und automatische Kamera-Sicherung.
+                        </p>
+                    </div>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                    APK bereit
+                </span>
+            </div>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700/60 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-700 dark:text-slate-300">
+                    <div class="flex items-start gap-2">
+                        <span class="text-base">⚡</span>
+                        <div>
+                            <strong class="text-slate-900 dark:text-white">Nativer Dateiexplorer</strong>
+                            <p class="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">Blitzschnelle Ordnernavigation, Suche, Live-Vorschauen und Dateiverwaltung.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-base">📸</span>
+                        <div>
+                            <strong class="text-slate-900 dark:text-white">Automatischer Foto-Sync</strong>
+                            <p class="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">Neue Smartphone-Fotos &amp; Videos im Hintergrund nach <code>Kamera/JJJJ/MM</code> sichern.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-base">📤</span>
+                        <div>
+                            <strong class="text-slate-900 dark:text-white">Android Teilen-Menü</strong>
+                            <p class="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">Dateien oder Fotos aus beliebigen Apps direkt in deine MiniCloud teilen.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <a
+                    href="download_app.php"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors"
+                >
+                    ⬇️ MiniCloud-Files.apk herunterladen (16 MB)
+                </a>
+                <span class="text-xs text-slate-500 dark:text-slate-400">
+                    Für alle Android-Geräte (Android 8.0 bis Android 14/15)
+                </span>
+            </div>
+        </section>
+
         <?php if (($appSettings['enable_webdav'] ?? '1') === '1'):
             $webdavEndpointUrl = getBaseUrl() . '/webdav.php/';
             $davsEndpointUrl   = preg_replace('/^https:\/\//i', 'davs://', preg_replace('/^http:\/\//i', 'dav://', $webdavEndpointUrl));
