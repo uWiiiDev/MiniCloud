@@ -14,8 +14,9 @@ AcceptPathInfo On
     RewriteCond %{HTTP:Authorization} ^(.*)
     RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
 
-    # Zugriff auf versteckte Dateien und Ordner (.git, .env, .gitignore) sperren
+    # Zugriff auf versteckte Dateien und Ordner (.git, .env, .gitignore) sowie SQLite-Datenbankdateien sperren
     RewriteRule (^|/)\.(?!well-known/) - [F,L]
+    RewriteRule \.(sqlite|sqlite3|sqlite-wal|sqlite-shm|db)$ - [F,L]
 </IfModule>
 
 # Verzeichnisauflistung deaktivieren

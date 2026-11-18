@@ -38,8 +38,39 @@ function testSetupDatabaseConnection(
     string $dbName,
     string $dbUser,
     string $dbPass,
-    bool $autoCreateDb = true
+    bool $autoCreateDb = true,
+    string $driver = 'mysql'
 ): array {
+    if ($driver === 'sqlite') {
+        if (!extension_loaded('pdo_sqlite')) {
+            return [
+                'ok'      => false,
+                'message' => 'Die PHP-Erweiterung pdo_sqlite ist auf diesem Server nicht aktiviert.',
+            ];
+        }
+        $sqlitePath = __DIR__ . '/config/minicloud.sqlite';
+        $existedBefore = is_file($sqlitePath);
+        try {
+            $pdo = new MiniCloudSQLitePDO($sqlitePath);
+            $ver = (string)$pdo->query('SELECT VERSION()')->fetchColumn();
+            return [
+                'ok'             => true,
+                'pdo'            => $pdo,
+                'server_version' => $ver,
+                'db_created'     => !$existedBefore,
+                'message'        => sprintf(
+                    'SQLite-Datenbank bereit (%s, Pfad: config/minicloud.sqlite)!',
+                    $ver !== '' ? $ver : 'SQLite 3'
+                ),
+            ];
+        } catch (Throwable $e) {
+            return [
+                'ok'      => false,
+                'message' => 'SQLite-Initialisierung fehlgeschlagen: ' . $e->getMessage(),
+            ];
+        }
+    }
+
     if (!extension_loaded('pdo_mysql')) {
         return [
             'ok'      => false,
@@ -158,6 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'test_
         exit((string)json_encode(['ok' => false, 'message' => 'Ungültiges Sicherheits-Token (CSRF). Bitte Seite neu laden.']));
     }
 
+    $dbDriver = strtolower(trim((string)($_POST['db_driver'] ?? 'mysql'))) === 'sqlite' ? 'sqlite' : 'mysql';
     $dbHost   = trim((string)($_POST['db_host'] ?? '127.0.0.1'));
     $dbPort   = max(1, min(65535, (int)($_POST['db_port'] ?? 3306)));
     $dbName   = trim((string)($_POST['db_name'] ?? ''));
@@ -165,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'test_
     $dbPass   = (string)($_POST['db_pass'] ?? '');
     $createDb = !empty($_POST['create_db']);
 
-    $res = testSetupDatabaseConnection($dbHost, $dbPort, $dbName, $dbUser, $dbPass, $createDb);
+    $res = testSetupDatabaseConnection($dbHost, $dbPort, $dbName, $dbUser, $dbPass, $createDb, $dbDriver);
     unset($res['pdo']);
     exit((string)json_encode($res));
 }
@@ -173,6 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'test_
 // System-Checks durchführen
 $phpVersionOk   = version_compare(PHP_VERSION, '8.1.0', '>=');
 $pdoMysqlOk     = extension_loaded('pdo_mysql');
+$pdoSqliteOk    = extension_loaded('pdo_sqlite');
 $mbstringOk     = extension_loaded('mbstring');
 $zipOk          = class_exists('ZipArchive');
 $configDir      = __DIR__ . '/config';
@@ -182,9 +215,11 @@ if (!is_dir($uploadsDir)) {
 }
 $configWritable  = is_dir($configDir) && is_writable($configDir);
 $uploadsWritable = is_dir($uploadsDir) && is_writable($uploadsDir);
-$allCriticalOk   = $phpVersionOk && $pdoMysqlOk && $configWritable;
+$allCriticalOk   = $phpVersionOk && ($pdoMysqlOk || $pdoSqliteOk) && $configWritable;
 
 // Formular-Standardwerte
+$rawDriver      = strtolower(trim((string)($_POST['db_driver'] ?? ($pdoMysqlOk ? 'mysql' : 'sqlite'))));
+$formDriver     = ($rawDriver === 'sqlite') ? 'sqlite' : 'mysql';
 $formHost       = trim((string)($_POST['db_host'] ?? '127.0.0.1'));
 $formPort       = trim((string)($_POST['db_port'] ?? '3306'));
 $formName       = trim((string)($_POST['db_name'] ?? 'minicloud'));
@@ -212,7 +247,7 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
     }
 
     $portInt = max(1, min(65535, (int)$formPort));
-    if ($formHost === '' || $formName === '' || $formUser === '') {
+    if ($formDriver === 'mysql' && ($formHost === '' || $formName === '' || $formUser === '')) {
         $errors[] = 'Bitte geben Sie Datenbank-Host, Datenbank-Name und Datenbank-Benutzer an.';
     }
 
@@ -229,7 +264,7 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
     }
 
     if (empty($errors)) {
-        $connResult = testSetupDatabaseConnection($formHost, $portInt, $formName, $formUser, $formPass, $formCreateDb);
+        $connResult = testSetupDatabaseConnection($formHost, $portInt, $formName, $formUser, $formPass, $formCreateDb, $formDriver);
         if (!$connResult['ok'] || !isset($connResult['pdo'])) {
             $errors[] = $connResult['message'];
         } else {
@@ -248,26 +283,10 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
             }
 
             // 1. Konfigurationsdatei config/db_credentials.php schreiben
-            $credContent = "<?php\n"
-                . "declare(strict_types=1);\n\n"
-                . "if (PHP_SAPI !== 'cli' && (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) ?: '') === realpath(__FILE__)) {\n"
-                . "    http_response_code(403);\n"
-                . "    exit('Zugriff verweigert.');\n"
-                . "}\n\n"
-                . "/**\n"
-                . " * MiniCloud – Lokale Datenbank-Zugangsdaten\n"
-                . " * Erstellt durch setup.php am " . date('d.m.Y H:i:s') . "\n"
-                . " */\n"
-                . "define('DB_HOST', " . var_export($formHost, true) . ");\n"
-                . "define('DB_PORT', " . var_export((string)$portInt, true) . ");\n"
-                . "define('DB_NAME', " . var_export($formName, true) . ");\n"
-                . "define('DB_USER', " . var_export($formUser, true) . ");\n"
-                . "define('DB_PASS', " . var_export($formPass, true) . ");\n";
-
-            if (@file_put_contents($credFile, $credContent) === false) {
+            $sqlitePath = __DIR__ . '/config/minicloud.sqlite';
+            if (!writeMiniCloudDbCredentials($credFile, $formDriver, $sqlitePath, $formHost, $portInt, $formName, $formUser, $formPass)) {
                 $errors[] = 'Die Datei config/db_credentials.php konnte nicht gespeichert werden. Bitte prüfen Sie die Schreibrechte des Ordners config/.';
             } else {
-                @chmod($credFile, 0640);
 
                 try {
                     // 2. Datenbankschema und alle Tabellen anlegen
@@ -469,9 +488,13 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                         <span class="font-medium">PHP-Version (mind. 8.1)</span>
                         <span class="font-bold"><?= $phpVersionOk ? '✅ ' . setupEscape(PHP_VERSION) : '❌ ' . setupEscape(PHP_VERSION) ?></span>
                     </div>
-                    <div class="flex items-center justify-between p-2.5 rounded-xl border <?= $pdoMysqlOk ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900' ?>">
+                    <div class="flex items-center justify-between p-2.5 rounded-xl border <?= $pdoMysqlOk ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900' ?>">
                         <span class="font-medium">PDO MySQL-Treiber</span>
-                        <span class="font-bold"><?= $pdoMysqlOk ? '✅ Aktiv' : '❌ Fehlt' ?></span>
+                        <span class="font-bold"><?= $pdoMysqlOk ? '✅ Aktiv' : '⚠️ Optional (bei SQLite)' ?></span>
+                    </div>
+                    <div class="flex items-center justify-between p-2.5 rounded-xl border <?= $pdoSqliteOk ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900' ?>">
+                        <span class="font-medium">PDO SQLite-Treiber</span>
+                        <span class="font-bold"><?= $pdoSqliteOk ? '✅ Aktiv' : '⚠️ Optional (bei MySQL)' ?></span>
                     </div>
                     <div class="flex items-center justify-between p-2.5 rounded-xl border <?= $configWritable ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900' ?>">
                         <span class="font-medium">Ordner <code class="font-mono">config/</code> beschreibbar</span>
@@ -485,10 +508,6 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                         <span class="font-medium">PHP <code class="font-mono">mbstring</code></span>
                         <span class="font-bold"><?= $mbstringOk ? '✅ Aktiv' : '⚠️ Empfohlen' ?></span>
                     </div>
-                    <div class="flex items-center justify-between p-2.5 rounded-xl border <?= $zipOk ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900' ?>">
-                        <span class="font-medium">PHP <code class="font-mono">ZipArchive</code> (Updates)</span>
-                        <span class="font-bold"><?= $zipOk ? '✅ Aktiv' : '⚠️ Optional' ?></span>
-                    </div>
                 </div>
             </div>
 
@@ -501,55 +520,98 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
                 <div>
                     <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
                         <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500">
-                            2. Datenbank-Verbindungsdaten (MySQL / MariaDB)
+                            2. Datenbank-Engine &amp; Verbindung
                         </h2>
-                        <div class="flex items-center gap-1.5 text-[11px]">
+                    </div>
+
+                    <!-- Auswahl: MySQL/MariaDB vs. SQLite -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-4">
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition <?= $formDriver === 'mysql' ? 'border-brand-600 bg-brand-50/40' : 'border-slate-200 hover:border-slate-300' ?>" id="lblDriverMysql">
+                            <input type="radio" name="db_driver" value="mysql" <?= $formDriver === 'mysql' ? 'checked' : '' ?> onchange="toggleDbDriver('mysql')" class="mt-0.5 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                    <span>🐬 MySQL / MariaDB</span>
+                                    <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Webhosting / STRATO</span>
+                                </div>
+                                <p class="text-slate-600 mt-1">
+                                    Klassischer Datenbank-Server für maximale Parallelität bei vielen Benutzern und großen Installationen.
+                                </p>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition <?= $formDriver === 'sqlite' ? 'border-brand-600 bg-brand-50/40' : 'border-slate-200 hover:border-slate-300' ?>" id="lblDriverSqlite">
+                            <input type="radio" name="db_driver" value="sqlite" <?= $formDriver === 'sqlite' ? 'checked' : '' ?> onchange="toggleDbDriver('sqlite')" class="mt-0.5 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                    <span>🪶 SQLite (Einzeldatei)</span>
+                                    <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Zero-Config</span>
+                                </div>
+                                <p class="text-slate-600 mt-1">
+                                    Kein Datenbank-Server nötig! Speichert alles schnell &amp; portabel in <code class="font-mono">config/minicloud.sqlite</code>.
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- MySQL-Eingabefelder -->
+                    <div id="mysqlFieldsBox" class="<?= $formDriver === 'sqlite' ? 'hidden' : '' ?>">
+                        <div class="flex flex-wrap items-center justify-end gap-1.5 text-[11px] mb-2">
                             <span class="text-slate-400">Schnellauswahl:</span>
                             <button type="button" onclick="setHostPreset('127.0.0.1', '3306')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium">127.0.0.1</button>
                             <button type="button" onclick="setHostPreset('localhost', '3306')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium">localhost</button>
                             <button type="button" onclick="setHostPreset('rdbms.strato.de', '3306')" class="px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium border border-blue-200">STRATO</button>
                         </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Host *</label>
+                                <input type="text" name="db_host" id="db_host" <?= $formDriver === 'mysql' ? 'required' : '' ?> value="<?= setupEscape($formHost) ?>" placeholder="z. B. 127.0.0.1 oder rdbms.strato.de"
+                                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Port *</label>
+                                <input type="number" name="db_port" id="db_port" <?= $formDriver === 'mysql' ? 'required' : '' ?> value="<?= setupEscape($formPort) ?>" min="1" max="65535"
+                                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Name (DB_NAME) *</label>
+                                <input type="text" name="db_name" id="db_name" <?= $formDriver === 'mysql' ? 'required' : '' ?> value="<?= setupEscape($formName) ?>" placeholder="z. B. minicloud oder dbs123456"
+                                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Benutzer (DB_USER) *</label>
+                                <input type="text" name="db_user" id="db_user" <?= $formDriver === 'mysql' ? 'required' : '' ?> value="<?= setupEscape($formUser) ?>" placeholder="z. B. minicloud_user oder dbu123456"
+                                       class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Passwort (DB_PASS)</label>
+                            <div class="relative">
+                                <input type="password" name="db_pass" id="db_pass" value="<?= setupEscape($formPass) ?>" placeholder="Passwort des Datenbank-Benutzers"
+                                       class="w-full px-3.5 py-2 pr-16 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                                <button type="button" onclick="togglePw('db_pass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-800 px-2 py-1">
+                                    Zeigen
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="sm:col-span-2">
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Host *</label>
-                            <input type="text" name="db_host" id="db_host" required value="<?= setupEscape($formHost) ?>" placeholder="z. B. 127.0.0.1 oder rdbms.strato.de"
-                                   class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                    <!-- SQLite-Hinweisbox -->
+                    <div id="sqliteInfoBox" class="<?= $formDriver === 'sqlite' ? '' : 'hidden' ?> p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-1.5">
+                        <div class="font-bold flex items-center gap-1.5">
+                            <span>🪶 SQLite-Modus (Einzeldatei im WAL-Journal-Modus)</span>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Port *</label>
-                            <input type="number" name="db_port" id="db_port" required value="<?= setupEscape($formPort) ?>" min="1" max="65535"
-                                   class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Name (DB_NAME) *</label>
-                            <input type="text" name="db_name" id="db_name" required value="<?= setupEscape($formName) ?>" placeholder="z. B. minicloud oder dbs123456"
-                                   class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Benutzer (DB_USER) *</label>
-                            <input type="text" name="db_user" id="db_user" required value="<?= setupEscape($formUser) ?>" placeholder="z. B. minicloud_user oder dbu123456"
-                                   class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Datenbank-Passwort (DB_PASS)</label>
-                        <div class="relative">
-                            <input type="password" name="db_pass" id="db_pass" value="<?= setupEscape($formPass) ?>" placeholder="Passwort des Datenbank-Benutzers"
-                                   class="w-full px-3.5 py-2 pr-16 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
-                            <button type="button" onclick="togglePw('db_pass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-800 px-2 py-1">
-                                Zeigen
-                            </button>
-                        </div>
+                        <p class="text-emerald-800 leading-relaxed">
+                            Die Datenbank wird automatisch als geschützte Datei unter <code class="font-mono font-semibold">config/minicloud.sqlite</code> angelegt. Es sind keinerlei Datenbank-Zugangsdaten erforderlich. Sie können später im Admin-Bereich jederzeit mit 1 Klick zwischen SQLite und MySQL wechseln.
+                        </p>
                     </div>
 
                     <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-                        <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <label id="createDbCheckboxWrap" class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer <?= $formDriver === 'sqlite' ? 'invisible' : '' ?>">
                             <input type="checkbox" name="create_db" id="create_db" value="1" <?= $formCreateDb ? 'checked' : '' ?> class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
                             <span>Datenbank automatisch anlegen, falls sie noch nicht existiert</span>
                         </label>
@@ -653,6 +715,43 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
     </div>
 
     <script>
+        function getSelectedDriver() {
+            const checked = document.querySelector('input[name="db_driver"]:checked');
+            return checked ? checked.value : 'mysql';
+        }
+
+        function toggleDbDriver(driver) {
+            const isSqlite = (driver === 'sqlite');
+            const mysqlBox = document.getElementById('mysqlFieldsBox');
+            const sqliteBox = document.getElementById('sqliteInfoBox');
+            const createWrap = document.getElementById('createDbCheckboxWrap');
+            const lblMysql = document.getElementById('lblDriverMysql');
+            const lblSqlite = document.getElementById('lblDriverSqlite');
+
+            if (mysqlBox) mysqlBox.classList.toggle('hidden', isSqlite);
+            if (sqliteBox) sqliteBox.classList.toggle('hidden', !isSqlite);
+            if (createWrap) createWrap.classList.toggle('invisible', isSqlite);
+
+            if (lblMysql && lblSqlite) {
+                if (isSqlite) {
+                    lblSqlite.classList.add('border-brand-600', 'bg-brand-50/40');
+                    lblSqlite.classList.remove('border-slate-200');
+                    lblMysql.classList.remove('border-brand-600', 'bg-brand-50/40');
+                    lblMysql.classList.add('border-slate-200');
+                } else {
+                    lblMysql.classList.add('border-brand-600', 'bg-brand-50/40');
+                    lblMysql.classList.remove('border-slate-200');
+                    lblSqlite.classList.remove('border-brand-600', 'bg-brand-50/40');
+                    lblSqlite.classList.add('border-slate-200');
+                }
+            }
+
+            ['db_host', 'db_port', 'db_name', 'db_user'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.required = !isSqlite;
+            });
+        }
+
         function setHostPreset(host, port) {
             document.getElementById('db_host').value = host;
             document.getElementById('db_port').value = port;
@@ -675,12 +774,13 @@ if (!$isAlreadyConfigured && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['a
             const btn = document.getElementById('btnTestConn');
             box.classList.remove('hidden', 'bg-emerald-50', 'border-emerald-200', 'text-emerald-800', 'bg-red-50', 'border-red-200', 'text-red-800');
             box.classList.add('bg-slate-50', 'border-slate-200', 'text-slate-600');
-            box.textContent = '⏳ Prüfe Verbindung zum Datenbank-Server ...';
+            box.textContent = '⏳ Prüfe Datenbank-Verbindung ...';
             btn.disabled = true;
 
             const fd = new FormData();
             fd.append('action', 'test_connection');
             fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
+            fd.append('db_driver', getSelectedDriver());
             fd.append('db_host', document.getElementById('db_host').value);
             fd.append('db_port', document.getElementById('db_port').value);
             fd.append('db_name', document.getElementById('db_name').value);

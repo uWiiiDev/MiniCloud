@@ -11,6 +11,9 @@ if (PHP_SAPI !== 'cli' && (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? ''))
  * Kompatibel mit PHP 8.2+ und MySQL / MariaDB (z.B. STRATO Webspace)
  */
 
+// SQLite-Adapter & Query-Translator einbinden
+require_once dirname(__DIR__) . '/includes/sqlite_adapter.php';
+
 // Lokale Datenbank-Zugangsdaten laden (werden durch setup.php erzeugt und nicht in Git versioniert)
 $localCredsFile = __DIR__ . '/db_credentials.php';
 $legacyLocalFile = __DIR__ . '/database.local.php';
@@ -18,6 +21,15 @@ if (is_file($localCredsFile)) {
     require_once $localCredsFile;
 } elseif (is_file($legacyLocalFile)) {
     require_once $legacyLocalFile;
+}
+
+// Datenbank-Treiber ('mysql' oder 'sqlite')
+if (!defined('DB_DRIVER')) {
+    $envDriver = strtolower(trim((string)(getenv('MINICLOUD_DB_DRIVER') ?: 'mysql')));
+    define('DB_DRIVER', in_array($envDriver, ['mysql', 'sqlite'], true) ? $envDriver : 'mysql');
+}
+if (!defined('DB_SQLITE_PATH')) {
+    define('DB_SQLITE_PATH', getenv('MINICLOUD_DB_SQLITE_PATH') ?: (__DIR__ . '/minicloud.sqlite'));
 }
 
 // Datenbank-Zugangsdaten (für STRATO z.B. DB_HOST = 'rdbms.strato.de')
@@ -44,9 +56,10 @@ if (!defined('DB_PASS')) {
 // Prüfen, ob bereits individuelle Verbindungsdaten hinterlegt wurden
 if (!defined('DB_CREDENTIALS_CONFIGURED')) {
     $hasCredFile = is_file($localCredsFile) || is_file($legacyLocalFile);
-    $hasEnvCreds = getenv('MINICLOUD_DB_HOST') !== false || getenv('MINICLOUD_DB_PASS') !== false;
+    $hasEnvCreds = getenv('MINICLOUD_DB_HOST') !== false || getenv('MINICLOUD_DB_PASS') !== false || getenv('MINICLOUD_DB_DRIVER') !== false;
     $hasCustomPass = (DB_PASS !== 'minicloud_secret' && DB_PASS !== '');
-    define('DB_CREDENTIALS_CONFIGURED', $hasCredFile || $hasEnvCreds || $hasCustomPass || $defaultSocket !== '');
+    $isSqliteConfigured = (strtolower((string)DB_DRIVER) === 'sqlite' && ($hasCredFile || is_file((string)DB_SQLITE_PATH)));
+    define('DB_CREDENTIALS_CONFIGURED', $hasCredFile || $hasEnvCreds || $hasCustomPass || $defaultSocket !== '' || $isSqliteConfigured);
 }
 
 // Speicherplatz- & Papierkorb-Konfiguration
@@ -109,21 +122,25 @@ function getDB(): PDO
         redirectToSetupIfUnconfigured('Keine Datenbank-Zugangsdaten konfiguriert (Erstinstallation).');
     }
 
-    if (DB_SOCKET !== '') {
-        $dsn = sprintf('mysql:unix_socket=%s;dbname=%s;charset=utf8mb4', DB_SOCKET, DB_NAME);
-    } else {
-        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_PORT, DB_NAME);
-    }
-
-    $options = [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-    ];
-
     try {
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        $pdo->exec("SET time_zone = '" . date('P') . "'");
+        if (strtolower((string)DB_DRIVER) === 'sqlite') {
+            $pdo = new MiniCloudSQLitePDO((string)DB_SQLITE_PATH);
+        } else {
+            if (DB_SOCKET !== '') {
+                $dsn = sprintf('mysql:unix_socket=%s;dbname=%s;charset=utf8mb4', DB_SOCKET, DB_NAME);
+            } else {
+                $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_PORT, DB_NAME);
+            }
+
+            $options = [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ];
+
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $pdo->exec("SET time_zone = '" . date('P') . "'");
+        }
         ensureSchemaUpdated($pdo);
     } catch (PDOException $e) {
         redirectToSetupIfUnconfigured($e->getMessage());
@@ -136,10 +153,10 @@ function getDB(): PDO
  * Stellt sicher, dass alle Tabellen und Erweiterungsspalten (Shares, Gruppenordner, Themes, Admin-Rolle)
  * in der Datenbank vorhanden sind und mindestens ein Administrator existiert.
  */
-function ensureSchemaUpdated(PDO $pdo): void
+function ensureSchemaUpdated(PDO $pdo, bool $force = false): void
 {
     static $checked = false;
-    if ($checked) {
+    if ($checked && !$force) {
         return;
     }
     $checked = true;

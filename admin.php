@@ -316,36 +316,65 @@ function getServerDashboardMetrics(PDO $pdo): array
     ];
 
     try {
-        $stmtTbl = $pdo->query('SHOW TABLE STATUS');
-        if ($stmtTbl) {
-            foreach ($stmtTbl->fetchAll(PDO::FETCH_ASSOC) as $t) {
-                $tName = (string)($t['Name'] ?? '');
-                if ($tName === '') {
+        if ($pdo instanceof MiniCloudSQLitePDO) {
+            $sqliteFileBytes = (defined('DB_SQLITE_PATH') && is_file((string)DB_SQLITE_PATH)) ? (int)@filesize((string)DB_SQLITE_PATH) : 0;
+            $stmtTbl = $pdo->query('SHOW TABLES');
+            $allTblNames = $stmtTbl ? $stmtTbl->fetchAll(PDO::FETCH_COLUMN) : [];
+            $tblCnt = max(1, count($allTblNames));
+            foreach ($allTblNames as $rawT) {
+                $tName = (string)$rawT;
+                if ($tName === '' || !preg_match('/^[a-zA-Z0-9_]+$/', $tName)) {
                     continue;
                 }
-                $dLen  = (int)($t['Data_length'] ?? 0);
-                $iLen  = (int)($t['Index_length'] ?? 0);
-                $fLen  = (int)($t['Data_free'] ?? 0);
-                $tRows = (int)($t['Rows'] ?? 0);
-                $tot   = $dLen + $iLen;
-
-                $dbDataBytes  += $dLen;
-                $dbIndexBytes += $iLen;
-                $dbFreeBytes  += $fLen;
-                $dbTotalRows  += $tRows;
+                $tRows = (int)($pdo->query("SELECT COUNT(*) FROM `{$tName}`")->fetchColumn() ?: 0);
+                $estBytes = intdiv($sqliteFileBytes, $tblCnt);
+                $dbTotalRows += $tRows;
                 $dbTableCount++;
-
                 $dbTablesList[] = [
-                    'name'       => $tName,
-                    'label'      => $tableLabels[$tName] ?? $tName,
-                    'engine'     => (string)($t['Engine'] ?? 'InnoDB'),
-                    'rows'       => $tRows,
-                    'data_fmt'   => formatBytes($dLen),
-                    'index_fmt'  => formatBytes($iLen),
-                    'free_fmt'   => formatBytes($fLen),
-                    'total_bytes'=> $tot,
-                    'total_fmt'  => formatBytes($tot),
+                    'name'        => $tName,
+                    'label'       => $tableLabels[$tName] ?? $tName,
+                    'engine'      => 'SQLite (WAL)',
+                    'rows'        => $tRows,
+                    'data_fmt'    => formatBytes($estBytes),
+                    'index_fmt'   => '–',
+                    'free_fmt'    => '0 B',
+                    'total_bytes' => $tRows,
+                    'total_fmt'   => $tRows . ' Zeilen',
                 ];
+            }
+            $dbDataBytes = $sqliteFileBytes;
+        } else {
+            $stmtTbl = $pdo->query('SHOW TABLE STATUS');
+            if ($stmtTbl) {
+                foreach ($stmtTbl->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                    $tName = (string)($t['Name'] ?? '');
+                    if ($tName === '') {
+                        continue;
+                    }
+                    $dLen  = (int)($t['Data_length'] ?? 0);
+                    $iLen  = (int)($t['Index_length'] ?? 0);
+                    $fLen  = (int)($t['Data_free'] ?? 0);
+                    $tRows = (int)($t['Rows'] ?? 0);
+                    $tot   = $dLen + $iLen;
+
+                    $dbDataBytes  += $dLen;
+                    $dbIndexBytes += $iLen;
+                    $dbFreeBytes  += $fLen;
+                    $dbTotalRows  += $tRows;
+                    $dbTableCount++;
+
+                    $dbTablesList[] = [
+                        'name'       => $tName,
+                        'label'      => $tableLabels[$tName] ?? $tName,
+                        'engine'     => (string)($t['Engine'] ?? 'InnoDB'),
+                        'rows'       => $tRows,
+                        'data_fmt'   => formatBytes($dLen),
+                        'index_fmt'  => formatBytes($iLen),
+                        'free_fmt'   => formatBytes($fLen),
+                        'total_bytes'=> $tot,
+                        'total_fmt'  => formatBytes($tot),
+                    ];
+                }
             }
         }
     } catch (Throwable) {
@@ -1225,6 +1254,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'update_mail_settings'            => 'mail',
         'send_test_email'                 => 'mail',
         'download_db_backup'              => 'system',
+        'download_sqlite_backup'          => 'system',
+        'switch_db_driver'                => 'system',
         'optimize_db_tables'              => 'system',
         'clear_audit_log'                 => 'system',
         'run_github_update'               => 'system',
@@ -1253,6 +1284,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
         echo $sqlDump;
+        exit;
+    }
+
+    // --- 0b. 1-Klick SQLite-Datenbankdatei (.sqlite) exportieren & herunterladen ---
+    if ($action === 'download_sqlite_backup') {
+        if (!extension_loaded('pdo_sqlite')) {
+            setFlash('error', 'Die PHP-Erweiterung pdo_sqlite ist auf diesem Server nicht aktiviert.');
+            header('Location: admin.php#tab-system');
+            exit;
+        }
+
+        $filename = 'minicloud_db_' . date('Y-m-d_His') . '.sqlite';
+        if ($pdo instanceof MiniCloudSQLitePDO && is_file((string)DB_SQLITE_PATH)) {
+            $pdo->exec('PRAGMA wal_checkpoint(FULL);');
+            logAuditEvent($pdo, 'db_backup', 'SQLite-Datenbankdatei (.sqlite) heruntergeladen');
+            if (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+            header('Content-Type: application/vnd.sqlite3');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Length: ' . (int)filesize((string)DB_SQLITE_PATH));
+            header('Cache-Control: no-store, no-cache, must-revalidate');
+            readfile((string)DB_SQLITE_PATH);
+            exit;
+        } else {
+            // Live-Export aus MySQL in eine temporäre SQLite-Datei
+            $tmpSqlite = sys_get_temp_dir() . '/minicloud_export_' . bin2hex(random_bytes(8)) . '.sqlite';
+            $tmpPdo = new MiniCloudSQLitePDO($tmpSqlite);
+            $mig = migrateMiniCloudDatabase($pdo, $tmpPdo);
+            $tmpPdo->exec('PRAGMA wal_checkpoint(FULL);');
+            $tmpPdo->exec('PRAGMA journal_mode = DELETE;');
+            $tmpPdo = null;
+
+            if (!$mig['ok'] || !is_file($tmpSqlite)) {
+                @unlink($tmpSqlite);
+                setFlash('error', 'SQLite-Export fehlgeschlagen: ' . ($mig['error'] ?? 'Unbekannter Fehler'));
+                header('Location: admin.php#tab-system');
+                exit;
+            }
+
+            logAuditEvent($pdo, 'db_backup', sprintf('Datenbank als SQLite-Datei exportiert (%d Tabellen, %d Zeilen)', $mig['tables_count'], $mig['rows_count']));
+            if (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+            header('Content-Type: application/vnd.sqlite3');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Length: ' . (int)filesize($tmpSqlite));
+            header('Cache-Control: no-store, no-cache, must-revalidate');
+            readfile($tmpSqlite);
+            @unlink($tmpSqlite);
+            exit;
+        }
+    }
+
+    // --- 0c. Live-Umschaltung & Migration zwischen MySQL/MariaDB und SQLite ---
+    if ($action === 'switch_db_driver') {
+        $targetDriver = strtolower(trim((string)($_POST['target_driver'] ?? ''))) === 'sqlite' ? 'sqlite' : 'mysql';
+        $migrateData  = !empty($_POST['migrate_data']);
+        $credFilePath = __DIR__ . '/config/db_credentials.php';
+        $sqlitePath   = defined('DB_SQLITE_PATH') ? (string)DB_SQLITE_PATH : (__DIR__ . '/config/minicloud.sqlite');
+
+        if ($targetDriver === 'sqlite') {
+            if (!extension_loaded('pdo_sqlite')) {
+                setFlash('error', 'Die PHP-Erweiterung pdo_sqlite ist auf diesem Server nicht aktiviert.');
+                header('Location: admin.php#tab-system');
+                exit;
+            }
+
+            try {
+                $targetSqlitePdo = new MiniCloudSQLitePDO($sqlitePath);
+                $migSummary = '';
+                if ($migrateData && !($pdo instanceof MiniCloudSQLitePDO)) {
+                    $mig = migrateMiniCloudDatabase($pdo, $targetSqlitePdo);
+                    if (!$mig['ok']) {
+                        throw new RuntimeException('Datenmigration nach SQLite fehlgeschlagen: ' . ($mig['error'] ?? ''));
+                    }
+                    $migSummary = sprintf(' (%d Tabellen mit %d Datensätzen wurden vollständig übernommen)', $mig['tables_count'], $mig['rows_count']);
+                } else {
+                    ensureSchemaUpdated($targetSqlitePdo, true);
+                    ensureUserSecurityColumns($targetSqlitePdo, true);
+                }
+                $targetSqlitePdo->exec('PRAGMA wal_checkpoint(FULL);');
+
+                if (!writeMiniCloudDbCredentials($credFilePath, 'sqlite', $sqlitePath, (string)DB_HOST, (int)DB_PORT, (string)DB_NAME, (string)DB_USER, (string)DB_PASS)) {
+                    throw new RuntimeException('config/db_credentials.php konnte nicht geschrieben werden.');
+                }
+
+                logAuditEvent($targetSqlitePdo, 'db_switch', 'Datenbank-Engine im laufenden Betrieb auf SQLite umgestellt' . $migSummary);
+                setFlash('success', '🪶 Datenbank-Engine erfolgreich auf SQLite (config/minicloud.sqlite) umgestellt!' . $migSummary);
+            } catch (Throwable $e) {
+                setFlash('error', 'Umschaltung auf SQLite fehlgeschlagen: ' . $e->getMessage());
+            }
+        } else {
+            // Umschaltung auf MySQL / MariaDB
+            if (!extension_loaded('pdo_mysql')) {
+                setFlash('error', 'Die PHP-Erweiterung pdo_mysql ist auf diesem Server nicht aktiviert.');
+                header('Location: admin.php#tab-system');
+                exit;
+            }
+
+            $mHost = trim((string)($_POST['mysql_host'] ?? DB_HOST));
+            $mPort = max(1, min(65535, (int)($_POST['mysql_port'] ?? DB_PORT)));
+            $mName = trim((string)($_POST['mysql_name'] ?? DB_NAME));
+            $mUser = trim((string)($_POST['mysql_user'] ?? DB_USER));
+            $mPass = (string)($_POST['mysql_pass'] ?? '');
+            if ($mPass === '') {
+                $mPass = (string)DB_PASS;
+            }
+
+            try {
+                if (DB_SOCKET !== '' && $mHost === (string)DB_HOST) {
+                    $dsn = sprintf('mysql:unix_socket=%s;dbname=%s;charset=utf8mb4', DB_SOCKET, $mName);
+                } else {
+                    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $mHost, $mPort, $mName);
+                }
+                $targetMysqlPdo = new PDO($dsn, $mUser, $mPass, [
+                    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES   => false,
+                ]);
+
+                $migSummary = '';
+                if ($migrateData && ($pdo instanceof MiniCloudSQLitePDO)) {
+                    $mig = migrateMiniCloudDatabase($pdo, $targetMysqlPdo);
+                    if (!$mig['ok']) {
+                        throw new RuntimeException('Datenmigration nach MySQL fehlgeschlagen: ' . ($mig['error'] ?? ''));
+                    }
+                    $migSummary = sprintf(' (%d Tabellen mit %d Datensätzen wurden vollständig übernommen)', $mig['tables_count'], $mig['rows_count']);
+                } else {
+                    ensureSchemaUpdated($targetMysqlPdo, true);
+                    ensureUserSecurityColumns($targetMysqlPdo, true);
+                }
+
+                if (!writeMiniCloudDbCredentials($credFilePath, 'mysql', $sqlitePath, $mHost, $mPort, $mName, $mUser, $mPass)) {
+                    throw new RuntimeException('config/db_credentials.php konnte nicht geschrieben werden.');
+                }
+
+                logAuditEvent($targetMysqlPdo, 'db_switch', 'Datenbank-Engine im laufenden Betrieb auf MySQL/MariaDB umgestellt' . $migSummary);
+                setFlash('success', '🐬 Datenbank-Engine erfolgreich auf MySQL / MariaDB umgestellt!' . $migSummary);
+            } catch (Throwable $e) {
+                setFlash('error', 'Umschaltung auf MySQL/MariaDB fehlgeschlagen: ' . $e->getMessage());
+            }
+        }
+
+        header('Location: admin.php#tab-system');
         exit;
     }
 
@@ -4613,26 +4789,117 @@ foreach ($modList as $mItem) {
                     <?php endif; ?>
                 </div>
 
-                <!-- 1-Klick Datenbank-Backup (.sql Export) -->
+                <!-- 1-Klick Datenbank-Backup (.sql & .sqlite Export) -->
                 <div class="pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-2">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            💾 1-Klick Datenbank-Backup (<code class="font-mono">.sql</code>)
+                            💾 1-Klick Datenbank-Backup (<code class="font-mono">.sql</code> &amp; <code class="font-mono">.sqlite</code>)
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Exportiert sämtliche 15 MiniCloud-Datenbanktabellen (Benutzer, Dateiverzeichnis, Ordner, Freigaben, Kontakte, Kalender, Chat, Audit-Log, Einstellungen) als vollständige SQL-Sicherungsdatei direkt auf Ihr Gerät &ndash; ganz ohne phpMyAdmin.
+                        Exportiert sämtliche MiniCloud-Datenbanktabellen wahlweise als SQL-Dump oder als direkt ausführbare SQLite-Einzeldatei &ndash; ganz ohne phpMyAdmin.
                     </p>
-                    <form action="admin.php" method="post">
-                        <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
-                        <input type="hidden" name="action" value="download_db_backup">
-                        <button
-                            type="submit"
-                            class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <form action="admin.php" method="post">
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="download_db_backup">
+                            <button
+                                type="submit"
+                                class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                <span>💾 SQL-Backup (.sql)</span>
+                            </button>
+                        </form>
+                        <form action="admin.php" method="post">
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="download_sqlite_backup">
+                            <button
+                                type="submit"
+                                class="w-full py-2.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                <span>🪶 SQLite-Export (.sqlite)</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Datenbank-Engine & Live-Migration (MySQL ⇄ SQLite) -->
+                <?php
+                    $isCurrentlySqlite = ($pdo instanceof MiniCloudSQLitePDO);
+                    $sqliteAvailable   = extension_loaded('pdo_sqlite');
+                    $mysqlAvailable    = extension_loaded('pdo_mysql');
+                    $sqliteFileSizeFmt = (defined('DB_SQLITE_PATH') && is_file((string)DB_SQLITE_PATH))
+                        ? formatBytes((int)@filesize((string)DB_SQLITE_PATH))
+                        : 'noch nicht angelegt';
+                ?>
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            🗄️ Datenbank-Engine (MySQL ⇄ SQLite)
+                        </span>
+                        <?php if ($isCurrentlySqlite): ?>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
+                                🪶 Aktiv: SQLite (WAL) &bull; <?= e($sqliteFileSizeFmt) ?>
+                            </span>
+                        <?php else: ?>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-300/60 dark:border-blue-800">
+                                🐬 Aktiv: MySQL / MariaDB
+                            </span>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if (!$isCurrentlySqlite): ?>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Sie können MiniCloud optional komplett über <strong>SQLite</strong> (<code class="font-mono">config/minicloud.sqlite</code>) betreiben. Bei der Umschaltung werden alle bestehenden Benutzer, Dateien, Ordner, Freigaben und Einstellungen automatisch 1:1 nach SQLite migriert.
+                        </p>
+                        <form
+                            action="admin.php"
+                            method="post"
+                            onsubmit="return confirm('Möchten Sie die gesamte Datenbank jetzt live nach SQLite kopieren und den Betrieb auf SQLite (config/minicloud.sqlite) umstellen?\n\nIhre bisherigen MySQL-Daten bleiben unverändert als Backup erhalten.');"
+                            class="space-y-2"
                         >
-                            <span>💾 Vollständiges Datenbank-Backup (.sql) herunterladen</span>
-                        </button>
-                    </form>
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="switch_db_driver">
+                            <input type="hidden" name="target_driver" value="sqlite">
+                            <input type="hidden" name="migrate_data" value="1">
+                            <button
+                                type="submit"
+                                <?= !$sqliteAvailable ? 'disabled' : '' ?>
+                                class="w-full py-2 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                <span>🪶 Jetzt live auf SQLite migrieren &amp; umschalten</span>
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            MiniCloud läuft aktuell im <strong>SQLite-Modus</strong> (<code class="font-mono">config/minicloud.sqlite</code>). Sie können jederzeit wieder auf MySQL / MariaDB umschalten und alle Daten automatisch zurück übertragen.
+                        </p>
+                        <form
+                            action="admin.php"
+                            method="post"
+                            onsubmit="return confirm('Möchten Sie alle Daten aus SQLite nach MySQL/MariaDB übertragen und wieder auf MySQL umschalten?');"
+                            class="space-y-2"
+                        >
+                            <input type="hidden" name="csrf_token" value="<?= e(getCsrfToken()) ?>">
+                            <input type="hidden" name="action" value="switch_db_driver">
+                            <input type="hidden" name="target_driver" value="mysql">
+                            <input type="hidden" name="migrate_data" value="1">
+                            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                                <input type="text" name="mysql_host" value="<?= e((string)DB_HOST) ?>" placeholder="MySQL Host" required class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100">
+                                <input type="number" name="mysql_port" value="<?= e((string)DB_PORT) ?>" placeholder="Port (3306)" required class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100">
+                                <input type="text" name="mysql_name" value="<?= e((string)DB_NAME) ?>" placeholder="DB Name" required class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100">
+                                <input type="text" name="mysql_user" value="<?= e((string)DB_USER) ?>" placeholder="DB Benutzer" required class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100">
+                            </div>
+                            <input type="password" name="mysql_pass" value="" placeholder="DB Passwort (leer lassen, falls bereits hinterlegt)" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-800 dark:text-slate-100">
+                            <button
+                                type="submit"
+                                <?= !$mysqlAvailable ? 'disabled' : '' ?>
+                                class="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                <span>🐬 Auf MySQL / MariaDB migrieren &amp; umschalten</span>
+                            </button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
 

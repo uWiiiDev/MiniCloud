@@ -53,10 +53,10 @@ if (!headers_sent()) {
  * und delegierte Admin-Einzelrechte (`admin_permissions`) in der Tabelle `users` existieren.
  * Wird pro Sitzung gecacht, um unnötige SHOW-COLUMNS-Abfragen bei jedem Seitenaufruf zu vermeiden.
  */
-function ensureUserSecurityColumns(PDO $pdo): void
+function ensureUserSecurityColumns(PDO $pdo, bool $force = false): void
 {
     static $checked = false;
-    if ($checked || (!empty($_SESSION['_mc_user_sec_cols_v3_ok']) && $_SESSION['_mc_user_sec_cols_v3_ok'] === 1)) {
+    if (!$force && ($checked || (!empty($_SESSION['_mc_user_sec_cols_v3_ok']) && $_SESSION['_mc_user_sec_cols_v3_ok'] === 1))) {
         $checked = true;
         return;
     }
