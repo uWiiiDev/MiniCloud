@@ -188,224 +188,7 @@ ensureDealsSchema($pdo, $userId);
 // ============================================================================
 // 2. SMARTER SCRAPER & PREIS-PARSER
 // ============================================================================
-
-/**
- * Konvertiert beliebige Preiszeichenketten (deutsch/US) in einen float.
- */
-function parsePriceString(string $raw): ?float
-{
-    $raw = trim($raw);
-    if ($raw === '') return null;
-
-    // Format: 1.249,99 oder 49,90
-    if (preg_match('/^([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})$/', $raw)) {
-        return (float)str_replace(['.', ','], ['', '.'], $raw);
-    }
-    // Format: 1,249.99
-    if (preg_match('/^([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})$/', $raw)) {
-        return (float)str_replace(',', '', $raw);
-    }
-    // Format: 1249,99
-    if (preg_match('/^([0-9]+),([0-9]{2})$/', $raw, $m)) {
-        return (float)($m[1] . '.' . $m[2]);
-    }
-    // Format: 1249.99
-    if (preg_match('/^([0-9]+)\.([0-9]{2})$/', $raw, $m)) {
-        return (float)($m[1] . '.' . $m[2]);
-    }
-
-    // Allgemeine Bereinigung
-    $clean = preg_replace('/[^0-9.,]/', '', $raw);
-    if ($clean === null || $clean === '') return null;
-
-    if (strpos($clean, ',') !== false && strpos($clean, '.') !== false) {
-        if (strrpos($clean, ',') > strrpos($clean, '.')) {
-            $clean = str_replace('.', '', $clean);
-            $clean = str_replace(',', '.', $clean);
-        } else {
-            $clean = str_replace(',', '', $clean);
-        }
-    } elseif (strpos($clean, ',') !== false) {
-        $clean = str_replace(',', '.', $clean);
-    }
-
-    return is_numeric($clean) && (float)$clean > 0 ? round((float)$clean, 2) : null;
-}
-
-/**
- * Liest Produktdetails (Name, Preis, Bild, Verfügbarkeit) von einer beliebigen URL aus.
- */
-function scrapeProductDetails(string $url): array
-{
-    $url = trim($url);
-    if (!filter_var($url, FILTER_VALIDATE_URL)) {
-        return ['ok' => false, 'error' => 'Ungültige Webadresse (URL).'];
-    }
-
-    $parsed = @parse_url($url);
-    $host = strtolower((string)($parsed['host'] ?? ''));
-    $domain = preg_replace('/^www\./i', '', $host);
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 6,
-        CURLOPT_TIMEOUT        => 9,
-        CURLOPT_CONNECTTIMEOUT => 4,
-        CURLOPT_ENCODING       => '', // auto gzip / deflate
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER     => [
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language: de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Cache-Control: no-cache',
-            'Upgrade-Insecure-Requests: 1',
-        ],
-    ]);
-
-    $html = curl_exec($ch);
-    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
-    curl_close($ch);
-
-    if ($html === false || $httpCode >= 400 || strlen($html) < 200) {
-        return [
-            'ok'        => false,
-            'url'       => $url,
-            'domain'    => $domain,
-            'title'     => '',
-            'price'     => null,
-            'image_url' => null,
-            'error'     => 'Konnte Seite nicht abrufen (HTTP-Status ' . $httpCode . ($err ? ': ' . $err : '') . ').'
-        ];
-    }
-
-    $title = '';
-    $price = null;
-    $imageUrl = null;
-    $currency = 'EUR';
-    $availability = 'Verfügbar';
-
-    // 1. JSON-LD Schema.org Auswertung (universell für moderne Shops)
-    if (preg_match_all('/<script[^>]+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $ldMatches)) {
-        foreach ($ldMatches[1] as $rawJson) {
-            $data = @json_decode(trim($rawJson), true);
-            if (!is_array($data)) continue;
-
-            $itemsToCheck = isset($data['@graph']) && is_array($data['@graph']) ? $data['@graph'] : [$data];
-            foreach ($itemsToCheck as $obj) {
-                if (!is_array($obj)) continue;
-                $type = (string)($obj['@type'] ?? '');
-                if (stripos($type, 'Product') !== false || isset($obj['offers'])) {
-                    if ($title === '' && !empty($obj['name']) && is_string($obj['name'])) {
-                        $title = trim(html_entity_decode($obj['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-                    }
-                    if ($imageUrl === null && !empty($obj['image'])) {
-                        $imageUrl = is_array($obj['image']) ? (string)($obj['image'][0] ?? '') : (string)$obj['image'];
-                    }
-
-                    // Preis aus offers
-                    if (isset($obj['offers'])) {
-                        $offers = is_array($obj['offers']) && !isset($obj['offers']['price']) ? $obj['offers'] : [$obj['offers']];
-                        foreach ($offers as $off) {
-                            if (!is_array($off)) continue;
-                            if (isset($off['price'])) {
-                                $parsedP = parsePriceString((string)$off['price']);
-                                if ($parsedP !== null && ($price === null || $parsedP < $price)) {
-                                    $price = $parsedP;
-                                }
-                            } elseif (isset($off['lowPrice'])) {
-                                $parsedP = parsePriceString((string)$off['lowPrice']);
-                                if ($parsedP !== null && ($price === null || $parsedP < $price)) {
-                                    $price = $parsedP;
-                                }
-                            }
-                            if (!empty($off['priceCurrency'])) {
-                                $currency = strtoupper(trim((string)$off['priceCurrency']));
-                            }
-                            if (!empty($off['availability']) && stripos((string)$off['availability'], 'OutOfStock') !== false) {
-                                $availability = 'Ausverkauft';
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 2. OpenGraph & Meta-Tags
-    if (preg_match('/<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-        if ($title === '') $title = trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-    }
-    if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-        if ($imageUrl === null) $imageUrl = trim($m[1]);
-    }
-    if (preg_match('/<meta[^>]+property=["\']product:price:amount["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m) ||
-        preg_match('/<meta[^>]+property=["\']og:price:amount["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-        if ($price === null) $price = parsePriceString($m[1]);
-    }
-
-    // 3. Fallback: <title> Tag
-    if ($title === '' && preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $m)) {
-        $rawT = trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        // Shop-Suffixe entfernen
-        $cleanT = preg_replace('/(\s*[-|–:]\s*(Amazon\.de|Idealo|Geizhals|Otto|MediaMarkt|Saturn|Alternate|Mindfactory|eBay)).*$/i', '', $rawT);
-        $title = $cleanT ?: $rawT;
-    }
-
-    // 4. Shop-spezifische HTML-Selektoren für Preis
-    if ($price === null) {
-        // Amazon spezifisch
-        if (str_contains($domain, 'amazon.')) {
-            if (preg_match('/<span[^>]*class=["\'][^"\']*a-price-whole[^"\']*["\'][^>]*>([0-9.,]+)<\/span>/i', $html, $mWhole)) {
-                $fraction = '00';
-                if (preg_match('/<span[^>]*class=["\'][^"\']*a-price-fraction[^"\']*["\'][^>]*>([0-9]{2})<\/span>/i', $html, $mFrac)) {
-                    $fraction = $mFrac[1];
-                }
-                $price = parsePriceString($mWhole[1] . ',' . $fraction);
-            } elseif (preg_match('/id=["\']priceblock_(?:ourprice|dealprice)["\'][^>]*>\s*([0-9.,]+)/i', $html, $m)) {
-                $price = parsePriceString($m[1]);
-            }
-        }
-        // Idealo spezifisch
-        elseif (str_contains($domain, 'idealo.')) {
-            if (preg_match('/class=["\'][^"\']*oopStage-price[^"\']*["\'][^>]*>\s*([0-9.,]+)\s*€/i', $html, $m)) {
-                $price = parsePriceString($m[1]);
-            }
-        }
-        // Geizhals spezifisch
-        elseif (str_contains($domain, 'geizhals.')) {
-            if (preg_match('/<span[^>]*class=["\'][^"\']*gh_price[^"\']*["\'][^>]*>.*?([0-9]{1,4}(?:\.[0-9]{3})*,[0-9]{2})/is', $html, $m)) {
-                $price = parsePriceString($m[1]);
-            }
-        }
-        // Allgemeines Fallback für Preismuster mit Euro-Zeichen
-        if ($price === null && preg_match('/(?:class=["\'][^"\']*(?:price|preis|kosten|amount)[^"\']*["\'][^>]*>.*?)([0-9]{1,4}(?:[.,][0-9]{3})*[.,][0-9]{2})\s*(?:€|EUR)/is', $html, $m)) {
-            $price = parsePriceString($m[1]);
-        }
-    }
-
-    // Bereinigung
-    $title = mb_substr(trim(preg_replace('/\s+/', ' ', $title)), 0, 255);
-    if ($title === '') {
-        $title = $domain . ' Produkt (' . date('d.m.Y') . ')';
-    }
-
-    return [
-        'ok'           => true,
-        'url'          => $url,
-        'domain'       => $domain,
-        'title'        => $title,
-        'price'        => $price,
-        'currency'     => $currency,
-        'image_url'    => $imageUrl,
-        'availability' => $availability,
-        'error'        => null
-    ];
-}
+require_once __DIR__ . '/includes/deals_scraper.php';
 
 // ============================================================================
 // 3. AJAX-API ACTIONS (PREVIEW, CHECK-SINGLE, CHECK-ALL)
@@ -554,12 +337,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $parsedUrl = @parse_url($url);
-        $domain = preg_replace('/^www\./i', '', strtolower((string)($parsedUrl['host'] ?? '')));
+        $cleanedInput = cleanProductInput($url);
+        $url = $cleanedInput['url'];
+        if ($title === '' && !empty($cleanedInput['title_hint'])) {
+            $title = $cleanedInput['title_hint'];
+        }
+        $domain = $cleanedInput['domain'] ?: 'unbekannt';
 
         // Falls noch kein Preis oder Titel eingegeben wurde: live scrapen
         if ($title === '' || $currentPrice === null) {
             $scraped = scrapeProductDetails($url);
+            if (!empty($scraped['url'])) {
+                $url = $scraped['url'];
+            }
             if ($title === '' && !empty($scraped['title'])) {
                 $title = $scraped['title'];
             }
@@ -813,7 +603,8 @@ if (!empty($items)) {
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
 $serverHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $currentPath = rtrim(dirname($_SERVER['PHP_SELF']), '/\\');
-$bookmarkletTargetUrl = $protocol . $serverHost . $currentPath . '/deals.php?add_url=';
+$bookmarkletBaseUrl = $protocol . $serverHost . $currentPath . '/deals.php?';
+$bookmarkletTargetUrl = $bookmarkletBaseUrl . 'add_url=';
 
 $pageTitle = 'Preiswächter & Deal-Radar';
 require_once __DIR__ . '/includes/header.php';
@@ -1170,14 +961,20 @@ require_once __DIR__ . '/includes/header.php';
             <div>
                 <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-200">Produkt-URL (Amazon, Idealo, Geizhals, Otto etc.) *</label>
                 <div class="flex gap-1.5">
-                    <input type="url" name="url" id="addInputUrl" required placeholder="https://www.amazon.de/dp/... oder https://geizhals.de/..."
+                    <input type="text" name="url" id="addInputUrl" required placeholder="https://www.amazon.de/dp/... oder Link aus App teilen"
                            class="flex-1 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs">
                     <button type="button" onclick="fetchUrlPreview()" id="btnFetchUrl"
                             class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold shrink-0 cursor-pointer flex items-center gap-1">
                         <span>🔍</span> <span class="hidden sm:inline">Laden</span>
                     </button>
                 </div>
-                <p class="text-[11px] text-slate-400 mt-1">Kopiere einfach den Link aus deinem Browser-Tab hier hinein.</p>
+                <p class="text-[11px] text-slate-400 mt-1">Kopiere einfach den Browser-Link oder die App-Freigabe hier hinein.</p>
+            </div>
+
+            <!-- Bot-Hinweis / Status-Banner -->
+            <div id="addNoticeBox" class="hidden p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+                <span class="text-base shrink-0">🛡️</span>
+                <div id="addNoticeContent" class="leading-relaxed"></div>
             </div>
 
             <!-- Auto-geladene Vorschau -->
@@ -1400,7 +1197,7 @@ require_once __DIR__ . '/includes/header.php';
         </p>
 
         <div class="p-6 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-center">
-            <a href="javascript:(function(){var u=encodeURIComponent(window.location.href);window.open('<?= e($bookmarkletTargetUrl) ?>'+u,'_blank');})();"
+            <a href="javascript:(function(){try{var u=location.href,t='',p='',img='';var tEl=document.querySelector('#productTitle')||document.querySelector('h1')||document.querySelector('meta[property=\'og:title\']');if(tEl)t=(tEl.innerText||tEl.content||'').trim();if(!t)t=document.title;var pEl=document.querySelector('.a-price .a-offscreen')||document.querySelector('#priceblock_ourprice')||document.querySelector('.apexPriceToPay .a-offscreen')||document.querySelector('[class*=\'oopStage-price\']')||document.querySelector('.gh_price')||document.querySelector('[itemprop=\'price\']')||document.querySelector('meta[property=\'og:price:amount\']');if(pEl)p=(pEl.innerText||pEl.content||pEl.value||'').trim();var iEl=document.querySelector('#landingImage')||document.querySelector('#imgBlkFront')||document.querySelector('meta[property=\'og:image\']');if(iEl)img=(iEl.src||iEl.content||'').trim();var dest='<?= e($bookmarkletBaseUrl) ?>add_url='+encodeURIComponent(u)+'&title='+encodeURIComponent(t)+'&price='+encodeURIComponent(p)+'&image='+encodeURIComponent(img);window.open(dest,'_blank');}catch(e){window.open('<?= e($bookmarkletBaseUrl) ?>add_url='+encodeURIComponent(location.href),'_blank');}})();"
                onclick="alert('Tipp: Ziehe diesen Button mit der linken Maustaste in deine Browser-Lesezeichenleiste oben!'); return false;"
                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs shadow-md transition cursor-grab active:cursor-grabbing">
                 <span>🏷️</span> Zu MiniCloud Preiswächter
@@ -1431,14 +1228,81 @@ require_once __DIR__ . '/includes/header.php';
 <script>
 const ITEMS_TO_CHECK = <?= json_encode(array_column($items, 'id')) ?>;
 
-function openAddModal(prefillUrl = '') {
+// Hilfsfunktion: Preis-String zu Float parsen
+function parsePriceJs(raw) {
+    if (!raw) return null;
+    raw = String(raw).trim();
+    const clean = raw.replace(/[^0-9.,]/g, '');
+    if (!clean) return null;
+    if (clean.includes(',') && clean.includes('.')) {
+        if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
+            return parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+        } else {
+            return parseFloat(clean.replace(/,/g, ''));
+        }
+    } else if (clean.includes(',')) {
+        return parseFloat(clean.replace(',', '.'));
+    }
+    const val = parseFloat(clean);
+    return !isNaN(val) && val > 0 ? Math.round(val * 100) / 100 : null;
+}
+
+// Erkennt geteilten Text aus Shopping-Apps (z. B. "Apple MacBook Air ... https://amzn.eu/d/...")
+function handlePastedUrl() {
+    const input = document.getElementById('addInputUrl');
+    if (!input) return;
+    const val = input.value.trim();
+    if (!val) return;
+
+    const match = val.match(/(https?:\/\/[^\s]+)/i);
+    if (match) {
+        const foundUrl = match[1];
+        const textAround = val.replace(foundUrl, '').trim().replace(/\s+/g, ' ');
+        const titleInput = document.getElementById('addInputTitle');
+        if (textAround && titleInput && !titleInput.value.trim()) {
+            titleInput.value = textAround;
+        }
+        input.value = foundUrl;
+    }
+}
+
+function openAddModal(prefillUrl = '', prefillTitle = '', prefillPrice = '', prefillImage = '') {
     const modal = document.getElementById('modalAddDeal');
     if (!modal) return;
+    modal.classList.remove('hidden');
+
+    const noticeBox = document.getElementById('addNoticeBox');
+    if (noticeBox) noticeBox.classList.add('hidden');
+
     if (prefillUrl) {
         document.getElementById('addInputUrl').value = prefillUrl;
+        handlePastedUrl();
+    }
+    if (prefillTitle) {
+        document.getElementById('addInputTitle').value = prefillTitle;
+        document.getElementById('addPreviewTitle').textContent = prefillTitle;
+    }
+    if (prefillPrice) {
+        const p = parsePriceJs(prefillPrice);
+        if (p !== null) {
+            document.getElementById('addInputCurrentPrice').value = p.toFixed(2).replace('.', ',');
+            const suggestedTarget = Math.round((p * 0.90) * 100) / 100;
+            document.getElementById('addInputTargetPrice').value = suggestedTarget.toFixed(2).replace('.', ',');
+            document.getElementById('addPreviewPrice').textContent = p.toFixed(2).replace('.', ',') + ' €';
+        }
+    }
+    if (prefillImage) {
+        document.getElementById('addInputImage').value = prefillImage;
+        document.getElementById('addPreviewImg').src = prefillImage;
+    }
+    if (prefillTitle || prefillPrice || prefillImage) {
+        document.getElementById('addPreviewBox')?.classList.remove('hidden');
+    }
+
+    // Nur fetchen, falls URL vorhanden aber noch kein Preis (z. B. Bookmarklet ohne DOM-Preis)
+    if (prefillUrl && !prefillPrice) {
         fetchUrlPreview();
     }
-    modal.classList.remove('hidden');
 }
 
 function openEditModal(item) {
@@ -1461,6 +1325,7 @@ function openBookmarkletModal() {
 
 // URL-Vorschau live abrufen
 async function fetchUrlPreview() {
+    handlePastedUrl();
     const url = document.getElementById('addInputUrl').value.trim();
     if (!url) return;
 
@@ -1469,19 +1334,29 @@ async function fetchUrlPreview() {
     btn.innerHTML = '<span>⏳</span> Lädt...';
     btn.disabled = true;
 
+    const noticeBox = document.getElementById('addNoticeBox');
+    const noticeContent = document.getElementById('addNoticeContent');
+    if (noticeBox) noticeBox.classList.add('hidden');
+
     try {
         const resp = await fetch('deals.php?api=fetch_preview&url=' + encodeURIComponent(url));
         const data = await resp.json();
 
         if (data && data.ok) {
-            if (data.title) {
+            if (data.url && data.url !== url) {
+                document.getElementById('addInputUrl').value = data.url;
+            }
+            if (data.title && !document.getElementById('addInputTitle').value.trim()) {
                 document.getElementById('addInputTitle').value = data.title;
             }
             if (data.price !== null) {
-                document.getElementById('addInputCurrentPrice').value = Number(data.price).toFixed(2).replace('.', ',');
-                // Vorschlag für Wunschpreis: ca. 10 % darunter
-                const suggestedTarget = Math.round((data.price * 0.90) * 100) / 100;
+                const p = Number(data.price);
+                document.getElementById('addInputCurrentPrice').value = p.toFixed(2).replace('.', ',');
+                const suggestedTarget = Math.round((p * 0.90) * 100) / 100;
                 document.getElementById('addInputTargetPrice').value = suggestedTarget.toFixed(2).replace('.', ',');
+                document.getElementById('addPreviewPrice').textContent = p.toFixed(2).replace('.', ',') + ' €';
+            } else {
+                document.getElementById('addPreviewPrice').textContent = 'Preis bitte manuell eintragen';
             }
             if (data.image_url) {
                 document.getElementById('addInputImage').value = data.image_url;
@@ -1490,14 +1365,28 @@ async function fetchUrlPreview() {
                 document.getElementById('addPreviewImg').src = '';
             }
 
-            document.getElementById('addPreviewTitle').textContent = data.title || 'Produkt';
-            document.getElementById('addPreviewPrice').textContent = data.price !== null ? (Number(data.price).toFixed(2).replace('.', ',') + ' €') : 'Preis auf Shop-Seite prüfen';
+            document.getElementById('addPreviewTitle').textContent = data.title || document.getElementById('addInputTitle').value || 'Produkt';
             document.getElementById('addPreviewBox').classList.remove('hidden');
+
+            if (data.bot_blocked || data.price === null) {
+                if (noticeBox && noticeContent) {
+                    noticeContent.innerHTML = `<strong>Hinweis (${data.shop_name || data.domain || 'Shop'}):</strong> Der Shop blockiert automatisierte Server-Abfragen (HTTP ${data.http_code || '503'} Bot-Schutz). Die Produktdaten wurden übernommen – bitte trage den aktuellen Preis kurz von Hand ein.`;
+                    noticeBox.classList.remove('hidden');
+                }
+                setTimeout(() => document.getElementById('addInputCurrentPrice').focus(), 150);
+            }
         } else {
-            alert(data.error || 'Details konnten nicht automatisch geladen werden. Bitte gib Titel und Preis manuell ein.');
+            if (noticeBox && noticeContent) {
+                noticeContent.innerHTML = data.error || 'Seite konnte nicht automatisch geladen werden. Bitte trage Titel und Preis manuell ein.';
+                noticeBox.classList.remove('hidden');
+            }
+            setTimeout(() => document.getElementById('addInputTitle').focus(), 150);
         }
     } catch (e) {
-        alert('Netzwerkfehler beim Abrufen der Produktdaten.');
+        if (noticeBox && noticeContent) {
+            noticeContent.innerHTML = 'Netzwerkfehler beim Abrufen der Produktdaten. Bitte trage Titel und Preis manuell ein.';
+            noticeBox.classList.remove('hidden');
+        }
     } finally {
         btn.innerHTML = origText;
         btn.disabled = false;
@@ -1520,14 +1409,14 @@ async function checkSingleDeal(itemId, btnEl) {
             const lbl = document.getElementById('checkLabel-' + itemId);
             if (lbl) lbl.textContent = 'Geprüft: Gerade eben';
             if (data.has_changed || data.target_reached) {
-                // Bei Änderung Seite kurz neu laden, um Statistiken und Karten zu aktualisieren
                 window.location.reload();
             }
         } else {
-            alert(data.error || 'Fehler beim Aktualisieren des Preises.');
+            const lbl = document.getElementById('checkLabel-' + itemId);
+            if (lbl) lbl.textContent = 'Geprüft (Bot-Schutz)';
         }
     } catch (e) {
-        alert('Fehler bei der Verbindung zum Server.');
+        // Stille Duldung bei Netzwerkfehler
     } finally {
         if (btnEl) {
             btnEl.classList.remove('animate-spin');
@@ -1645,12 +1534,38 @@ async function openHistoryModal(itemId, itemTitle) {
     }
 }
 
-// Auto-Trigger falls Bookmarklet mit ?add_url= aufgerufen wurde
+// Auto-Trigger falls Bookmarklet mit Parametern aufgerufen wurde
 document.addEventListener('DOMContentLoaded', function() {
     const params = new URLSearchParams(window.location.search);
     const addUrl = params.get('add_url');
-    if (addUrl) {
-        openAddModal(addUrl);
+    const title = params.get('title') || '';
+    const price = params.get('price') || '';
+    const image = params.get('image') || '';
+    if (addUrl || title || price) {
+        openAddModal(addUrl || '', title, price, image);
+    }
+
+    // Auto-Berechnung Wunschpreis (10 % Rabatt-Vorschlag) bei manueller Preiseingabe
+    const curPriceInput = document.getElementById('addInputCurrentPrice');
+    if (curPriceInput) {
+        curPriceInput.addEventListener('input', function() {
+            const p = parsePriceJs(this.value);
+            const targetInput = document.getElementById('addInputTargetPrice');
+            if (p !== null && targetInput && (!targetInput.value.trim() || targetInput.dataset.autofill === '1')) {
+                const suggested = Math.round((p * 0.90) * 100) / 100;
+                targetInput.value = suggested.toFixed(2).replace('.', ',');
+                targetInput.dataset.autofill = '1';
+            }
+        });
+    }
+
+    // Paste- & Change-Listener für URL-Eingabe (erkennt geteilten Text aus Apps)
+    const urlInput = document.getElementById('addInputUrl');
+    if (urlInput) {
+        urlInput.addEventListener('paste', function() {
+            setTimeout(handlePastedUrl, 50);
+        });
+        urlInput.addEventListener('change', handlePastedUrl);
     }
 });
 </script>

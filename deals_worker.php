@@ -14,6 +14,7 @@ if (php_sapi_name() !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/deals_scraper.php';
 
 $pdo = getDB();
 $appSettings = getAppSettings($pdo);
